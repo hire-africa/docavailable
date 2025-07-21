@@ -1,0 +1,2388 @@
+import { apiService } from './services/apiService';
+import { useAuth } from '@/contexts/AuthContext';
+import { useAlert } from '@/hooks/useAlert';
+import { authService } from '@/services/authService';
+import { FontAwesome } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import AlertDialog from '../components/AlertDialog';
+import ConfirmDialog from '../components/ConfirmDialog';
+import WorkingHours from '../components/WorkingHours';
+import WorkingHoursCard from '../components/WorkingHoursCard';
+
+const profileImage = require('../assets/images/profile.jpg');
+const { width } = Dimensions.get('window');
+const isWeb = Platform.OS === 'web';
+const maxWidth = isWeb ? 1200 : width;
+const isLargeScreen = width > 768;
+
+interface TabProps {
+  icon: string;
+  label: string;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+interface BookingRequest {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  patientName: string;
+  doctorName: string;
+  date: string;
+  time: string;
+  consultationType: 'text' | 'voice' | 'video';
+  reason: string;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  createdAt: string;
+  reschedulePending?: boolean;
+}
+
+// Add DoctorType interface
+interface DoctorType {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
+const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
+  <TouchableOpacity
+    style={[styles.tab, isActive && styles.activeTab]}
+    onPress={onPress}
+  >
+    <FontAwesome
+      name={icon as any}
+      size={24}
+      color={isActive ? '#4CAF50' : '#666'}
+    />
+    <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]} numberOfLines={1}>
+      {label}
+    </Text>
+  </TouchableOpacity>
+);
+
+export default function DoctorDashboard() {
+  const { user, userData, loading } = useAuth();
+  const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
+  const [activeTab, setActiveTab] = useState('home');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [bookingRequests, setBookingRequests] = useState<any[]>([]);
+  const [confirmedAppointments, setConfirmedAppointments] = useState<any[]>([]);
+  const [activeTextSessions, setActiveTextSessions] = useState<any[]>([]);
+  const [ratings, setRatings] = useState<any[]>([]);
+  const [walletInfo, setWalletInfo] = useState<any>(null);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [loadingConfirmed, setLoadingConfirmed] = useState(false);
+  const [loadingTextSessions, setLoadingTextSessions] = useState(false);
+  const [loadingRatings, setLoadingRatings] = useState(false);
+  const [loadingWallet, setLoadingWallet] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [activeCall, setActiveCall] = useState<any>(null);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [appointmentsTab, setAppointmentsTab] = useState<'requests' | 'accepted'>('requests');
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [withdrawalMethod, setWithdrawalMethod] = useState('bank');
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+  const [earnings, setEarnings] = useState(0);
+  const [showOnlyActive, setShowOnlyActive] = useState(false);
+  const [doctors, setDoctors] = useState<DoctorType[]>([]);
+  const [enabledDaysCount, setEnabledDaysCount] = useState(0);
+
+  // Sidebar state
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const sidebarAnim = useRef(new Animated.Value(0)).current;
+  const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
+
+  useEffect(() => {
+    if (user) {
+      fetchAppointments();
+    }
+  }, [user]);
+
+  // Fetch booking requests for this doctor immediately when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchBookingRequests();
+    }
+  }, [user]);
+
+  // Additional fetch when appointments tab is active (for real-time updates)
+  useEffect(() => {
+    if (user && activeTab === 'appointments') {
+      fetchBookingRequests();
+    }
+  }, [user, activeTab]);
+
+  // Fetch confirmed appointments immediately when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchConfirmedAppointments();
+      fetchActiveTextSessions();
+    }
+  }, [user]);
+
+  // Additional fetch when messages tab is active (for real-time updates)
+  useEffect(() => {
+    if (user && activeTab === 'messages') {
+      fetchConfirmedAppointments();
+      fetchActiveTextSessions();
+    }
+  }, [user, activeTab]);
+
+  // Fetch ratings immediately when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchRatings();
+    }
+  }, [user]);
+
+  // Fetch wallet info immediately when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchWalletInfo();
+    }
+  }, [user]);
+
+  const updateEnabledDaysCount = async () => {
+    try {
+      if (!user?.id) return;
+      
+      const response = await authService.getDoctorAvailability(user.id.toString());
+      if (response.success && response.data) {
+        const workingHours = response.data.working_hours || {};
+        const count = Object.values(workingHours).filter((day: any) => day.enabled).length;
+        setEnabledDaysCount(count);
+      }
+    } catch (error) {
+      console.error('Error updating enabled days count:', error);
+    }
+  };
+
+  // Update enabled days count when working hours tab is active
+  useEffect(() => {
+    if (user && activeTab === 'working-hours') {
+      updateEnabledDaysCount();
+    }
+  }, [user, activeTab]);
+
+  // Sidebar functions
+  const openSidebar = () => {
+    setSidebarVisible(true);
+    if (Platform.OS === 'web') {
+      setWebSidebarTransform(0);
+    } else {
+      Animated.timing(sidebarAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const closeSidebar = () => {
+    if (Platform.OS === 'web') {
+      setWebSidebarTransform(-300);
+      setTimeout(() => setSidebarVisible(false), 350);
+    } else {
+      Animated.timing(sidebarAnim, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }).start(() => {
+        setSidebarVisible(false);
+      });
+    }
+  };
+
+  // Early returns - moved after all hooks
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  if (!user) return null;
+
+  const fetchAppointments = async () => {
+    try {
+      const response = await apiService.get('/appointments');
+      if (response.success && response.data) {
+        setAppointments(response.data.data || response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+    }
+  };
+
+  const fetchBookingRequests = async () => {
+    if (!user) return;
+
+    setLoadingRequests(true);
+    try {
+      const response = await apiService.get('/appointments?status=pending');
+      if (response.success && response.data) {
+        const requests = response.data.data || response.data;
+        setBookingRequests(requests);
+      }
+    } catch (error) {
+      console.error('Error fetching booking requests:', error);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const fetchConfirmedAppointments = async () => {
+    if (!user) return;
+
+    setLoadingConfirmed(true);
+    try {
+      const response = await apiService.get('/appointments?status=confirmed');
+      if (response.success && response.data) {
+        const confirmed = response.data.data || response.data;
+        setConfirmedAppointments(confirmed);
+      }
+    } catch (error) {
+      console.error('Error fetching confirmed appointments:', error);
+    } finally {
+      setLoadingConfirmed(false);
+    }
+  };
+
+  const fetchActiveTextSessions = async () => {
+    if (!user) return;
+
+    setLoadingTextSessions(true);
+    try {
+      const response = await apiService.get('/text-sessions/history');
+      if (response.success && response.data) {
+        const sessions = response.data.data || response.data;
+        // Filter for active sessions where this doctor is the doctor
+        const activeSessions = sessions.filter((session: any) => 
+          session.doctor_id === user.id && 
+          ['active', 'waiting_for_doctor'].includes(session.status)
+        );
+        setActiveTextSessions(activeSessions);
+      }
+    } catch (error) {
+      console.error('Error fetching active text sessions:', error);
+    } finally {
+      setLoadingTextSessions(false);
+    }
+  };
+
+  const fetchRatings = async () => {
+    if (!user) return;
+
+    setLoadingRatings(true);
+    try {
+      const response = await apiService.get('/reviews');
+      if (response.success && response.data) {
+        setRatings(response.data.data || response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching ratings:', error);
+    } finally {
+      setLoadingRatings(false);
+    }
+  };
+
+  const fetchWalletInfo = async () => {
+    if (!user) return;
+
+    setLoadingWallet(true);
+    try {
+      const response = await apiService.get('/doctor/wallet');
+      if (response.success && response.data) {
+        setWalletInfo(response.data);
+        setEarnings(response.data.balance || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching wallet info:', error);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  const handleAcceptBooking = async (request: BookingRequest) => {
+    try {
+      const response = await apiService.patch(`/appointments/${request.id}`, {
+        status: 'confirmed'
+      });
+
+      if (response.success) {
+        showSuccess('Success', 'Booking request accepted successfully!');
+        // Refresh the booking requests
+        fetchBookingRequests();
+      } else {
+        showError('Error', 'Failed to accept booking request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error accepting booking:', error);
+      showError('Error', 'Failed to accept booking request. Please try again.');
+    }
+  };
+
+  const handleRejectBooking = async (request: BookingRequest) => {
+    try {
+      const response = await apiService.patch(`/appointments/${request.id}`, {
+        status: 'cancelled'
+      });
+
+      if (response.success) {
+        showSuccess('Success', 'Booking request rejected.');
+        // Refresh the booking requests
+        fetchBookingRequests();
+      } else {
+        showError('Error', 'Failed to reject booking request. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+      showError('Error', 'Failed to reject booking request. Please try again.');
+    }
+  };
+
+  const handleSelectPatient = (patient: BookingRequest) => {
+    const chatId = `chat_${patient.patientId || 'unknown'}_${patient.doctorId || 'unknown'}_${patient.id || 'unknown'}`;
+    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+  };
+
+  const handleSelectTextSession = (session: any) => {
+    const chatId = `text_session_${session.id}`;
+    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+  };
+
+  const handleTestChat = () => {
+    // Test chat with a hardcoded patient ID for testing
+    const testPatientId = 'test-patient-123';
+    const chatId = `chat_${testPatientId}_${user?.id}`;
+    console.log('DoctorDashboard: Testing chat with ID:', chatId);
+    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+  };
+
+  const handleLogout = async () => {
+      setShowConfirm(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowConfirm(false);
+    try {
+      await authService.signOut();
+      router.replace('/');
+    } catch (error) {
+      showError('Error', 'Failed to logout. Please try again.');
+    }
+  };
+
+  const handleWithdrawal = async () => {
+    if (!withdrawalAmount || parseFloat(withdrawalAmount) <= 0) {
+      Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
+      return;
+    }
+
+    if (parseFloat(withdrawalAmount) > earnings) {
+      Alert.alert('Insufficient Funds', 'You cannot withdraw more than your available earnings.');
+      return;
+    }
+
+    setShowWithdrawalModal(false);
+    showProcessing('Processing withdrawal...');
+
+    try {
+      const response = await apiService.post('/doctor/wallet/withdraw', {
+        amount: parseFloat(withdrawalAmount),
+        method: withdrawalMethod
+      });
+
+      if (response.success) {
+        showSuccess('Success', 'Withdrawal request submitted successfully!');
+        setWithdrawalAmount('');
+        fetchWalletInfo(); // Refresh wallet info
+      } else {
+        showError('Error', response.message || 'Failed to submit withdrawal request');
+      }
+    } catch (error) {
+      console.error('Error submitting withdrawal:', error);
+      showError('Error', 'Failed to submit withdrawal request. Please try again.');
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-MW', {
+      style: 'currency',
+      currency: 'MWK'
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    try {
+      // Handle different date formats
+      let date: Date;
+      
+      // If it's already in MM/DD/YYYY format, parse it properly
+      if (dateString.includes('/')) {
+        const parts = dateString.split('/');
+        if (parts.length === 3) {
+          const month = parseInt(parts[0]) - 1; // Month is 0-indexed
+          const day = parseInt(parts[1]);
+          const year = parseInt(parts[2]);
+          
+          // Validate the date components
+          if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year > 1900) {
+            date = new Date(year, month, day);
+          } else {
+            return 'Invalid Date';
+          }
+        } else {
+          return 'Invalid Date';
+        }
+      } else {
+        // Try parsing as ISO string or other formats
+        date = new Date(dateString);
+      }
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+      
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Invalid Date';
+    }
+  };
+
+  const getConsultationTypeLabel = (type: string) => {
+    switch (type) {
+      case 'text': return 'Text Consultation';
+      case 'voice': return 'Voice Call';
+      case 'video': return 'Video Call';
+      default: return type;
+    }
+  };
+
+  const getConsultationTypeIcon = (type: string) => {
+    switch (type) {
+      case 'text': return 'comments';
+      case 'voice': return 'phone';
+      case 'video': return 'video-camera';
+      default: return 'comments';
+    }
+  };
+
+  const handleOpenReschedule = (booking: BookingRequest) => {
+    setSelectedAppointment(booking);
+    setNewDate(booking.date);
+    setNewTime(booking.time);
+    setShowRescheduleModal(true);
+  };
+
+  const handleRescheduleBooking = async () => {
+    if (!selectedAppointment) return;
+    
+    try {
+      const response = await apiService.post(`/appointments/${selectedAppointment.id}/propose-reschedule`, {
+        proposed_date: newDate,
+        proposed_time: newTime,
+        reason: 'Doctor requested reschedule'
+      });
+
+      if (response.success) {
+        setShowRescheduleModal(false);
+        setSelectedAppointment(null);
+        showSuccess('Success', 'Appointment reschedule request sent to patient!');
+        // Refresh appointments
+        fetchBookingRequests();
+      } else {
+        showError('Error', 'Failed to reschedule. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error rescheduling appointment:', error);
+      showError('Error', 'Failed to reschedule. Please try again.');
+    }
+  };
+
+  // Accept handler
+  const handleAccept = async (callId: string, callData: any) => {
+    setModalVisible(false);
+    try {
+      // Placeholder: callService is not defined. Implement call logic here if needed.
+      // const { pc, localStream } = await callService.acceptCallAsDoctor(user.id, callId);
+      // setActiveCall({
+      //   pc,
+      //   localStream,
+      //   remoteParticipantName: callData.callerName || 'Patient',
+      //   callType: callData.callType || 'voice',
+      // });
+    } catch (err: any) {
+      Alert.alert('Call Error', err.message || 'Failed to accept call');
+    }
+  };
+
+  // Reject handler
+  const handleReject = async (callId: string) => {
+    setModalVisible(false);
+    try {
+      // Placeholder: Implement call rejection logic here
+      console.log('Call rejected:', callId);
+    } catch (error) {
+      console.error('Error rejecting call:', error);
+    }
+  };
+
+  const handleCancelAppointment = (appt: any) => {
+    setAppointmentToCancel(appt);
+    setCancelReason('');
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancelAppointment = async () => {
+    if (!cancelReason.trim()) {
+      Alert.alert('Reason required', 'Please provide a reason for cancellation.');
+      return;
+    }
+    
+    if (!appointmentToCancel) return;
+    
+    setShowCancelConfirm(false);
+    setLoadingRequests(true);
+    
+    try {
+      const response = await apiService.patch(`/appointments/${appointmentToCancel.id}`, {
+        status: 'cancelled',
+        cancellation_reason: cancelReason,
+        cancelled_by: 'doctor'
+      });
+
+      if (response.success) {
+        showSuccess('Success', 'Appointment cancelled successfully.');
+        await fetchBookingRequests();
+      } else {
+        showError('Error', 'Failed to cancel appointment. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      showError('Error', 'Failed to cancel appointment. Please try again.');
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const renderHomeContent = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {/* Welcome Section - Updated to match patient dashboard */}
+      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
+        {/* User Avatar */}
+        <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 12 }}>
+          {user?.profile_picture_url ? (
+            <Image source={{ uri: user.profile_picture_url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+          ) : (
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' }}>
+              <FontAwesome name="user-md" size={32} color="#888" />
+            </View>
+          )}
+        </View>
+        <Text
+          style={{
+            fontSize: 28,
+            fontWeight: 'bold',
+            color: '#222',
+            textAlign: 'center',
+            marginBottom: 4,
+            maxWidth: 220,
+            lineHeight: 34,
+            paddingHorizontal: 8,
+          }}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          Hi Dr. {user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'}
+        </Text>
+        <Text
+          style={{
+            fontSize: 16,
+            color: '#666',
+            textAlign: 'center',
+            maxWidth: 260,
+            lineHeight: 22,
+            paddingHorizontal: 8,
+          }}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          Manage your practice and patients
+        </Text>
+      </View>
+
+      {/* Pending Requests Summary */}
+      {bookingRequests.length > 0 && (
+        <View style={styles.pendingRequestsCard}>
+          <View style={styles.pendingRequestsHeader}>
+            <FontAwesome name="clock-o" size={20} color="#FF9500" />
+            <Text style={styles.pendingRequestsTitle}>
+              {bookingRequests.length} Pending Booking Request{bookingRequests.length !== 1 ? 's' : ''}
+            </Text>
+          </View>
+          <Text style={styles.pendingRequestsSubtitle}>
+            Review and respond to patient booking requests
+          </Text>
+          <TouchableOpacity 
+            style={styles.viewRequestsButton}
+            onPress={() => setActiveTab('appointments')}
+          >
+            <Text style={styles.viewRequestsButtonText}>View Requests</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.quickActions}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <View style={styles.actionGrid}>
+          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
+            <View style={styles.actionIcon}>
+              <FontAwesome name="calendar" size={24} color="#34C759" />
+            </View>
+            <Text style={styles.actionTitle}>Appointments</Text>
+            <Text style={styles.actionSubtitle}>Manage bookings</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
+            <View style={styles.actionIcon}>
+              <FontAwesome name="comments" size={24} color="#FF3B30" />
+            </View>
+            <Text style={styles.actionTitle}>Messages</Text>
+            <Text style={styles.actionSubtitle}>Chat with patients</Text>
+          </TouchableOpacity>
+
+          <WorkingHoursCard onPress={() => setActiveTab('working-hours')} enabledDaysCount={enabledDaysCount} />
+
+          <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
+            <View style={styles.actionIcon}>
+              <FontAwesome name="money" size={24} color="#4CAF50" />
+            </View>
+            <Text style={styles.actionTitle}>Earnings</Text>
+            <Text style={styles.actionSubtitle}>Withdraw funds</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.recentActivity}>
+        <Text style={styles.sectionTitle}>Recent Activity</Text>
+        {bookingRequests.length > 0 ? (
+          <View style={styles.activityCard}>
+            <View style={styles.activityHeader}>
+              <FontAwesome name="user-plus" size={20} color="#4CAF50" />
+              <Text style={styles.activityTitle}>New Booking Request</Text>
+              <Text style={styles.activityTime}>Just now</Text>
+            </View>
+            <Text style={styles.activityDescription}>
+              {bookingRequests[0].patientName} requested a {getConsultationTypeLabel(bookingRequests[0].consultationType)} appointment
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.activityCard}>
+            <View style={styles.activityHeader}>
+              <FontAwesome name="info-circle" size={20} color="#666" />
+              <Text style={styles.activityTitle}>No Recent Activity</Text>
+            </View>
+            <Text style={styles.activityDescription}>
+              You&apos;ll see patient booking requests and messages here
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* --- Add this demo block at the top of renderHomeContent() --- */}
+
+      <View style={{ marginBottom: 20 }}>
+        <TouchableOpacity
+          style={{
+            padding: 8,
+            backgroundColor: showOnlyActive ? '#e0ffe0' : '#eee',
+            borderRadius: 8,
+            marginBottom: 10,
+            alignSelf: 'flex-end',
+          }}
+          onPress={() => setShowOnlyActive((prev) => !prev)}
+        >
+          <Text>{showOnlyActive ? 'Show All Doctors' : 'Show Only Active Doctors'}</Text>
+        </TouchableOpacity>
+        {doctors
+          .filter((doctor: DoctorType) => !showOnlyActive || doctor.is_active)
+          .map((doctor: DoctorType) => (
+            <View key={doctor.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold' }}>{doctor.name}</Text>
+              {doctor.is_active && (
+                <View style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: 'green',
+                  marginLeft: 6,
+                }} />
+              )}
+            </View>
+          ))}
+      </View>
+    </ScrollView>
+  );
+
+  const renderAppointmentsContent = () => (
+    <ScrollView style={{...styles.content, backgroundColor: '#F8F9FA'}} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
+        <Text style={{fontSize: 28, fontWeight: 'bold', color: '#222', textAlign: 'center', marginBottom: 8}}>Appointments</Text>
+        <Text style={{fontSize: 16, color: '#7CB18F', textAlign: 'center'}}>Review and manage patient appointments</Text>
+      </View>
+      
+      {/* Sub-tab button group */}
+      <View style={{ flexDirection: 'row', marginBottom: 24, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 4, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
+        <TouchableOpacity
+          style={{
+            backgroundColor: appointmentsTab === 'requests' ? '#4CAF50' : 'transparent',
+            borderRadius: 12,
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            marginRight: 4,
+          }}
+          onPress={() => setAppointmentsTab('requests')}
+        >
+          <Text style={{ color: appointmentsTab === 'requests' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Booking Requests</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{
+            backgroundColor: appointmentsTab === 'accepted' ? '#4CAF50' : 'transparent',
+            borderRadius: 12,
+            paddingVertical: 10,
+            paddingHorizontal: 20,
+            marginLeft: 4,
+          }}
+          onPress={() => setAppointmentsTab('accepted')}
+        >
+          <Text style={{ color: appointmentsTab === 'accepted' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Accepted Sessions</Text>
+        </TouchableOpacity>
+      </View>
+      {/* Booking Requests Tab */}
+      {appointmentsTab === 'requests' && (
+        loadingRequests ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Loading booking requests...</Text>
+        </View>
+      ) : bookingRequests.length === 0 ? (
+        <View style={{alignItems: 'center', marginTop: 60}}>
+          <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18}}>
+            <FontAwesome name="calendar-o" size={40} color="#4CAF50" />
+          </View>
+          <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Pending Requests</Text>
+          <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>When patients book appointments, they'll appear here for your review</Text>
+        </View>
+      ) : (
+        <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+            {bookingRequests.filter(request => !request.reschedulePending).map((request) => (
+            <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+              <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+                <FontAwesome name="user" size={20} color="#4CAF50" />
+              </View>
+              <View style={{flex: 1}}>
+                <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}}>{request.patientName}</Text>
+                <Text style={{color: '#7CB18F', fontSize: 14, marginBottom: 2}}>{formatDate(request.date)} at {request.time}</Text>
+                <Text style={{color: '#7CB18F', fontSize: 14}}>{getConsultationTypeLabel(request.consultationType)}</Text>
+              </View>
+              <View style={{alignItems: 'flex-end', gap: 8}}>
+                <View style={{backgroundColor: '#FFF3CD', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+                  <Text style={{color: '#856404', fontSize: 12, fontWeight: 'bold'}}>Pending</Text>
+                </View>
+                <View style={{flexDirection: 'row', gap: 8}}>
+                  <TouchableOpacity 
+                    style={{backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12}}
+                    onPress={() => handleRejectBooking(request)}
+                  >
+                    <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={{backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12}}
+                    onPress={() => handleAcceptBooking(request)}
+                  >
+                    <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+        )
+      )}
+      {/* Accepted Sessions Tab */}
+      {appointmentsTab === 'accepted' && (
+        loadingConfirmed ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#4CAF50" />
+            <Text style={styles.loadingText}>Loading accepted sessions...</Text>
+          </View>
+        ) : bookingRequests.length === 0 ? (
+          <View style={{alignItems: 'center', marginTop: 60}}>
+            <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18}}>
+              <FontAwesome name="calendar-check-o" size={40} color="#4CAF50" />
+            </View>
+            <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Accepted Sessions</Text>
+            <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>Accepted sessions will appear here until they are completed or cancelled</Text>
+          </View>
+        ) : (
+          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+            {bookingRequests.filter(request => request.status === 'confirmed').map((request) => (
+              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+                <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+                  <FontAwesome name="user" size={20} color="#4CAF50" />
+                </View>
+                <View style={{flex: 1}}>
+                  <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}}>{request.patientName}</Text>
+                  <Text style={{color: '#7CB18F', fontSize: 14, marginBottom: 2}}>{formatDate(request.date)} at {request.time}</Text>
+                  <Text style={{color: '#7CB18F', fontSize: 14}}>{getConsultationTypeLabel(request.consultationType)}</Text>
+                </View>
+                <View style={{alignItems: 'flex-end'}}>
+                  <View style={{backgroundColor: '#D4EDDA', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+                    <Text style={{color: '#155724', fontSize: 12, fontWeight: 'bold'}}>Confirmed</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        )
+      )}
+      <Modal
+        visible={showRescheduleModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowRescheduleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Reschedule Appointment</Text>
+            <Text style={styles.modalLabel}>New Date</Text>
+            <TextInput
+              style={styles.input}
+              value={newDate}
+              onChangeText={setNewDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#999"
+            />
+            <Text style={styles.modalLabel}>New Time</Text>
+            <TextInput
+              style={styles.input}
+              value={newTime}
+              onChangeText={setNewTime}
+              placeholder="Enter new time"
+              placeholderTextColor="#999"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowRescheduleModal(false)}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitButton} onPress={handleRescheduleBooking}>
+                <Text style={styles.submitButtonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={showCancelConfirm} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
+            <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
+            <TextInput
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="Reason..."
+              style={{ borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8, marginBottom: 16 }}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={() => setShowCancelConfirm(false)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmCancelAppointment} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
+  );
+
+  const renderMessagesContent = () => (
+    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 18, paddingBottom: 10, paddingHorizontal: 16, backgroundColor: '#F8F9FA' }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222' }}>Messages</Text>
+        </View>
+      </View>
+
+      {/* Search Bar */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAF4EC', borderRadius: 16, marginHorizontal: 16, marginBottom: 18, paddingHorizontal: 14, height: 44 }}>
+        <FontAwesome name="search" size={20} color="#7CB18F" style={{ marginRight: 8 }} />
+        <TextInput
+          style={{ flex: 1, fontSize: 17, color: '#222', backgroundColor: 'transparent' }}
+          placeholder="Search"
+          placeholderTextColor="#7CB18F"
+          underlineColorAndroid="transparent"
+        />
+      </View>
+
+      {/* Active Text Sessions */}
+      {activeTextSessions.length > 0 && (
+        <View style={{ marginHorizontal: 20, marginBottom: 16 }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#4CAF50', marginBottom: 8 }}>Active Text Sessions</Text>
+          {activeTextSessions.map((session) => (
+            <TouchableOpacity
+              key={session.id}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#E8F5E8',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 8,
+                borderWidth: 1,
+                borderColor: '#4CAF50'
+              }}
+              onPress={() => handleSelectTextSession(session)}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#4CAF50', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                <FontAwesome name="comments" size={20} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 2 }}>
+                  {session.patient?.first_name} {session.patient?.last_name}
+                </Text>
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>
+                  Text Session • {session.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
+                </Text>
+              </View>
+              <FontAwesome name="chevron-right" size={16} color="#4CAF50" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Recent Label */}
+      <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#222', marginLeft: 24, marginBottom: 10 }}>Recent</Text>
+
+      {loadingConfirmed || loadingTextSessions ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Loading patients...</Text>
+        </View>
+      ) : (confirmedAppointments?.length || 0) === 0 && (activeTextSessions?.length || 0) === 0 ? (
+        <View style={styles.emptyState}>
+          <View style={styles.emptyStateIcon}>
+            <FontAwesome name="users" size={64} color="#E0E0E0" />
+          </View>
+          <Text style={styles.emptyStateTitle}>No Active Chats</Text>
+          <Text style={styles.emptyStateSubtitle}>
+            Patients will appear here once you accept their booking requests or start text sessions
+          </Text>
+          <View style={styles.emptyStateAction}>
+            <FontAwesome name="calendar-plus-o" size={16} color="#4CAF50" />
+            <Text style={styles.emptyStateActionText}>Check Appointments Tab</Text>
+          </View>
+        </View>
+      ) : (
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {confirmedAppointments
+            .sort((a, b) => {
+              // Sort by most recent activity (createdAt, updatedAt, or date)
+              const getDate = (appt: any) => {
+                if (appt.updatedAt) return new Date(appt.updatedAt).getTime();
+                if (appt.createdAt) return new Date(appt.createdAt).getTime();
+                if (appt.date && appt.time) {
+                  try {
+                    // Try to parse date and time
+                    const [month, day, year] = (appt.date || '').split('/').map(Number);
+                    const [hour, minute] = (appt.time || '').split(':').map(Number);
+                    return new Date(year, month - 1, day, hour, minute).getTime();
+                  } catch {
+                    return 0;
+                  }
+                }
+                return 0;
+              };
+              return getDate(b) - getDate(a); // Most recent first
+            })
+            .map((patient) => (
+            <TouchableOpacity
+              key={String(patient.id || patient.patientId || 'unknown')}
+              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
+              onPress={() => handleSelectPatient(patient)}
+              activeOpacity={0.7}
+            >
+              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D1E7DD', alignItems: 'center', justifyContent: 'center', marginRight: 18 }}>
+                <FontAwesome name="user" size={24} color="#4CAF50" />
+              </View>
+              <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
+                <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
+                  {String(patient.reason || 'Chat')}
+                </Text>
+                <Text style={{ fontSize: 16, color: '#4CAF50' }} numberOfLines={1}>
+                  {String(patient.patientName || 'Unknown Patient')}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+    </View>
+  );
+
+  const renderProfileContent = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {/* Profile Header */}
+      <View style={{alignItems: 'center', marginBottom: 18}}>
+        <Image source={profileImage} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+        <Text style={{fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center'}}>{user?.display_name || user?.email?.split('@')[0] || 'Doctor'}</Text>
+        {userData?.status === 'approved' && <Text style={{color: '#4CAF50', fontWeight: 'bold', fontSize: 15, textAlign: 'center', marginBottom: 2}}>Verified</Text>}
+        <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'center', marginBottom: 2}}>Joined {userData?.created_at ? new Date(userData.created_at).getFullYear() : '2021'}</Text>
+      </View>
+
+      {/* Account Section */}
+      <Text style={{fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18}}>Account</Text>
+      <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+        <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="envelope" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Email</Text>
+          <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2}}>{user?.email || 'Not provided'}</Text>
+        </View>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/doctor-withdrawals')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="money" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Earnings</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Settings Section */}
+      <Text style={{fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18}}>Settings</Text>
+      <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/doctor-profile')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="user" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>View Profile</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/edit-doctor-profile')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="user" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Edit Profile</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/privacy-settings')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="eye" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Privacy Settings</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/notifications-settings')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="bell" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Notifications</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => setActiveTab('home')}>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="clock-o" size={20} color="#4CAF50" /></View>
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Working Hours</Text>
+          <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Logout */}
+      <TouchableOpacity style={[{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}, {marginTop: 20}]} onPress={handleLogout}>
+        <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="sign-out" size={20} color="#FF3B30" /></View>
+        <Text style={[{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}, {color: '#FF3B30'}]}>Logout</Text>
+        <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={{marginLeft: 8}} />
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  const renderWorkingHoursContent = () => (
+    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      {/* Header */}
+      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
+        <Text style={{fontSize: 28, fontWeight: 'bold', color: '#222', textAlign: 'center', marginBottom: 8}}>Working Hours</Text>
+        <Text style={{fontSize: 16, color: '#7CB18F', textAlign: 'center'}}>Set your availability for patient appointments</Text>
+      </View>
+      
+      {/* Working Hours Component */}
+      <View style={{marginBottom: 20}}>
+        <WorkingHours />
+      </View>
+    </ScrollView>
+  );
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'home':
+        return renderHomeContent();
+      case 'appointments':
+        return renderAppointmentsContent();
+      case 'messages':
+        return renderMessagesContent();
+      case 'working-hours':
+        return renderWorkingHoursContent();
+      case 'profile':
+        return renderProfileContent();
+      default:
+        return renderHomeContent();
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#F8F9FA', zIndex: 10 }}>
+        <TouchableOpacity style={styles.profileButton} onPress={openSidebar}>
+          <FontAwesome name="user-circle" size={28} color="#4CAF50" />
+        </TouchableOpacity>
+        
+        {/* DocAvailable Logo */}
+        <Image 
+          source={require('../assets/images/DA logo green.png')} 
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
+        
+        {/* Spacer to balance the layout */}
+        <View style={{ width: 44 }} />
+      </View>
+
+      <View style={styles.mainContent}>
+        {renderContent()}
+        <View style={styles.bottomNav}>
+          <Tab
+            icon="home"
+            label="Home"
+            isActive={activeTab === 'home'}
+            onPress={() => setActiveTab('home')}
+          />
+          <View style={{ position: 'relative', flex: 1 }}>
+          <Tab
+            icon="calendar"
+            label="Appointments"
+            isActive={activeTab === 'appointments'}
+            onPress={() => setActiveTab('appointments')}
+          />
+            {bookingRequests.length > 0 && (
+              <View style={{
+                position: 'absolute',
+                top: 2,
+                right: 32,
+                backgroundColor: '#4CAF50',
+                borderRadius: 12,
+                minWidth: 24,
+                height: 24,
+                justifyContent: 'center',
+                alignItems: 'center',
+                paddingHorizontal: 6,
+                zIndex: 10
+              }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
+                  {bookingRequests.length}
+                </Text>
+              </View>
+            )}
+          </View>
+          <Tab
+            icon="comments"
+            label="Messages"
+            isActive={activeTab === 'messages'}
+            onPress={() => setActiveTab('messages')}
+          />
+          <Tab
+            icon="clock-o"
+            label="Working Hours"
+            isActive={activeTab === 'working-hours'}
+            onPress={() => setActiveTab('working-hours')}
+          />
+        </View>
+      </View>
+
+      {/* Sidebar */}
+      {sidebarVisible && (
+        <View style={styles.sidebarOverlay}>
+          <TouchableOpacity style={styles.sidebarOverlayTouchable} activeOpacity={1} onPress={closeSidebar} />
+          <Animated.View
+            style={[
+              styles.sidebar,
+              Platform.OS === 'web' ? {
+                transform: `translateX(${webSidebarTransform}px)`,
+              } : {
+                transform: [
+                  {
+                    translateX: sidebarAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-300, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Profile Header */}
+            <View style={styles.sidebarHeader}>
+              {user?.profile_picture_url ? (
+                <Image source={{ uri: user.profile_picture_url }} style={styles.sidebarProfileImage} />
+              ) : user?.profile_picture ? (
+                <Image source={{ uri: user.profile_picture }} style={styles.sidebarProfileImage} />
+              ) : (
+                <Image source={profileImage} style={styles.sidebarProfileImage} />
+              )}
+              <Text style={styles.sidebarUserName}>{userData?.display_name || user?.display_name || 'Doctor'}</Text>
+              <Text style={styles.sidebarUserEmail}>{userData?.email || user?.email || 'doctor@example.com'}</Text>
+            </View>
+            
+            {/* Settings Section */}
+            <Text style={styles.sectionHeader}>Settings</Text>
+            <View style={styles.sectionGroup}>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/doctor-profile'); }}>
+                <View style={styles.iconBox}><FontAwesome name="user" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>View Profile</Text>
+                <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={styles.chevron} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/edit-doctor-profile'); }}>
+                <View style={styles.iconBox}><FontAwesome name="user" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>Edit Profile</Text>
+                <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={styles.chevron} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/privacy-settings'); }}>
+                <View style={styles.iconBox}><FontAwesome name="eye" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>Privacy Settings</Text>
+                <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={styles.chevron} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/notifications-settings'); }}>
+                <View style={styles.iconBox}><FontAwesome name="bell" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>Notifications</Text>
+                <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={styles.chevron} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/help-support'); }}>
+                <View style={styles.iconBox}><FontAwesome name="question-circle" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>Help & Support</Text>
+                <FontAwesome name="chevron-right" size={18} color="#B0B0B0" style={styles.chevron} />
+              </TouchableOpacity>
+            </View>
+            
+            {/* Logout */}
+            <TouchableOpacity style={[styles.sidebarMenuItem, { marginTop: 20 }]} onPress={() => { closeSidebar(); handleLogout(); }}>
+              <View style={styles.iconBox}><FontAwesome name="sign-out" size={20} color="#FF3B30" /></View>
+              <Text style={[styles.sidebarMenuItemText, { color: '#FF3B30' }]}>Logout</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+      )}
+
+      <ConfirmDialog
+        visible={showConfirm}
+        onConfirm={confirmLogout}
+        onCancel={() => setShowConfirm(false)}
+        message="Are you sure you want to logout?"
+        type="logout"
+      />
+      <AlertDialog
+        visible={alertState.visible}
+        onClose={hideAlert}
+        title={alertState.title}
+        message={alertState.message}
+        type={alertState.type}
+        buttonText={alertState.buttonText}
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+  },
+  mainContent: {
+    flex: 1,
+    maxWidth: maxWidth,
+    alignSelf: 'center',
+    width: '100%',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#4CAF50',
+    marginTop: 16,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: isWeb ? 40 : 20,
+    // paddingTop: 20, // Removed to eliminate extra gap
+  },
+  header: {
+    marginBottom: 30,
+  },
+  welcomeText: {
+    fontSize: isLargeScreen ? 32 : 28,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: isLargeScreen ? 18 : 16,
+    color: '#666',
+  },
+  quickActions: {
+    marginBottom: 30,
+  },
+  sectionTitle: {
+    fontSize: isLargeScreen ? 22 : 20,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 20,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  actionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: isWeb ? 24 : 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    width: '48%',
+    marginBottom: 16,
+  },
+  actionIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  actionTitle: {
+    fontSize: isLargeScreen ? 16 : 14,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  actionSubtitle: {
+    fontSize: isLargeScreen ? 14 : 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  statsContainer: {
+    marginBottom: 30,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: isWeb ? 24 : 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    width: '48%',
+    marginBottom: 16,
+  },
+  statNumber: {
+    fontSize: isLargeScreen ? 32 : 28,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  statLabel: {
+    fontSize: isLargeScreen ? 14 : 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  addButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  appointmentList: {
+    marginBottom: 30,
+  },
+  appointmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  appointmentDate: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  appointmentTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appointmentType: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+  },
+  patientName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginLeft: 8,
+  },
+  appointmentStatus: {
+    alignSelf: 'flex-start',
+  },
+  statusPending: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  statusConfirmed: {
+    backgroundColor: '#34C759',
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+  },
+  messageList: {
+    marginBottom: 30,
+  },
+  messageCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  messageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  messageSender: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  messageTime: {
+    fontSize: 12,
+    color: '#666',
+  },
+  messagePreview: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  unreadIndicator: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  unreadText: {
+    backgroundColor: '#FF3B30',
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+  },
+  profileSection: {
+    marginBottom: 30,
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    marginBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  profileHeader: {
+    alignItems: 'center',
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: '#666',
+  },
+  menuSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  menuText: {
+    fontSize: 16,
+    color: '#000',
+    marginLeft: 12,
+    flex: 1,
+  },
+  logoutText: {
+    color: '#FF3B30',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  activeTab: {
+    // Active state styling is handled by color changes
+  },
+  tabLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  activeTabLabel: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+  },
+  pendingRequestsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  pendingRequestsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  pendingRequestsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginLeft: 8,
+  },
+  pendingRequestsSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  viewRequestsButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  viewRequestsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  recentActivity: {
+    marginBottom: 30,
+  },
+  activityCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  activityTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginLeft: 8,
+  },
+  activityTime: {
+    fontSize: 14,
+    color: '#666',
+  },
+  activityDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyStateIcon: {
+    marginBottom: 24,
+  },
+  emptyStateTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  emptyStateAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  emptyStateActionText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  bookingRequestsList: {
+    marginBottom: 30,
+  },
+  bookingRequestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  requestHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  patientInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  requestStatus: {
+    backgroundColor: '#FF9500',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  requestDetails: {
+    marginBottom: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reasonSection: {
+    marginBottom: 8,
+  },
+  reasonLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  reasonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  requestActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  rejectButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  rejectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  acceptButton: {
+    backgroundColor: '#34C759',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  acceptButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  messagesContainer: {
+    flex: 1,
+  },
+  messagesHeader: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  messagesHeaderContent: {
+    flexDirection: 'column',
+  },
+  messagesTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  messagesTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000',
+    marginLeft: 12,
+  },
+  messagesSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+  },
+  messagesStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statItem: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginRight: 12,
+  },
+  patientsList: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  patientCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  selectedPatientCard: {
+    backgroundColor: '#F0F8FF',
+    borderColor: '#4CAF50',
+    borderWidth: 2,
+  },
+  patientCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  patientCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  patientAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  patientInfo: {
+    flex: 1,
+  },
+  patientMeta: {
+    flexDirection: 'column',
+    gap: 4,
+  },
+  consultationTypeBadge: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  consultationTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginLeft: 4,
+  },
+  appointmentTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appointmentTimeText: {
+    fontSize: 13,
+    color: '#666',
+    marginLeft: 4,
+  },
+  patientCardRight: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  statusBadge: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#34C759',
+    marginLeft: 4,
+  },
+  rescheduleButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginLeft: 8,
+  },
+  rescheduleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 16,
+    width: '80%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    fontSize: 16,
+    color: '#000',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  submitButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  balanceContainer: {
+    padding: 8,
+  },
+  balanceText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  ratingsSection: {
+    marginBottom: 30,
+  },
+  ratingsList: {
+    marginBottom: 20,
+  },
+  ratingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  ratingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  starRating: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingDate: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  ratingComment: {
+    fontSize: 14,
+    color: '#666',
+  },
+  noRatingsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  noRatingsText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 12,
+  },
+  noRatingsSubtext: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  moreRatingsText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  profileCardsRow: {
+    flexDirection: 'row',
+  },
+  profileCardBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    flex: 1,
+    minWidth: 0,
+    marginBottom: 20,
+  },
+  profileCardNew: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    padding: 22,
+    marginBottom: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
+    justifyContent: 'flex-start',
+    gap: 22,
+  },
+  profileImageContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 22,
+    overflow: 'hidden',
+    backgroundColor: '#F0F8FF',
+    marginRight: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 22,
+    resizeMode: 'cover',
+  },
+  profileInfoNew: {
+    flex: 1,
+  },
+  profileNameNew: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 2,
+  },
+  profileEmailNew: {
+    fontSize: 15,
+    color: '#444',
+    marginBottom: 2,
+  },
+  profileTypeNew: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+    fontSize: 15,
+    marginBottom: 2,
+  },
+  earningsCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 18,
+    alignItems: 'center',
+  },
+  earningsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 8,
+  },
+  earningsAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 4,
+  },
+  earningsButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 28,
+    alignSelf: 'center',
+    marginTop: 8,
+  },
+  earningsButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  logoutItem: {
+    borderBottomWidth: 0,
+  },
+  welcomeHeader: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  welcomeContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  userInfo: {
+    flex: 1,
+  },
+  welcomeText: {
+    fontSize: 16,
+    color: '#666666',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333333',
+    marginTop: 4,
+  },
+  userRole: {
+    fontSize: 14,
+    color: '#4CAF50',
+    marginTop: 2,
+  },
+  profileButton: {
+    padding: 8,
+  },
+  headerLogo: {
+    width: 100,
+    height: 30,
+  },
+  sidebarOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1000,
+    flexDirection: 'row',
+  },
+  sidebarOverlayTouchable: {
+    flex: 1,
+  },
+  sidebar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    height: '100%',
+    width: 300,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    justifyContent: 'flex-start',
+  },
+  sidebarHeader: {
+    marginTop: 32,
+    alignItems: 'center',
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    marginBottom: 20,
+  },
+  sidebarProfileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+  },
+  sidebarUserName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+  },
+  sidebarUserEmail: {
+    fontSize: 14,
+    color: '#666',
+  },
+  sectionHeader: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 16,
+  },
+  sectionGroup: {
+    marginBottom: 20,
+  },
+  sidebarMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#E0F2E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  sidebarMenuItemText: {
+    fontSize: 16,
+    color: '#000',
+    marginLeft: 12,
+    fontWeight: '500',
+  },
+  chevron: {
+    marginLeft: 8,
+  },
+}); 
