@@ -1,5 +1,4 @@
 import { apiService } from '../app/services/apiService';
-import { chatApiService } from './chatApiService';
 import { notificationApiService } from './notificationApiService';
 import { walletApiService } from './walletApiService';
 
@@ -73,7 +72,20 @@ class HybridService {
   // Chat Services
   async getChatRooms() {
     try {
-      return await chatApiService.getChatRooms();
+      // Use the new chat API - get appointments that can be used for chat
+      const response = await apiService.get('/appointments');
+      if (response.success) {
+        // Transform appointments into chat rooms format
+        const chatRooms = response.data.map((appointment: any) => ({
+          id: appointment.id,
+          name: appointment.doctor_name || appointment.patient_name,
+          last_message: null,
+          unread_count: 0,
+          type: 'appointment'
+        }));
+        return { success: true, data: chatRooms };
+      }
+      return { success: false, data: [], error: 'Failed to get appointments' };
     } catch (error) {
       console.warn('Backend chat failed:', error);
       return { success: false, data: [], error: error.message };

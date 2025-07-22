@@ -1,5 +1,4 @@
 import { apiService } from '../app/services/apiService';
-import encryptionService from './encryptionService';
 
 export interface EncryptionStatus {
   encryption_enabled: boolean;
@@ -146,7 +145,7 @@ class EncryptionApiService {
         algorithm: message.algorithm,
       };
 
-      return await encryptionService.decryptMessage(encryptedData, roomKey);
+      return await reactNativeEncryptionService.decryptMessage(encryptedData, roomKey);
     } catch (error) {
       console.error('Error decrypting message locally:', error);
       throw error;
@@ -158,7 +157,7 @@ class EncryptionApiService {
    */
   async encryptMessageLocally(content: string, roomKey: string): Promise<any> {
     try {
-      return await encryptionService.encryptMessage(content, roomKey);
+      return await reactNativeEncryptionService.encryptMessage(content, roomKey);
     } catch (error) {
       console.error('Error encrypting message locally:', error);
       throw error;

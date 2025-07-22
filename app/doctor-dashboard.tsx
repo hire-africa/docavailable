@@ -1,4 +1,3 @@
-import { apiService } from './services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { authService } from '@/services/authService';
@@ -6,25 +5,26 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import WorkingHours from '../components/WorkingHours';
 import WorkingHoursCard from '../components/WorkingHoursCard';
+import { apiService } from './services/apiService';
 
 const profileImage = require('../assets/images/profile.jpg');
 const { width } = Dimensions.get('window');
@@ -281,18 +281,34 @@ export default function DoctorDashboard() {
 
     setLoadingTextSessions(true);
     try {
-      const response = await apiService.get('/text-sessions/history');
+      // Get confirmed appointments for this doctor
+      const response = await apiService.get('/appointments');
       if (response.success && response.data) {
-        const sessions = response.data.data || response.data;
-        // Filter for active sessions where this doctor is the doctor
-        const activeSessions = sessions.filter((session: any) => 
-          session.doctor_id === user.id && 
-          ['active', 'waiting_for_doctor'].includes(session.status)
-        );
-        setActiveTextSessions(activeSessions);
+        // Handle paginated response - appointments are in response.data.data
+        const appointments = response.data.data || response.data;
+        if (Array.isArray(appointments)) {
+          // Filter for confirmed appointments where this doctor is the doctor
+          const activeSessions = appointments
+            .filter((appt: any) => 
+              appt.doctor_id === user.id && 
+              (appt.status === 'confirmed' || appt.status === 1)
+            )
+            .map((appt: any) => ({
+              id: appt.id,
+              appointment_id: appt.id,
+              doctor_id: appt.doctor_id,
+              patient_id: appt.patient_id,
+              patient: appt.patient,
+              doctor: appt.doctor,
+              status: 'active',
+              started_at: appt.created_at,
+              last_activity_at: appt.updated_at
+            }));
+          setActiveTextSessions(activeSessions);
+        }
       }
     } catch (error) {
-      console.error('Error fetching active text sessions:', error);
+      console.error('Error fetching active appointments:', error);
     } finally {
       setLoadingTextSessions(false);
     }
@@ -370,21 +386,18 @@ export default function DoctorDashboard() {
   };
 
   const handleSelectPatient = (patient: BookingRequest) => {
-    const chatId = `chat_${patient.patientId || 'unknown'}_${patient.doctorId || 'unknown'}_${patient.id || 'unknown'}`;
-    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+    // Navigate to chat using appointment ID
+    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
   };
 
   const handleSelectTextSession = (session: any) => {
-    const chatId = `text_session_${session.id}`;
-    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+    // Navigate to chat using appointment ID
+    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: session.appointment_id } });
   };
 
   const handleTestChat = () => {
-    // Test chat with a hardcoded patient ID for testing
-    const testPatientId = 'test-patient-123';
-    const chatId = `chat_${testPatientId}_${user?.id}`;
-    console.log('DoctorDashboard: Testing chat with ID:', chatId);
-    router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+    // Navigate to test chat
+    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: '1' } });
   };
 
   const handleLogout = async () => {

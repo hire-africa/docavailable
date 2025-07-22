@@ -1,5 +1,4 @@
 // Move all import statements to the top
-import { apiService } from './services/apiService';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
@@ -26,6 +25,7 @@ import AlertDialog from '../components/AlertDialog';
 import ChatbotModal from '../components/ChatbotModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
+import { apiService } from './services/apiService';
 
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -420,32 +420,63 @@ export default function PatientDashboard() {
         if (params.sessionId) {
           console.log('PatientDashboard: Session ID from params:', params.sessionId);
           
-          // Try to get session details from API
+          // Try to get appointment details from API
           try {
-            const response = await apiService.get(`/text-sessions/${params.sessionId}`);
+            const response = await apiService.get(`/appointments/${params.sessionId}`);
             if (response.success && response.data) {
-              setActiveTextSession(response.data);
-              console.log('PatientDashboard: Active text session loaded:', response.data);
+              // Transform appointment data to match expected format
+              const appointment = response.data;
+              setActiveTextSession({
+                id: appointment.id,
+                appointment_id: appointment.id,
+                doctor: appointment.doctor,
+                patient: appointment.patient,
+                status: appointment.status,
+                remaining_time_minutes: 30, // Default session time
+                started_at: appointment.created_at,
+                last_activity_at: appointment.updated_at
+              });
+              console.log('PatientDashboard: Active appointment loaded:', appointment);
             }
           } catch (error) {
-            console.error('Error loading text session:', error);
+            console.error('Error loading appointment:', error);
             // Don't show error to user, just continue without session
           }
         } else {
-          // Check for active session
+          // Check for active appointments (confirmed appointments can be used for chat)
           try {
-            const response = await apiService.get('/text-sessions/active');
+            const response = await apiService.get('/appointments');
             if (response.success && response.data) {
-              setActiveTextSession(response.data);
-              console.log('PatientDashboard: Active text session found:', response.data);
+              // Handle paginated response - appointments are in response.data.data
+              const appointments = response.data.data || response.data;
+              if (Array.isArray(appointments)) {
+                // Find the most recent confirmed appointment
+                const activeAppointment = appointments
+                  .filter((appt: any) => appt.status === 'confirmed' || appt.status === 1)
+                  .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+                
+                if (activeAppointment) {
+                  setActiveTextSession({
+                    id: activeAppointment.id,
+                    appointment_id: activeAppointment.id,
+                    doctor: activeAppointment.doctor,
+                    patient: activeAppointment.patient,
+                    status: activeAppointment.status,
+                    remaining_time_minutes: 30,
+                    started_at: activeAppointment.created_at,
+                    last_activity_at: activeAppointment.updated_at
+                  });
+                  console.log('PatientDashboard: Active appointment found:', activeAppointment);
+                }
+              }
             }
           } catch (error) {
-            console.error('Error checking active text session:', error);
+            console.error('Error checking active appointments:', error);
             // Don't show error to user, just continue without session
           }
         }
       } catch (error) {
-        console.error('Error in text session check:', error);
+        console.error('Error in appointment check:', error);
         // Don't show error to user, just continue without session
       }
     };
@@ -498,10 +529,8 @@ export default function PatientDashboard() {
     
     // If sessionId is provided, navigate to the chat after a short delay
     if (params.sessionId) {
-      setTimeout(() => {
-        const chatId = `text_session_${params.sessionId}`;
-        router.push({ pathname: '/chat/[chatId]', params: { chatId } });
-      }, 500); // Small delay to ensure dashboard is loaded
+      // Navigate to chat using appointment ID
+      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: params.sessionId } });
     }
   }, [params]);
 
@@ -1045,9 +1074,8 @@ export default function PatientDashboard() {
               borderColor: '#4CAF50'
             }}
             onPress={() => {
-              // Navigate to the text session chat
-              const chatId = `text_session_${activeTextSession.session_id}`;
-              router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+              // Navigate to chat using appointment ID
+              router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: activeTextSession.appointment_id } });
             }}
           >
             {activeTextSession.doctor?.profile_picture_url ? (
@@ -1109,8 +1137,8 @@ export default function PatientDashboard() {
                 key={String(appt.id || appt.doctorId || 'unknown')}
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
                 onPress={() => {
-                  const chatId = `chat_${user?.id || 'unknown'}_${appt.doctorId || 'unknown'}_${appt.id || 'unknown'}`;
-                  router.push({ pathname: '/chat/[chatId]', params: { chatId } });
+                  // Navigate to chat using appointment ID
+                  router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: appt.id } });
                 }}
               >
                 {appt.doctor?.profile_picture_url ? (

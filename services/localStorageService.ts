@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../app/services/apiService';
-import encryptionService from './encryptionService';
+import reactNativeEncryptionService from './reactNativeEncryptionService';
 
 interface LocalMessage {
   id: string;
@@ -56,7 +56,6 @@ interface DecryptedMessage {
 }
 
 class LocalStorageService {
-  private encryptionService = encryptionService;
   private storagePrefix = 'text_session_';
   private keyPrefix = 'session_key_';
   private metadataPrefix = 'session_metadata_';
@@ -167,7 +166,7 @@ class LocalStorageService {
       for (const message of messages) {
         try {
           if (message.is_encrypted) {
-            const decryptedText = await this.encryptionService.decryptMessage({
+            const decryptedText = await reactNativeEncryptionService.decryptMessage({
               encrypted_content: message.encrypted_content,
               iv: message.iv,
               tag: message.tag,

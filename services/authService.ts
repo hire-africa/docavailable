@@ -157,6 +157,52 @@ class AuthService {
     }
   }
 
+  // Sign in with Google
+  async signInWithGoogle(idToken: string): Promise<AuthState> {
+    try {
+      console.log('AuthService: Starting Google sign-in...');
+      
+      // Sign in with Laravel backend using Google token
+      const response = await apiService.googleLogin({ id_token: idToken });
+      
+      if (response.success && response.data) {
+        const { user, token } = response.data;
+        
+        // Store token
+        await this.storeToken(token);
+        
+        const state: AuthState = {
+          user,
+          token,
+          loading: false,
+          error: null
+        };
+
+        this.currentUser = user;
+        this.currentToken = token;
+        this.notifyListeners(state);
+        return state;
+      } else {
+        throw new Error(response.message || 'Google login failed');
+      }
+    } catch (error: any) {
+      console.error('AuthService: Google login error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      
+      const state: AuthState = {
+        user: null,
+        token: null,
+        loading: false,
+        error: error.message
+      };
+      this.notifyListeners(state);
+      throw error;
+    }
+  }
+
   // Sign up with email and password
   async signUp(formData: FormData): Promise<AuthState> {
     try {

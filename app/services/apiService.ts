@@ -63,8 +63,8 @@ class ApiService {
     isOpen: false,
     failureCount: 0,
     lastFailureTime: 0,
-    threshold: 5, // Number of failures before opening circuit
-    timeout: 30000 // 30 seconds timeout before trying again
+    threshold: 10, // Increased threshold to be less aggressive
+    timeout: 10000 // Reduced timeout to 10 seconds for faster recovery
   };
 
   constructor() {
@@ -702,9 +702,9 @@ class ApiService {
       } catch (error) {
         console.error('❌ [ApiService] POST error:', { 
           url, 
-          error: error?.message,
-          status: error?.response?.status,
-          data: error?.response?.data 
+          error: (error as any)?.message,
+          status: (error as any)?.response?.status,
+          data: (error as any)?.response?.data 
         });
         throw error;
       }

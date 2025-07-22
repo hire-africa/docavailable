@@ -57,34 +57,94 @@ export default function LoginPage() {
         } catch (error: any) {
             console.error('Login error:', error);
             
-            // Show specific error messages based on the error type
+            // Enhanced error handling with detailed messages and suggestions
             let errorMessage = 'Login failed. Please try again.';
             let errorTitle = 'Login Failed';
+            let errorSuggestion = '';
             
-            if (error.message) {
+            // Check if we have detailed error information from the backend
+            if (error.response?.data) {
+                const errorData = error.response.data;
+                errorMessage = errorData.message || errorMessage;
+                
+                // Set title based on error type
+                if (errorData.error_type) {
+                    switch (errorData.error_type) {
+                        case 'validation_error':
+                            errorTitle = 'Validation Error';
+                            break;
+                        case 'email_not_found':
+                            errorTitle = 'Email Not Found';
+                            break;
+                        case 'invalid_password':
+                            errorTitle = 'Invalid Password';
+                            break;
+                        case 'account_suspended':
+                            errorTitle = 'Account Suspended';
+                            break;
+                        case 'account_pending':
+                            errorTitle = 'Account Pending';
+                            break;
+                        case 'database_error':
+                            errorTitle = 'Database Error';
+                            break;
+                        case 'authentication_error':
+                            errorTitle = 'Authentication Error';
+                            break;
+                        case 'connection_error':
+                            errorTitle = 'Connection Error';
+                            break;
+                        case 'token_error':
+                            errorTitle = 'Token Error';
+                            break;
+                        case 'unexpected_error':
+                            errorTitle = 'Unexpected Error';
+                            break;
+                        default:
+                            errorTitle = 'Login Error';
+                    }
+                }
+                
+                // Add suggestion if available
+                if (errorData.suggestion) {
+                    errorSuggestion = errorData.suggestion;
+                }
+            } else if (error.message) {
+                // Fallback to message-based error handling
                 if (error.message.includes('Invalid email or password')) {
                     errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+                    errorSuggestion = 'Make sure caps lock is off and try again.';
                 } else if (error.message.includes('Network error') || error.message.includes('Cannot connect to server')) {
                     errorMessage = 'Network error. Please check your internet connection and try again.';
                     errorTitle = 'Connection Error';
+                    errorSuggestion = 'Check your internet connection and try again.';
                 } else if (error.message.includes('Request timed out')) {
                     errorMessage = 'Request timed out. Please check your internet connection and try again.';
                     errorTitle = 'Timeout Error';
+                    errorSuggestion = 'Check your internet connection and try again.';
                 } else if (error.message.includes('Server error')) {
                     errorMessage = 'Server error. Please try again later or contact support if the problem persists.';
                     errorTitle = 'Server Error';
+                    errorSuggestion = 'If this problem persists, please contact support.';
                 } else if (error.message.includes('Service temporarily unavailable')) {
                     errorMessage = 'Service temporarily unavailable. Please try again later.';
                     errorTitle = 'Service Unavailable';
+                    errorSuggestion = 'Please try again in a few minutes.';
                 } else if (error.message.includes('Validation failed')) {
                     errorMessage = 'Please check your email format and ensure all fields are filled correctly.';
                     errorTitle = 'Validation Error';
+                    errorSuggestion = 'Make sure your email is in the correct format: example@domain.com';
                 } else {
                     errorMessage = error.message;
                 }
             }
             
-            Alert.alert(errorTitle, errorMessage);
+            // Show error with suggestion if available
+            if (errorSuggestion) {
+                Alert.alert(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
+            } else {
+                Alert.alert(errorTitle, errorMessage);
+            }
         } finally {
             setLoading(false);
         }
@@ -93,7 +153,24 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         try {
-            const authState = await authService.signInWithGoogle();
+            // TODO: Implement Google Sign-In
+            // This requires installing @expo/google-sign-in and configuring Google OAuth
+            // For now, show a message that this feature is not yet implemented
+            
+            Alert.alert(
+                'Google Sign-In Not Available',
+                'Google sign-in is not yet implemented. Please use email and password to sign in.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => setLoading(false)
+                    }
+                ]
+            );
+            
+            // Uncomment the following code when Google sign-in is implemented:
+            /*
+            const authState = await authService.signInWithGoogle(idToken);
             console.log('Google login successful');
             
             if (authState.user) {
@@ -115,23 +192,75 @@ export default function LoginPage() {
                 Alert.alert('Login Failed', 'User data not found.');
                 await authService.signOut();
             }
+            */
         } catch (error: any) {
             console.error('Google login error:', error);
             
-            // Show helpful error messages
+            // Enhanced Google sign-in error handling
             let errorMessage = 'Failed to sign in with Google. Please try again.';
+            let errorTitle = 'Google Login Failed';
+            let errorSuggestion = '';
             
-            if (error.message.includes('Firebase configuration not available')) {
-                errorMessage = 'Google authentication is not configured. Please contact support.';
-            } else if (error.message.includes('Google sign-in was cancelled')) {
-                errorMessage = 'Google sign-in was cancelled.';
-            } else if (error.message.includes('Firebase Auth not initialized')) {
-                errorMessage = 'Authentication service is not ready. Please try again.';
-            } else if (error.message.includes('Google authentication failed')) {
-                errorMessage = 'Google authentication failed. Please check your internet connection and try again.';
+            // Check if we have detailed error information from the backend
+            if (error.response?.data) {
+                const errorData = error.response.data;
+                errorMessage = errorData.message || errorMessage;
+                
+                if (errorData.error_type) {
+                    switch (errorData.error_type) {
+                        case 'invalid_google_token':
+                            errorTitle = 'Invalid Google Token';
+                            break;
+                        case 'google_verification_failed':
+                            errorTitle = 'Google Verification Failed';
+                            break;
+                        case 'account_suspended':
+                            errorTitle = 'Account Suspended';
+                            break;
+                        case 'account_pending':
+                            errorTitle = 'Account Pending';
+                            break;
+                        default:
+                            errorTitle = 'Google Login Error';
+                    }
+                }
+                
+                if (errorData.suggestion) {
+                    errorSuggestion = errorData.suggestion;
+                }
+            } else if (error.message) {
+                // Fallback to message-based error handling
+                if (error.message.includes('Firebase configuration not available')) {
+                    errorMessage = 'Google authentication is not configured. Please contact support.';
+                    errorSuggestion = 'This is a configuration issue. Please contact our support team.';
+                } else if (error.message.includes('Google sign-in was cancelled')) {
+                    errorMessage = 'Google sign-in was cancelled.';
+                    errorSuggestion = 'You can try signing in again or use email/password login.';
+                } else if (error.message.includes('Firebase Auth not initialized')) {
+                    errorMessage = 'Authentication service is not ready. Please try again.';
+                    errorSuggestion = 'Please wait a moment and try again.';
+                } else if (error.message.includes('Google authentication failed')) {
+                    errorMessage = 'Google authentication failed. Please check your internet connection and try again.';
+                    errorSuggestion = 'Check your internet connection and try again.';
+                } else if (error.message.includes('Network error')) {
+                    errorMessage = 'Network error during Google sign-in. Please check your internet connection.';
+                    errorTitle = 'Network Error';
+                    errorSuggestion = 'Check your internet connection and try again.';
+                } else if (error.message.includes('Request timed out')) {
+                    errorMessage = 'Google sign-in request timed out. Please try again.';
+                    errorTitle = 'Timeout Error';
+                    errorSuggestion = 'Check your internet connection and try again.';
+                } else {
+                    errorMessage = error.message;
+                }
             }
             
-            Alert.alert('Google Login Failed', errorMessage);
+            // Show error with suggestion if available
+            if (errorSuggestion) {
+                Alert.alert(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
+            } else {
+                Alert.alert(errorTitle, errorMessage);
+            }
         } finally {
             setLoading(false);
         }

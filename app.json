@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.docavailable.app"
+      "bundleIdentifier": "com.docavailable.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -41,9 +44,11 @@
       "typedRoutes": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "2eb40af4-b32e-462e-b070-a1b171e65485"
       }
-    }
+    },
+    "owner": "sleeky77"
   }
 }

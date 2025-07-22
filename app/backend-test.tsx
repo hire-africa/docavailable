@@ -1,5 +1,4 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { chatApiService } from '@/services/chatApiService';
 import { hybridService } from '@/services/hybridService';
 import { notificationApiService } from '@/services/notificationApiService';
 import { walletApiService } from '@/services/walletApiService';
@@ -84,22 +83,22 @@ export default function BackendTestPage() {
         addTestResult('Authentication', 'error', 'No user logged in');
       }
 
-      // Test 4: Chat API (requires authentication)
+      // Test 4: New Chat API (requires authentication)
       if (user) {
-        addTestResult('Chat API', 'pending', 'Testing chat API...');
+        addTestResult('New Chat API', 'pending', 'Testing new chat API...');
         try {
-          const chatResponse = await chatApiService.getChatRooms();
+          const chatResponse = await apiService.get('/chat/1/info');
           addTestResult(
-            'Chat API',
+            'New Chat API',
             chatResponse.success ? 'success' : 'error',
-            chatResponse.success ? 'Chat API working' : 'Chat API failed',
+            chatResponse.success ? 'New Chat API working' : 'New Chat API failed',
             chatResponse.data
           );
         } catch (error: any) {
-          addTestResult('Chat API', 'error', `Chat API error: ${error.message}`);
+          addTestResult('New Chat API', 'error', `New Chat API error: ${error.message}`);
         }
       } else {
-        addTestResult('Chat API', 'error', 'Chat API requires authentication - please log in');
+        addTestResult('New Chat API', 'error', 'New Chat API requires authentication - please log in');
       }
 
       // Test 5: Wallet API (for doctors)
@@ -165,14 +164,14 @@ export default function BackendTestPage() {
             connectivity ? 'Backend is reachable' : 'Backend is not reachable');
           break;
 
-        case 'Chat API':
+        case 'New Chat API':
           if (user) {
-            const chatResponse = await chatApiService.getChatRooms();
+            const chatResponse = await apiService.get('/chat/1/info');
             addTestResult(testName, chatResponse.success ? 'success' : 'error',
-              chatResponse.success ? 'Chat API working' : 'Chat API failed',
+              chatResponse.success ? 'New Chat API working' : 'New Chat API failed',
               chatResponse.data);
           } else {
-            addTestResult(testName, 'error', 'Chat API requires authentication - please log in');
+            addTestResult(testName, 'error', 'New Chat API requires authentication - please log in');
           }
           break;
 
