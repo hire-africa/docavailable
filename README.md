@@ -1,50 +1,195 @@
-# Welcome to your Expo app 👋
+# Doc Available - Healthcare Appointment Booking App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A comprehensive healthcare appointment booking application with real-time chat functionality, built with React Native and Laravel.
 
-## Get started
+## 🏥 Features
 
-1. Install dependencies
+### Core Functionality
+- **Appointment Booking**: Schedule appointments with healthcare providers
+- **Real-time Chat**: Secure messaging between patients and doctors
+- **User Authentication**: Role-based access (Patients, Doctors, Admins)
+- **Profile Management**: Complete user and doctor profile management
+- **Payment Integration**: Secure payment processing for appointments
+- **Push Notifications**: Real-time notifications for appointments and messages
 
-   ```bash
-   npm install
-   ```
+### Security Features
+- **End-to-End Encryption**: Secure message encryption
+- **JWT Authentication**: Secure token-based authentication
+- **Role-based Access Control**: Different permissions for different user types
+- **Data Validation**: Comprehensive input validation and sanitization
 
-2. Start the app
+## 🛠 Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+### Frontend (React Native)
+- **React Native**: Cross-platform mobile development
+- **Expo**: Development platform and tools
+- **TypeScript**: Type-safe JavaScript
+- **React Navigation**: Navigation between screens
+- **AsyncStorage**: Local data persistence
+- **Axios**: HTTP client for API calls
 
-In the output, you'll find options to open the app in a
+### Backend (Laravel)
+- **Laravel 10**: PHP framework
+- **MySQL**: Database
+- **Laravel Sanctum**: API authentication
+- **Laravel Broadcasting**: Real-time features
+- **Laravel Notifications**: Push notifications
+- **Laravel Jobs**: Background task processing
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Additional Technologies
+- **WebSocket**: Real-time communication
+- **Firebase Cloud Messaging**: Push notifications
+- **Laravel Echo**: Real-time event broadcasting
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 📱 Screenshots
 
-## Get a fresh project
+*Screenshots will be added here*
 
-When you're ready, run:
+## 🚀 Getting Started
 
+### Prerequisites
+- Node.js (v16 or higher)
+- PHP (v8.1 or higher)
+- Composer
+- MySQL
+- Expo CLI
+- Android Studio / Xcode (for mobile development)
+
+### Installation
+
+#### 1. Clone the Repository
 ```bash
-npm run reset-project
+git clone https://github.com/yourusername/doc-available.git
+cd doc-available
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+#### 2. Backend Setup (Laravel)
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan db:seed
+php artisan serve
+```
 
-## Learn more
+#### 3. Frontend Setup (React Native)
+```bash
+cd ../
+npm install
+npx expo start
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+#### 4. Environment Configuration
+Create a `.env` file in the root directory:
+```env
+API_BASE_URL=http://localhost:8000/api
+EXPO_PUBLIC_API_URL=http://localhost:8000/api
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 📁 Project Structure
 
-## Join the community
+```
+Doc_available/
+├── app/                    # React Native app screens
+├── backend/               # Laravel backend
+│   ├── app/
+│   │   ├── Http/Controllers/
+│   │   ├── Models/
+│   │   └── Services/
+│   ├── database/
+│   └── routes/
+├── components/            # Reusable React Native components
+├── services/             # API services and utilities
+├── scripts/              # Utility scripts
+└── assets/               # Images, fonts, and other assets
+```
 
-Join our community of developers creating universal apps.
+## 🔧 Configuration
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Database Configuration
+Update the database settings in `backend/.env`:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=doc_available
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
+
+### Push Notifications
+Configure Firebase Cloud Messaging in `backend/config/broadcasting.php`:
+```php
+'fcm' => [
+    'driver' => 'fcm',
+    'key' => env('FCM_SERVER_KEY'),
+],
+```
+
+## 🧪 Testing
+
+### Backend Tests
+```bash
+cd backend
+php artisan test
+```
+
+### Frontend Tests
+```bash
+npm test
+```
+
+## 📦 Deployment
+
+### Backend Deployment
+1. Set up a production server
+2. Configure environment variables
+3. Run database migrations
+4. Set up SSL certificates
+5. Configure web server (Apache/Nginx)
+
+### Mobile App Deployment
+1. Build the app using Expo:
+   ```bash
+   eas build --platform all
+   ```
+2. Submit to app stores (iOS App Store, Google Play Store)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+If you encounter any issues or have questions:
+- Create an issue on GitHub
+- Check the documentation in the `/docs` folder
+- Review the troubleshooting guide
+
+## 🔄 Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes and updates.
+
+## 👥 Authors
+
+- **Your Name** - *Initial work* - [YourGitHub](https://github.com/yourusername)
+
+## 🙏 Acknowledgments
+
+- Laravel team for the amazing framework
+- React Native community for mobile development tools
+- All contributors and testers
+
+---
+
+**Note**: This is a healthcare application. Please ensure compliance with relevant healthcare regulations (HIPAA, GDPR, etc.) before deploying to production.
