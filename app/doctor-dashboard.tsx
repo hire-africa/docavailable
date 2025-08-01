@@ -81,7 +81,7 @@ const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
 );
 
 export default function DoctorDashboard() {
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
@@ -124,6 +124,30 @@ export default function DoctorDashboard() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const sidebarAnim = useRef(new Animated.Value(0)).current;
   const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
+
+  // Refresh user data when component mounts or when user data changes
+  useEffect(() => {
+    const refreshData = async () => {
+      try {
+        console.log('DoctorDashboard: Refreshing user data...');
+        await refreshUserData();
+      } catch (error) {
+        console.error('DoctorDashboard: Error refreshing user data:', error);
+      }
+    };
+    
+    refreshData();
+  }, []);
+
+  // Log when user data changes
+  useEffect(() => {
+    if (userData) {
+      console.log('DoctorDashboard: User data updated:', {
+        profile_picture_url: userData.profile_picture_url,
+        profile_picture: userData.profile_picture
+      });
+    }
+  }, [userData]);
 
   useEffect(() => {
     if (user) {
@@ -407,6 +431,12 @@ export default function DoctorDashboard() {
   };
 
   const handleAcceptBooking = async (request: BookingRequest) => {
+    // Check if appointment is expired
+    if (isAppointmentExpired(request.date, request.time)) {
+      showError('Error', 'Cannot accept expired appointment. The appointment time has already passed.');
+      return;
+    }
+
     try {
       console.log('🔄 [DoctorDashboard] Accepting appointment:', request.id);
       console.log('🔄 [DoctorDashboard] Request data:', {
@@ -1187,20 +1217,41 @@ export default function DoctorDashboard() {
                     <View style={{backgroundColor: '#FFF3CD', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
                       <Text style={{color: '#856404', fontSize: 12, fontWeight: 'bold'}}>Pending</Text>
                     </View>
-                    <View style={{flexDirection: 'row', gap: 8}}>
+                    <View style={{flexDirection: 'row', gap: 8, justifyContent: 'flex-end'}}>
                       <TouchableOpacity 
-                        style={{backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12}}
+                        style={[
+                          {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
+                          {backgroundColor: '#FF3B30'}
+                        ]}
                         onPress={() => handleRejectBooking(request)}
                       >
                         <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Reject</Text>
                       </TouchableOpacity>
                       <TouchableOpacity 
-                        style={{backgroundColor: '#4CAF50', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12}}
+                        style={[
+                          {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
+                          isAppointmentExpired(request.date, request.time) 
+                            ? {backgroundColor: '#E0E0E0'} 
+                            : {backgroundColor: '#4CAF50'}
+                        ]}
                         onPress={() => handleAcceptBooking(request)}
+                        disabled={isAppointmentExpired(request.date, request.time)}
                       >
-                        <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Accept</Text>
+                        <Text style={[
+                          {fontSize: 12, fontWeight: 'bold'},
+                          isAppointmentExpired(request.date, request.time)
+                            ? {color: '#999999'}
+                            : {color: '#FFFFFF'}
+                        ]}>
+                          {isAppointmentExpired(request.date, request.time) ? 'Expired' : 'Accept'}
+                        </Text>
                       </TouchableOpacity>
                     </View>
+                    {isAppointmentExpired(request.date, request.time) && (
+                      <View style={{marginTop: 4, alignItems: 'center'}}>
+                        <Text style={{color: '#FF6B6B', fontSize: 10, fontStyle: 'italic'}}>Appointment time has passed</Text>
+                      </View>
+                    )}
                   </>
                 )}
               </View>
@@ -1424,7 +1475,13 @@ export default function DoctorDashboard() {
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
       {/* Profile Header */}
       <View style={{alignItems: 'center', marginBottom: 18}}>
-        <Image source={profileImage} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+        {user?.profile_picture_url ? (
+          <Image source={{ uri: user.profile_picture_url }} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+        ) : user?.profile_picture ? (
+          <Image source={{ uri: user.profile_picture }} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+        ) : (
+          <Image source={profileImage} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+        )}
         <Text style={{fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center'}}>{user?.display_name || user?.email?.split('@')[0] || 'Doctor'}</Text>
         {userData?.status === 'approved' && <Text style={{color: '#4CAF50', fontWeight: 'bold', fontSize: 15, textAlign: 'center', marginBottom: 2}}>Verified</Text>}
         <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'center', marginBottom: 2}}>Joined {userData?.created_at ? new Date(userData.created_at).getFullYear() : '2021'}</Text>

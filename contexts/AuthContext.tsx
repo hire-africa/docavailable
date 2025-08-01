@@ -79,12 +79,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Get token from authService
       const token = await authService.getStoredToken();
+      console.log('AuthContext: Stored token found:', !!token);
+      
       if (!token) {
         console.log('AuthContext: No token found');
         return null;
       }
       
       // Get current user from Laravel backend using direct fetch
+      console.log('AuthContext: Making request to /api/user...');
       const response = await fetch('http://172.20.10.11:8000/api/user', {
         method: 'GET',
         headers: {
@@ -92,6 +95,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           'Content-Type': 'application/json',
         },
       });
+      
+      console.log('AuthContext: Response status:', response.status);
       
       if (!response.ok) {
         if (response.status === 401) {
@@ -101,20 +106,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return null;
       }
       
-      const apiUser = await response.json();
-      console.log('AuthContext: API response:', apiUser);
+      const apiResponse = await response.json();
+      console.log('AuthContext: API response:', apiResponse);
       
-      if (apiUser) {
-        console.log('AuthContext: Retrieved user data from Laravel:', apiUser);
-        const userData = convertApiUserToUserData(apiUser);
+      // Handle the wrapped response structure
+      if (apiResponse.success && apiResponse.data) {
+        console.log('AuthContext: Retrieved user data from Laravel:', apiResponse.data);
+        const userData = convertApiUserToUserData(apiResponse.data);
         console.log('AuthContext: Converted to UserData format:', userData);
         console.log('AuthContext: User type:', userData.user_type);
         console.log('AuthContext: User status:', userData.status);
         return userData;
+      } else {
+        console.log('AuthContext: API response indicates failure:', apiResponse.message);
+        return null;
       }
       
-      console.log('AuthContext: No user data found in Laravel backend');
-      return null;
     } catch (error: any) {
       console.error('AuthContext: Error fetching user data from Laravel:', error);
       return null;
@@ -125,14 +132,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('AuthContext: Refreshing user data...');
       const data = await fetchUserData();
-      setUserData(data);
-      setUser(data); // Set user to be the same as userData
-      // Get token from authService
-      const storedToken = await authService.getStoredToken();
-      setToken(storedToken);
-      console.log('AuthContext: User data refreshed successfully:', data?.user_type);
+      console.log('AuthContext: Fetched user data:', data);
+      
+      if (data) {
+        setUserData(data);
+        setUser(data); // Set user to be the same as userData
+        // Get token from authService
+        const storedToken = await authService.getStoredToken();
+        setToken(storedToken);
+        console.log('AuthContext: User data refreshed successfully:', data?.user_type);
+      } else {
+        console.log('AuthContext: No user data received from API, but keeping existing data');
+        // Don't clear existing data if API fails - keep what we have
+        // Only clear if we explicitly get a null response
+      }
     } catch (error) {
       console.error('AuthContext: Error refreshing user data:', error);
+      // Don't clear state on error - keep existing data
+      console.log('AuthContext: Keeping existing user data despite refresh error');
     }
   };
 

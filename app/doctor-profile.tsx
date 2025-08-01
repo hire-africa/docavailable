@@ -20,7 +20,7 @@ const maxWidth = isWeb ? 800 : width;
 const isLargeScreen = width > 768;
 
 export default function DoctorProfile() {
-    const { user, userData } = useAuth();
+    const { user, userData, refreshUserData } = useAuth();
     const [appointmentData, setAppointmentData] = useState<any[]>([]);
     const [weeklyData, setWeeklyData] = useState<any[]>([]);
     const [timeFrame, setTimeFrame] = useState<'monthly' | 'weekly'>('monthly');
@@ -29,6 +29,27 @@ export default function DoctorProfile() {
     useEffect(() => {
         fetchAppointmentData();
     }, []);
+
+    // Refresh user data when component mounts or when navigating back
+    useEffect(() => {
+        const refreshData = async () => {
+            try {
+                console.log('DoctorProfile: Refreshing user data...');
+                await refreshUserData();
+            } catch (error) {
+                console.error('DoctorProfile: Error refreshing user data:', error);
+            }
+        };
+        
+        refreshData();
+    }, []);
+
+    // Refresh when userData changes
+    useEffect(() => {
+        if (userData) {
+            console.log('DoctorProfile: User data updated:', userData.profile_picture_url);
+        }
+    }, [userData]);
 
     const fetchAppointmentData = async () => {
         try {

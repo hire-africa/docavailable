@@ -99,7 +99,7 @@ export default function PrivacySettings() {
             
             if (response.success) {
                 setSettings(updatedSettings);
-                Alert.alert('Success', 'Privacy settings updated successfully.');
+                // Silent success - no modal
             } else {
                 Alert.alert('Error', response.message || 'Failed to save privacy settings.');
             }

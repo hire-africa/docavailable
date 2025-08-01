@@ -71,6 +71,21 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
 
     // Use profilePictureUrl if available, otherwise fall back to imageUri
     const finalImageUri = profilePictureUrl || imageUri;
+    
+    console.log('ProfilePictureDisplay - Props:', {
+        imageUri,
+        profilePictureUrl,
+        finalImageUri,
+        size
+    });
+
+    // Add more detailed debugging for troubleshooting
+    if (finalImageUri) {
+        console.log('ProfilePictureDisplay - Final image URI:', finalImageUri);
+        console.log('ProfilePictureDisplay - Is full URL:', finalImageUri.startsWith('http'));
+    } else {
+        console.log('ProfilePictureDisplay - No image URI available');
+    }
 
     return (
         <View style={styles.container}>
@@ -78,6 +93,12 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
                 <Image
                     source={{ uri: getImageUrl(finalImageUri) }}
                     style={styles.image}
+                    onError={(error) => {
+                        console.error('ProfilePictureDisplay - Image load error:', error);
+                    }}
+                    onLoad={() => {
+                        console.log('ProfilePictureDisplay - Image loaded successfully:', finalImageUri);
+                    }}
                 />
             ) : (
                 <FontAwesome name="user" size={size / 2.5} color={borderColor} />

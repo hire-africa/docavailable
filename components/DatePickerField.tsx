@@ -94,26 +94,78 @@ function formatDate(date: Date, format: 'MM/DD/YYYY' | 'YYYY-MM-DD' = 'YYYY-MM-D
 function parseDate(str: string): Date | null {
     if (!str || str.trim() === '') return null;
     
+    console.log('DatePickerField: Parsing date string:', str);
+    
     // Handle different date formats
     let parts: string[] = [];
     
-    if (str.includes('/')) {
-        parts = str.split('/');
-        if (parts.length === 3) {
-            // MM/DD/YYYY
-            return new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]));
-        }
-    } else if (str.includes('-')) {
-        parts = str.split('-');
-        if (parts.length === 3) {
-            // YYYY-MM-DD
-            return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    // 1. Try parsing as ISO string (Laravel default format)
+    if (str.includes('T') || str.includes('Z')) {
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+            console.log('DatePickerField: Parsed as ISO string:', date);
+            return date;
         }
     }
     
-    // Try parsing as is
+    // 2. Try parsing as YYYY-MM-DD format
+    if (str.includes('-') && !str.includes('T')) {
+        parts = str.split('-');
+        if (parts.length === 3) {
+            const year = Number(parts[0]);
+            const month = Number(parts[1]) - 1; // Month is 0-indexed
+            const day = Number(parts[2]);
+            
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                const date = new Date(year, month, day);
+                console.log('DatePickerField: Parsed as YYYY-MM-DD:', date);
+                return date;
+            }
+        }
+    }
+    
+    // 3. Try parsing as MM/DD/YYYY format
+    if (str.includes('/')) {
+        parts = str.split('/');
+        if (parts.length === 3) {
+            const month = Number(parts[0]) - 1; // Month is 0-indexed
+            const day = Number(parts[1]);
+            const year = Number(parts[2]);
+            
+            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                const date = new Date(year, month, day);
+                console.log('DatePickerField: Parsed as MM/DD/YYYY:', date);
+                return date;
+            }
+        }
+    }
+    
+    // 4. Try parsing as timestamp (Unix timestamp)
+    if (/^\d+$/.test(str)) {
+        const timestamp = Number(str);
+        if (!isNaN(timestamp)) {
+            // Check if it's a Unix timestamp (seconds since epoch)
+            if (timestamp > 1000000000) { // Likely a Unix timestamp
+                const date = new Date(timestamp * 1000);
+                console.log('DatePickerField: Parsed as Unix timestamp:', date);
+                return date;
+            } else {
+                const date = new Date(timestamp);
+                console.log('DatePickerField: Parsed as JavaScript timestamp:', date);
+                return date;
+            }
+        }
+    }
+    
+    // 5. Try parsing as is (fallback)
     const date = new Date(str);
-    return !isNaN(date.getTime()) ? date : null;
+    if (!isNaN(date.getTime())) {
+        console.log('DatePickerField: Parsed as generic date:', date);
+        return date;
+    }
+    
+    console.log('DatePickerField: Failed to parse date string:', str);
+    return null;
 }
 
 export const DatePickerField: React.FC<DatePickerFieldProps> = ({ 
@@ -132,6 +184,13 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
     
     // Validate the current value
     const isValidValue = !value || parseDate(value) !== null;
+    
+    // Log the parsing result for debugging
+    if (value) {
+        console.log('DatePickerField: Input value:', value);
+        console.log('DatePickerField: Parsed date object:', dateObj);
+        console.log('DatePickerField: Is valid:', isValidValue);
+    }
 
     if (Platform.OS === 'web') {
         // For web, always use YYYY-MM-DD as it's the HTML5 date input format
@@ -209,7 +268,7 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
                     color: value && isValidValue ? '#000' : '#999', 
                     fontSize: 16 
                 }}>
-                    {value && isValidValue ? value : 'Select date'}
+                    {value && isValidValue ? formatDate(dateObj, outputFormat) : 'Select date'}
                 </Text>
             </TouchableOpacity>
             {show && (

@@ -90,7 +90,7 @@ interface UserSubscription {
 }
 
 export default function PatientDashboard() {
-  const { user, userData, loading } = useAuth();
+  const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const [activeTab, setActiveTab] = useState('home');
@@ -142,6 +142,30 @@ export default function PatientDashboard() {
   const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
 
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+  // Refresh user data when component mounts or when user data changes
+  useEffect(() => {
+    const refreshData = async () => {
+      try {
+        console.log('PatientDashboard: Refreshing user data...');
+        await refreshUserData();
+      } catch (error) {
+        console.error('PatientDashboard: Error refreshing user data:', error);
+      }
+    };
+    
+    refreshData();
+  }, []);
+
+  // Log when user data changes
+  useEffect(() => {
+    if (userData) {
+      console.log('PatientDashboard: User data updated:', {
+        profile_picture_url: userData.profile_picture_url,
+        profile_picture: userData.profile_picture
+      });
+    }
+  }, [userData]);
 
   // Helper function to ensure appointments is always an array
   const getSafeAppointments = () => {
@@ -824,6 +848,32 @@ export default function PatientDashboard() {
       return () => clearInterval(healthCheckInterval);
     }
   }, [user]);
+
+  // Add polling for real-time status updates
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (user && activeTab === 'appointments') {
+      // Poll for updates every 30 seconds
+      interval = setInterval(async () => {
+        try {
+          const response = await apiService.get('/appointments');
+          if (response.success && response.data) {
+            const appointmentsData = response.data.data || response.data;
+            setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
+          }
+        } catch (error) {
+          console.error('Error polling for appointment updates:', error);
+        }
+      }, 30000); // 30 seconds
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [user, activeTab]);
 
   if (!user) return null;
 
@@ -2058,6 +2108,37 @@ export default function PatientDashboard() {
     </ScrollView>
   );
 
+  // Helper to get status badge information
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case 'pending':
+        return { color: '#FFA500', text: 'Pending', icon: 'clock-o' };
+      case 'confirmed':
+        return { color: '#4CAF50', text: 'Confirmed', icon: 'check-circle' };
+      case 'cancelled':
+        return { color: '#F44336', text: 'Cancelled', icon: 'times-circle' };
+      case 'completed':
+        return { color: '#2196F3', text: 'Completed', icon: 'check-square' };
+      default:
+        return { color: '#666', text: 'Unknown', icon: 'question-circle' };
+    }
+  };
+
+  // Helper to get status color
+  const getStatusColor = (status: string) => {
+    return getStatusBadge(status).color;
+  };
+
+  // Helper to get status text
+  const getStatusText = (status: string) => {
+    return getStatusBadge(status).text;
+  };
+
+  // Helper to get status icon
+  const getStatusIcon = (status: string) => {
+    return getStatusBadge(status).icon;
+  };
+
   const renderAppointmentsContent = () => {
     const parseDateTime = (dateStr: string, timeStr: string) => {
       try {
@@ -2133,20 +2214,16 @@ export default function PatientDashboard() {
           ) : (
             confirmed.map(appt => (
               <View key={appt.id} style={styles.appointmentCard}>
-                <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                <View style={styles.appointmentHeader}>
+                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
+                </View>
                 <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentStatus}>Status: {appt.status}</Text>
-                {appt.status === 'pending' && (
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => {
-                      setSelectedAppointmentId(appt.id);
-                      setShowConfirm(true);
-                    }}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                )}
+                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
+                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
               </View>
             ))
           )}
@@ -2159,13 +2236,44 @@ export default function PatientDashboard() {
           ) : (
             pending.map(appt => (
               <View key={appt.id} style={styles.appointmentCard}>
-                <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                <View style={styles.appointmentHeader}>
+                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
+                </View>
                 <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentStatus}>Status: {appt.status}</Text>
+                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
+                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
+                <Text style={styles.pendingNote}>Waiting for doctor to confirm your appointment</Text>
               </View>
             ))
           )}
         </View>
+
+        <View style={{marginBottom: 24}}>
+          <Text style={styles.sectionTitle}>Cancelled Appointments</Text>
+          {cancelled.length === 0 ? (
+            <Text style={styles.emptyText}>No cancelled appointments.</Text>
+          ) : (
+            cancelled.map(appt => (
+              <View key={appt.id} style={styles.appointmentCard}>
+                <View style={styles.appointmentHeader}>
+                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
+                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
+                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
+              </View>
+            ))
+          )}
+        </View>
+
         <View>
           <Text style={styles.sectionTitle}>Past Appointments</Text>
           {completed.length === 0 ? (
@@ -2173,9 +2281,16 @@ export default function PatientDashboard() {
           ) : (
             completed.map(appt => (
               <View key={appt.id} style={styles.appointmentCard}>
-                <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                <View style={styles.appointmentHeader}>
+                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
+                </View>
                 <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentStatus}>Status: {appt.status}</Text>
+                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
+                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
               </View>
             ))
           )}
@@ -4336,7 +4451,42 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     backgroundColor: '#4CAF50',
-    marginRight: 4,
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  statusBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  appointmentType: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  appointmentReason: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  pendingNote: {
+    fontSize: 12,
+    color: '#FFA500',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   onlineText: {
     fontSize: 14,

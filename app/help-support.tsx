@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -26,7 +25,60 @@ interface FAQItem {
     category: string;
 }
 
-const faqData: FAQItem[] = [
+const patientFaqData: FAQItem[] = [
+    {
+        question: "How do I book an appointment with a doctor?",
+        answer: "Go to the Doctors tab, find a doctor you want to consult with, and tap 'Book Appointment'. Choose your preferred date and time.",
+        category: "Appointments"
+    },
+    {
+        question: "How do I view my upcoming appointments?",
+        answer: "Go to the Appointments tab to see all your scheduled appointments, including date, time, and doctor details.",
+        category: "Appointments"
+    },
+    {
+        question: "How do I cancel or reschedule an appointment?",
+        answer: "Go to the Appointments tab, find your appointment, and tap 'Cancel' or 'Reschedule'. You can do this up to 24 hours before the appointment.",
+        category: "Appointments"
+    },
+    {
+        question: "How do I communicate with my doctor?",
+        answer: "Use the Chat tab to message your doctor. You can send text messages, images, and voice notes during your consultation.",
+        category: "Communication"
+    },
+    {
+        question: "How do I update my profile information?",
+        answer: "Go to Profile > Edit Profile to update your personal information, medical history, and preferences.",
+        category: "Profile"
+    },
+    {
+        question: "How do I manage my subscription?",
+        answer: "Go to Profile > Subscription to view your current plan, billing history, and upgrade or downgrade your subscription.",
+        category: "Subscriptions"
+    },
+    {
+        question: "How do I make payments?",
+        answer: "Payments are processed securely through the app. You can use credit cards, mobile money, or bank transfers.",
+        category: "Payments"
+    },
+    {
+        question: "How do I reset my password?",
+        answer: "On the login screen, tap 'Forgot Password' and follow the instructions sent to your email.",
+        category: "Account"
+    },
+    {
+        question: "How do I get support or report an issue?",
+        answer: "Tap the Contact Support button below to email, call, or WhatsApp our support team.",
+        category: "Support"
+    },
+    {
+        question: "How is my privacy protected?",
+        answer: "We are HIPAA compliant and use end-to-end encryption. Your medical data is never shared without your consent.",
+        category: "Privacy"
+    }
+];
+
+const doctorFaqData: FAQItem[] = [
     {
         question: "How do I accept or reject appointment requests?",
         answer: "Go to the Appointments tab to view pending requests. Tap Accept or Reject for each request.",
@@ -53,6 +105,16 @@ const faqData: FAQItem[] = [
         category: "Compliance"
     },
     {
+        question: "How do I set my consultation fees?",
+        answer: "Go to Profile > Settings to set your consultation fees for different types of appointments.",
+        category: "Profile"
+    },
+    {
+        question: "How do I manage my schedule?",
+        answer: "Go to Profile > Availability to set your working hours and days when you're available for consultations.",
+        category: "Profile"
+    },
+    {
         question: "How do I get support or report an issue?",
         answer: "Tap the Contact Support button below to email, call, or WhatsApp our support team.",
         category: "Support"
@@ -65,12 +127,18 @@ const faqData: FAQItem[] = [
 ];
 
 export default function HelpSupport() {
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
 
-    const categories = ['All', 'Appointments', 'Subscriptions', 'Communication', 'Payments', 'Profile', 'Account', 'Privacy'];
+    // Determine user type and select appropriate FAQ data
+    const isDoctor = userData?.userType === 'doctor';
+    const faqData = isDoctor ? doctorFaqData : patientFaqData;
+    
+    const categories = isDoctor 
+        ? ['All', 'Appointments', 'Earnings', 'Communication', 'Profile', 'Account', 'Support', 'Compliance']
+        : ['All', 'Appointments', 'Subscriptions', 'Communication', 'Payments', 'Profile', 'Account', 'Privacy'];
 
     const filteredFAQs = faqData.filter(faq => {
         const matchesSearch = faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -129,7 +197,7 @@ export default function HelpSupport() {
         >
             <View style={styles.faqHeader}>
                 <Text style={styles.faqQuestion}>{faq.question}</Text>
-                                        <Text style={{ fontSize: 16, color: "#666" }}>⬇️</Text>
+                                        <Text style={{ fontSize: 16, color: "#666" }}>▼</Text>
             </View>
             {expandedFAQ === index && (
                 <Text style={styles.faqAnswer}>{faq.answer}</Text>
@@ -140,16 +208,6 @@ export default function HelpSupport() {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.mainContent}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Text style={{ fontSize: 20, color: "#4CAF50" }}>⬅️</Text>
-                        <Text style={styles.backButtonText}>Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Help & Support</Text>
-                    <View style={{ width: 60 }} />
-                </View>
-
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                     {/* Search Bar */}
                     <View style={styles.searchContainer}>
@@ -163,7 +221,7 @@ export default function HelpSupport() {
                         />
                         {searchQuery.length > 0 && (
                             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                                <Text style={{ fontSize: 16, color: "#999" }}>❌</Text>
+                                <Text style={{ fontSize: 16, color: "#999" }}>×</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -200,7 +258,7 @@ export default function HelpSupport() {
                         <View style={styles.quickActionsGrid}>
                             <TouchableOpacity style={styles.quickActionCard} onPress={handleContactSupport}>
                                 <View style={styles.quickActionIcon}>
-                                    <Text style={{ fontSize: 24, color: "#4CAF50" }}>📞</Text>
+                                    <Text style={{ fontSize: 16, color: "#4CAF50", fontWeight: 'bold' }}>📞</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Contact Support</Text>
                                 <Text style={styles.quickActionSubtitle}>Get help from our team</Text>
@@ -208,7 +266,7 @@ export default function HelpSupport() {
 
                             <TouchableOpacity style={styles.quickActionCard} onPress={handleEmergencyContact}>
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#FFF5F5' }]}>
-                                    <Text style={{ fontSize: 24, color: "#F44336" }}>⚠️</Text>
+                                    <Text style={{ fontSize: 16, color: "#F44336", fontWeight: 'bold' }}>🚨</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Emergency</Text>
                                 <Text style={styles.quickActionSubtitle}>Emergency services</Text>
@@ -219,7 +277,7 @@ export default function HelpSupport() {
                                 onPress={() => Linking.openURL('https://docavailable.com/terms')}
                             >
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#F0F8FF' }]}>
-                                    <Text style={{ fontSize: 24, color: "#2196F3" }}>📄</Text>
+                                    <Text style={{ fontSize: 16, color: "#2196F3", fontWeight: 'bold' }}>📄</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Terms of Service</Text>
                                 <Text style={styles.quickActionSubtitle}>Read our terms</Text>
@@ -230,7 +288,7 @@ export default function HelpSupport() {
                                 onPress={() => Linking.openURL('https://docavailable.com/privacy')}
                             >
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#F0FFF0' }]}>
-                                    <Text style={{ fontSize: 24, color: "#4CAF50" }}>🛡️</Text>
+                                    <Text style={{ fontSize: 16, color: "#4CAF50", fontWeight: 'bold' }}>🛡️</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Privacy Policy</Text>
                                 <Text style={styles.quickActionSubtitle}>Data protection</Text>
@@ -297,34 +355,11 @@ const styles = StyleSheet.create({
         display: 'flex',
         flexDirection: 'column',
     },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: '#FFFFFF',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E0E0E0',
-    },
-    backButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    backButtonText: {
-        fontSize: 16,
-        color: '#4CAF50',
-        marginLeft: 8,
-        fontWeight: '600',
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#000',
-    },
+
     content: {
         flex: 1,
         paddingHorizontal: 20,
+        paddingTop: 20,
     },
     searchContainer: {
         flexDirection: 'row',

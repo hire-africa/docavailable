@@ -41,6 +41,7 @@ export default function BookAppointmentFlow() {
   const [reason, setReason] = useState('');
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [workingHours, setWorkingHours] = useState<any>(null);
   const [loadingHours, setLoadingHours] = useState(true);
 
@@ -255,7 +256,7 @@ export default function BookAppointmentFlow() {
       },
       mode: 'time',
       is24Hour: false,
-      minuteInterval: 30,
+      minuteInterval: 1,
       minimumDate: now,
     });
   };
@@ -421,6 +422,19 @@ export default function BookAppointmentFlow() {
                       })}
                     </Text>
                   </View>
+
+                  {/* Doctor Availability Info */}
+                  <View style={styles.availabilityContainer}>
+                    <View style={styles.availabilityHeader}>
+                      <FontAwesome name="clock-o" size={16} color="#4CAF50" />
+                      <Text style={styles.availabilityTitle}>Doctor's Availability</Text>
+                    </View>
+                    {loadingHours ? (
+                      <Text style={styles.availabilityText}>Loading availability...</Text>
+                    ) : (
+                      <Text style={styles.availabilityText}>{getAvailabilityInfo()}</Text>
+                    )}
+                  </View>
                   
                   <View style={styles.timePickerContainer}>
                     <DateTimePicker
@@ -428,12 +442,20 @@ export default function BookAppointmentFlow() {
                       mode="time"
                       display="spinner"
                       onChange={handleTimeChange}
-                      minuteInterval={30}
+                      minuteInterval={1}
                       minimumDate={new Date()}
                       style={styles.nativeTimePicker}
                       textColor="#000000"
                       themeVariant="light"
                     />
+                  </View>
+
+                  {/* Selected Time Preview */}
+                  <View style={styles.selectedTimePreview}>
+                    <Text style={styles.selectedTimeLabel}>Selected Time:</Text>
+                    <Text style={styles.selectedTimeValue}>
+                      {formatTime12Hour(tempTime)}
+                    </Text>
                   </View>
                   
                   <View style={styles.modalFooter}>
@@ -455,13 +477,14 @@ export default function BookAppointmentFlow() {
                         styles.continueModalBtnText,
                         !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
                       ]}>
-                        Continue
+                        Confirm Time
                       </Text>
                     </TouchableOpacity>
                   </View>
                   
                   {!isCurrentTimeValid() && (
                     <View style={styles.validationMessage}>
+                      <FontAwesome name="exclamation-triangle" size={14} color="#D32F2F" />
                       <Text style={styles.validationText}>
                         Selected time is outside working hours
                       </Text>
@@ -560,34 +583,36 @@ export default function BookAppointmentFlow() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <FontAwesome name="close" size={22} color="#222" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Appointment Booked</Text>
+        <Text style={styles.headerTitle}>Appointment Requested</Text>
         <View style={{ width: 32 }} />
       </View>
       <View style={styles.successCard}>
-        <Text style={styles.successTitle}>You're all set!</Text>
-        <Text style={styles.successMsg}>Your appointment with {doctorName} is confirmed.</Text>
+        <Text style={styles.successTitle}>Appointment Request Sent!</Text>
+        <Text style={styles.successMsg}>Your appointment request with {doctorName} has been sent and is waiting for doctor approval.</Text>
         <View style={styles.successCheck}>
-          <FontAwesome name="check" size={48} color="#4CAF50" />
+          <FontAwesome name="check-circle" size={48} color="#4CAF50" />
         </View>
         <View style={styles.successDetails}>
           <Text style={styles.successDetailLabel}>Date & Time</Text>
           <Text style={styles.successDetailValue}>
-            {selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {selectedTime}
+            {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {selectedTime}
           </Text>
           <Text style={styles.successDetailLabel}>Consultation Type</Text>
           <Text style={styles.successDetailValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
           <Text style={styles.successDetailLabel}>Reason</Text>
           <Text style={styles.successDetailValue}>{reason}</Text>
         </View>
+        <View style={styles.pendingNote}>
+          <Text style={styles.pendingNoteText}>
+            You'll receive a notification when the doctor confirms or rejects your appointment.
+          </Text>
+        </View>
       </View>
-      <TouchableOpacity style={styles.addCalendarBtn}>
-        <Text style={styles.addCalendarBtnText}>Add to Calendar</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/my-appointments')}>
-        <Text style={styles.secondaryBtnText}>View Appointment Details</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push('/my-appointments')}>
-        <Text style={styles.secondaryBtnText}>Back to Appointments</Text>
+      <TouchableOpacity 
+        style={styles.proceedBtn} 
+        onPress={() => router.push('/(tabs)/discover')}
+      >
+        <Text style={styles.proceedBtnText}>Proceed</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -1023,9 +1048,14 @@ const styles = StyleSheet.create({
   timePickerBtn: {
     backgroundColor: '#4CAF50',
     borderRadius: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 8,
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   timePickerBtnText: {
     color: '#fff',
@@ -1047,80 +1077,144 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 24,
-    width: '85%',
-    maxWidth: 350,
+    width: '90%',
+    maxWidth: 380,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalHeader: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    width: '100%',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#222',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   modalSubtitle: {
+    fontSize: 15,
+    color: '#666',
+    textAlign: 'center',
+  },
+  availabilityContainer: {
+    width: '100%',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  availabilityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  availabilityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+    marginLeft: 8,
+  },
+  availabilityText: {
     fontSize: 14,
-    color: '#888',
+    color: '#666',
+    lineHeight: 20,
   },
   timePickerContainer: {
     width: '100%',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   nativeTimePicker: {
     width: '100%',
     height: 200,
     backgroundColor: '#FFFFFF',
   },
+  selectedTimePreview: {
+    width: '100%',
+    backgroundColor: '#E8F5E8',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  selectedTimeLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  selectedTimeValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
   modalFooter: {
     width: '100%',
-    marginTop: 20,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   cancelModalBtn: {
-    backgroundColor: '#E0E0E0',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
+    flex: 1,
+    backgroundColor: '#F1F3F4',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   cancelModalBtnText: {
-    color: '#222',
-    fontWeight: 'bold',
-    fontSize: 15,
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 16,
   },
   continueModalBtn: {
+    flex: 1,
     backgroundColor: '#4CAF50',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   continueModalBtnText: {
     color: '#fff',
     fontWeight: 'bold',
-    fontSize: 15,
+    fontSize: 16,
   },
   continueModalBtnDisabled: {
     backgroundColor: '#E0E0E0',
-    opacity: 0.7,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   continueModalBtnTextDisabled: {
     color: '#999',
   },
   validationMessage: {
-    backgroundColor: '#FFE0E0',
+    backgroundColor: '#FFEBEE',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    marginTop: 10,
-    alignSelf: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   validationText: {
     color: '#D32F2F',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
+    flex: 1,
   },
   disabledDay: {
     backgroundColor: '#F5F5F5',
@@ -1128,5 +1222,37 @@ const styles = StyleSheet.create({
   },
   disabledDayText: {
     color: '#999',
+  },
+  pendingNote: {
+    backgroundColor: '#E8F5E8',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    marginTop: 16,
+    alignSelf: 'center',
+  },
+  pendingNoteText: {
+    color: '#2E7D32',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  proceedBtn: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 24,
+    marginHorizontal: 24,
+    marginTop: 24,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  proceedBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 17,
   },
 }); 

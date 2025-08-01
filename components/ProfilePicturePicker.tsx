@@ -44,17 +44,56 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
                 }
             }
 
-            // Launch image picker
+            // Show file size info to user
+            if (Platform.OS !== 'web') {
+                alert('Please select an image under 2MB. Large images will be automatically compressed.');
+            }
+
+            // Launch image picker with compression to keep file size under 2MB
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
-                quality: 1.0, // No compression - maximum quality
+                quality: 0.7, // Compress to 70% quality to reduce file size
+                base64: false,
             });
 
             if (!result.canceled && result.assets[0]) {
-                // No processing - use original image
-                onImageSelected(result.assets[0].uri);
+                console.log('ProfilePicturePicker: Image selected:', {
+                    uri: result.assets[0].uri,
+                    width: result.assets[0].width,
+                    height: result.assets[0].height,
+                    fileSize: result.assets[0].fileSize
+                });
+                
+                // Check if we need additional compression
+                if (result.assets[0].fileSize && result.assets[0].fileSize > 1500000) { // 1.5MB
+                    console.log('ProfilePicturePicker: Image too large, using higher compression');
+                    
+                    // Show user feedback
+                    if (Platform.OS !== 'web') {
+                        alert('Image is being compressed to meet size requirements...');
+                    }
+                    
+                    // Re-pick with higher compression
+                    const compressedResult = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.5, // Higher compression for large files
+                        base64: false,
+                    });
+                    
+                    if (!compressedResult.canceled && compressedResult.assets[0]) {
+                        console.log('ProfilePicturePicker: Compressed image selected:', {
+                            uri: compressedResult.assets[0].uri,
+                            fileSize: compressedResult.assets[0].fileSize
+                        });
+                        onImageSelected(compressedResult.assets[0].uri);
+                    }
+                } else {
+                    onImageSelected(result.assets[0].uri);
+                }
             }
         } catch (error) {
             console.error('Error picking image:', error);

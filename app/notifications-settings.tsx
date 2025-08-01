@@ -109,7 +109,7 @@ export default function NotificationsSettings() {
             
             if (response.success) {
                 setSettings(updatedSettings);
-                Alert.alert('Success', 'Notification settings updated successfully.');
+                // Silent success - no modal
             } else {
                 Alert.alert('Error', response.message || 'Failed to save notification settings.');
             }
