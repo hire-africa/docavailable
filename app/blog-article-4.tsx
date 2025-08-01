@@ -1,8 +1,9 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+
 
 export default function BlogArticle4() {
   const router = useRouter();
@@ -15,11 +16,11 @@ export default function BlogArticle4() {
           style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+          <Icon name="arrowLeft" size={16} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blog</Text>
         <TouchableOpacity style={styles.shareButton}>
-          <FontAwesome name="share" size={20} color="#4CAF50" />
+          <Icon name="share" size={16} color="#222" />
         </TouchableOpacity>
       </View>
 
@@ -40,15 +41,15 @@ export default function BlogArticle4() {
           {/* Meta Info */}
           <View style={styles.metaInfo}>
             <View style={styles.metaItem}>
-              <FontAwesome name="calendar" size={14} color="#888" />
+              <Icon name="calendar" size={14} color="#888" />
               <Text style={styles.metaText}>December 2024</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="clock-o" size={14} color="#888" />
+              <Icon name="clock" size={14} color="#888" />
               <Text style={styles.metaText}>6 min read</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="user" size={14} color="#888" />
+              <Icon name="userMd" size={14} color="#888" />
               <Text style={styles.metaText}>Health Team</Text>
             </View>
           </View>
@@ -65,7 +66,7 @@ export default function BlogArticle4() {
 
             <View style={styles.techniqueCard}>
               <View style={styles.techniqueHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Icon name="heart" size={14} color="#4CAF50" />
                 <Text style={styles.techniqueTitle}>1. Breathe Like You Mean It</Text>
               </View>
               <Text style={styles.techniqueDescription}>
@@ -75,7 +76,7 @@ export default function BlogArticle4() {
 
             <View style={styles.techniqueCard}>
               <View style={styles.techniqueHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Icon name="edit" size={14} color="#4CAF50" />
                 <Text style={styles.techniqueTitle}>2. Write It Out</Text>
               </View>
               <Text style={styles.techniqueDescription}>
@@ -85,7 +86,7 @@ export default function BlogArticle4() {
 
             <View style={styles.techniqueCard}>
               <View style={styles.techniqueHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Icon name="refresh" size={14} color="#4CAF50" />
                 <Text style={styles.techniqueTitle}>3. Move, Even for 5 Minutes</Text>
               </View>
               <Text style={styles.techniqueDescription}>
@@ -95,7 +96,7 @@ export default function BlogArticle4() {
 
             <View style={styles.techniqueCard}>
               <View style={styles.techniqueHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Icon name="times" size={14} color="#4CAF50" />
                 <Text style={styles.techniqueTitle}>4. Say "No" Without Guilt</Text>
               </View>
               <Text style={styles.techniqueDescription}>
@@ -105,7 +106,7 @@ export default function BlogArticle4() {
 
             <View style={styles.techniqueCard}>
               <View style={styles.techniqueHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.techniqueTitle}>5. Talk to Someone</Text>
               </View>
               <Text style={styles.techniqueDescription}>

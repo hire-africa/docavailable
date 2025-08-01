@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
@@ -353,7 +353,7 @@ export default function DoctorDashboard() {
       {bookingRequests.length > 0 && (
         <View style={styles.pendingRequestsCard}>
           <View style={styles.pendingRequestsHeader}>
-            <FontAwesome name="clock-o" size={20} color="#FF9500" />
+            <SimpleIcons.FontAwesome.clock-o />
             <Text style={styles.pendingRequestsTitle}>
               {bookingRequests.length} Pending Booking Request{bookingRequests.length !== 1 ? 's' : ''}
             </Text>
@@ -375,7 +375,7 @@ export default function DoctorDashboard() {
         <View style={styles.actionGrid}>
           <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="calendar" size={24} color="#34C759" />
+              <SimpleIcons.FontAwesome.calendar />
             </View>
             <Text style={styles.actionTitle}>Appointments</Text>
             <Text style={styles.actionSubtitle}>Manage bookings</Text>
@@ -383,7 +383,7 @@ export default function DoctorDashboard() {
 
           <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="comments" size={24} color="#FF3B30" />
+              <SimpleIcons.FontAwesome.comments />
             </View>
             <Text style={styles.actionTitle}>Messages</Text>
             <Text style={styles.actionSubtitle}>Chat with patients</Text>
@@ -391,7 +391,7 @@ export default function DoctorDashboard() {
 
           <TouchableOpacity style={styles.actionCard} onPress={handleTestChat}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="bug" size={24} color="#FF9500" />
+              <SimpleIcons.FontAwesome.bug />
             </View>
             <Text style={styles.actionTitle}>Test Chat</Text>
             <Text style={styles.actionSubtitle}>Debug messaging</Text>
@@ -399,7 +399,7 @@ export default function DoctorDashboard() {
 
           <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="money" size={24} color="#4CAF50" />
+              <SimpleIcons.FontAwesome.money />
             </View>
             <Text style={styles.actionTitle}>Earnings</Text>
             <Text style={styles.actionSubtitle}>Withdraw funds</Text>
@@ -412,7 +412,7 @@ export default function DoctorDashboard() {
         {bookingRequests.length > 0 ? (
           <View style={styles.activityCard}>
             <View style={styles.activityHeader}>
-              <FontAwesome name="user-plus" size={20} color="#4CAF50" />
+              <SimpleIcons.FontAwesome.user-plus />
               <Text style={styles.activityTitle}>New Booking Request</Text>
               <Text style={styles.activityTime}>Just now</Text>
             </View>
@@ -423,7 +423,7 @@ export default function DoctorDashboard() {
         ) : (
           <View style={styles.activityCard}>
             <View style={styles.activityHeader}>
-              <FontAwesome name="info-circle" size={20} color="#666" />
+              <SimpleIcons.FontAwesome.info-circle />
               <Text style={styles.activityTitle}>No Recent Activity</Text>
             </View>
             <Text style={styles.activityDescription}>
@@ -449,7 +449,7 @@ export default function DoctorDashboard() {
         </View>
       ) : bookingRequests.length === 0 ? (
         <View style={styles.emptyState}>
-          <FontAwesome name="calendar-o" size={48} color="#CCC" />
+          <SimpleIcons.FontAwesome.calendar-o />
           <Text style={styles.emptyStateTitle}>No Pending Requests</Text>
           <Text style={styles.emptyStateSubtitle}>
             When patients book appointments, they'll appear here for your review
@@ -461,7 +461,7 @@ export default function DoctorDashboard() {
             <View key={request.id} style={styles.bookingRequestCard}>
               <View style={styles.requestHeader}>
                 <View style={styles.patientInfo}>
-                  <FontAwesome name="user" size={20} color="#4CAF50" />
+                  <SimpleIcons.FontAwesome.user />
                   <Text style={styles.patientName}>{request.patientName}</Text>
                 </View>
                 <View style={styles.requestStatus}>
@@ -471,11 +471,11 @@ export default function DoctorDashboard() {
 
               <View style={styles.requestDetails}>
                 <View style={styles.detailRow}>
-                  <FontAwesome name="calendar" size={14} color="#666" />
+                  <SimpleIcons.FontAwesome.calendar />
                   <Text style={styles.detailText}>{formatDate(request.date)}</Text>
                 </View>
                 <View style={styles.detailRow}>
-                  <FontAwesome name="clock-o" size={14} color="#666" />
+                  <SimpleIcons.FontAwesome.clock-o />
                   <Text style={styles.detailText}>{request.time}</Text>
                 </View>
                 <View style={styles.detailRow}>
@@ -494,7 +494,7 @@ export default function DoctorDashboard() {
                   style={styles.chatButton}
                   onPress={() => handleStartChat(request)}
                 >
-                  <FontAwesome name="comments" size={16} color="#4CAF50" />
+                  <SimpleIcons.FontAwesome.comments />
                   <Text style={styles.chatButtonText}>Chat</Text>
                 </TouchableOpacity>
                 
@@ -502,7 +502,7 @@ export default function DoctorDashboard() {
                   style={styles.rejectButton}
                   onPress={() => handleRejectBooking(request)}
                 >
-                  <FontAwesome name="times" size={16} color="#FF3B30" />
+                  <SimpleIcons.FontAwesome.times />
                   <Text style={styles.rejectButtonText}>Reject</Text>
                 </TouchableOpacity>
                 
@@ -510,7 +510,7 @@ export default function DoctorDashboard() {
                   style={styles.acceptButton}
                   onPress={() => handleAcceptBooking(request)}
                 >
-                  <FontAwesome name="check" size={16} color="#FFFFFF" />
+                  <SimpleIcons.FontAwesome.check />
                   <Text style={styles.acceptButtonText}>Accept</Text>
                 </TouchableOpacity>
               </View>
@@ -535,7 +535,7 @@ export default function DoctorDashboard() {
         </View>
       ) : confirmedAppointments.length === 0 ? (
         <View style={styles.emptyState}>
-          <FontAwesome name="users" size={48} color="#CCC" />
+          <SimpleIcons.FontAwesome.users />
           <Text style={styles.emptyStateTitle}>No Confirmed Patients</Text>
           <Text style={styles.emptyStateSubtitle}>
             Patients will appear here after you accept their booking requests
@@ -554,7 +554,7 @@ export default function DoctorDashboard() {
             >
               <View style={styles.patientCardHeader}>
                 <View style={styles.patientAvatar}>
-                  <FontAwesome name="user" size={24} color="#4CAF50" />
+                  <SimpleIcons.FontAwesome.user />
                 </View>
                 <View style={styles.patientCardInfo}>
                   <Text style={styles.patientCardName}>{patient.patientName}</Text>
@@ -569,11 +569,11 @@ export default function DoctorDashboard() {
 
               <View style={styles.patientCardDetails}>
                 <View style={styles.patientDetailRow}>
-                  <FontAwesome name="calendar" size={14} color="#666" />
+                  <SimpleIcons.FontAwesome.calendar />
                   <Text style={styles.patientDetailText}>{formatDate(patient.date)}</Text>
                 </View>
                 <View style={styles.patientDetailRow}>
-                  <FontAwesome name="clock-o" size={14} color="#666" />
+                  <SimpleIcons.FontAwesome.clock-o />
                   <Text style={styles.patientDetailText}>{patient.time}</Text>
                 </View>
               </View>
@@ -583,7 +583,7 @@ export default function DoctorDashboard() {
                   style={styles.startChatButton}
                   onPress={() => handleStartChatWithPatient(patient)}
                 >
-                  <FontAwesome name="comments" size={16} color="#FFFFFF" />
+                  <SimpleIcons.FontAwesome.comments />
                   <Text style={styles.startChatButtonText}>Start Chat</Text>
                 </TouchableOpacity>
               </View>
@@ -600,7 +600,7 @@ export default function DoctorDashboard() {
               style={styles.closeChatButton}
               onPress={() => setSelectedPatient(null)}
             >
-              <FontAwesome name="times" size={16} color="#666" />
+              <SimpleIcons.FontAwesome.times />
             </TouchableOpacity>
           </View>
           <ChatWindow chatId={selectedAppointmentId || ''} userId={user?.uid || ''} />
@@ -619,7 +619,7 @@ export default function DoctorDashboard() {
       <View style={styles.profileSection}>
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            <FontAwesome name="user-md" size={60} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.user-md />
             <Text style={styles.profileName}>
               Dr. {user?.displayName || user?.email?.split('@')[0] || 'Doctor'}
             </Text>
@@ -629,39 +629,39 @@ export default function DoctorDashboard() {
 
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/doctor-profile')}>
-            <FontAwesome name="eye" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.eye />
             <Text style={styles.menuText}>View Profile</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <FontAwesome name="user" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.user />
             <Text style={styles.menuText}>Edit Profile</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/doctor-withdrawals')}>
-            <FontAwesome name="money" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.money />
             <Text style={styles.menuText}>Withdraw Earnings</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/privacy-settings')}>
-            <FontAwesome name="lock" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.lock />
             <Text style={styles.menuText}>Privacy Settings</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/privacy-settings')}>
-            <FontAwesome name="cog" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.cog />
             <Text style={styles.menuText}>Settings</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <FontAwesome name="sign-out" size={20} color="#FF3B30" />
+            <SimpleIcons.FontAwesome.sign-out />
             <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
         </View>
       </View>

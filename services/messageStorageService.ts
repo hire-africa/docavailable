@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from '../app/services/apiService';
 
 export interface Message {
@@ -7,9 +7,33 @@ export interface Message {
   sender_id: number;
   sender_name: string;
   message: string;
+  message_type: 'text' | 'image' | 'voice';
+  media_url?: string;
   timestamp: string;
   created_at: string;
   updated_at: string;
+  reactions?: MessageReaction[];
+  read_by?: MessageRead[];
+  is_edited?: boolean;
+  edited_at?: string;
+  reply_to_id?: string;
+  reply_to_message?: string;
+  reply_to_sender_name?: string;
+  delivery_status?: 'sending' | 'sent' | 'delivered' | 'read';
+  temp_id?: string;
+}
+
+export interface MessageReaction {
+  reaction: string;
+  user_id: number;
+  user_name: string;
+  timestamp?: string;
+}
+
+export interface MessageRead {
+  user_id: number;
+  user_name: string;
+  read_at: string;
 }
 
 export interface LocalStorageData {
@@ -21,21 +45,29 @@ export interface LocalStorageData {
 
 class MessageStorageService {
   private readonly STORAGE_PREFIX = 'chat_messages_';
-  private readonly SYNC_INTERVAL = 5000; // Keep at 10 seconds (safe)
-  private syncTimers: Map<number, NodeJS.Timeout> = new Map();
-  private errorCount: Map<number, number> = new Map(); // Track errors per chat
-  private readonly MAX_ERRORS = 3; // Stop polling after 3 consecutive errors
+  private readonly SYNC_INTERVAL = 5000;
+  private syncTimers: Map<number, ReturnType<typeof setInterval>> = new Map();
   private updateCallbacks: Map<number, (messages: Message[]) => void> = new Map();
+  
+  private errorLogTimestamps: Map<string, number> = new Map();
+  private readonly ERROR_LOG_COOLDOWN = 10000;
 
-  /**
-   * Store a message locally
-   */
+  private logErrorOnce(message: string, error?: any, context?: string): void {
+    const key = `${message}-${context || 'default'}`;
+    const now = Date.now();
+    const lastLog = this.errorLogTimestamps.get(key);
+    
+    if (!lastLog || (now - lastLog) > this.ERROR_LOG_COOLDOWN) {
+      this.errorLogTimestamps.set(key, now);
+      console.error(message, error);
+    }
+  }
+
   async storeMessage(appointmentId: number, message: Message): Promise<void> {
     try {
       const key = this.getStorageKey(appointmentId);
       const data = await this.getLocalData(appointmentId);
       
-      // Add message if it doesn't exist
       const exists = data.messages.some(m => m.id === message.id);
       if (!exists) {
         data.messages.push(message);
@@ -43,16 +75,12 @@ class MessageStorageService {
         data.last_sync = new Date().toISOString();
         
         await AsyncStorage.setItem(key, JSON.stringify(data));
-        console.log(`Message stored locally for appointment ${appointmentId}`);
       }
     } catch (error) {
-      console.error('Error storing message locally:', error);
+      this.logErrorOnce('Error storing message locally:', error, `appointment-${appointmentId}`);
     }
   }
 
-  /**
-   * Get messages from local storage
-   */
   async getMessages(appointmentId: number): Promise<Message[]> {
     try {
       const data = await this.getLocalData(appointmentId);
@@ -60,231 +88,139 @@ class MessageStorageService {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     } catch (error) {
-      console.error('Error getting messages from local storage:', error);
+      this.logErrorOnce('Error getting messages from local storage:', error, `appointment-${appointmentId}`);
       return [];
     }
   }
 
-  /**
-   * Load messages from server and store locally
-   */
   async loadFromServer(appointmentId: number): Promise<Message[]> {
     try {
       const response = await apiService.get(`/chat/${appointmentId}/local-storage`);
       
       if (response.success && response.data) {
-        const serverData: LocalStorageData = response.data;
-        
-        // Store in local storage
+        const serverData = response.data as LocalStorageData;
         const key = this.getStorageKey(appointmentId);
         await AsyncStorage.setItem(key, JSON.stringify(serverData));
-        
-        console.log(`Loaded ${serverData.message_count} messages from server for appointment ${appointmentId}`);
         return serverData.messages;
       }
       
       return [];
     } catch (error) {
-      console.error('Error loading messages from server:', error);
+      this.logErrorOnce('Error loading messages from server:', error, `appointment-${appointmentId}`);
       return [];
     }
   }
 
-  /**
-   * Sync local messages to server
-   */
-  async syncToServer(appointmentId: number): Promise<boolean> {
-    try {
-      const data = await this.getLocalData(appointmentId);
-      
-      if (data.messages.length === 0) {
-        return true;
-      }
-      
-      const response = await apiService.post(`/chat/${appointmentId}/sync`, {
-        messages: data.messages
-      });
-      
-      if (response.success) {
-        console.log(`Synced ${data.messages.length} messages to server for appointment ${appointmentId}`);
-        return true;
-      }
-      
-      return false;
-    } catch (error) {
-      console.error('Error syncing messages to server:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Send a message (store locally and send to server)
-   */
   async sendMessage(appointmentId: number, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
     try {
-      // Create temporary message for immediate display
-      const tempMessage: Message = {
-        id: `temp_${Date.now()}_${Math.random()}`,
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const message: Message = {
+        id: messageId,
         appointment_id: appointmentId,
         sender_id: senderId,
         sender_name: senderName,
         message: messageText,
+        message_type: 'text',
+        delivery_status: 'sending',
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
       
-      // Store locally first for immediate display
-      await this.storeMessage(appointmentId, tempMessage);
+      await this.storeMessage(appointmentId, message);
       
-      // Send to server
+      const callback = this.updateCallbacks.get(appointmentId);
+      if (callback) {
+        const currentMessages = await this.getMessages(appointmentId);
+        callback(currentMessages);
+      }
+      
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
-        message: messageText
+        message: messageText,
+        message_type: 'text'
       });
       
       if (response.success && response.data) {
-        const serverMessage: Message = response.data;
+        const serverMessage = response.data as Message;
+        await this.updateMessageInStorage(appointmentId, messageId, serverMessage);
         
-        // Replace temp message with server message
-        await this.replaceMessage(appointmentId, tempMessage.id, serverMessage);
+        if (callback) {
+          const updatedMessages = await this.getMessages(appointmentId);
+          callback(updatedMessages);
+        }
         
-        console.log(`Message sent successfully for appointment ${appointmentId}`);
         return serverMessage;
       }
       
-      return null;
+      return message;
     } catch (error) {
-      console.error('Error sending message:', error);
+      this.logErrorOnce('Error sending message:', error, `appointment-${appointmentId}`);
       return null;
     }
   }
 
-  /**
-   * Replace a temporary message with server message
-   */
-  private async replaceMessage(appointmentId: number, tempId: string, serverMessage: Message): Promise<void> {
+  private async updateMessageInStorage(appointmentId: number, tempId: string, updatedMessage: Message): Promise<void> {
     try {
-      const key = this.getStorageKey(appointmentId);
       const data = await this.getLocalData(appointmentId);
-      
-      // Find and replace temp message
       const messageIndex = data.messages.findIndex(m => m.id === tempId);
+      
       if (messageIndex !== -1) {
-        data.messages[messageIndex] = serverMessage;
+        data.messages[messageIndex] = updatedMessage;
+        data.last_sync = new Date().toISOString();
+        
+        const key = this.getStorageKey(appointmentId);
         await AsyncStorage.setItem(key, JSON.stringify(data));
+        
+        const callback = this.updateCallbacks.get(appointmentId);
+        if (callback) {
+          callback(data.messages);
+        }
       }
     } catch (error) {
-      console.error('Error replacing message:', error);
+      this.logErrorOnce('Error updating message in storage:', error, `message-${tempId}`);
     }
   }
 
-  /**
-   * Register callback for real-time updates
-   */
   registerUpdateCallback(appointmentId: number, callback: (messages: Message[]) => void): void {
     this.updateCallbacks.set(appointmentId, callback);
   }
 
-  /**
-   * Unregister callback for real-time updates
-   */
   unregisterUpdateCallback(appointmentId: number): void {
     this.updateCallbacks.delete(appointmentId);
   }
 
-  /**
-   * Start auto-sync for an appointment with error protection and real-time updates
-   */
   startAutoSync(appointmentId: number): void {
-    // Clear existing timer
     this.stopAutoSync(appointmentId);
     
-    // Reset error count
-    this.errorCount.set(appointmentId, 0);
-    
-    // Start new timer with error protection and real-time updates
     const timer = setInterval(async () => {
-      const currentErrors = this.errorCount.get(appointmentId) || 0;
-      
-      // Stop polling if too many errors
-      if (currentErrors >= this.MAX_ERRORS) {
-        console.warn(`Stopping auto-sync for appointment ${appointmentId} due to too many errors`);
-        this.stopAutoSync(appointmentId);
-        return;
-      }
-      
       try {
-        // First sync local messages to server
-        await this.syncToServer(appointmentId);
+        const serverMessages = await this.loadFromServer(appointmentId);
         
-        // Then fetch new messages from server
-        const newMessages = await this.loadFromServer(appointmentId);
-        
-        // Update UI if callback is registered - ALWAYS update, not just when length > 0
-        const callback = this.updateCallbacks.get(appointmentId);
-        if (callback) {
-          callback(newMessages);
-          console.log(`Real-time update: ${newMessages.length} messages for appointment ${appointmentId}`);
+        if (serverMessages.length > 0) {
+          const callback = this.updateCallbacks.get(appointmentId);
+          if (callback) {
+            const localMessages = await this.getMessages(appointmentId);
+            const allMessages = [...localMessages, ...serverMessages];
+            callback(allMessages);
+          }
         }
-        
-        // Reset error count on success
-        this.errorCount.set(appointmentId, 0);
       } catch (error: any) {
-        console.error(`Auto-sync error for appointment ${appointmentId}:`, error);
-        
-        // Stop auto-sync immediately for authentication errors
-        if (error.message?.includes('401') || error.message?.includes('Unauthenticated')) {
-          console.warn(`Stopping auto-sync for appointment ${appointmentId} due to authentication error`);
-          this.stopAutoSync(appointmentId);
-          return;
-        }
-        
-        const newErrorCount = currentErrors + 1;
-        this.errorCount.set(appointmentId, newErrorCount);
-        
-        // Stop polling if too many errors
-        if (newErrorCount >= this.MAX_ERRORS) {
-          console.warn(`Stopping auto-sync for appointment ${appointmentId} after ${newErrorCount} errors`);
-          this.stopAutoSync(appointmentId);
-        }
+        // Silent error handling
       }
     }, this.SYNC_INTERVAL);
     
     this.syncTimers.set(appointmentId, timer);
-    console.log(`Safe auto-sync with real-time updates started for appointment ${appointmentId}`);
   }
 
-  /**
-   * Stop auto-sync for an appointment
-   */
   stopAutoSync(appointmentId: number): void {
     const timer = this.syncTimers.get(appointmentId);
     if (timer) {
       clearInterval(timer);
       this.syncTimers.delete(appointmentId);
-      this.errorCount.delete(appointmentId); // Clean up error count
-      this.unregisterUpdateCallback(appointmentId); // Clean up callback
-      console.log(`Auto-sync stopped for appointment ${appointmentId}`);
     }
   }
 
-  /**
-   * Clear all messages for an appointment
-   */
-  async clearMessages(appointmentId: number): Promise<void> {
-    try {
-      const key = this.getStorageKey(appointmentId);
-      await AsyncStorage.removeItem(key);
-      this.stopAutoSync(appointmentId);
-      console.log(`Messages cleared for appointment ${appointmentId}`);
-    } catch (error) {
-      console.error('Error clearing messages:', error);
-    }
-  }
-
-  /**
-   * Get local storage data for an appointment
-   */
   private async getLocalData(appointmentId: number): Promise<LocalStorageData> {
     try {
       const key = this.getStorageKey(appointmentId);
@@ -294,7 +230,6 @@ class MessageStorageService {
         return JSON.parse(data);
       }
       
-      // Return default structure
       return {
         appointment_id: appointmentId,
         messages: [],
@@ -302,7 +237,7 @@ class MessageStorageService {
         message_count: 0
       };
     } catch (error) {
-      console.error('Error getting local data:', error);
+      this.logErrorOnce('Error getting local data:', error, `appointment-${appointmentId}`);
       return {
         appointment_id: appointmentId,
         messages: [],
@@ -312,39 +247,9 @@ class MessageStorageService {
     }
   }
 
-  /**
-   * Get storage key for appointment
-   */
   private getStorageKey(appointmentId: number): string {
     return `${this.STORAGE_PREFIX}${appointmentId}`;
   }
-
-  /**
-   * Get all active chat rooms from local storage
-   */
-  async getActiveChatRooms(): Promise<number[]> {
-    try {
-      const keys = await AsyncStorage.getAllKeys();
-      const chatKeys = keys.filter(key => key.startsWith(this.STORAGE_PREFIX));
-      
-      const activeRooms: number[] = [];
-      
-      for (const key of chatKeys) {
-        const data = await AsyncStorage.getItem(key);
-        if (data) {
-          const chatData: LocalStorageData = JSON.parse(data);
-          if (chatData.messages.length > 0) {
-            activeRooms.push(chatData.appointment_id);
-          }
-        }
-      }
-      
-      return activeRooms;
-    } catch (error) {
-      console.error('Error getting active chat rooms:', error);
-      return [];
-    }
-  }
 }
 
-export const messageStorageService = new MessageStorageService(); 
+export const messageStorageService = new MessageStorageService();

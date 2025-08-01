@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -128,7 +128,7 @@ export default function DoctorWithdrawals() {
       <View style={styles.mainContent}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <FontAwesome name="arrow-left" size={22} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.arrow-left />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Withdraw Earnings</Text>
         </View>
@@ -137,7 +137,7 @@ export default function DoctorWithdrawals() {
           {/* Earnings Summary */}
           <View style={styles.earningsCard}>
             <View style={styles.earningsHeader}>
-              <FontAwesome name="money" size={24} color="#4CAF50" />
+              <SimpleIcons.FontAwesome.money />
               <Text style={styles.earningsTitle}>Available Balance</Text>
             </View>
             <Text style={styles.earningsAmount}>{formatCurrency(earnings)}</Text>
@@ -164,7 +164,7 @@ export default function DoctorWithdrawals() {
                 style={[styles.paymentMethod, withdrawalMethod === 'bank' && styles.paymentMethodActive]}
                 onPress={() => setWithdrawalMethod('bank')}
               >
-                <FontAwesome name="bank" size={16} color={withdrawalMethod === 'bank' ? '#4CAF50' : '#666'} />
+                <SimpleIcons.FontAwesome.bank />
                 <Text style={[styles.paymentMethodText, withdrawalMethod === 'bank' && styles.paymentMethodTextActive]}>
                   Bank Transfer
                 </Text>
@@ -174,7 +174,7 @@ export default function DoctorWithdrawals() {
                 style={[styles.paymentMethod, withdrawalMethod === 'mobile' && styles.paymentMethodActive]}
                 onPress={() => setWithdrawalMethod('mobile')}
               >
-                <FontAwesome name="mobile" size={16} color={withdrawalMethod === 'mobile' ? '#4CAF50' : '#666'} />
+                <SimpleIcons.FontAwesome.mobile />
                 <Text style={[styles.paymentMethodText, withdrawalMethod === 'mobile' && styles.paymentMethodTextActive]}>
                   Mobile Money
                 </Text>
@@ -186,7 +186,7 @@ export default function DoctorWithdrawals() {
               onPress={handleWithdrawal}
               disabled={!withdrawalAmount}
             >
-              <FontAwesome name="bank" size={16} color="#FFFFFF" />
+              <SimpleIcons.FontAwesome.bank />
               <Text style={styles.withdrawButtonText}>Request Withdrawal</Text>
             </TouchableOpacity>
           </View>

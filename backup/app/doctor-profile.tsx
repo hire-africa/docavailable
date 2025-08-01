@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -178,13 +178,13 @@ export default function DoctorProfile() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>My Profile</Text>
                     <View style={styles.headerRight}>
                         <TouchableOpacity style={styles.balanceContainer} onPress={() => router.push('/doctor-withdrawals')}>
-                            <FontAwesome name="money" size={16} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.money />
                             <Text style={styles.balanceText}>{formatCurrency(earnings)}</Text>
                         </TouchableOpacity>
                     </View>
@@ -194,7 +194,7 @@ export default function DoctorProfile() {
                     {/* Profile Header */}
                     <View style={styles.profileHeader}>
                         <View style={styles.avatarContainer}>
-                            <FontAwesome name="user-md" size={60} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.user-md />
                         </View>
                         <View style={styles.profileInfo}>
                             <Text style={styles.profileName}>
@@ -214,7 +214,7 @@ export default function DoctorProfile() {
                     {/* Professional Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="stethoscope" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.stethoscope />
                             <Text style={styles.sectionTitle}>Professional Information</Text>
                         </View>
                         
@@ -271,7 +271,7 @@ export default function DoctorProfile() {
                     {/* Contact Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="phone" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.phone />
                             <Text style={styles.sectionTitle}>Contact Information</Text>
                         </View>
                         
@@ -304,7 +304,7 @@ export default function DoctorProfile() {
                     {/* Availability */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="calendar" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.calendar />
                             <Text style={styles.sectionTitle}>Availability</Text>
                         </View>
                         
@@ -319,7 +319,7 @@ export default function DoctorProfile() {
                     {/* Performance */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="star" size={20} color="#FFD700" />
+                            <SimpleIcons.FontAwesome.star />
                             <Text style={styles.sectionTitle}>Performance</Text>
                         </View>
                         
@@ -340,7 +340,7 @@ export default function DoctorProfile() {
                     {/* Account Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="info-circle" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.info-circle />
                             <Text style={styles.sectionTitle}>Account Information</Text>
                         </View>
                         

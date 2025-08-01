@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -75,7 +75,7 @@ const Step1: React.FC<Step1Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="user" size={40} color="#4CAF50" />
+                <SimpleIcons.FontAwesome.user />
                 <Text style={styles.stepTitle}>Personal Information</Text>
                 <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
             </View>
@@ -202,7 +202,7 @@ const Step2 = () => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="id-card" size={40} color="#4CAF50" />
+                <SimpleIcons.FontAwesome.id-card />
                 <Text style={styles.stepTitle}>Identity Verification</Text>
                 <Text style={styles.stepSubtitle}>Secure and confidential verification</Text>
             </View>
@@ -215,7 +215,7 @@ const Step2 = () => {
                         onPress={() => setIdType('drivers')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'drivers' && styles.idOptionIconActive]}>
-                            <FontAwesome name="id-card" size={24} color={idType === 'drivers' ? '#FFFFFF' : '#4CAF50'} />
+                            <SimpleIcons.FontAwesome.id-card />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'drivers' && styles.idOptionTextActive]}>
                             Driver's License
@@ -227,7 +227,7 @@ const Step2 = () => {
                         onPress={() => setIdType('passport')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'passport' && styles.idOptionIconActive]}>
-                            <FontAwesome name="id-badge" size={24} color={idType === 'passport' ? '#FFFFFF' : '#4CAF50'} />
+                            <SimpleIcons.FontAwesome.id-badge />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'passport' && styles.idOptionTextActive]}>
                             Passport
@@ -239,7 +239,7 @@ const Step2 = () => {
                         onPress={() => setIdType('national')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'national' && styles.idOptionIconActive]}>
-                            <FontAwesome name="credit-card" size={24} color={idType === 'national' ? '#FFFFFF' : '#4CAF50'} />
+                            <SimpleIcons.FontAwesome.credit-card />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'national' && styles.idOptionTextActive]}>
                             National ID
@@ -264,14 +264,14 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <FontAwesome name="camera" size={40} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.camera />
                             <Text style={styles.photoUploadText}>Tap to Upload</Text>
                         </>
                     )}
                 </TouchableOpacity>
 
                 <View style={styles.securityNote}>
-                    <FontAwesome name="shield" size={16} color="#34C759" />
+                    <SimpleIcons.FontAwesome.shield />
                     <Text style={styles.securityNoteText}>
                         Your information is encrypted and secure. We follow strict privacy guidelines.
                     </Text>
@@ -469,7 +469,7 @@ export default function PatientSignUp() {
                             onPress={() => setStep(step - 1)}
                             disabled={loading}
                         >
-                            <FontAwesome name="arrow-left" size={16} color="#666" />
+                            <SimpleIcons.FontAwesome.arrow-left />
                             <Text style={styles.backButtonText}>Back</Text>
                         </TouchableOpacity>
                     )}
@@ -485,7 +485,7 @@ export default function PatientSignUp() {
                                 <Text style={styles.continueButtonText}>
                                     {step === 2 ? 'Create Account' : 'Continue'}
                                 </Text>
-                                <FontAwesome name="arrow-right" size={16} color="#FFFFFF" />
+                                <SimpleIcons.FontAwesome.arrow-right />
                             </>
                         )}
                     </TouchableOpacity>

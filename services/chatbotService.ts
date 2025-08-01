@@ -1,7 +1,7 @@
 // Chatbot Service for handling health-related questions
 // Uses OpenAI API for intelligent responses with fallback to keyword-based system
 
-import OpenAI from 'openai';
+// import OpenAI from 'openai';
 import { OPENAI_CONFIG } from '../config/openai';
 
 export interface ChatbotResponse {
@@ -59,35 +59,35 @@ const RESPONSES = {
 };
 
 // Initialize OpenAI client
-let openai: OpenAI | null = null;
+// let openai: OpenAI | null = null;
 
-try {
-  // Check if API key is configured
-  if (OPENAI_CONFIG.apiKey && OPENAI_CONFIG.apiKey !== 'your-api-key-here') {
-    openai = new OpenAI({
-      apiKey: OPENAI_CONFIG.apiKey,
-    });
-    console.log('OpenAI initialized successfully');
-  } else {
-    console.log('OpenAI API key not configured, using fallback system');
-  }
-} catch (error) {
-  console.log('OpenAI initialization failed, using fallback system:', error);
-}
+// try {
+//   // Check if API key is configured
+//   if (OPENAI_CONFIG.apiKey && OPENAI_CONFIG.apiKey !== 'your-api-key-here') {
+//     openai = new OpenAI({
+//       apiKey: OPENAI_CONFIG.apiKey,
+//     });
+//     console.log('OpenAI initialized successfully');
+//   } else {
+//     console.log('OpenAI API key not configured, using fallback system');
+//   }
+// } catch (error) {
+//   console.log('OpenAI initialization failed, using fallback system:', error);
+// }
 
 export class ChatbotService {
   static async getResponse(userInput: string): Promise<ChatbotResponse> {
     // Try OpenAI first if available
-    if (openai) {
-      try {
-        const response = await this.getOpenAIResponse(userInput);
-        return response;
-      } catch (error) {
-        console.error('OpenAI API error:', error);
-        // Fallback to basic responses
-        return this.getBasicResponse(userInput);
-      }
-    }
+    // if (openai) {
+    //   try {
+    //     const response = await this.getOpenAIResponse(userInput);
+    //     return response;
+    //   } catch (error) {
+    //     console.error('OpenAI API error:', error);
+    //     // Fallback to basic responses
+    //     return this.getBasicResponse(userInput);
+    //   }
+    // }
     
     // Use basic keyword-based system if OpenAI is not available
     return this.getBasicResponse(userInput);

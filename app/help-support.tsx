@@ -1,4 +1,3 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -130,11 +129,7 @@ export default function HelpSupport() {
         >
             <View style={styles.faqHeader}>
                 <Text style={styles.faqQuestion}>{faq.question}</Text>
-                <FontAwesome
-                    name={expandedFAQ === index ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color="#666"
-                />
+                                        <Text style={{ fontSize: 16, color: "#666" }}>⬇️</Text>
             </View>
             {expandedFAQ === index && (
                 <Text style={styles.faqAnswer}>{faq.answer}</Text>
@@ -148,7 +143,7 @@ export default function HelpSupport() {
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <Text style={{ fontSize: 20, color: "#4CAF50" }}>⬅️</Text>
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Help & Support</Text>
@@ -158,7 +153,7 @@ export default function HelpSupport() {
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                     {/* Search Bar */}
                     <View style={styles.searchContainer}>
-                        <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+                        <Text style={{ fontSize: 16, color: "#999" }}>🔍</Text>
                         <TextInput
                             style={styles.searchInput}
                             placeholder="Search for help topics..."
@@ -168,7 +163,7 @@ export default function HelpSupport() {
                         />
                         {searchQuery.length > 0 && (
                             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                                <FontAwesome name="times" size={16} color="#666" />
+                                <Text style={{ fontSize: 16, color: "#999" }}>❌</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -205,7 +200,7 @@ export default function HelpSupport() {
                         <View style={styles.quickActionsGrid}>
                             <TouchableOpacity style={styles.quickActionCard} onPress={handleContactSupport}>
                                 <View style={styles.quickActionIcon}>
-                                    <FontAwesome name="phone" size={24} color="#4CAF50" />
+                                    <Text style={{ fontSize: 24, color: "#4CAF50" }}>📞</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Contact Support</Text>
                                 <Text style={styles.quickActionSubtitle}>Get help from our team</Text>
@@ -213,7 +208,7 @@ export default function HelpSupport() {
 
                             <TouchableOpacity style={styles.quickActionCard} onPress={handleEmergencyContact}>
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#FFF5F5' }]}>
-                                    <FontAwesome name="exclamation-triangle" size={24} color="#FF3B30" />
+                                    <Text style={{ fontSize: 24, color: "#F44336" }}>⚠️</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Emergency</Text>
                                 <Text style={styles.quickActionSubtitle}>Emergency services</Text>
@@ -224,7 +219,7 @@ export default function HelpSupport() {
                                 onPress={() => Linking.openURL('https://docavailable.com/terms')}
                             >
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#F0F8FF' }]}>
-                                    <FontAwesome name="file-text" size={24} color="#007AFF" />
+                                    <Text style={{ fontSize: 24, color: "#2196F3" }}>📄</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Terms of Service</Text>
                                 <Text style={styles.quickActionSubtitle}>Read our terms</Text>
@@ -235,7 +230,7 @@ export default function HelpSupport() {
                                 onPress={() => Linking.openURL('https://docavailable.com/privacy')}
                             >
                                 <View style={[styles.quickActionIcon, { backgroundColor: '#F0FFF0' }]}>
-                                    <FontAwesome name="shield" size={24} color="#34C759" />
+                                    <Text style={{ fontSize: 24, color: "#4CAF50" }}>🛡️</Text>
                                 </View>
                                 <Text style={styles.quickActionTitle}>Privacy Policy</Text>
                                 <Text style={styles.quickActionSubtitle}>Data protection</Text>
@@ -252,7 +247,7 @@ export default function HelpSupport() {
                         
                         {filteredFAQs.length === 0 ? (
                             <View style={styles.emptyState}>
-                                <FontAwesome name="search" size={48} color="#CCC" />
+                                <Text style={{ fontSize: 48, color: "#CCC" }}>🔍</Text>
                                 <Text style={styles.emptyStateTitle}>No results found</Text>
                                 <Text style={styles.emptyStateSubtitle}>
                                     Try searching with different keywords or browse all categories
@@ -270,15 +265,15 @@ export default function HelpSupport() {
                         <Text style={styles.sectionTitle}>Still Need Help?</Text>
                         <View style={styles.contactCard}>
                             <View style={styles.contactInfo}>
-                                <FontAwesome name="envelope" size={20} color="#4CAF50" />
+                                <Text style={{ fontSize: 20, color: "#4CAF50" }}>📧</Text>
                                 <Text style={styles.contactText}>support@docavailable.com</Text>
                             </View>
                             <View style={styles.contactInfo}>
-                                <FontAwesome name="phone" size={20} color="#4CAF50" />
+                                <Text style={{ fontSize: 20, color: "#4CAF50" }}>📞</Text>
                                 <Text style={styles.contactText}>+265 123 456 789</Text>
                             </View>
                             <View style={styles.contactInfo}>
-                                <FontAwesome name="clock-o" size={20} color="#4CAF50" />
+                                <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
                                 <Text style={styles.contactText}>24/7 Support Available</Text>
                             </View>
                         </View>
@@ -299,6 +294,8 @@ const styles = StyleSheet.create({
         maxWidth: maxWidth,
         alignSelf: 'center',
         width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
     },
     header: {
         flexDirection: 'row',

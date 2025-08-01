@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -150,7 +150,7 @@ const Step2 = () => {
                 </TouchableOpacity>
             </View>
             <TouchableOpacity style={styles.uploadButton}>
-                <FontAwesome name="upload" size={24} color="gray" />
+                <SimpleIcons.FontAwesome.upload />
                 <Text style={styles.uploadButtonText}>Upload ID Photo</Text>
             </TouchableOpacity>
         </View>

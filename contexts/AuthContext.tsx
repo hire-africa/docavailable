@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User as ApiUser, apiService } from '../app/services/apiService';
 import { UserData, authService } from '../services/authService';
 
 interface AuthContextType {
   user: UserData | null;
   userData: UserData | null;
   loading: boolean;
+  token: string | null;
   refreshUserData: () => Promise<void>;
 }
 
@@ -16,7 +16,14 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  return context;
+  // Ensure all properties are defined to prevent destructuring errors
+  return {
+    user: context.user || null,
+    userData: context.userData || null,
+    loading: context.loading || false,
+    token: context.token || null,
+    refreshUserData: context.refreshUserData || (() => Promise.resolve())
+  };
 };
 
 interface AuthProviderProps {
@@ -24,7 +31,7 @@ interface AuthProviderProps {
 }
 
 // Helper function to convert ApiUser to UserData
-const convertApiUserToUserData = (apiUser: ApiUser): UserData => {
+const convertApiUserToUserData = (apiUser: any): UserData => {
   return {
     id: apiUser.id,
     email: apiUser.email,
@@ -64,13 +71,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserData | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
 
   const fetchUserData = async (): Promise<UserData | null> => {
     try {
       console.log('AuthContext: Fetching user data from Laravel backend...');
       
-      // Get current user from Laravel backend using apiService
-      const apiUser = await apiService.getCurrentUser();
+      // Get token from authService
+      const token = await authService.getStoredToken();
+      if (!token) {
+        console.log('AuthContext: No token found');
+        return null;
+      }
+      
+      // Get current user from Laravel backend using direct fetch
+      const response = await fetch('http://172.20.10.11:8000/api/user', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('AuthContext: Authentication failed, clearing token');
+          await authService.clearStoredToken();
+        }
+        return null;
+      }
+      
+      const apiUser = await response.json();
       console.log('AuthContext: API response:', apiUser);
       
       if (apiUser) {
@@ -86,11 +117,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return null;
     } catch (error: any) {
       console.error('AuthContext: Error fetching user data from Laravel:', error);
-      console.error('AuthContext: Error details:', {
-        message: error.message,
-        status: error.status,
-        data: error.data
-      });
       return null;
     }
   };
@@ -101,6 +127,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const data = await fetchUserData();
       setUserData(data);
       setUser(data); // Set user to be the same as userData
+      // Get token from authService
+      const storedToken = await authService.getStoredToken();
+      setToken(storedToken);
       console.log('AuthContext: User data refreshed successfully:', data?.user_type);
     } catch (error) {
       console.error('AuthContext: Error refreshing user data:', error);
@@ -124,8 +153,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Test API connection first
         console.log('AuthContext: Testing API connection...');
         try {
-          const healthCheck = await apiService.healthCheck();
-          console.log('AuthContext: API health check result:', healthCheck);
+                     const healthResponse = await fetch('http://172.20.10.11:8000/api/health');
+          if (healthResponse.ok) {
+            console.log('AuthContext: API health check successful');
+          } else {
+            console.error('AuthContext: API health check failed');
+          }
         } catch (healthError) {
           console.error('AuthContext: API health check failed:', healthError);
         }
@@ -138,10 +171,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
           setUser(authState.user);
           setUserData(authState.user);
+          // Get token from authService
+          const storedToken = await authService.getStoredToken();
+          setToken(storedToken);
         } else {
           console.log('AuthContext: No authenticated user found');
           setUser(null);
           setUserData(null);
+          setToken(null);
         }
       } catch (error) {
         console.error('AuthContext: Error initializing auth:', error);
@@ -163,10 +200,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('AuthContext: Setting user data:', authState.user);
         setUser(authState.user);
         setUserData(authState.user);
+        // Get token from authService (synchronous)
+        authService.getStoredToken().then(storedToken => {
+          setToken(storedToken);
+        }).catch(error => {
+          console.error('AuthContext: Error getting stored token:', error);
+        });
       } else {
         console.log('AuthContext: Clearing user data');
         setUser(null);
         setUserData(null);
+        setToken(null);
       }
     };
 
@@ -179,6 +223,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('AuthContext: Found current user on initialization:', currentUser);
       setUser(currentUser);
       setUserData(currentUser);
+      // Get token from authService (synchronous)
+      authService.getStoredToken().then(storedToken => {
+        setToken(storedToken);
+      }).catch(error => {
+        console.error('AuthContext: Error getting stored token:', error);
+      });
       setLoading(false);
     }
 
@@ -189,10 +239,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const value = {
-    user,
-    userData,
-    loading,
-    refreshUserData
+    user: user || null,
+    userData: userData || null,
+    loading: loading || false,
+    token: token || null,
+    refreshUserData: refreshUserData || (() => Promise.resolve())
   };
 
   console.log('AuthContext: Rendering with loading:', loading, 'user:', user ? user.email : 'null');

@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -123,7 +122,28 @@ export default function InstantSessionsScreen() {
           ]
         );
       } else {
-        Alert.alert('Error', data.message || 'Failed to start session');
+        // Handle specific error cases
+        if (response.status === 400 && data.message?.includes('already have an active session')) {
+          Alert.alert(
+            'Active Session Found', 
+            'You already have an active text session. Please check your messages or wait for the current session to end before starting a new one.',
+            [
+              {
+                text: 'View Messages',
+                onPress: () => {
+                  // Navigate to messages tab
+                  router.push('/patient-dashboard?tab=messages');
+                }
+              },
+              {
+                text: 'Stay Here',
+                style: 'cancel'
+              }
+            ]
+          );
+        } else {
+          Alert.alert('Error', data.message || 'Failed to start session');
+        }
       }
     } catch (error) {
       console.error('Error starting session:', error);
@@ -175,7 +195,7 @@ export default function InstantSessionsScreen() {
       {activeSession && (
         <View style={styles.activeSessionCard}>
           <View style={styles.activeSessionHeader}>
-            <Ionicons name="chatbubbles" size={24} color={Colors.success} />
+                            <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
             <Text style={styles.activeSessionTitle}>Active Session</Text>
           </View>
           <Text style={styles.activeSessionText}>
@@ -197,7 +217,7 @@ export default function InstantSessionsScreen() {
         <Text style={styles.sectionTitle}>Available Doctors</Text>
         {doctors.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="medical" size={48} color={Colors.gray} />
+                            <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
             <Text style={styles.emptyStateText}>No doctors available right now</Text>
             <Text style={styles.emptyStateSubtext}>
               Check back later or try again in a few minutes
@@ -243,7 +263,7 @@ export default function InstantSessionsScreen() {
                   <ActivityIndicator size="small" color="white" />
                 ) : (
                   <>
-                    <Ionicons name="chatbubble" size={16} color="white" />
+                    <Text style={{ fontSize: 20, color: "#4CAF50" }}>💬</Text>
                     <Text style={styles.startSessionButtonText}>Start Session</Text>
                   </>
                 )}
@@ -255,18 +275,18 @@ export default function InstantSessionsScreen() {
 
       <View style={styles.infoSection}>
         <Text style={styles.infoTitle}>How it works:</Text>
-        <View style={styles.infoItem}>
-          <Ionicons name="time" size={16} color="#4CAF50" />
-          <Text style={styles.infoText}>Each session is 10 minutes long</Text>
-        </View>
-        <View style={styles.infoItem}>
-          <Ionicons name="speedometer" size={16} color="#4CAF50" />
-          <Text style={styles.infoText}>Doctors respond within 2 minutes</Text>
-        </View>
-        <View style={styles.infoItem}>
-          <Ionicons name="card" size={16} color="#4CAF50" />
-          <Text style={styles.infoText}>Uses your subscription text sessions</Text>
-        </View>
+                 <View style={styles.infoItem}>
+                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
+           <Text style={styles.infoText}>Each session is 10 minutes long</Text>
+         </View>
+         <View style={styles.infoItem}>
+                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
+           <Text style={styles.infoText}>Doctors respond within 2 minutes</Text>
+         </View>
+         <View style={styles.infoItem}>
+                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>💳</Text>
+           <Text style={styles.infoText}>Uses your subscription text sessions</Text>
+         </View>
       </View>
     </ScrollView>
   );

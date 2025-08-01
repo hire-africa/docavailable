@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -98,7 +98,7 @@ export default function AdminSignUp() {
       <View style={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.arrow-left />
           </TouchableOpacity>
           <Text style={styles.title}>Create Admin Account</Text>
         </View>

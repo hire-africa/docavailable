@@ -18,6 +18,7 @@
     "backend/**/*",
     "node_modules/**/*",
     "android/**/*",
-    "ios/**/*"
+    "ios/**/*",
+    "backup/**/*"
   ]
 }

@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import React, { useEffect, useState } from 'react';
@@ -247,14 +247,14 @@ export default function AdminDashboard() {
       <View style={styles.notificationBanner}>
         <View style={styles.notificationHeader}>
           <View style={styles.notificationTitleContainer}>
-            <FontAwesome name="bell" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.bell />
             <Text style={styles.notificationTitle}>Recent Notifications</Text>
             <View style={styles.notificationBadge}>
               <Text style={styles.notificationBadgeText}>{notificationCount}</Text>
             </View>
           </View>
           <TouchableOpacity onPress={clearNotifications} style={styles.clearButton}>
-            <FontAwesome name="times" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.times />
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.notificationList} showsVerticalScrollIndicator={false}>
@@ -280,7 +280,7 @@ export default function AdminDashboard() {
                   {notification.timestamp.toLocaleTimeString()}
                 </Text>
               </View>
-              <FontAwesome name="chevron-right" size={16} color="#666" />
+              <SimpleIcons.FontAwesome.chevron-right />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -384,28 +384,28 @@ export default function AdminDashboard() {
       <View style={styles.profileSection}>
         <View style={styles.profileCard}>
           <View style={styles.profileHeader}>
-            <FontAwesome name="user" size={60} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.user />
             <Text style={styles.profileName}>{user?.displayName || user?.email?.split('@')[0] || 'Admin'}</Text>
             <Text style={styles.profileEmail}>{user?.email}</Text>
           </View>
         </View>
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/admin-profile')}>
-            <FontAwesome name="eye" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.eye />
             <Text style={styles.menuText}>View Profile</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/privacy-settings')}>
-            <FontAwesome name="lock" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.lock />
             <Text style={styles.menuText}>Privacy Settings</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-            <FontAwesome name="sign-out" size={20} color="#FF3B30" />
+            <SimpleIcons.FontAwesome.sign-out />
             <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
         </View>
       </View>

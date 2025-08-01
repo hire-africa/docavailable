@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -250,12 +250,12 @@ export default function PrivacySettings() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Privacy Settings</Text>
                     <TouchableOpacity style={styles.resetButton} onPress={resetToDefaults}>
-                        <FontAwesome name="refresh" size={20} color="#FF3B30" />
+                        <SimpleIcons.FontAwesome.refresh />
                         <Text style={styles.resetButtonText}>Reset</Text>
                     </TouchableOpacity>
                 </View>
@@ -466,9 +466,9 @@ export default function PrivacySettings() {
                     {/* Privacy Policy Link */}
                     <View style={styles.privacyPolicySection}>
                         <TouchableOpacity style={styles.privacyPolicyButton}>
-                            <FontAwesome name="file-text-o" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.file-text-o />
                             <Text style={styles.privacyPolicyText}>View Privacy Policy</Text>
-                            <FontAwesome name="chevron-right" size={16} color="#666" />
+                            <SimpleIcons.FontAwesome.chevron-right />
                         </TouchableOpacity>
                     </View>
                 </ScrollView>

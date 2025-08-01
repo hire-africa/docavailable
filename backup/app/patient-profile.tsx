@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -143,12 +143,12 @@ export default function PatientProfile() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>My Profile</Text>
                     <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-patient-profile')}>
-                        <FontAwesome name="edit" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.edit />
                         <Text style={styles.editButtonText}>Edit</Text>
                     </TouchableOpacity>
                 </View>
@@ -157,7 +157,7 @@ export default function PatientProfile() {
                     {/* Profile Header */}
                     <View style={styles.profileHeader}>
                         <View style={styles.avatarContainer}>
-                            <FontAwesome name="user" size={60} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.user />
                         </View>
                         <View style={styles.profileInfo}>
                             <Text style={styles.profileName}>
@@ -174,7 +174,7 @@ export default function PatientProfile() {
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="user" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.user />
                             <Text style={styles.sectionTitle}>Basic Information</Text>
                         </View>
                         
@@ -201,7 +201,7 @@ export default function PatientProfile() {
                     {/* Contact Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="phone" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.phone />
                             <Text style={styles.sectionTitle}>Contact Information</Text>
                         </View>
                         
@@ -234,7 +234,7 @@ export default function PatientProfile() {
                     {/* Health Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="heartbeat" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.heartbeat />
                             <Text style={styles.sectionTitle}>Health Information</Text>
                         </View>
                         
@@ -271,7 +271,7 @@ export default function PatientProfile() {
                     {(userData?.emergencyContactName || userData?.emergencyContactPhone) && (
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <FontAwesome name="exclamation-triangle" size={20} color="#FF3B30" />
+                                <SimpleIcons.FontAwesome.exclamation-triangle />
                                 <Text style={styles.sectionTitle}>Emergency Contact</Text>
                             </View>
                             
@@ -295,7 +295,7 @@ export default function PatientProfile() {
                     {/* Preferences */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="cog" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.cog />
                             <Text style={styles.sectionTitle}>Preferences</Text>
                         </View>
                         
@@ -314,7 +314,7 @@ export default function PatientProfile() {
                     {/* Account Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="info-circle" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.info-circle />
                             <Text style={styles.sectionTitle}>Account Information</Text>
                         </View>
                         

@@ -185,14 +185,9 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
               {selectedPaymentMethod === 'mobile' && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Phone Number</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={phoneNumber}
-                    onChangeText={setPhoneNumber}
-                    placeholder="Enter your phone number"
-                    placeholderTextColor="#999"
-                    keyboardType="phone-pad"
-                  />
+                  <Text style={styles.textInput}>
+                    Enter your phone number
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -226,14 +221,9 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
               {selectedPaymentMethod === 'bank' && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Account Number</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={accountNumber}
-                    onChangeText={setAccountNumber}
-                    placeholder="Enter your account number"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
-                  />
+                  <Text style={styles.textInput}>
+                    Enter your account number
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>

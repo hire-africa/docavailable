@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import encryptionApiService, { EncryptionStatus } from '../services/encryptionApiService';
+// import encryptionApiService, { EncryptionStatus } from '../services/encryptionApiService';
+
+// Temporary type definition
+interface EncryptionStatus {
+  encryption_enabled: boolean;
+  has_keys: boolean;
+  public_key: string | null;
+}
 
 interface UseEncryptionReturn {
   encryptionStatus: EncryptionStatus | null;
@@ -32,7 +39,7 @@ export const useEncryption = (): UseEncryptionReturn => {
   const loadEncryptionStatus = useCallback(async () => {
     try {
       setIsLoading(true);
-      const status = await encryptionApiService.getEncryptionStatus();
+      // const status = await encryptionApiService.getEncryptionStatus();
       
       // If user doesn't have encryption enabled, automatically enable it
       if (!status.encryption_enabled) {
@@ -68,7 +75,7 @@ export const useEncryption = (): UseEncryptionReturn => {
   const generateKeys = useCallback(async () => {
     try {
       setIsLoading(true);
-      const result = await encryptionApiService.generateKeys();
+      // const result = await encryptionApiService.generateKeys();
       setEncryptionStatus({
         encryption_enabled: result.encryption_enabled,
         has_keys: true,
@@ -98,22 +105,22 @@ export const useEncryption = (): UseEncryptionReturn => {
   const enableRoomEncryption = useCallback(async (roomId: number) => {
     try {
       setIsLoading(true);
-      const enableResult = await encryptionApiService.enableRoomEncryption(roomId);
+      // const enableResult = await encryptionApiService.enableRoomEncryption(roomId);
       
       // Get the room key after enabling encryption
-      const keyResult = await encryptionApiService.getRoomKey(roomId);
-      const key = keyResult.encryption_key;
+      // const keyResult = await encryptionApiService.getRoomKey(roomId);
+      // const key = keyResult.encryption_key;
       
       // Cache the key using the actual room ID returned from the API
-      const actualRoomId = keyResult.room_id;
-      setRoomKeys(prev => new Map(prev).set(actualRoomId, key));
+      // const actualRoomId = keyResult.room_id;
+      // setRoomKeys(prev => new Map(prev).set(actualRoomId, key));
       
       // Also cache it with the original roomId for backward compatibility
-      if (actualRoomId !== roomId) {
-        setRoomKeys(prev => new Map(prev).set(roomId, key));
-      }
+      // if (actualRoomId !== roomId) {
+      //   setRoomKeys(prev => new Map(prev).set(roomId, key));
+      // }
       
-      Alert.alert('Success', 'Room encryption enabled successfully!');
+      // Alert.alert('Success', 'Room encryption enabled successfully!');
     } catch (error) {
       console.error('Error enabling room encryption:', error);
       Alert.alert('Error', 'Failed to enable room encryption. Please try again.');
@@ -130,26 +137,27 @@ export const useEncryption = (): UseEncryptionReturn => {
       }
 
       // Get room encryption status first
-      const roomStatus = await encryptionApiService.getRoomEncryptionStatus(roomId);
+      // const roomStatus = await encryptionApiService.getRoomEncryptionStatus(roomId);
       
-      if (!roomStatus.encryption_enabled) {
-        return null;
-      }
+      // if (!roomStatus.encryption_enabled) {
+      //   return null;
+      // }
 
       // Get the room key
-      const keyResult = await encryptionApiService.getRoomKey(roomId);
-      const key = keyResult.encryption_key;
+      // const keyResult = await encryptionApiService.getRoomKey(roomId);
+      // const key = keyResult.encryption_key;
       
       // Cache the key using the actual room ID returned from the API
-      const actualRoomId = keyResult.room_id;
-      setRoomKeys(prev => new Map(prev).set(actualRoomId, key));
+      // const actualRoomId = keyResult.room_id;
+      // setRoomKeys(prev => new Map(prev).set(actualRoomId, key));
       
       // Also cache it with the original roomId for backward compatibility
-      if (actualRoomId !== roomId) {
-        setRoomKeys(prev => new Map(prev).set(roomId, key));
-      }
+      // if (actualRoomId !== roomId) {
+      //   setRoomKeys(prev => new Map(prev).set(roomId, key));
+      // }
       
-      return key;
+      // return key;
+      return null; // Temporary return until encryption service is available
     } catch (error) {
       console.error('Error getting room key:', error);
       return null;
@@ -165,7 +173,8 @@ export const useEncryption = (): UseEncryptionReturn => {
         return message.content || '';
       }
 
-      return await encryptionApiService.decryptMessageLocally(message, roomKey);
+      // return await encryptionApiService.decryptMessageLocally(message, roomKey);
+      return message.content || ''; // Temporary return until encryption service is available
     } catch (error) {
       console.error('Error decrypting message:', error);
       // Return original content if decryption fails
@@ -182,7 +191,8 @@ export const useEncryption = (): UseEncryptionReturn => {
         return null;
       }
 
-      return await encryptionApiService.encryptMessageLocally(content, roomKey);
+      // return await encryptionApiService.encryptMessageLocally(content, roomKey);
+      return null; // Temporary return until encryption service is available
     } catch (error) {
       console.error('Error encrypting message:', error);
       // Return null to indicate encryption failed

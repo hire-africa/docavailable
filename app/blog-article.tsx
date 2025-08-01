@@ -1,8 +1,9 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+
 
 export default function BlogArticle() {
   const router = useRouter();
@@ -15,11 +16,11 @@ export default function BlogArticle() {
           style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+          <Icon name="arrowLeft" size={16} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blog</Text>
         <TouchableOpacity style={styles.shareButton}>
-          <FontAwesome name="share" size={20} color="#4CAF50" />
+          <Icon name="share" size={16} color="#222" />
         </TouchableOpacity>
       </View>
 
@@ -40,15 +41,15 @@ export default function BlogArticle() {
           {/* Meta Info */}
           <View style={styles.metaInfo}>
             <View style={styles.metaItem}>
-              <FontAwesome name="calendar" size={14} color="#888" />
+              <Icon name="calendar" size={14} color="#888" />
               <Text style={styles.metaText}>December 2024</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="clock-o" size={14} color="#888" />
+              <Icon name="clock" size={14} color="#888" />
               <Text style={styles.metaText}>5 min read</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="user" size={14} color="#888" />
+              <Icon name="userMd" size={14} color="#888" />
               <Text style={styles.metaText}>Health Team</Text>
             </View>
           </View>
@@ -63,7 +64,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="camera" size={20} color="#4CAF50" />
+                  <Icon name="camera" size={16} color="#4CAF50" />
                 </View>
                 <Text style={styles.serviceTitle}>Skin Check-Ups (Dermatology)</Text>
               </View>
@@ -76,7 +77,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="heart" size={20} color="#4CAF50" />
+                  <Icon name="heart" size={16} color="#4CAF50" />
                 </View>
                 <Text style={styles.serviceTitle}>Mental Health Support</Text>
               </View>
@@ -89,7 +90,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="apple" size={20} color="#4CAF50" />
+                  <Icon name="apple" size={16} color="#4CAF50" />
                 </View>
                 <Text style={styles.serviceTitle}>Nutrition & Diet Consultations</Text>
               </View>
@@ -102,7 +103,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="stethoscope" size={20} color="#4CAF50" />
+                  <Text style={{ fontSize: 14, color: '#888' }}>??</Text>
                 </View>
                 <Text style={styles.serviceTitle}>Chronic Condition Management</Text>
               </View>
@@ -115,7 +116,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="flask" size={20} color="#4CAF50" />
+                  <Text style={{ fontSize: 16 }}>??</Text>
                 </View>
                 <Text style={styles.serviceTitle}>Lab Test Orders & Reviews</Text>
               </View>
@@ -128,7 +129,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="shield" size={20} color="#4CAF50" />
+                  <Text style={{ fontSize: 16 }}>???</Text>
                 </View>
                 <Text style={styles.serviceTitle}>Sexual Health Services</Text>
               </View>
@@ -141,7 +142,7 @@ export default function BlogArticle() {
             <View style={styles.serviceCard}>
               <View style={styles.serviceHeader}>
                 <View style={styles.serviceIcon}>
-                  <FontAwesome name="bed" size={20} color="#4CAF50" />
+                  <Text style={{ fontSize: 16 }}>??</Text>
                 </View>
                 <Text style={styles.serviceTitle}>Sleep Consultations</Text>
               </View>

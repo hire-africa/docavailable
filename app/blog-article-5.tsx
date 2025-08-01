@@ -1,8 +1,9 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+
 
 export default function BlogArticle5() {
   const router = useRouter();
@@ -15,11 +16,11 @@ export default function BlogArticle5() {
           style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+          <Icon name="arrowLeft" size={16} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blog</Text>
         <TouchableOpacity style={styles.shareButton}>
-          <FontAwesome name="share" size={20} color="#4CAF50" />
+          <Icon name="share" size={16} color="#222" />
         </TouchableOpacity>
       </View>
 
@@ -40,15 +41,15 @@ export default function BlogArticle5() {
           {/* Meta Info */}
           <View style={styles.metaInfo}>
             <View style={styles.metaItem}>
-              <FontAwesome name="calendar" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>??</Text>
               <Text style={styles.metaText}>June 2025</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="clock-o" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>?</Text>
               <Text style={styles.metaText}>5 min read</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="user" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>??</Text>
               <Text style={styles.metaText}>Health Team</Text>
             </View>
           </View>
@@ -65,7 +66,7 @@ export default function BlogArticle5() {
 
             <View style={styles.nutrientCard}>
               <View style={styles.nutrientHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.nutrientTitle}>1. Protein: The Body's Building Block</Text>
               </View>
               <Text style={styles.nutrientSubtitle}>Why you need it:</Text>
@@ -76,7 +77,7 @@ export default function BlogArticle5() {
 
             <View style={styles.nutrientCard}>
               <View style={styles.nutrientHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.nutrientTitle}>2. Carbs: Your Energy Source (Yes, You Still Need Them)</Text>
               </View>
               <Text style={styles.nutrientSubtitle}>Why you need them:</Text>
@@ -87,7 +88,7 @@ export default function BlogArticle5() {
 
             <View style={styles.nutrientCard}>
               <View style={styles.nutrientHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.nutrientTitle}>3. Healthy Fats: Not the Enemy</Text>
               </View>
               <Text style={styles.nutrientSubtitle}>Why you need them:</Text>
@@ -98,7 +99,7 @@ export default function BlogArticle5() {
 
             <View style={styles.nutrientCard}>
               <View style={styles.nutrientHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.nutrientTitle}>4. Vitamins & Minerals: The Invisible Helpers</Text>
               </View>
               <Text style={styles.nutrientSubtitle}>Why you need them:</Text>
@@ -109,7 +110,7 @@ export default function BlogArticle5() {
 
             <View style={styles.nutrientCard}>
               <View style={styles.nutrientHeader}>
-                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.nutrientTitle}>5. Water: The One People Forget</Text>
               </View>
               <Text style={styles.nutrientSubtitle}>Why you need it:</Text>
@@ -122,19 +123,19 @@ export default function BlogArticle5() {
 
             <View style={styles.habitsList}>
               <View style={styles.habitItem}>
-                <FontAwesome name="leaf" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.habitText}>Fill half your plate with veggies.</Text>
               </View>
               <View style={styles.habitItem}>
-                <FontAwesome name="drumstick-bite" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.habitText}>Add a lean protein source.</Text>
               </View>
               <View style={styles.habitItem}>
-                <FontAwesome name="seedling" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.habitText}>Choose whole grains over processed carbs.</Text>
               </View>
               <View style={styles.habitItem}>
-                <FontAwesome name="heart" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.habitText}>Don't skip healthy fats.</Text>
               </View>
             </View>

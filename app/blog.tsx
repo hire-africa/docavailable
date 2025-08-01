@@ -1,7 +1,8 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Icon from '../components/Icon';
+
 
 const featuredBlogs = [
   {
@@ -65,14 +66,12 @@ interface BlogProps {
 export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('date');
-  const [showSortOptions, setShowSortOptions] = useState(false);
 
-  // Combine all blogs for search and sorting
+  // Combine all blogs for search
   const allBlogs = [...featuredBlogs, ...articles];
 
-  // Filter and sort blogs
-  const getFilteredAndSortedBlogs = () => {
+  // Filter blogs
+  const getFilteredBlogs = () => {
     let filteredBlogs = allBlogs;
     
     // Filter by search query
@@ -86,29 +85,11 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       });
     }
 
-    // Sort blogs
-    switch (sortBy) {
-      case 'date':
-        return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      case 'title':
-        return filteredBlogs.sort((a, b) => a.title.localeCompare(b.title));
-      case 'category':
-        return filteredBlogs.sort((a, b) => a.category.localeCompare(b.category));
-      default:
-        return filteredBlogs;
-    }
+    // Sort by date (newest first)
+    return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
-  const getSortOptionLabel = (value: string) => {
-    switch (value) {
-      case 'date': return 'Date (Newest)';
-      case 'title': return 'Title (A-Z)';
-      case 'category': return 'Category (A-Z)';
-      default: return 'Sort by';
-    }
-  };
-
-  const filteredAndSortedBlogs = getFilteredAndSortedBlogs();
+  const filteredBlogs = getFilteredBlogs();
 
   return (
     <View style={styles.container}>
@@ -117,7 +98,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       
       {/* Search Bar */}
       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAF4EC', borderRadius: 16, marginHorizontal: 16, marginBottom: 18, paddingHorizontal: 14, height: 44 }}>
-        <FontAwesome name="search" size={20} color="#7CB18F" style={{ marginRight: 8 }} />
+        <Icon name="search" size={16} color="#7CB18F" />
         <TextInput
           style={{ flex: 1, fontSize: 17, color: '#222', backgroundColor: 'transparent' }}
           placeholder="Search blogs by title, description, or category..."
@@ -128,50 +109,22 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginLeft: 8 }}>
-            <FontAwesome name="times-circle" size={22} color="#7CB18F" />
+            <Icon name="times" size={16} color="#7CB18F" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Sort Options */}
-      <View style={styles.sortContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity 
-            style={[styles.sortButton, sortBy === 'date' && styles.sortButtonActive]}
-            onPress={() => setSortBy('date')}
-          >
-            <Text style={[styles.sortButtonText, sortBy === 'date' && styles.sortButtonTextActive]}>
-              Date
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.sortButton, sortBy === 'title' && styles.sortButtonActive]}
-            onPress={() => setSortBy('title')}
-          >
-            <Text style={[styles.sortButtonText, sortBy === 'title' && styles.sortButtonTextActive]}>
-              Title
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.sortButton, sortBy === 'category' && styles.sortButtonActive]}
-            onPress={() => setSortBy('category')}
-          >
-            <Text style={[styles.sortButtonText, sortBy === 'category' && styles.sortButtonTextActive]}>
-              Category
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
+
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Search Results */}
         {searchQuery.trim() && (
           <View style={styles.searchResultsContainer}>
             <Text style={styles.searchResultsTitle}>
-              Search Results ({filteredAndSortedBlogs.length})
+              Search Results ({filteredBlogs.length})
             </Text>
             <View style={styles.searchResultsList}>
-              {filteredAndSortedBlogs.map(blog => (
+              {filteredBlogs.map(blog => (
                 <TouchableOpacity 
                   key={blog.id} 
                   style={styles.searchResultItem}
@@ -264,23 +217,23 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       {!hideBottomNav && (
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/')}> 
-          <FontAwesome name="home" size={22} color="#222" />
+          <Icon name="home" size={16} color="#888" />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/my-appointments')}> 
-          <FontAwesome name="calendar" size={22} color="#222" />
+          <Icon name="calendar" size={14} color="#888" />
           <Text style={styles.navLabel}>Appointments</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/chat/123')}> 
-          <FontAwesome name="comments" size={22} color="#222" />
+          <Icon name="message" size={16} color="#888" />
           <Text style={styles.navLabel}>Messages</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.navItem, styles.activeNavItem]} onPress={() => router.push('/blog')}> 
-          <FontAwesome name="newspaper-o" size={22} color="#4CAF50" />
+          <Icon name="file" size={16} color="#4CAF50" />
           <Text style={[styles.navLabel, styles.activeNavLabel]}>Blog</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient-profile')}> 
-          <FontAwesome name="user" size={22} color="#222" />
+          <Icon name="user" size={14} color="#888" />
           <Text style={styles.navLabel}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -408,28 +361,7 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontWeight: 'bold',
   },
-  sortContainer: {
-    marginBottom: 18,
-  },
-  sortButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    backgroundColor: 'transparent',
-  },
-  sortButtonActive: {
-    backgroundColor: '#7CB18F',
-  },
-  sortButtonText: {
-    fontSize: 14,
-    color: '#222',
-    fontWeight: '500',
-  },
-  sortButtonTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
+
   searchResultsContainer: {
     paddingHorizontal: 20,
     marginBottom: 18,

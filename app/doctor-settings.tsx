@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -6,6 +5,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from 'react-native';
 import OnlineStatusToggle from '../components/OnlineStatusToggle';
@@ -19,7 +19,7 @@ export default function DoctorSettingsScreen() {
   if (!user || user.role !== 'doctor') {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="lock-closed" size={48} color={Colors.gray} />
+        <Text style={{ fontSize: 24, color: "#FF6B6B" }}>🔒</Text>
         <Text style={styles.errorText}>Access denied</Text>
         <Text style={styles.errorSubtext}>This page is for doctors only</Text>
       </View>
@@ -43,23 +43,23 @@ export default function DoctorSettingsScreen() {
         
         <View style={styles.infoCard}>
           <View style={styles.infoHeader}>
-            <Ionicons name="information-circle" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>ℹ️</Text>
             <Text style={styles.infoTitle}>How it works</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>✅</Text>
             <Text style={styles.infoText}>When online, patients can start instant sessions with you</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="time" size={16} color={Colors.text} />
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
             <Text style={styles.infoText}>Sessions are 10 minutes long per patient subscription</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="speedometer" size={16} color={Colors.text} />
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
             <Text style={styles.infoText}>You have 2 minutes to respond to messages</Text>
           </View>
           <View style={styles.infoItem}>
-            <Ionicons name="chatbubble" size={16} color={Colors.text} />
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>💬</Text>
             <Text style={styles.infoText}>Sessions appear in your normal chat list</Text>
           </View>
         </View>
@@ -70,35 +70,35 @@ export default function DoctorSettingsScreen() {
         
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIcon}>
-            <Ionicons name="person" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>👤</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Edit Profile</Text>
             <Text style={styles.settingDescription}>Update your personal information</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIcon}>
-            <Ionicons name="medical" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Specialization</Text>
             <Text style={styles.settingDescription}>Manage your medical specialties</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIcon}>
-            <Ionicons name="calendar" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>📅</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Working Hours</Text>
             <Text style={styles.settingDescription}>Set your appointment availability</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
       </View>
 
@@ -107,24 +107,24 @@ export default function DoctorSettingsScreen() {
         
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIcon}>
-            <Ionicons name="notifications" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>🔔</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Notifications</Text>
             <Text style={styles.settingDescription}>Manage push notifications</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.settingItem}>
           <View style={styles.settingIcon}>
-            <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
+            <Text style={{ fontSize: 24, color: "#4CAF50" }}>🛡️</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={styles.settingTitle}>Privacy & Security</Text>
             <Text style={styles.settingDescription}>Manage your privacy settings</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -143,13 +143,13 @@ export default function DoctorSettingsScreen() {
           }}
         >
           <View style={styles.settingIcon}>
-            <Ionicons name="log-out" size={20} color={Colors.danger} />
+            <Text style={{ fontSize: 24, color: Colors.danger }}>🚪</Text>
           </View>
           <View style={styles.settingContent}>
             <Text style={[styles.settingTitle, { color: Colors.danger }]}>Sign Out</Text>
             <Text style={styles.settingDescription}>Sign out of your account</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={Colors.gray} />
+          <Text style={{ fontSize: 24, color: "#666" }}>▶️</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

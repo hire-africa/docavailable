@@ -1,12 +1,9 @@
-import { authService } from '@/services/authService';
-import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
     Platform,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Switch,
@@ -14,12 +11,13 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
+import { apiService } from './services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 const maxWidth = isWeb ? 800 : width;
-const isLargeScreen = width > 768;
 
 interface NotificationSettings {
     communication: {
@@ -34,11 +32,10 @@ interface NotificationSettings {
         cancellations: boolean;
         reschedules: boolean;
     };
-    marketing: {
-        promotionalMessages: boolean;
-        healthNews: boolean;
-        specialOffers: boolean;
-        surveys: boolean;
+    consultation: {
+        newMessages: boolean;
+        consultationUpdates: boolean;
+        feedbackRequests: boolean;
     };
     system: {
         securityAlerts: boolean;
@@ -48,7 +45,7 @@ interface NotificationSettings {
 }
 
 export default function NotificationsSettings() {
-    const { user } = useAuth();
+    const { user, userData } = useAuth();
     const [loading, setLoading] = useState(false);
     const [settings, setSettings] = useState<NotificationSettings>({
         communication: {
@@ -63,11 +60,10 @@ export default function NotificationsSettings() {
             cancellations: true,
             reschedules: true,
         },
-        marketing: {
-            promotionalMessages: false,
-            healthNews: false,
-            specialOffers: false,
-            surveys: false,
+        consultation: {
+            newMessages: true,
+            consultationUpdates: true,
+            feedbackRequests: true,
         },
         system: {
             securityAlerts: true,
@@ -81,8 +77,6 @@ export default function NotificationsSettings() {
             router.replace('/');
             return;
         }
-
-        // Load existing notification settings from Firestore
         loadNotificationSettings();
     }, [user]);
 
@@ -91,16 +85,15 @@ export default function NotificationsSettings() {
 
         try {
             setLoading(true);
-            const userDoc = await authService.getUserById(user.uid);
-            if (userDoc?.notificationSettings) {
+            const response = await apiService.get('/user/notification-settings');
+            if (response.success && response.data) {
                 setSettings(prevSettings => ({
                     ...prevSettings,
-                    ...userDoc.notificationSettings,
+                    ...response.data,
                 }));
             }
         } catch (error) {
             console.error('Error loading notification settings:', error);
-            Alert.alert('Error', 'Failed to load notification settings.');
         } finally {
             setLoading(false);
         }
@@ -112,12 +105,14 @@ export default function NotificationsSettings() {
         try {
             setLoading(true);
             const updatedSettings = { ...settings, ...newSettings };
-            await authService.updateUser(user.uid, {
-                notificationSettings: updatedSettings,
-                updatedAt: new Date(),
-            });
-            setSettings(updatedSettings);
-            Alert.alert('Success', 'Notification settings updated successfully.');
+            const response = await apiService.patch('/user/notification-settings', updatedSettings);
+            
+            if (response.success) {
+                setSettings(updatedSettings);
+                Alert.alert('Success', 'Notification settings updated successfully.');
+            } else {
+                Alert.alert('Error', response.message || 'Failed to save notification settings.');
+            }
         } catch (error) {
             console.error('Error saving notification settings:', error);
             Alert.alert('Error', 'Failed to save notification settings. Please try again.');
@@ -161,11 +156,10 @@ export default function NotificationsSettings() {
                                 cancellations: true,
                                 reschedules: true,
                             },
-                            marketing: {
-                                promotionalMessages: false,
-                                healthNews: false,
-                                specialOffers: false,
-                                surveys: false,
+                            consultation: {
+                                newMessages: true,
+                                consultationUpdates: true,
+                                feedbackRequests: true,
                             },
                             system: {
                                 securityAlerts: true,
@@ -189,7 +183,7 @@ export default function NotificationsSettings() {
     ) => (
         <View style={styles.section}>
             <View style={styles.sectionHeader}>
-                <FontAwesome name={icon as any} size={20} color="#4CAF50" />
+                <Icon name={icon} size={24} color="#4CAF50" />
                 <View style={styles.sectionTitleContainer}>
                     <Text style={styles.sectionTitle}>{title}</Text>
                     {description && <Text style={styles.sectionDescription}>{description}</Text>}
@@ -224,26 +218,33 @@ export default function NotificationsSettings() {
 
     if (!user) return null;
 
-    return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.mainContent}>
-                <View style={styles.header}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
-                        <Text style={styles.backButtonText}>Back</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Notifications</Text>
-                    <TouchableOpacity style={styles.resetButton} onPress={resetToDefaults}>
-                        <FontAwesome name="refresh" size={20} color="#FF3B30" />
-                        <Text style={styles.resetButtonText}>Reset</Text>
-                    </TouchableOpacity>
-                </View>
+    const isDoctor = userData?.userType === 'doctor';
 
-                <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+    return (
+        <View style={styles.container}>
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                <View style={[styles.content, { maxWidth }]}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <Icon name="back" size={20} color="#333" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Notifications</Text>
+                        <TouchableOpacity
+                            style={styles.resetButton}
+                            onPress={resetToDefaults}
+                        >
+                            <Icon name="refresh" size={20} color="#FF3B30" />
+                        </TouchableOpacity>
+                    </View>
+
                     {/* Communication Channels */}
                     {renderSection(
                         'Communication Channels',
-                        'envelope',
+                        'message',
                         <View style={styles.sectionContent}>
                             {renderToggleItem(
                                 'Email Notifications',
@@ -322,51 +323,43 @@ export default function NotificationsSettings() {
                         'Manage appointment-related notifications'
                     )}
 
-                    {/* Marketing */}
+                    {/* Consultation */}
                     {renderSection(
-                        'Marketing & Promotions',
-                        'gift',
+                        'Consultation',
+                        'chat',
                         <View style={styles.sectionContent}>
                             {renderToggleItem(
-                                'Promotional Messages',
-                                'Receive offers and promotional content',
-                                settings.marketing.promotionalMessages,
-                                (value) => handleToggle('marketing', 'promotionalMessages', value),
-                                'marketing',
-                                'promotionalMessages'
+                                'New Messages',
+                                'Get notified when you receive new consultation messages',
+                                settings.consultation.newMessages,
+                                (value) => handleToggle('consultation', 'newMessages', value),
+                                'consultation',
+                                'newMessages'
                             )}
                             {renderToggleItem(
-                                'Health News',
-                                'Get updates on health-related news and articles',
-                                settings.marketing.healthNews,
-                                (value) => handleToggle('marketing', 'healthNews', value),
-                                'marketing',
-                                'healthNews'
+                                'Consultation Updates',
+                                'Receive updates about your consultation status',
+                                settings.consultation.consultationUpdates,
+                                (value) => handleToggle('consultation', 'consultationUpdates', value),
+                                'consultation',
+                                'consultationUpdates'
                             )}
                             {renderToggleItem(
-                                'Special Offers',
-                                'Receive notifications about special offers and discounts',
-                                settings.marketing.specialOffers,
-                                (value) => handleToggle('marketing', 'specialOffers', value),
-                                'marketing',
-                                'specialOffers'
-                            )}
-                            {renderToggleItem(
-                                'Surveys & Feedback',
-                                'Participate in surveys to help improve our services',
-                                settings.marketing.surveys,
-                                (value) => handleToggle('marketing', 'surveys', value),
-                                'marketing',
-                                'surveys'
+                                'Feedback Requests',
+                                'Get notified when feedback is requested',
+                                settings.consultation.feedbackRequests,
+                                (value) => handleToggle('consultation', 'feedbackRequests', value),
+                                'consultation',
+                                'feedbackRequests'
                             )}
                         </View>,
-                        'Manage promotional and marketing communications'
+                        'Manage consultation-related notifications'
                     )}
 
                     {/* System */}
                     {renderSection(
                         'System Notifications',
-                        'cog',
+                        'settings',
                         <View style={styles.sectionContent}>
                             {renderToggleItem(
                                 'Security Alerts',
@@ -398,39 +391,43 @@ export default function NotificationsSettings() {
 
                     {/* Quick Actions */}
                     <View style={styles.quickActionsSection}>
-                        <TouchableOpacity style={styles.quickActionButton} onPress={() => {
-                            // Toggle all notifications on
-                            const allOn = {
-                                communication: { email: true, sms: true, push: true, inApp: true },
-                                appointments: { reminders: true, confirmations: true, cancellations: true, reschedules: true },
-                                marketing: { promotionalMessages: true, healthNews: true, specialOffers: true, surveys: true },
-                                system: { securityAlerts: true, maintenanceUpdates: true, featureAnnouncements: true },
-                            };
-                            setSettings(allOn);
-                            saveNotificationSettings(allOn);
-                        }}>
-                            <FontAwesome name="check-square-o" size={20} color="#4CAF50" />
+                        <TouchableOpacity 
+                            style={styles.quickActionButton} 
+                            onPress={() => {
+                                const allOn = {
+                                    communication: { email: true, sms: true, push: true, inApp: true },
+                                    appointments: { reminders: true, confirmations: true, cancellations: true, reschedules: true },
+                                    consultation: { newMessages: true, consultationUpdates: true, feedbackRequests: true },
+                                    system: { securityAlerts: true, maintenanceUpdates: true, featureAnnouncements: true },
+                                };
+                                setSettings(allOn);
+                                saveNotificationSettings(allOn);
+                            }}
+                        >
+                            <Icon name="check" size={20} color="#4CAF50" />
                             <Text style={styles.quickActionText}>Enable All</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.quickActionButton} onPress={() => {
-                            // Toggle all notifications off
-                            const allOff = {
-                                communication: { email: false, sms: false, push: false, inApp: false },
-                                appointments: { reminders: false, confirmations: false, cancellations: false, reschedules: false },
-                                marketing: { promotionalMessages: false, healthNews: false, specialOffers: false, surveys: false },
-                                system: { securityAlerts: false, maintenanceUpdates: false, featureAnnouncements: false },
-                            };
-                            setSettings(allOff);
-                            saveNotificationSettings(allOff);
-                        }}>
-                            <FontAwesome name="square-o" size={20} color="#FF3B30" />
+                        <TouchableOpacity 
+                            style={styles.quickActionButton} 
+                            onPress={() => {
+                                const allOff = {
+                                    communication: { email: false, sms: false, push: false, inApp: false },
+                                    appointments: { reminders: false, confirmations: false, cancellations: false, reschedules: false },
+                                    consultation: { newMessages: false, consultationUpdates: false, feedbackRequests: false },
+                                    system: { securityAlerts: false, maintenanceUpdates: false, featureAnnouncements: false },
+                                };
+                                setSettings(allOff);
+                                saveNotificationSettings(allOff);
+                            }}
+                        >
+                            <Icon name="close" size={20} color="#FF3B30" />
                             <Text style={[styles.quickActionText, { color: '#FF3B30' }]}>Disable All</Text>
                         </TouchableOpacity>
                     </View>
-                </ScrollView>
-            </View>
-        </SafeAreaView>
+                </View>
+            </ScrollView>
+        </View>
     );
 }
 
@@ -439,11 +436,12 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F8F9FA',
     },
-    mainContent: {
+    scrollContent: {
+        flexGrow: 1,
+    },
+    content: {
         flex: 1,
-        maxWidth: maxWidth,
-        alignSelf: 'center',
-        width: '100%',
+        paddingHorizontal: 20,
     },
     header: {
         flexDirection: 'row',
@@ -454,16 +452,13 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
         borderBottomColor: '#E0E0E0',
+        marginTop: 20,
+        borderRadius: 12,
+        marginBottom: 20,
     },
     backButton: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    backButtonText: {
-        fontSize: 16,
-        color: '#4CAF50',
-        marginLeft: 8,
-        fontWeight: '600',
     },
     headerTitle: {
         fontSize: 18,
@@ -473,16 +468,6 @@ const styles = StyleSheet.create({
     resetButton: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    resetButtonText: {
-        fontSize: 16,
-        color: '#FF3B30',
-        marginLeft: 8,
-        fontWeight: '600',
-    },
-    content: {
-        flex: 1,
-        paddingHorizontal: 20,
     },
     section: {
         backgroundColor: '#FFFFFF',

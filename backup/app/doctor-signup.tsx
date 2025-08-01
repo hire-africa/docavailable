@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -68,7 +68,7 @@ const Step1: React.FC<Step1Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="user-md" size={40} color="#4CAF50" />
+                <SimpleIcons.FontAwesome.user-md />
                 <Text style={styles.stepTitle}>Personal & Professional Info</Text>
                 <Text style={styles.stepSubtitle}>Tell us about yourself and your expertise</Text>
             </View>
@@ -216,7 +216,7 @@ const Step2 = () => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="file-text" size={40} color="#4CAF50" />
+                <SimpleIcons.FontAwesome.file-text />
                 <Text style={styles.stepTitle}>Document Verification</Text>
                 <Text style={styles.stepSubtitle}>Upload your credentials for verification</Text>
             </View>
@@ -237,7 +237,7 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <FontAwesome name="graduation-cap" size={40} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.graduation-cap />
                             <Text style={styles.photoUploadText}>Medical Degree</Text>
                             <Text style={styles.photoUploadSubtext}>Tap to Upload</Text>
                         </>
@@ -253,7 +253,7 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <FontAwesome name="credit-card" size={40} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.credit-card />
                             <Text style={styles.photoUploadText}>National ID</Text>
                             <Text style={styles.photoUploadSubtext}>Tap to Upload</Text>
                         </>
@@ -269,7 +269,7 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <FontAwesome name="certificate" size={40} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.certificate />
                             <Text style={styles.photoUploadText}>Medical License</Text>
                             <Text style={styles.photoUploadSubtext}>Optional</Text>
                         </>
@@ -277,7 +277,7 @@ const Step2 = () => {
                 </TouchableOpacity>
 
                 <View style={styles.securityNote}>
-                    <FontAwesome name="shield" size={16} color="#34C759" />
+                    <SimpleIcons.FontAwesome.shield />
                     <Text style={styles.securityNoteText}>
                         Your documents are encrypted and secure. We follow strict privacy guidelines and HIPAA compliance.
                     </Text>
@@ -471,7 +471,7 @@ export default function DoctorSignUp() {
                             onPress={() => setStep(step - 1)}
                             disabled={loading}
                         >
-                            <FontAwesome name="arrow-left" size={16} color="#666" />
+                            <SimpleIcons.FontAwesome.arrow-left />
                             <Text style={styles.backButtonText}>Back</Text>
                         </TouchableOpacity>
                     )}
@@ -487,7 +487,7 @@ export default function DoctorSignUp() {
                                 <Text style={styles.continueButtonText}>
                                     {step === 2 ? 'Create Account' : 'Continue'}
                                 </Text>
-                                <FontAwesome name="arrow-right" size={16} color="#FFFFFF" />
+                                <SimpleIcons.FontAwesome.arrow-right />
                             </>
                         )}
                     </TouchableOpacity>

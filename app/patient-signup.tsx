@@ -1,5 +1,3 @@
-import { authService } from '@/services/authService';
-import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -18,6 +16,7 @@ import {
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
+import { authService } from '../services/authService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -72,7 +71,7 @@ const Step1: React.FC<Step1Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="user" size={40} color="#4CAF50" />
+                <Text style={{ fontSize: 32, color: "#4CAF50" }}>👤</Text>
                 <Text style={styles.stepTitle}>Personal Information</Text>
                 <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
             </View>
@@ -93,13 +92,13 @@ const Step1: React.FC<Step1Props> = ({
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>First Name</Text>
                         <TextInput
-                            style={[styles.input, errors.firstName && styles.inputError]}
+                            style={[styles.input, errors?.firstName && styles.inputError]}
                             placeholder="Enter your first name"
                             placeholderTextColor="#999"
                             value={firstName}
                             onChangeText={setFirstName}
                         />
-                        {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+                                                    {errors?.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                     </View>
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>Surname</Text>
@@ -132,11 +131,7 @@ const Step1: React.FC<Step1Props> = ({
                             style={[styles.genderButton, gender === option && styles.genderButtonActive]}
                             onPress={() => setGender(option)}
                         >
-                            <FontAwesome 
-                                name={option === 'Male' ? 'mars' : option === 'Female' ? 'venus' : 'genderless'} 
-                                size={16} 
-                                color={gender === option ? '#FFFFFF' : '#666'} 
-                            />
+                            <Text style={{ fontSize: 24, color: gender === option ? "#4CAF50" : "#666" }}>👤</Text>
                             <Text style={[styles.genderButtonText, gender === option && styles.genderButtonTextActive]}>
                                 {option}
                             </Text>
@@ -202,7 +197,7 @@ const Step2 = () => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="id-card" size={40} color="#4CAF50" />
+                <Text style={{ fontSize: 32, color: "#4CAF50" }}>🛡️</Text>
                 <Text style={styles.stepTitle}>Identity Verification</Text>
                 <Text style={styles.stepSubtitle}>Secure and confidential verification</Text>
             </View>
@@ -215,7 +210,7 @@ const Step2 = () => {
                         onPress={() => setIdType('drivers')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'drivers' && styles.idOptionIconActive]}>
-                            <FontAwesome name="id-card" size={24} color={idType === 'drivers' ? '#FFFFFF' : '#4CAF50'} />
+                            <Text style={{ fontSize: 24, color: idType === 'drivers' ? "#4CAF50" : "#666" }}>🚗</Text>
                         </View>
                         <Text style={[styles.idOptionText, idType === 'drivers' && styles.idOptionTextActive]}>
                             Driver&apos;s License
@@ -227,7 +222,7 @@ const Step2 = () => {
                         onPress={() => setIdType('passport')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'passport' && styles.idOptionIconActive]}>
-                            <FontAwesome name="id-badge" size={24} color={idType === 'passport' ? '#FFFFFF' : '#4CAF50'} />
+                            <Text style={{ fontSize: 24, color: idType === 'passport' ? "#4CAF50" : "#666" }}>📄</Text>
                         </View>
                         <Text style={[styles.idOptionText, idType === 'passport' && styles.idOptionTextActive]}>
                             Passport
@@ -239,7 +234,7 @@ const Step2 = () => {
                         onPress={() => setIdType('national')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'national' && styles.idOptionIconActive]}>
-                            <FontAwesome name="credit-card" size={24} color={idType === 'national' ? '#FFFFFF' : '#4CAF50'} />
+                            <Text style={{ fontSize: 24, color: idType === 'national' ? "#4CAF50" : "#666" }}>🆔</Text>
                         </View>
                         <Text style={[styles.idOptionText, idType === 'national' && styles.idOptionTextActive]}>
                             National ID
@@ -264,14 +259,14 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <FontAwesome name="camera" size={40} color="#4CAF50" />
+                            <Text style={{ fontSize: 48, color: "#4CAF50" }}>📷</Text>
                             <Text style={styles.photoUploadText}>Tap to Upload</Text>
                         </>
                     )}
                 </TouchableOpacity>
 
                 <View style={styles.securityNote}>
-                    <FontAwesome name="shield" size={16} color="#34C759" />
+                    <Text style={{ fontSize: 20, color: "#4CAF50" }}>🛡️</Text>
                     <Text style={styles.securityNoteText}>
                         Your information is encrypted and secure. We follow strict privacy guidelines.
                     </Text>
@@ -509,6 +504,12 @@ export default function PatientSignUp() {
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
                 <View style={styles.header}>
+                    <TouchableOpacity 
+                        style={styles.backToSignupButton}
+                        onPress={() => router.push('/signup')}
+                    >
+                        <Text style={styles.backToSignupText}>← Back to Sign Up</Text>
+                    </TouchableOpacity>
                     <Text style={styles.headerText}>Create Patient Account</Text>
                     <Text style={styles.headerSubtext}>Join our healthcare platform</Text>
                 </View>
@@ -530,7 +531,7 @@ export default function PatientSignUp() {
                             onPress={() => setStep(step - 1)}
                             disabled={loading}
                         >
-                            <FontAwesome name="arrow-left" size={16} color="#666" />
+                            <Text style={styles.arrowIcon}>←</Text>
                             <Text style={styles.backButtonText}>Back</Text>
                         </TouchableOpacity>
                     )}
@@ -546,7 +547,7 @@ export default function PatientSignUp() {
                                 <Text style={styles.continueButtonText}>
                                     {step === 2 ? 'Create Account' : 'Continue'}
                                 </Text>
-                                <FontAwesome name="arrow-right" size={16} color="#FFFFFF" />
+                                <Text style={styles.arrowIcon}>→</Text>
                             </>
                         )}
                     </TouchableOpacity>
@@ -572,6 +573,19 @@ const styles = StyleSheet.create({
     header: {
         alignItems: 'center',
         marginBottom: 30,
+    },
+    backToSignupButton: {
+        alignSelf: 'flex-start',
+        marginBottom: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
+    },
+    backToSignupText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
     },
     headerText: {
         fontSize: isLargeScreen ? 32 : 28,

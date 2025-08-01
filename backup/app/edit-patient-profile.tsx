@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -310,7 +310,7 @@ export default function EditPatientProfile() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -606,7 +606,7 @@ export default function EditPatientProfile() {
                             <ActivityIndicator size="small" color="#FFFFFF" />
                         ) : (
                             <>
-                                <FontAwesome name="save" size={16} color="#FFFFFF" />
+                                <SimpleIcons.FontAwesome.save />
                                 <Text style={styles.saveButtonText}>Save Changes</Text>
                             </>
                         )}

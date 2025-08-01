@@ -1,8 +1,9 @@
-import { FontAwesome } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from '../components/Icon';
+
 
 export default function BlogArticle6() {
   const router = useRouter();
@@ -15,11 +16,11 @@ export default function BlogArticle6() {
           style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+          <Icon name="arrowLeft" size={16} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Blog</Text>
         <TouchableOpacity style={styles.shareButton}>
-          <FontAwesome name="share" size={20} color="#4CAF50" />
+          <Icon name="share" size={16} color="#222" />
         </TouchableOpacity>
       </View>
 
@@ -40,15 +41,15 @@ export default function BlogArticle6() {
           {/* Meta Info */}
           <View style={styles.metaInfo}>
             <View style={styles.metaItem}>
-              <FontAwesome name="calendar" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>??</Text>
               <Text style={styles.metaText}>December 2024</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="clock-o" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>?</Text>
               <Text style={styles.metaText}>7 min read</Text>
             </View>
             <View style={styles.metaItem}>
-              <FontAwesome name="user" size={14} color="#888" />
+              <Text style={{ fontSize: 14, color: '#888' }}>??</Text>
               <Text style={styles.metaText}>Health Team</Text>
             </View>
           </View>
@@ -105,7 +106,7 @@ export default function BlogArticle6() {
 
             <View style={styles.workoutCard}>
               <View style={styles.workoutHeader}>
-                <FontAwesome name="clock-o" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#888' }}>?</Text>
                 <Text style={styles.workoutTitle}>The 5-Minute Morning Boost</Text>
               </View>
               <Text style={styles.workoutDescription}>
@@ -115,7 +116,7 @@ export default function BlogArticle6() {
 
             <View style={styles.workoutCard}>
               <View style={styles.workoutHeader}>
-                <FontAwesome name="home" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.workoutTitle}>Living Room Cardio</Text>
               </View>
               <Text style={styles.workoutDescription}>
@@ -125,7 +126,7 @@ export default function BlogArticle6() {
 
             <View style={styles.workoutCard}>
               <View style={styles.workoutHeader}>
-                <FontAwesome name="bed" size={20} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.workoutTitle}>Pre-Sleep Stretch</Text>
               </View>
               <Text style={styles.workoutDescription}>
@@ -137,19 +138,19 @@ export default function BlogArticle6() {
 
             <View style={styles.foundationList}>
               <View style={styles.foundationItem}>
-                <FontAwesome name="heart" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.foundationText}>Cardio: Start with walking, progress to jogging</Text>
               </View>
               <View style={styles.foundationItem}>
-                <FontAwesome name="dumbbell" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.foundationText}>Strength: Bodyweight exercises first, then weights</Text>
               </View>
               <View style={styles.foundationItem}>
-                <FontAwesome name="balance-scale" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 14, color: '#4CAF50' }}>?</Text>
                 <Text style={styles.foundationText}>Flexibility: Daily stretching prevents injuries</Text>
               </View>
               <View style={styles.foundationItem}>
-                <FontAwesome name="leaf" size={16} color="#4CAF50" />
+                <Text style={{ fontSize: 16 }}>??</Text>
                 <Text style={styles.foundationText}>Recovery: Rest days are just as important</Text>
               </View>
             </View>

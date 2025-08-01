@@ -1,5 +1,4 @@
-import { apiService } from '../app/services/apiService';
-import { laravelService } from './laravelService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface UserData {
   id: number;
@@ -41,6 +40,7 @@ export interface AuthState {
 }
 
 class AuthService {
+  private baseURL = 'http://172.20.10.11:8000/api'; // Update with your backend URL
   private currentUser: UserData | null = null;
   private currentToken: string | null = null;
   private listeners: ((state: AuthState) => void)[] = [];
@@ -50,280 +50,287 @@ class AuthService {
     try {
       console.log('AuthService: Starting initialization...');
       
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise<AuthState>((_, reject) => {
-        setTimeout(() => reject(new Error('Initialization timeout')), 10000); // Reduced to 10 seconds
-      });
+      const token = await this.getStoredToken();
+      console.log('AuthService: Stored token found:', !!token);
       
-      const initPromise = this.performInitialization();
+      if (token) {
+        console.log('AuthService: Token found, getting current user...');
+        const userData = await this.getCurrentUserWithToken(token);
+        console.log('AuthService: User data retrieved:', !!userData);
+        
+        if (userData) {
+          console.log('AuthService: Valid user found, setting state...');
+          this.currentUser = userData;
+          this.currentToken = token;
+          
+          return {
+            user: userData,
+            token,
+            loading: false,
+            error: null
+          };
+        } else {
+          console.log('AuthService: Invalid token, clearing...');
+          await this.clearStoredToken();
+        }
+      }
       
-      return await Promise.race([initPromise, timeoutPromise]);
+      return {
+        user: null,
+        token: null,
+        loading: false,
+        error: null
+      };
     } catch (error: any) {
       console.error('AuthService: Error during initialization:', error);
-      
-      // Clear any stored data on timeout or error
       await this.clearStoredToken();
       
       return {
         user: null,
         token: null,
         loading: false,
-        error: null // Don't show error to user, just return null state
+        error: null
       };
     }
   }
 
-  private async performInitialization(): Promise<AuthState> {
-    // Check if we have a stored token
-    console.log('AuthService: Checking for stored token...');
-    const token = await this.getStoredToken();
-    console.log('AuthService: Stored token found:', !!token);
-    
-    if (token) {
-      console.log('AuthService: Token found, getting current user...');
-      // Try to get current user with token
-      const userData = await this.getCurrentUserWithToken(token);
-      console.log('AuthService: User data retrieved:', !!userData);
-      
-      if (userData) {
-        console.log('AuthService: Valid user found, setting state...');
-        this.currentUser = userData;
-        this.currentToken = token;
-        
-        return {
-          user: userData,
-          token,
-          loading: false,
-          error: null
-        };
-      } else {
-        console.log('AuthService: Invalid token, clearing...');
-        // Token is invalid, clear it
-        await this.clearStoredToken();
-      }
-    }
-    
-    console.log('AuthService: No valid token, returning null state...');
-    // No valid token
-    return {
-      user: null,
-      token: null,
-      loading: false,
-      error: null
-    };
-  }
-
-  // Sign in with email and password
   async signIn(email: string, password: string): Promise<AuthState> {
     try {
-      // Sign in with Laravel backend
-      const response = await apiService.login({ email, password });
+      console.log('AuthService: Attempting sign in...');
       
-      if (response.success && response.data) {
-        const { user, token } = response.data;
-        
-        // Store token
-        await this.storeToken(token);
-        
-        const state: AuthState = {
-          user,
-          token,
-          loading: false,
-          error: null
-        };
-
-        this.currentUser = user;
-        this.currentToken = token;
-        this.notifyListeners(state);
-        return state;
-      } else {
-        throw new Error(response.message || 'Login failed');
-      }
-    } catch (error: any) {
-      console.error('AuthService: Login error:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
+      const response = await fetch(`${this.baseURL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Login failed');
+      }
+
+      const data = await response.json();
       
-      const state: AuthState = {
+      // Handle the nested data structure from Laravel
+      const responseData = data.data || data;
+      const token = responseData.token;
+      const user = responseData.user;
+      
+      if (!token) {
+        throw new Error('No token received from server');
+      }
+      
+      // Store auth data
+      await this.storeToken(token);
+      this.currentUser = user;
+      this.currentToken = token;
+      
+      const authState = {
+        user: user,
+        token: token,
+        loading: false,
+        error: null
+      };
+
+      this.notifyListeners(authState);
+      return authState;
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      const authState = {
         user: null,
         token: null,
         loading: false,
         error: error.message
       };
-      this.notifyListeners(state);
+      this.notifyListeners(authState);
       throw error;
     }
   }
 
-  // Sign in with Google
   async signInWithGoogle(idToken: string): Promise<AuthState> {
     try {
-      console.log('AuthService: Starting Google sign-in...');
+      console.log('AuthService: Attempting Google sign in...');
       
-      // Sign in with Laravel backend using Google token
-      const response = await apiService.googleLogin({ id_token: idToken });
-      
-      if (response.success && response.data) {
-        const { user, token } = response.data;
-        
-        // Store token
-        await this.storeToken(token);
-        
-        const state: AuthState = {
-          user,
-          token,
-          loading: false,
-          error: null
-        };
-
-        this.currentUser = user;
-        this.currentToken = token;
-        this.notifyListeners(state);
-        return state;
-      } else {
-        throw new Error(response.message || 'Google login failed');
-      }
-    } catch (error: any) {
-      console.error('AuthService: Google login error:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data
+      const response = await fetch(`${this.baseURL}/google-login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id_token: idToken }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Google login failed');
+      }
+
+      const data = await response.json();
       
-      const state: AuthState = {
+      // Handle the nested data structure from Laravel
+      const responseData = data.data || data;
+      const token = responseData.token;
+      const user = responseData.user;
+      
+      if (!token) {
+        throw new Error('No token received from server');
+      }
+      
+      // Store auth data
+      await this.storeToken(token);
+      this.currentUser = user;
+      this.currentToken = token;
+      
+      const authState = {
+        user: user,
+        token: token,
+        loading: false,
+        error: null
+      };
+
+      this.notifyListeners(authState);
+      return authState;
+    } catch (error: any) {
+      console.error('Google sign in error:', error);
+      const authState = {
         user: null,
         token: null,
         loading: false,
         error: error.message
       };
-      this.notifyListeners(state);
+      this.notifyListeners(authState);
       throw error;
     }
   }
 
-  // Sign up with email and password
   async signUp(formData: FormData): Promise<AuthState> {
     try {
-        console.log('AuthService: Starting registration with form data');
+      console.log('AuthService: Attempting sign up...');
+      
+      const response = await fetch(`${this.baseURL}/auth/register`, {
+        method: 'POST',
+        body: formData,
+      });
 
-        const response = await apiService.register(formData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Registration failed');
+      }
 
-        if (response.success && response.data) {
-            const { user, token } = response.data;
-
-            // For doctors, don't store token as they need approval
-            if (formData.get('user_type') === 'doctor') {
-                const state: AuthState = {
-                    user,
-                    token: null,
-                    loading: false,
-                    error: null
-                };
-                this.notifyListeners(state);
-                return state;
-            }
-
-            // For patients, store token and log in
-            await this.storeToken(token);
-            
-            const state: AuthState = {
-                user,
-                token,
-                loading: false,
-                error: null
-            };
-
-            this.currentUser = user;
-            this.currentToken = token;
-            this.notifyListeners(state);
-            return state;
-        } else {
-            throw new Error(response.message || 'Registration failed');
-        }
-    } catch (error: any) {
-        console.error('AuthService: Registration error:', error);
-        const state: AuthState = {
-            user: null,
-            token: null,
-            loading: false,
-            error: error.message
-        };
-        this.notifyListeners(state);
-        throw error;
-    }
-}
-
-  // Sign out
-  async signOut(): Promise<void> {
-    try {
-      // Call logout endpoint if we have a token
-      if (this.currentToken) {
-        try {
-          await apiService.logout();
-        } catch (error) {
-          console.warn('Logout API call failed:', error);
-        }
+      const data = await response.json();
+      
+      // Handle the nested data structure from Laravel
+      const responseData = data.data || data;
+      const token = responseData.token;
+      const user = responseData.user;
+      
+      if (!token) {
+        throw new Error('No token received from server');
       }
       
-      // Clear stored data
+      // Store auth data
+      await this.storeToken(token);
+      this.currentUser = user;
+      this.currentToken = token;
+      
+      const authState = {
+        user: data.user,
+        token: data.token,
+        loading: false,
+        error: null
+      };
+
+      this.notifyListeners(authState);
+      return authState;
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      const authState = {
+        user: null,
+        token: null,
+        loading: false,
+        error: error.message
+      };
+      this.notifyListeners(authState);
+      throw error;
+    }
+  }
+
+  async signOut(): Promise<void> {
+    try {
+      console.log('AuthService: Signing out...');
+      
+      if (this.currentToken) {
+        // Call logout endpoint
+        await fetch(`${this.baseURL}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.currentToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear local data regardless of server response
       await this.clearStoredToken();
       this.currentUser = null;
       this.currentToken = null;
       
-      const state: AuthState = {
+      const authState = {
         user: null,
         token: null,
         loading: false,
         error: null
       };
       
-      this.notifyListeners(state);
-    } catch (error: any) {
-      console.error('Sign out error:', error);
-      throw error;
+      this.notifyListeners(authState);
     }
   }
 
-  // Get current user data
   getCurrentUser(): UserData | null {
     return this.currentUser;
   }
 
-  // Get current token
   getCurrentToken(): string | null {
     return this.currentToken;
   }
 
-  // Update user data
   async updateUser(userId: number, data: Partial<UserData>): Promise<UserData> {
     try {
-      const response = await laravelService.updateUser(userId, data);
-      
-      if (response.success && response.data) {
-        this.currentUser = response.data;
-        
-        // Notify listeners of the update
-        const state: AuthState = {
-          user: this.currentUser,
-          token: this.currentToken,
-          loading: false,
-          error: null
-        };
-        this.notifyListeners(state);
-        
-        return response.data;
-      } else {
-        throw new Error('Failed to update user');
+      const response = await fetch(`${this.baseURL}/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.currentToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Update failed');
       }
+
+      const updatedUser = await response.json();
+      this.currentUser = updatedUser;
+      
+      const authState = {
+        user: updatedUser,
+        token: this.currentToken,
+        loading: false,
+        error: null
+      };
+      
+      this.notifyListeners(authState);
+      return updatedUser;
     } catch (error: any) {
       console.error('Update user error:', error);
       throw error;
     }
   }
 
-  // Listen to auth state changes
   onAuthStateChanged(callback: (state: AuthState) => void): () => void {
     this.listeners.push(callback);
     
@@ -336,12 +343,10 @@ class AuthService {
     };
   }
 
-  // Subscribe to auth state changes
   subscribe(callback: (state: AuthState) => void): void {
     this.listeners.push(callback);
   }
 
-  // Unsubscribe from auth state changes
   unsubscribe(callback: (state: AuthState) => void): void {
     const index = this.listeners.indexOf(callback);
     if (index > -1) {
@@ -349,86 +354,67 @@ class AuthService {
     }
   }
 
-  // Private methods
   private async getCurrentUserWithToken(token: string): Promise<UserData | null> {
     try {
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('User fetch timeout')), 8000); // 8 second timeout
+      const response = await fetch(`${this.baseURL}/auth/user`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
-      
-      const userPromise = apiService.getCurrentUser();
-      
-      const user = await Promise.race([userPromise, timeoutPromise]);
-      
-      if (user) {
-        console.log('AuthService: Valid user retrieved from API');
-        return user as UserData;
-      }
-      
-      console.log('AuthService: No valid user returned from API');
-      return null;
-    } catch (error: any) {
-      console.error('AuthService: Error getting current user with token:', error);
-      
-      // If it's a timeout or network error, don't clear the token
-      // Only clear token on authentication errors
-      if (error.message?.includes('timeout') || error.code === 'NETWORK_ERROR') {
-        console.log('AuthService: Network timeout, keeping token for retry');
+
+      if (!response.ok) {
         return null;
       }
-      
-      // For authentication errors, clear the token
-      if (error.response?.status === 401) {
-        console.log('AuthService: Authentication failed, clearing token');
-        await this.clearStoredToken();
-      }
-      
+
+      const userData = await response.json();
+      return userData;
+    } catch (error) {
+      console.error('Get current user error:', error);
       return null;
     }
   }
 
   private async storeToken(token: string): Promise<void> {
     try {
-      await apiService.setAuthToken(token);
+      await AsyncStorage.setItem('auth_token', token);
     } catch (error) {
-      console.error('Failed to store token:', error);
+      console.error('Store token error:', error);
     }
   }
 
   private async getStoredToken(): Promise<string | null> {
     try {
-      return await apiService.getAuthToken();
+      return await AsyncStorage.getItem('auth_token');
     } catch (error) {
-      console.error('Failed to get stored token:', error);
+      console.error('Get stored token error:', error);
       return null;
     }
   }
 
   private async clearStoredToken(): Promise<void> {
     try {
-      await apiService.removeAuthToken();
+      await AsyncStorage.removeItem('auth_token');
     } catch (error) {
-      console.error('Failed to clear stored token:', error);
+      console.error('Clear stored token error:', error);
     }
   }
 
   private notifyListeners(state: AuthState) {
-    this.listeners.forEach(callback => {
+    this.listeners.forEach(listener => {
       try {
-        callback(state);
+        listener(state);
       } catch (error) {
-        console.error('Error in auth state listener:', error);
+        console.error('Listener error:', error);
       }
     });
   }
 
-  // Get current user
   getCurrentUser(): UserData | null {
     return this.currentUser;
   }
 
-  // Utility methods
   isAuthenticated(): boolean {
     return !!this.currentToken && !!this.currentUser;
   }
@@ -453,85 +439,125 @@ class AuthService {
     return this.currentUser?.id || null;
   }
 
-  // Proactive token refresh
   async checkAndRefreshToken(): Promise<boolean> {
-    try {
-      const isExpiring = await apiService.isTokenExpiringSoon();
-      if (isExpiring) {
-        console.log('AuthService: Token expiring soon, refreshing proactively');
-        const refreshed = await apiService.refreshToken();
-        if (refreshed) {
-          // Update current token
-          this.currentToken = await apiService.getAuthToken();
-          return true;
-        }
-      }
-      return false;
-    } catch (error) {
-      console.error('AuthService: Error checking/refreshing token:', error);
+    // Simplified token refresh logic
+    if (!this.currentToken) {
       return false;
     }
+
+    try {
+      const response = await fetch(`${this.baseURL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.currentToken = data.token;
+        await this.storeToken(data.token);
+        return true;
+      }
+    } catch (error) {
+      console.error('Token refresh error:', error);
+    }
+
+    return false;
   }
 
-  // Doctor Availability Methods
   async getDoctorAvailability(doctorId: string): Promise<{ success: boolean; data?: any; message?: string }> {
     try {
-      console.log('AuthService: Getting doctor availability for ID:', doctorId);
-      
-      // Check circuit breaker status
-      const circuitStatus = apiService.getCircuitBreakerStatus();
-      console.log('AuthService: Circuit breaker status:', circuitStatus);
-      
-      if (circuitStatus.isOpen) {
-        console.log('AuthService: Circuit breaker is open, resetting...');
-        apiService.resetCircuitBreaker();
-      }
-      
-      const response = await apiService.get(`/doctors/${doctorId}/availability`);
-      console.log('AuthService: API response received:', response);
-      
-      return response;
-    } catch (error: any) {
-      console.error('AuthService: Error getting doctor availability:', error);
-      console.error('AuthService: Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
+      const response = await fetch(`${this.baseURL}/doctors/${doctorId}/availability`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.currentToken}`,
+          'Content-Type': 'application/json',
+        },
       });
-      return { success: false, message: error.message || 'Failed to get availability' };
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { success: false, message: errorData.message || 'Failed to get availability' };
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error: any) {
+      console.error('Get doctor availability error:', error);
+      return { success: false, message: error.message || 'Network error' };
     }
   }
 
   async updateDoctorAvailability(doctorId: string, availability: any): Promise<{ success: boolean; data?: any; message?: string }> {
     try {
-      console.log('AuthService: Updating doctor availability for ID:', doctorId);
-      console.log('AuthService: Availability data:', availability);
-      
-      // Check circuit breaker status
-      const circuitStatus = apiService.getCircuitBreakerStatus();
-      console.log('AuthService: Circuit breaker status:', circuitStatus);
-      
-      if (circuitStatus.isOpen) {
-        console.log('AuthService: Circuit breaker is open, resetting...');
-        apiService.resetCircuitBreaker();
-      }
-      
-      const response = await apiService.put(`/doctors/${doctorId}/availability`, availability);
-      console.log('AuthService: Update response received:', response);
-      
-      return response;
-    } catch (error: any) {
-      console.error('AuthService: Error updating doctor availability:', error);
-      console.error('AuthService: Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
+      const response = await fetch(`${this.baseURL}/doctors/${doctorId}/availability`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.currentToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(availability),
       });
-      return { success: false, message: error.message || 'Failed to update availability' };
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        return { success: false, message: errorData.message || 'Failed to update availability' };
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+    } catch (error: any) {
+      console.error('Update doctor availability error:', error);
+      return { success: false, message: error.message || 'Network error' };
+    }
+  }
+
+  async sendPasswordResetLink(email: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to send reset link');
+      }
+    } catch (error: any) {
+      console.error('Send password reset link error:', error);
+      throw error;
+    }
+  }
+
+  async resetPassword(token: string, email: string, password: string, passwordConfirmation: string): Promise<void> {
+    try {
+      const response = await fetch(`${this.baseURL}/auth/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          token,
+          email,
+          password,
+          password_confirmation: passwordConfirmation,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to reset password');
+      }
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      throw error;
     }
   }
 }
 
-// Export singleton instance
-export const authService = new AuthService();
-export default authService; 
+export const authService = new AuthService(); 

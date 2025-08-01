@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -247,12 +247,12 @@ export default function NotificationsSettings() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Notifications</Text>
                     <TouchableOpacity style={styles.resetButton} onPress={resetToDefaults}>
-                        <FontAwesome name="refresh" size={20} color="#FF3B30" />
+                        <SimpleIcons.FontAwesome.refresh />
                         <Text style={styles.resetButtonText}>Reset</Text>
                     </TouchableOpacity>
                 </View>
@@ -469,7 +469,7 @@ export default function NotificationsSettings() {
                             setSettings(allOn);
                             saveNotificationSettings(allOn);
                         }}>
-                            <FontAwesome name="check-square-o" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.check-square-o />
                             <Text style={styles.quickActionText}>Enable All</Text>
                         </TouchableOpacity>
 
@@ -485,7 +485,7 @@ export default function NotificationsSettings() {
                             setSettings(allOff);
                             saveNotificationSettings(allOff);
                         }}>
-                            <FontAwesome name="square-o" size={20} color="#FF3B30" />
+                            <SimpleIcons.FontAwesome.square-o />
                             <Text style={[styles.quickActionText, { color: '#FF3B30' }]}>Disable All</Text>
                         </TouchableOpacity>
                     </View>

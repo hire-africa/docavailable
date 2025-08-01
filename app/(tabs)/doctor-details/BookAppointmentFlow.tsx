@@ -1,9 +1,12 @@
 import { FontAwesome } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
     Alert,
+    DateTimePickerAndroid,
     Modal,
+    Platform,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -12,8 +15,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../../../app/services/apiService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
 
 const availableTimes = [
   '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -28,16 +31,18 @@ const consultationTypes = [
 export default function BookAppointmentFlow() {
   const params = useLocalSearchParams();
   const { user, userData } = useAuth();
-  const [step, setStep] = useState(1);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showNativeTimePicker, setShowNativeTimePicker] = useState(false);
+  const [tempTime, setTempTime] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [customTime, setCustomTime] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [consultationType, setConsultationType] = useState('text');
+  const [consultationType, setConsultationType] = useState('');
   const [reason, setReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [workingHours, setWorkingHours] = useState<any>(null);
   const [loadingHours, setLoadingHours] = useState(true);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [customTime, setCustomTime] = useState('');
 
   // Doctor info from params
   const doctorId = params.doctorId as string;
@@ -106,6 +111,13 @@ export default function BookAppointmentFlow() {
   const generateTimeOptions = () => {
     const slots = getAvailableSlots();
     const options: string[] = [];
+    const now = new Date();
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = selectedDateOnly.getTime() === today.getTime();
+    
     slots.forEach((slot: any) => {
       const [startHour, startMin] = slot.start.split(':').map(Number);
       const [endHour, endMin] = slot.end.split(':').map(Number);
@@ -113,18 +125,69 @@ export default function BookAppointmentFlow() {
       current.setHours(startHour, startMin, 0, 0);
       const end = new Date();
       end.setHours(endHour, endMin, 0, 0);
+      
       while (current <= end) {
         const h = current.getHours();
         const m = current.getMinutes();
         const ampm = h >= 12 ? 'PM' : 'AM';
         const hour12 = h % 12 === 0 ? 12 : h % 12;
         const label = `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
-        options.push(label);
+        
+        // Filter out past times for today
+        if (isToday) {
+          const currentTime = new Date();
+          const slotTime = new Date();
+          slotTime.setHours(h, m, 0, 0);
+          if (slotTime > currentTime) {
+            options.push(label);
+          }
+        } else {
+          options.push(label);
+        }
+        
         current.setMinutes(current.getMinutes() + 30);
       }
     });
     // Remove duplicates and sort
-    return Array.from(new Set(options));
+    return Array.from(new Set(options)).sort((a, b) => {
+      const timeA = new Date(`2000-01-01 ${a}`);
+      const timeB = new Date(`2000-01-01 ${b}`);
+      return timeA.getTime() - timeB.getTime();
+    });
+  };
+
+  // Helper to check if a time slot is available (not booked)
+  const isTimeSlotAvailable = (timeStr: string) => {
+    // This would typically check against booked appointments
+    // For now, we'll assume all slots are available
+    return true;
+  };
+
+  // Helper to get time slot status
+  const getTimeSlotStatus = (timeStr: string) => {
+    if (!isTimeSlotAvailable(timeStr)) {
+      return 'booked';
+    }
+    
+    const now = new Date();
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = selectedDateOnly.getTime() === today.getTime();
+    
+    if (isToday) {
+      const time24 = to24HourFormat(timeStr);
+      const [hour, minute] = time24.split(':').map(Number);
+      const slotTime = new Date();
+      slotTime.setHours(hour, minute, 0, 0);
+      
+      if (slotTime <= now) {
+        return 'past';
+      }
+    }
+    
+    return 'available';
   };
 
   // Helper to convert 12-hour time string (e.g., '1:30 PM') to 24-hour format (e.g., '13:30')
@@ -141,6 +204,106 @@ export default function BookAppointmentFlow() {
     if (period.toUpperCase() === 'AM' && h === 12) h = 0;
     return `${h.toString().padStart(2, '0')}:${minute}`;
   }
+
+  // Helper to convert Date object to 12-hour format string
+  function formatTime12Hour(date: Date): string {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+    return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  }
+
+  // Helper to check if a time is within available slots
+  const isTimeInAvailableSlots = (time: Date): boolean => {
+    const slots = getAvailableSlots();
+    const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
+    
+    return slots.some((slot: any) => {
+      const startTime = slot.start;
+      const endTime = slot.end;
+      return timeStr >= startTime && timeStr <= endTime;
+    });
+  };
+
+  // Native time picker for Android
+  const showAndroidTimePicker = () => {
+    const now = new Date();
+    const minTime = new Date(now);
+    minTime.setMinutes(Math.ceil(now.getMinutes() / 30) * 30);
+    
+    DateTimePickerAndroid.open({
+      value: tempTime,
+      onChange: (event, selectedTime) => {
+        if (selectedTime && event.type === 'set') {
+          setTempTime(selectedTime);
+          const timeStr = formatTime12Hour(selectedTime);
+          const time24Hour = to24HourFormat(timeStr);
+          
+          // Check if time is within available slots
+          if (isTimeInAvailableSlots(selectedTime)) {
+            setCustomTime(timeStr);
+            setSelectedTime(time24Hour);
+          } else {
+            Alert.alert(
+              'Invalid Time',
+              'The selected time is outside of the doctor\'s working hours. Please select a time within the available schedule.',
+              [{ text: 'OK' }]
+            );
+          }
+        }
+      },
+      mode: 'time',
+      is24Hour: false,
+      minuteInterval: 30,
+      minimumDate: now,
+    });
+  };
+
+  // Native time picker for iOS
+  const showIOSTimePicker = () => {
+    setShowNativeTimePicker(true);
+  };
+
+  // Handle time picker change for iOS
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    if (selectedTime && event.type === 'set') {
+      setTempTime(selectedTime);
+    }
+  };
+
+  // Handle continue button press for iOS time picker
+  const handleContinueTimeSelection = () => {
+    const timeStr = formatTime12Hour(tempTime);
+    const time24Hour = to24HourFormat(timeStr);
+    
+    // Check if time is within available slots
+    if (isTimeInAvailableSlots(tempTime)) {
+      setCustomTime(timeStr);
+      setSelectedTime(time24Hour);
+      setShowNativeTimePicker(false);
+    } else {
+      Alert.alert(
+        'Invalid Time',
+        'The selected time is outside of the doctor\'s working hours. Please select a time within the available schedule.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  // Show appropriate time picker based on platform
+  const showTimePickerModal = () => {
+    if (Platform.OS === 'android') {
+      showAndroidTimePicker();
+    } else {
+      showIOSTimePicker();
+    }
+  };
+
+  // Check if current temp time is valid
+  const isCurrentTimeValid = () => {
+    return isTimeInAvailableSlots(tempTime);
+  };
 
   // Calendar logic for current month
   const currentMonth = selectedDate.getMonth();
@@ -233,7 +396,7 @@ export default function BookAppointmentFlow() {
           <View style={{ marginHorizontal: 24, marginBottom: 8 }}>
             <TouchableOpacity
               style={styles.timePickerBtn}
-              onPress={() => setShowTimePicker(true)}
+              onPress={showTimePickerModal}
             >
               <Text style={styles.timePickerBtnText}>{customTime ? `Change Time (${customTime})` : 'Pick a time'}</Text>
             </TouchableOpacity>
@@ -241,31 +404,69 @@ export default function BookAppointmentFlow() {
               <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
             ) : null}
             <Modal
-              visible={showTimePicker}
+              visible={showNativeTimePicker}
               animationType="slide"
               transparent={true}
-              onRequestClose={() => setShowTimePicker(false)}
+              onRequestClose={() => setShowNativeTimePicker(false)}
             >
               <View style={styles.modalOverlay}>
                 <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Pick a Time</Text>
-                  <ScrollView style={{ maxHeight: 250 }}>
-                    {generateTimeOptions().map((option, idx) => (
-                      <TouchableOpacity
-                        key={option + idx}
-                        style={styles.timeOptionBtn}
-                        onPress={() => {
-                          setCustomTime(option);
-                          setShowTimePicker(false);
-                        }}
-                      >
-                        <Text style={styles.timeOptionText}>{option}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowTimePicker(false)}>
-                    <Text style={styles.closeModalBtnText}>Cancel</Text>
-                  </TouchableOpacity>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Select Time</Text>
+                    <Text style={styles.modalSubtitle}>
+                      {selectedDate.toLocaleDateString(undefined, { 
+                        weekday: 'long', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.timePickerContainer}>
+                    <DateTimePicker
+                      value={tempTime}
+                      mode="time"
+                      display="spinner"
+                      onChange={handleTimeChange}
+                      minuteInterval={30}
+                      minimumDate={new Date()}
+                      style={styles.nativeTimePicker}
+                      textColor="#000000"
+                      themeVariant="light"
+                    />
+                  </View>
+                  
+                  <View style={styles.modalFooter}>
+                    <TouchableOpacity 
+                      style={styles.cancelModalBtn} 
+                      onPress={() => setShowNativeTimePicker(false)}
+                    >
+                      <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[
+                        styles.continueModalBtn, 
+                        !isCurrentTimeValid() && styles.continueModalBtnDisabled
+                      ]} 
+                      onPress={handleContinueTimeSelection}
+                      disabled={!isCurrentTimeValid()}
+                    >
+                      <Text style={[
+                        styles.continueModalBtnText,
+                        !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
+                      ]}>
+                        Continue
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {!isCurrentTimeValid() && (
+                    <View style={styles.validationMessage}>
+                      <Text style={styles.validationText}>
+                        Selected time is outside working hours
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             </Modal>
@@ -852,35 +1053,74 @@ const styles = StyleSheet.create({
     maxWidth: 350,
     alignItems: 'center',
   },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#222',
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  timeOptionBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F3F4',
-    width: 220,
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#888',
+  },
+  timePickerContainer: {
+    width: '100%',
     alignItems: 'center',
+    marginBottom: 20,
   },
-  timeOptionText: {
-    fontSize: 16,
-    color: '#222',
+  nativeTimePicker: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#FFFFFF',
   },
-  closeModalBtn: {
-    marginTop: 16,
+  modalFooter: {
+    width: '100%',
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  cancelModalBtn: {
     backgroundColor: '#E0E0E0',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 24,
   },
-  closeModalBtnText: {
+  cancelModalBtnText: {
     color: '#222',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  continueModalBtn: {
+    backgroundColor: '#4CAF50',
+  },
+  continueModalBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
+  },
+  continueModalBtnDisabled: {
+    backgroundColor: '#E0E0E0',
+    opacity: 0.7,
+  },
+  continueModalBtnTextDisabled: {
+    color: '#999',
+  },
+  validationMessage: {
+    backgroundColor: '#FFE0E0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    marginTop: 10,
+    alignSelf: 'center',
+  },
+  validationText: {
+    color: '#D32F2F',
+    fontSize: 13,
+    fontWeight: '600',
   },
   disabledDay: {
     backgroundColor: '#F5F5F5',

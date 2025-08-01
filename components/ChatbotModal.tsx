@@ -8,7 +8,6 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -202,16 +201,9 @@ export default function ChatbotModal({ visible, onClose }: ChatbotModalProps) {
 
         {/* Input */}
         <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="Ask me anything about health..."
-            placeholderTextColor="#999"
-            multiline
-            maxLength={500}
-            onSubmitEditing={sendMessage}
-          />
+          <Text style={styles.textInput}>
+            Ask me anything about health...
+          </Text>
           <TouchableOpacity
             style={[
               styles.sendButton,

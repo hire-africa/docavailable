@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -136,12 +136,12 @@ export default function AdminProfile() {
             <View style={styles.mainContent}>
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.arrow-left />
                         <Text style={styles.backButtonText}>Back</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>My Profile</Text>
                     <TouchableOpacity style={styles.editButton} onPress={() => router.push('/edit-admin-profile')}>
-                        <FontAwesome name="edit" size={20} color="#4CAF50" />
+                        <SimpleIcons.FontAwesome.edit />
                         <Text style={styles.editButtonText}>Edit</Text>
                     </TouchableOpacity>
                 </View>
@@ -150,7 +150,7 @@ export default function AdminProfile() {
                     {/* Profile Header */}
                     <View style={styles.profileHeader}>
                         <View style={styles.avatarContainer}>
-                            <FontAwesome name="user-secret" size={60} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.user-secret />
                         </View>
                         <View style={styles.profileInfo}>
                             <Text style={styles.profileName}>
@@ -170,7 +170,7 @@ export default function AdminProfile() {
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="user" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.user />
                             <Text style={styles.sectionTitle}>Basic Information</Text>
                         </View>
                         
@@ -193,7 +193,7 @@ export default function AdminProfile() {
                     {/* Contact Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="phone" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.phone />
                             <Text style={styles.sectionTitle}>Contact Information</Text>
                         </View>
                         
@@ -227,14 +227,14 @@ export default function AdminProfile() {
                     {adminData?.permissions && adminData.permissions.length > 0 && (
                         <View style={styles.section}>
                             <View style={styles.sectionHeader}>
-                                <FontAwesome name="shield" size={20} color="#4CAF50" />
+                                <SimpleIcons.FontAwesome.shield />
                                 <Text style={styles.sectionTitle}>Permissions</Text>
                             </View>
                             
                             <View style={styles.permissionsContainer}>
                                 {adminData.permissions.map((permission, index) => (
                                     <View key={index} style={styles.permissionItem}>
-                                        <FontAwesome name="check-circle" size={16} color="#4CAF50" />
+                                        <SimpleIcons.FontAwesome.check-circle />
                                         <Text style={styles.permissionText}>{permission}</Text>
                                     </View>
                                 ))}
@@ -245,7 +245,7 @@ export default function AdminProfile() {
                     {/* Account Information */}
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
-                            <FontAwesome name="info-circle" size={20} color="#4CAF50" />
+                            <SimpleIcons.FontAwesome.info-circle />
                             <Text style={styles.sectionTitle}>Account Information</Text>
                         </View>
                         

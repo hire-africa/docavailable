@@ -53,7 +53,7 @@ From your logs, I can see you're currently using:
 ### Phase 3: Real-time Features
 
 1. **WebSocket Setup**
-   - Laravel WebSockets or Pusher for real-time chat
+   - Alternative real-time solution (to be determined)
    - Replace Firebase real-time listeners
 
 2. **File Storage**
@@ -192,14 +192,8 @@ DB_USERNAME=root
 DB_PASSWORD=
 
 # WebSocket
-BROADCAST_DRIVER=pusher
-PUSHER_APP_ID=your-pusher-app-id
-PUSHER_APP_KEY=your-pusher-key
-PUSHER_APP_SECRET=your-pusher-secret
-PUSHER_HOST=
-PUSHER_PORT=443
-PUSHER_SCHEME=https
-PUSHER_APP_CLUSTER=mt1
+# Removed Pusher configuration - will use alternative solution
+BROADCAST_DRIVER=log
 ```
 
 ### Frontend (.env)
@@ -217,7 +211,7 @@ EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
 EXPO_PUBLIC_FIREBASE_APP_ID=your-app-id
 
 # WebSocket
-EXPO_PUBLIC_WEBSOCKET_URL=ws://172.20.10.11:6001
+# Removed Pusher configuration - will use alternative solution
 ```
 
 ## Post-Migration Cleanup

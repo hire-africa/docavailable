@@ -59,13 +59,14 @@ class ApiService {
   private refreshApi: AxiosInstance; // Separate instance for token refresh
   private baseURL: string;
   private isRefreshing = false; // Prevent multiple simultaneous refresh attempts
-  private circuitBreaker = {
-    isOpen: false,
-    failureCount: 0,
-    lastFailureTime: 0,
-    threshold: 10, // Increased threshold to be less aggressive
-    timeout: 10000 // Reduced timeout to 10 seconds for faster recovery
-  };
+  // Circuit breaker completely disabled
+  // private circuitBreaker = {
+  //   isOpen: false,
+  //   failureCount: 0,
+  //   lastFailureTime: 0,
+  //   threshold: 999999,
+  //   timeout: 30000
+  // };
 
   constructor() {
     // Get base URL without /api suffix
@@ -494,9 +495,9 @@ class ApiService {
       });
       console.log('ApiService: Connectivity check successful');
       
-      // Reset circuit breaker on successful connectivity check
-      this.circuitBreaker.failureCount = 0;
-      this.circuitBreaker.isOpen = false;
+      // Circuit breaker disabled - no reset needed
+      // this.circuitBreaker.failureCount = 0;
+      // this.circuitBreaker.isOpen = false;
       
       return true;
     } catch (error: any) {
@@ -509,20 +510,17 @@ class ApiService {
     }
   }
 
-  // Reset circuit breaker manually
+  // Circuit breaker methods disabled
   resetCircuitBreaker(): void {
-    this.circuitBreaker.isOpen = false;
-    this.circuitBreaker.failureCount = 0;
-    this.circuitBreaker.lastFailureTime = 0;
     console.log('ApiService: Circuit breaker reset manually');
+    // No actual circuit breaker to reset since it's disabled
   }
 
-  // Get circuit breaker status
   getCircuitBreakerStatus(): { isOpen: boolean; failureCount: number; lastFailureTime: number } {
     return {
-      isOpen: this.circuitBreaker.isOpen,
-      failureCount: this.circuitBreaker.failureCount,
-      lastFailureTime: this.circuitBreaker.lastFailureTime
+      isOpen: false, // Always return false since circuit breaker is disabled
+      failureCount: 0,
+      lastFailureTime: 0
     };
   }
 
@@ -593,42 +591,16 @@ class ApiService {
   }
 
   private async retryRequest<T>(requestFn: () => Promise<T>, maxRetries: number = 2): Promise<T> {
-    // Check circuit breaker
-    if (this.circuitBreaker.isOpen) {
-      const timeSinceLastFailure = Date.now() - this.circuitBreaker.lastFailureTime;
-      if (timeSinceLastFailure < this.circuitBreaker.timeout) {
-        console.log('ApiService: Circuit breaker is open, skipping request');
-        throw new Error('Service temporarily unavailable. Please try again later.');
-      } else {
-        console.log('ApiService: Circuit breaker timeout reached, trying request');
-        this.circuitBreaker.isOpen = false;
-        this.circuitBreaker.failureCount = 0;
-      }
-    }
-
+    // Circuit breaker disabled - always try requests
+    
     let lastError: any;
     
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const result = await requestFn();
-        
-        // Reset circuit breaker on success
-        this.circuitBreaker.failureCount = 0;
-        this.circuitBreaker.isOpen = false;
-        
         return result;
       } catch (error: any) {
         lastError = error;
-        
-        // Increment failure count
-        this.circuitBreaker.failureCount++;
-        this.circuitBreaker.lastFailureTime = Date.now();
-        
-        // Open circuit breaker if threshold reached
-        if (this.circuitBreaker.failureCount >= this.circuitBreaker.threshold) {
-          this.circuitBreaker.isOpen = true;
-          console.log('ApiService: Circuit breaker opened due to repeated failures');
-        }
         
         // Enhanced error logging
         console.error('❌ [ApiService] Request failed:', {

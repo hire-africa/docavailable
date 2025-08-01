@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { SimpleIcons } from '../components/SimpleIcons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
@@ -331,7 +331,7 @@ export default function PatientDashboard() {
 
       {currentSubscription && (
         <View style={styles.subscriptionBanner}>
-          <FontAwesome name="star" size={20} color="#FFD700" />
+          <SimpleIcons.FontAwesome.star />
           <View style={styles.subscriptionInfo}>
             <Text style={styles.subscriptionTitle}>{currentSubscription.name} Active</Text>
             <Text style={styles.subscriptionDetails}>
@@ -346,7 +346,7 @@ export default function PatientDashboard() {
         <View style={styles.cardsGrid}>
           <TouchableOpacity style={styles.patientCard} onPress={() => setActiveTab('discover')}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="user-md" size={24} color="#4CAF50" />
+              <SimpleIcons.FontAwesome.user-md />
             </View>
             <Text style={styles.actionTitle}>Find Doctor</Text>
             <Text style={styles.actionSubtitle}>Book an appointment</Text>
@@ -354,7 +354,7 @@ export default function PatientDashboard() {
 
           <View style={styles.patientCard}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="calendar" size={24} color="#34C759" />
+              <SimpleIcons.FontAwesome.calendar />
             </View>
             <Text style={styles.actionTitle}>My Appointments</Text>
             <Text style={styles.actionSubtitle}>View scheduled visits</Text>
@@ -362,7 +362,7 @@ export default function PatientDashboard() {
 
           <View style={styles.patientCard}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="file-text-o" size={24} color="#FF9500" />
+              <SimpleIcons.FontAwesome.file-text-o />
             </View>
             <Text style={styles.actionTitle}>Medical Records</Text>
             <Text style={styles.actionSubtitle}>Access your history</Text>
@@ -370,7 +370,7 @@ export default function PatientDashboard() {
 
           <TouchableOpacity style={styles.patientCard} onPress={() => setActiveTab('subscriptions')}>
             <View style={styles.actionIcon}>
-              <FontAwesome name="star" size={24} color="#FFD700" />
+              <SimpleIcons.FontAwesome.star />
             </View>
             <Text style={styles.actionTitle}>Subscriptions</Text>
             <Text style={styles.actionSubtitle}>Manage your plan</Text>
@@ -382,7 +382,7 @@ export default function PatientDashboard() {
         <Text style={styles.sectionTitle}>Recent Activity</Text>
         <View style={styles.activityCard}>
           <View style={styles.activityHeader}>
-            <FontAwesome name="calendar-check-o" size={20} color="#34C759" />
+            <SimpleIcons.FontAwesome.calendar-check-o />
             <Text style={styles.activityTitle}>Appointment Confirmed</Text>
             <Text style={styles.activityTime}>2 hours ago</Text>
           </View>
@@ -393,7 +393,7 @@ export default function PatientDashboard() {
 
         <View style={styles.activityCard}>
           <View style={styles.activityHeader}>
-            <FontAwesome name="file-text-o" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.file-text-o />
             <Text style={styles.activityTitle}>Test Results Ready</Text>
             <Text style={styles.activityTime}>1 day ago</Text>
           </View>
@@ -415,7 +415,7 @@ export default function PatientDashboard() {
       {currentSubscription && (
         <View style={styles.currentPlanCard}>
           <View style={styles.currentPlanHeader}>
-            <FontAwesome name="star" size={24} color="#FFD700" />
+            <SimpleIcons.FontAwesome.star />
             <Text style={styles.currentPlanTitle}>Current Plan: {currentSubscription.name}</Text>
           </View>
           <Text style={styles.currentPlanPrice}>
@@ -455,7 +455,7 @@ export default function PatientDashboard() {
             <View style={styles.planFeatures}>
               {plan.features.map((feature, index) => (
                 <View key={index} style={styles.featureItem}>
-                  <FontAwesome name="check" size={16} color="#4CAF50" />
+                  <SimpleIcons.FontAwesome.check />
                   <Text style={styles.featureText}>{feature}</Text>
                 </View>
               ))}
@@ -489,7 +489,7 @@ export default function PatientDashboard() {
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+        <SimpleIcons.FontAwesome.search />
         <TextInput
           style={styles.searchInput}
           placeholder="Search messages, doctors, or appointments..."
@@ -499,7 +499,7 @@ export default function PatientDashboard() {
         />
         {messageSearchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setMessageSearchQuery('')} style={styles.clearButton}>
-            <FontAwesome name="times" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.times />
           </TouchableOpacity>
         )}
       </View>
@@ -515,7 +515,7 @@ export default function PatientDashboard() {
             onPress={() => router.push({ pathname: '/chat/[chatId]', params: { chatId: 'practice-doctor' } })}
           >
             <View style={styles.chatAvatar}>
-              <FontAwesome name="user-md" size={24} color="#FFFFFF" />
+              <SimpleIcons.FontAwesome.user-md />
             </View>
             <View style={styles.chatContent}>
               <View style={styles.chatHeader}>
@@ -551,7 +551,7 @@ export default function PatientDashboard() {
             }}
           >
             <View style={[styles.chatAvatar, styles.appointmentAvatar]}>
-              <FontAwesome name="calendar" size={20} color="#FFFFFF" />
+              <SimpleIcons.FontAwesome.calendar />
             </View>
             <View style={styles.chatContent}>
               <View style={styles.chatHeader}>
@@ -572,7 +572,7 @@ export default function PatientDashboard() {
         {appointments.length === 0 && !messageSearchQuery && (
           <View style={styles.emptyChatState}>
             <View style={styles.emptyChatIcon}>
-              <FontAwesome name="comments" size={48} color="#CCC" />
+              <SimpleIcons.FontAwesome.comments />
             </View>
             <Text style={styles.emptyChatTitle}>No appointment chats yet</Text>
             <Text style={styles.emptyChatSubtitle}>
@@ -591,7 +591,7 @@ export default function PatientDashboard() {
          !'Dr. Sarah Johnson'.toLowerCase().includes(messageSearchQuery.toLowerCase()) && (
           <View style={styles.emptyChatState}>
             <View style={styles.emptyChatIcon}>
-              <FontAwesome name="search" size={48} color="#CCC" />
+              <SimpleIcons.FontAwesome.search />
             </View>
             <Text style={styles.emptyChatTitle}>No messages found</Text>
             <Text style={styles.emptyChatSubtitle}>
@@ -613,7 +613,7 @@ export default function PatientDashboard() {
       <View style={styles.profileSection}>
         <View style={styles.profileCard}>
           <View style={styles.profileAvatar}>
-            <FontAwesome name="user" size={40} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.user />
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>
@@ -626,52 +626,52 @@ export default function PatientDashboard() {
 
         <View style={styles.menuSection}>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/patient-profile')}>
-            <FontAwesome name="eye" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.eye />
             <Text style={styles.menuText}>View Profile</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/edit-patient-profile')}>
-            <FontAwesome name="user" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.user />
             <Text style={styles.menuText}>Edit Profile</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/privacy-settings')}>
-            <FontAwesome name="lock" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.lock />
             <Text style={styles.menuText}>Privacy Settings</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/notifications-settings')}>
-            <FontAwesome name="bell" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.bell />
             <Text style={styles.menuText}>Notifications</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <FontAwesome name="file-text-o" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.file-text-o />
             <Text style={styles.menuText}>Medical Records</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <FontAwesome name="credit-card" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.credit-card />
             <Text style={styles.menuText}>Billing & Payments</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem}>
-            <FontAwesome name="question-circle" size={20} color="#4CAF50" />
+            <SimpleIcons.FontAwesome.question-circle />
             <Text style={styles.menuText}>Help & Support</Text>
-            <FontAwesome name="chevron-right" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.chevron-right />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity style={[styles.menuItem, styles.logoutItem]} onPress={handleLogout}>
-          <FontAwesome name="sign-out" size={20} color="#FF3B30" />
+          <SimpleIcons.FontAwesome.sign-out />
           <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
-          <FontAwesome name="chevron-right" size={16} color="#666" />
+          <SimpleIcons.FontAwesome.chevron-right />
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -687,7 +687,7 @@ export default function PatientDashboard() {
       {/* Search and Sort Section */}
       <View style={styles.searchSortContainer}>
         <View style={styles.searchContainer}>
-          <FontAwesome name="search" size={16} color="#666" style={styles.searchIcon} />
+          <SimpleIcons.FontAwesome.search />
           <TextInput
             style={styles.searchInput}
             placeholder="Search doctors, specializations, or locations..."
@@ -697,7 +697,7 @@ export default function PatientDashboard() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-              <FontAwesome name="times" size={16} color="#666" />
+              <SimpleIcons.FontAwesome.times />
             </TouchableOpacity>
           )}
         </View>
@@ -707,7 +707,7 @@ export default function PatientDashboard() {
             style={styles.sortButton}
             onPress={() => setShowSortOptions(!showSortOptions)}
           >
-            <FontAwesome name="sort" size={16} color="#666" />
+            <SimpleIcons.FontAwesome.sort />
             <Text style={styles.sortButtonText}>{getSortOptionLabel(sortBy)}</Text>
             <FontAwesome 
               name={showSortOptions ? "chevron-up" : "chevron-down"} 
@@ -743,7 +743,7 @@ export default function PatientDashboard() {
                     {option.label}
                   </Text>
                   {sortBy === option.value && (
-                    <FontAwesome name="check" size={14} color="#4CAF50" />
+                    <SimpleIcons.FontAwesome.check />
                   )}
                 </TouchableOpacity>
               ))}
@@ -761,12 +761,12 @@ export default function PatientDashboard() {
 
       {loadingDoctors ? (
         <View style={styles.loadingContainer}>
-          <FontAwesome name="spinner" size={32} color="#4CAF50" />
+          <SimpleIcons.FontAwesome.spinner />
           <Text style={styles.loadingText}>Loading doctors...</Text>
         </View>
       ) : getFilteredAndSortedDoctors().length === 0 ? (
         <View style={styles.noResultsContainer}>
-          <FontAwesome name="search" size={48} color="#CCC" />
+          <SimpleIcons.FontAwesome.search />
           <Text style={styles.noResultsText}>
             {searchQuery.trim() ? 'No doctors found' : 'No approved doctors available'}
           </Text>
@@ -790,15 +790,15 @@ export default function PatientDashboard() {
                 <Text style={styles.doctorSpecialization}>{doctor.specialization}</Text>
                 <View style={styles.doctorDetails}>
                   <View style={styles.doctorRating}>
-                    <FontAwesome name="star" size={16} color="#FFD700" />
+                    <SimpleIcons.FontAwesome.star />
                     <Text style={styles.ratingText}>{doctor.rating}</Text>
                   </View>
                   <View style={styles.doctorExperience}>
-                    <FontAwesome name="clock-o" size={14} color="#666" />
+                    <SimpleIcons.FontAwesome.clock-o />
                     <Text style={styles.experienceText}>{doctor.experience} years</Text>
                   </View>
                   <View style={styles.doctorLocation}>
-                    <FontAwesome name="map-marker" size={14} color="#666" />
+                    <SimpleIcons.FontAwesome.map-marker />
                     <Text style={styles.locationText}>{doctor.location}</Text>
                   </View>
                 </View>
