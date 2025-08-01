@@ -12,29 +12,29 @@ export interface Message {
   timestamp: string;
   created_at: string;
   updated_at: string;
-  reactions?: MessageReaction[];
-  read_by?: MessageRead[];
-  is_edited?: boolean;
-  edited_at?: string;
-  reply_to_id?: string;
-  reply_to_message?: string;
-  reply_to_sender_name?: string;
-  delivery_status?: 'sending' | 'sent' | 'delivered' | 'read';
+  // reactions?: MessageReaction[]; // COMMENTED OUT
+  // read_by?: MessageRead[]; // COMMENTED OUT
+  // is_edited?: boolean; // COMMENTED OUT
+  // edited_at?: string; // COMMENTED OUT
+  // reply_to_id?: string; // COMMENTED OUT
+  // reply_to_message?: string; // COMMENTED OUT
+  // reply_to_sender_name?: string; // COMMENTED OUT
+  // delivery_status?: 'sending' | 'sent' | 'delivered' | 'read'; // COMMENTED OUT
   temp_id?: string;
 }
 
-export interface MessageReaction {
-  reaction: string;
-  user_id: number;
-  user_name: string;
-  timestamp?: string;
-}
+// export interface MessageReaction { // COMMENTED OUT
+//   reaction: string;
+//   user_id: number;
+//   user_name: string;
+//   timestamp?: string;
+// }
 
-export interface MessageRead {
-  user_id: number;
-  user_name: string;
-  read_at: string;
-}
+// export interface MessageRead { // COMMENTED OUT
+//   user_id: number;
+//   user_name: string;
+//   read_at: string;
+// }
 
 export interface LocalStorageData {
   appointment_id: number;
@@ -45,7 +45,7 @@ export interface LocalStorageData {
 
 class MessageStorageService {
   private readonly STORAGE_PREFIX = 'chat_messages_';
-  private readonly SYNC_INTERVAL = 5000;
+  private readonly SYNC_INTERVAL = 5000; // 30 seconds - much longer interval
   private syncTimers: Map<number, ReturnType<typeof setInterval>> = new Map();
   private updateCallbacks: Map<number, (messages: Message[]) => void> = new Map();
   
@@ -63,18 +63,105 @@ class MessageStorageService {
     }
   }
 
+  // private async checkConnectivity(): Promise<boolean> { // COMMENTED OUT
+  //   const now = Date.now();
+  //   if (now - this.lastConnectivityCheck < this.CONNECTIVITY_CHECK_INTERVAL) {
+  //     return !this.offlineMode;
+  //   }
+  //   
+  //   this.lastConnectivityCheck = now;
+  //   
+  //   try {
+  //     const isConnected = await apiService.checkConnectivity();
+  //     this.offlineMode = !isConnected;
+  //     
+  //     if (this.offlineMode) {
+  //       console.log('📱 MessageStorageService: Entering offline mode');
+  //     } else {
+  //       console.log('📱 MessageStorageService: Back online');
+  //     }
+  //     
+  //     return isConnected;
+  //   } catch (error) {
+  //     this.offlineMode = true;
+  //     console.log('📱 MessageStorageService: Connectivity check failed, staying offline');
+  //     return false;
+  //   }
+  // }
+
+  private async notifyCallbacks(appointmentId: number, messages: Message[]): Promise<void> {
+    const callback = this.updateCallbacks.get(appointmentId);
+    if (callback) {
+      // Sort messages by creation time
+      const sortedMessages = messages.sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      callback(sortedMessages);
+    }
+  }
+
+  // private async mergeMessages(localMessages: Message[], serverMessages: Message[]): Promise<Message[]> { // COMMENTED OUT
+  //   const mergedMap = new Map<string, Message>();
+  //   
+  //   // Add local messages first
+  //   localMessages.forEach(message => {
+  //     mergedMap.set(message.id, message);
+  //     // Also track by temp_id for pending messages
+  //     if (message.temp_id) {
+  //       mergedMap.set(message.temp_id, message);
+  //     }
+  //   });
+  //   
+  //   // Merge server messages, handling duplicates
+  //   serverMessages.forEach(serverMessage => {
+  //     // Check if we have a local message with this temp_id
+  //     const existingByTempId = Array.from(mergedMap.values()).find(
+  //       localMsg => localMsg.temp_id === serverMessage.id || localMsg.id === serverMessage.id
+  //     );
+  //     
+  //     if (existingByTempId) {
+  //       // Update existing message with server data but preserve local delivery status
+  //       const updatedMessage = {
+  //         ...serverMessage,
+  //         delivery_status: existingByTempId.delivery_status === 'sending' ? 'sent' : serverMessage.delivery_status,
+  //         temp_id: existingByTempId.temp_id // Preserve temp_id for tracking
+  //       };
+  //       mergedMap.set(serverMessage.id, updatedMessage);
+  //       
+  //       // Remove the temp_id version if it exists
+  //       if (existingByTempId.temp_id && existingByTempId.temp_id !== serverMessage.id) {
+  //         mergedMap.delete(existingByTempId.temp_id);
+  //       }
+  //     } else {
+  //       // New server message
+  //       mergedMap.set(serverMessage.id, serverMessage);
+  //     }
+  //   });
+  //   
+  //   return Array.from(mergedMap.values());
+  // }
+
   async storeMessage(appointmentId: number, message: Message): Promise<void> {
     try {
       const key = this.getStorageKey(appointmentId);
       const data = await this.getLocalData(appointmentId);
       
-      const exists = data.messages.some(m => m.id === message.id);
+      // Check for duplicates by id or temp_id
+      const exists = data.messages.some(m => 
+        m.id === message.id || 
+        (message.temp_id && m.temp_id === message.temp_id) ||
+        (m.temp_id && message.id === m.temp_id)
+      );
+      
       if (!exists) {
         data.messages.push(message);
         data.message_count = data.messages.length;
         data.last_sync = new Date().toISOString();
         
         await AsyncStorage.setItem(key, JSON.stringify(data));
+        
+        // Notify callbacks only once
+        await this.notifyCallbacks(appointmentId, data.messages);
       }
     } catch (error) {
       this.logErrorOnce('Error storing message locally:', error, `appointment-${appointmentId}`);
@@ -99,61 +186,62 @@ class MessageStorageService {
       
       if (response.success && response.data) {
         const serverData = response.data as LocalStorageData;
+        
+        // Update local storage with server data
         const key = this.getStorageKey(appointmentId);
         await AsyncStorage.setItem(key, JSON.stringify(serverData));
+        
+        // Notify callbacks with server messages
+        await this.notifyCallbacks(appointmentId, serverData.messages);
+        
         return serverData.messages;
       }
       
       return [];
     } catch (error) {
       this.logErrorOnce('Error loading messages from server:', error, `appointment-${appointmentId}`);
-      return [];
+      // Return local messages on error
+      return await this.getMessages(appointmentId);
     }
   }
 
   async sendMessage(appointmentId: number, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
     try {
-      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       const message: Message = {
-        id: messageId,
+        id: tempId, // Use temp_id as id initially
         appointment_id: appointmentId,
         sender_id: senderId,
         sender_name: senderName,
         message: messageText,
         message_type: 'text',
-        delivery_status: 'sending',
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        temp_id: tempId // Store temp_id for tracking
       };
       
+      // Store message locally first
       await this.storeMessage(appointmentId, message);
       
-      const callback = this.updateCallbacks.get(appointmentId);
-      if (callback) {
-        const currentMessages = await this.getMessages(appointmentId);
-        callback(currentMessages);
-      }
-      
+      // Send to server with temp_id for duplicate detection
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
         message: messageText,
-        message_type: 'text'
+        message_type: 'text',
+        temp_id: tempId // Send temp_id to backend
       });
       
       if (response.success && response.data) {
         const serverMessage = response.data as Message;
-        await this.updateMessageInStorage(appointmentId, messageId, serverMessage);
         
-        if (callback) {
-          const updatedMessages = await this.getMessages(appointmentId);
-          callback(updatedMessages);
-        }
+        // Update message with server response
+        await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
         
         return serverMessage;
+      } else {
+        return message;
       }
-      
-      return message;
     } catch (error) {
       this.logErrorOnce('Error sending message:', error, `appointment-${appointmentId}`);
       return null;
@@ -163,24 +251,51 @@ class MessageStorageService {
   private async updateMessageInStorage(appointmentId: number, tempId: string, updatedMessage: Message): Promise<void> {
     try {
       const data = await this.getLocalData(appointmentId);
-      const messageIndex = data.messages.findIndex(m => m.id === tempId);
+      const messageIndex = data.messages.findIndex(m => 
+        m.id === tempId || m.temp_id === tempId
+      );
       
       if (messageIndex !== -1) {
-        data.messages[messageIndex] = updatedMessage;
+        // Update the message with server data
+        data.messages[messageIndex] = {
+          ...updatedMessage,
+          temp_id: tempId, // Preserve temp_id for tracking
+        };
+        
         data.last_sync = new Date().toISOString();
         
         const key = this.getStorageKey(appointmentId);
         await AsyncStorage.setItem(key, JSON.stringify(data));
         
-        const callback = this.updateCallbacks.get(appointmentId);
-        if (callback) {
-          callback(data.messages);
-        }
+        // Notify callbacks only once
+        await this.notifyCallbacks(appointmentId, data.messages);
       }
     } catch (error) {
       this.logErrorOnce('Error updating message in storage:', error, `message-${tempId}`);
     }
   }
+
+  // private async updateMessageDeliveryStatus(appointmentId: number, messageId: string, status: 'sending' | 'sent' | 'delivered' | 'read'): Promise<void> { // COMMENTED OUT
+  //   try {
+  //     const data = await this.getLocalData(appointmentId);
+  //     const messageIndex = data.messages.findIndex(m => 
+  //       m.id === messageId || m.temp_id === messageId
+  //     );
+  //     
+  //     if (messageIndex !== -1) {
+  //       data.messages[messageIndex].delivery_status = status;
+  //       data.last_sync = new Date().toISOString();
+  //       
+  //       const key = this.getStorageKey(appointmentId);
+  //       await AsyncStorage.setItem(key, JSON.stringify(data));
+  //       
+  //       // Notify callbacks only once
+  //       await this.notifyCallbacks(appointmentId, data.messages);
+  //     }
+  //   } catch (error) {
+  //     this.logErrorOnce('Error updating message delivery status:', error, `message-${messageId}`);
+  //   }
+  // }
 
   registerUpdateCallback(appointmentId: number, callback: (messages: Message[]) => void): void {
     this.updateCallbacks.set(appointmentId, callback);
@@ -195,15 +310,16 @@ class MessageStorageService {
     
     const timer = setInterval(async () => {
       try {
-        const serverMessages = await this.loadFromServer(appointmentId);
-        
-        if (serverMessages.length > 0) {
-          const callback = this.updateCallbacks.get(appointmentId);
-          if (callback) {
-            const localMessages = await this.getMessages(appointmentId);
-            const allMessages = [...localMessages, ...serverMessages];
-            callback(allMessages);
-          }
+        // Only sync if there are no pending messages to avoid conflicts
+        // This is a simplified check. In a real app, you'd have a pendingMessages map
+        // and only sync if there are no pending messages for this appointment.
+        // For now, we'll just check if the last sync was recent.
+        const data = await this.getLocalData(appointmentId);
+        const lastSyncTime = new Date(data.last_sync).getTime();
+        const now = Date.now();
+
+        if (now - lastSyncTime > this.SYNC_INTERVAL) {
+          await this.loadFromServer(appointmentId);
         }
       } catch (error: any) {
         // Silent error handling
@@ -250,6 +366,103 @@ class MessageStorageService {
   private getStorageKey(appointmentId: number): string {
     return `${this.STORAGE_PREFIX}${appointmentId}`;
   }
+
+  async preloadMessages(appointmentId: number): Promise<void> {
+    try {
+      // Preload messages from server for better performance
+      await this.loadFromServer(appointmentId);
+    } catch (error) {
+      this.logErrorOnce('Error preloading messages:', error, `appointment-${appointmentId}`);
+    }
+  }
+
+  async getMessagesOptimized(appointmentId: number): Promise<Message[]> {
+    try {
+      // Get messages with optimized loading
+      const messages = await this.getMessages(appointmentId);
+      return messages.sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    } catch (error) {
+      this.logErrorOnce('Error getting optimized messages:', error, `appointment-${appointmentId}`);
+      return [];
+    }
+  }
+
+  // async markMessagesAsRead(appointmentId: number, userId: number): Promise<void> { // COMMENTED OUT
+  //   try {
+  //     // Mark messages as read locally
+  //     const data = await this.getLocalData(appointmentId);
+  //     const updatedMessages = data.messages.map(message => {
+  //       if (!message.read_by) {
+  //         message.read_by = [];
+  //       }
+  //       
+  //       const alreadyRead = message.read_by.some(read => read.user_id === userId);
+  //       if (!alreadyRead) {
+  //         message.read_by.push({
+  //           user_id: userId,
+  //           user_name: `User ${userId}`, // This should be replaced with actual user name
+  //           read_at: new Date().toISOString()
+  //         });
+  //       }
+  //       return message;
+  //     });
+  //     
+  //     data.messages = updatedMessages;
+  //     data.last_sync = new Date().toISOString();
+  //     
+  //     const key = this.getStorageKey(appointmentId);
+  //     await AsyncStorage.setItem(key, JSON.stringify(data));
+  //     
+  //     // Check connectivity before notifying server
+  //     const isConnected = await this.checkConnectivity();
+  //     if (isConnected) {
+  //       try {
+  //         await apiService.post(`/chat/${appointmentId}/mark-read`, {
+  //           user_id: userId,
+  //           timestamp: new Date().toISOString()
+  //         });
+  //       } catch (error) {
+  //         // Silent error for server notification
+  //       }
+  //     }
+  //   } catch (error) {
+  //     this.logErrorOnce('Error marking messages as read:', error, `appointment-${appointmentId}`);
+  //   }
+  // }
+
+  // async startTyping(appointmentId: number, userId: number, userName: string): Promise<void> { // COMMENTED OUT
+  //   try {
+  //     const isConnected = await this.checkConnectivity();
+  //     if (!isConnected) {
+  //       console.log('📱 MessageStorageService: Skipping typing indicator - offline mode');
+  //       return;
+  //     }
+  //     
+  //     await apiService.post(`/chat/${appointmentId}/typing/start`, {
+  //       user_id: userId,
+  //       user_name: userName
+  //     });
+  //   } catch (error) {
+  //     this.logErrorOnce('Error starting typing indicator:', error, `appointment-${appointmentId}`);
+  //   }
+  // }
+
+  // async stopTyping(appointmentId: number, userId: number): Promise<void> { // COMMENTED OUT
+  //   try {
+  //     const isConnected = await this.checkConnectivity();
+  //     if (!isConnected) {
+  //       console.log('📱 MessageStorageService: Skipping typing indicator - offline mode');
+  //     }
+  //     
+  //     await apiService.post(`/chat/${appointmentId}/typing/stop`, {
+  //       user_id: userId
+  //     });
+  //   } catch (error) {
+  //     this.logErrorOnce('Error stopping typing indicator:', error, `appointment-${appointmentId}`);
+  //   }
+  // }
 }
 
 export const messageStorageService = new MessageStorageService();

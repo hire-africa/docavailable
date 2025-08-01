@@ -1,7 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { Animated, Text, View } from 'react-native';
-import { apiService } from '../app/services/apiService';
+import React from 'react';
 
 interface TypingUser {
   user_id: number;
@@ -14,9 +11,17 @@ interface TypingIndicatorProps {
   currentUserId: number;
 }
 
+// COMMENTED OUT ENTIRE COMPONENT TO SIMPLIFY MESSAGE SYSTEM
 const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, currentUserId }) => {
+  // Always return null - no typing indicators for simplified system
+  return null;
+  
+  // COMMENTED OUT ALL TYPING INDICATOR FUNCTIONALITY
+  /*
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [dotAnimation] = useState(new Animated.Value(0));
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastPollTime, setLastPollTime] = useState(0);
 
   // Animate the dots
   useEffect(() => {
@@ -44,9 +49,30 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, curren
     };
   }, [typingUsers.length]);
 
-  // Poll for typing indicators
+  // Check connectivity before polling
+  const checkConnectivity = async (): Promise<boolean> => {
+    try {
+      const isConnected = await apiService.checkConnectivity();
+      setIsOnline(isConnected);
+      return isConnected;
+    } catch (error) {
+      setIsOnline(false);
+      return false;
+    }
+  };
+
+  // Poll for typing indicators with reduced frequency and offline handling
   useEffect(() => {
     const pollTypingIndicators = async () => {
+      const now = Date.now();
+      
+      // Skip polling if we're offline or if it's too soon since last poll
+      if (!isOnline || (now - lastPollTime) < 5000) {
+        return;
+      }
+      
+      setLastPollTime(now);
+      
       try {
         const response = await apiService.get(`/chat/${appointmentId}/typing`);
         
@@ -57,15 +83,27 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, curren
         }
       } catch (error) {
         console.error('Error polling typing indicators:', error);
+        // Mark as offline on error
+        setIsOnline(false);
       }
     };
 
-    // Poll every 2 seconds
-    const interval = setInterval(pollTypingIndicators, 2000);
-    pollTypingIndicators(); // Initial poll
+    // Check connectivity first
+    checkConnectivity().then(() => {
+      // Poll every 10 seconds instead of 2 seconds to reduce API calls
+      const interval = setInterval(async () => {
+        const isConnected = await checkConnectivity();
+        if (isConnected) {
+          pollTypingIndicators();
+        }
+      }, 10000);
+      
+      // Initial poll
+      pollTypingIndicators();
 
-    return () => clearInterval(interval);
-  }, [appointmentId, currentUserId]);
+      return () => clearInterval(interval);
+    });
+  }, [appointmentId, currentUserId, isOnline]);
 
   if (typingUsers.length === 0) {
     return null;
@@ -124,6 +162,7 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, curren
       </View>
     </View>
   );
+  */
 };
 
 export default TypingIndicator; 

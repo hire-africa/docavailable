@@ -97,19 +97,34 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       {headerContent}
       
       {/* Search Bar */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAF4EC', borderRadius: 16, marginHorizontal: 16, marginBottom: 18, paddingHorizontal: 14, height: 44 }}>
-        <Icon name="search" size={16} color="#7CB18F" />
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 16, 
+        marginHorizontal: 20, 
+        marginBottom: 20, 
+        paddingHorizontal: 16, 
+        height: 48,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+      }}>
+        <Icon name="search" size={20} color="#4CAF50" />
         <TextInput
-          style={{ flex: 1, fontSize: 17, color: '#222', backgroundColor: 'transparent' }}
+          style={{ flex: 1, fontSize: 16, color: '#666', backgroundColor: 'transparent', marginLeft: 12 }}
           placeholder="Search blogs by title, description, or category..."
-          placeholderTextColor="#7CB18F"
+          placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
-          underlineColorAndroid="transparent"
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginLeft: 8 }}>
-            <Icon name="times" size={16} color="#7CB18F" />
+            <Icon name="times" size={20} color="#666" />
           </TouchableOpacity>
         )}
       </View>

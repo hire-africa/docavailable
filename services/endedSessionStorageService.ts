@@ -15,6 +15,11 @@ export const endedSessionStorageService = {
     return [];
   },
   
+  getEndedSessionsByPatient: async (patientId: number): Promise<EndedSessionMetadata[]> => {
+    // Placeholder implementation - return empty array for now
+    return [];
+  },
+  
   deleteEndedSession: async (appointmentId: number): Promise<void> => {
     // Placeholder implementation
   },
