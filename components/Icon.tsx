@@ -94,10 +94,10 @@ export const IconNames = {
   
   // Material icons
   add: 'add',
-  close: 'close',
-  menu: 'menu',
+  closeMaterial: 'close',
+  menuMaterial: 'menu',
   moreVert: 'more-vert',
-  settings: 'settings',
+  settingsMaterial: 'settings',
   person: 'person',
   email: 'email',
   phoneAndroid: 'phone',
@@ -105,7 +105,7 @@ export const IconNames = {
   schedule: 'schedule',
   payment: 'payment',
   security: 'security',
-  help: 'help',
+  helpMaterial: 'help',
   exitToApp: 'exit-to-app',
   
   // Ionicons

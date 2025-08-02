@@ -1,5 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     Platform,
@@ -61,11 +62,22 @@ const WorkingHours: React.FC = () => {
         { key: 'sunday', label: 'Sunday', icon: 'calendar' as const },
     ];
 
+    // Load availability when component mounts
     useEffect(() => {
         if (user?.id) {
             loadAvailability();
         }
     }, [user?.id]);
+
+    // Reload availability when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            if (user?.id) {
+                console.log('WorkingHours: Screen focused, reloading availability');
+                loadAvailability();
+            }
+        }, [user?.id])
+    );
 
     const loadAvailability = async () => {
         try {
@@ -126,6 +138,8 @@ const WorkingHours: React.FC = () => {
             
             if (response.success) {
                 Alert.alert('Success', 'Availability settings updated successfully!');
+                // Reload the data after successful save to ensure UI is in sync
+                await loadAvailability();
             } else {
                 Alert.alert('Error', response.message || 'Failed to update availability');
             }
@@ -231,7 +245,20 @@ const WorkingHours: React.FC = () => {
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
             {/* Header Section */}
             <View style={styles.header}>
-                <Text style={styles.title}>Availability & Working Hours</Text>
+                <View style={styles.headerTop}>
+                    <Text style={styles.title}>Availability & Working Hours</Text>
+                    <TouchableOpacity 
+                        style={styles.refreshButton} 
+                        onPress={loadAvailability}
+                        disabled={loading}
+                    >
+                        <FontAwesome 
+                            name="refresh" 
+                            size={16} 
+                            color={loading ? "#999" : "#4CAF50"} 
+                        />
+                    </TouchableOpacity>
+                </View>
                 <Text style={styles.subtitle}>
                     Manage your online status, working hours, and appointment preferences
                 </Text>
@@ -455,11 +482,22 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#E0E0E0',
     },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
     title: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#000',
-        marginBottom: 8,
+        flex: 1,
+    },
+    refreshButton: {
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
     },
     subtitle: {
         fontSize: 16,

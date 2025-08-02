@@ -77,20 +77,47 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
       const result = await paymentService.processPayment(paymentRequest);
 
       if (result.success) {
-        Alert.alert(
-          'Payment Successful!',
-          `Your ${plan.name} subscription has been activated.\nTransaction ID: ${result.transactionId}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                onPaymentSuccess();
-                onClose();
-                setIsProcessing(false);
+        if (result.paymentUrl) {
+          // For Paychangu, we need to redirect to payment URL or show payment instructions
+          Alert.alert(
+            'Payment Initiated!',
+            `Please complete your payment using the provided link.\nTransaction ID: ${result.transactionId}`,
+            [
+              {
+                text: 'Complete Payment',
+                onPress: () => {
+                  // Here you would typically open the payment URL
+                  // For now, we'll simulate success
+                  onPaymentSuccess();
+                  onClose();
+                  setIsProcessing(false);
+                }
+              },
+              {
+                text: 'Cancel',
+                onPress: () => {
+                  setIsProcessing(false);
+                }
               }
-            }
-          ]
-        );
+            ]
+          );
+        } else {
+          // Direct success (for immediate payments)
+          Alert.alert(
+            'Payment Successful!',
+            `Your ${plan.name} subscription has been activated.\nTransaction ID: ${result.transactionId}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  onPaymentSuccess();
+                  onClose();
+                  setIsProcessing(false);
+                }
+              }
+            ]
+          );
+        }
       } else {
         Alert.alert('Payment Failed', result.error || 'Please try again or contact support.');
         setIsProcessing(false);

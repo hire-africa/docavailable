@@ -1,4 +1,5 @@
 import { Buffer } from 'buffer';
+import './cryptoPolyfill'; // Ensure crypto polyfills are loaded
 
 export interface EncryptedMessage {
   encrypted_content: string;

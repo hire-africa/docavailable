@@ -2,6 +2,9 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
 
+// Import crypto polyfill early to ensure it's loaded before any encryption services
+import '../services/cryptoPolyfill';
+
 export default function RootLayout() {
   return (
     <AuthProvider>

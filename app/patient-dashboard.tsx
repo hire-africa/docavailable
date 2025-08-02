@@ -1,6 +1,7 @@
 // Move all import statements to the top
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -39,6 +40,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { authService } from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
+import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
 import Blog from './blog';
 const profileImage = require('../assets/images/profile.jpg');
@@ -120,6 +122,7 @@ export default function PatientDashboard() {
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [availableSpecializations, setAvailableSpecializations] = useState<string[]>([]);
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
+  const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [endedSessions, setEndedSessions] = useState<EndedSessionMetadata[]>([]);
   const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
   const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
@@ -1067,8 +1070,7 @@ export default function PatientDashboard() {
         );
       case 'rating':
         return filteredDoctors.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-      case 'experience':
-        return filteredDoctors.sort((a, b) => (b.years_of_experience || 0) - (a.years_of_experience || 0));
+
       case 'specialization':
         return filteredDoctors.sort((a, b) => (a.specialization || '').localeCompare(b.specialization || ''));
       case 'location':
@@ -1082,7 +1084,6 @@ export default function PatientDashboard() {
     switch (value) {
       case 'name': return 'Name (A-Z)';
       case 'rating': return 'Rating (High to Low)';
-      case 'experience': return 'Experience (High to Low)';
       case 'specialization': return 'Specialization (A-Z)';
       case 'location': return 'Location (A-Z)';
       default: return 'Sort by';
@@ -1992,7 +1993,7 @@ export default function PatientDashboard() {
             onPress={() => setShowOnlyOnline(!showOnlyOnline)}
           >
             <Text style={[styles.filterPillText, showOnlyOnline && styles.filterPillTextActive]}>
-              Availability
+              Online Only
             </Text>
           </TouchableOpacity>
           <TouchableOpacity 
@@ -2009,6 +2010,15 @@ export default function PatientDashboard() {
           >
             <Text style={[styles.filterPillText, sortBy === 'rating' && styles.filterPillTextActive]}>
               Rating
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.filterPill, selectedSpecialization && styles.filterPillActive]}
+            onPress={() => setShowSpecializationModal(true)}
+          >
+            <Text style={[styles.filterPillText, selectedSpecialization && styles.filterPillTextActive]}>
+              {selectedSpecialization || 'Specialization'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -2117,15 +2127,15 @@ export default function PatientDashboard() {
   const getStatusBadge = (status: string) => {
     switch(status) {
       case 'pending':
-        return { color: '#FFA500', text: 'Pending', icon: 'clock-o' };
+        return { color: '#FFA500', text: 'Pending', icon: 'clock' };
       case 'confirmed':
-        return { color: '#4CAF50', text: 'Confirmed', icon: 'check-circle' };
+        return { color: '#4CAF50', text: 'Confirmed', icon: 'check' };
       case 'cancelled':
-        return { color: '#F44336', text: 'Cancelled', icon: 'times-circle' };
+        return { color: '#F44336', text: 'Cancelled', icon: 'times' };
       case 'completed':
-        return { color: '#2196F3', text: 'Completed', icon: 'check-square' };
+        return { color: '#2196F3', text: 'Completed', icon: 'check-square-o' };
       default:
-        return { color: '#666', text: 'Unknown', icon: 'question-circle' };
+        return { color: '#666', text: 'Unknown', icon: 'question' };
     }
   };
 
@@ -2977,6 +2987,15 @@ export default function PatientDashboard() {
           </Animated.View>
         </View>
       )}
+
+      {/* Specialization Filter Modal */}
+      <SpecializationFilterModal
+        visible={showSpecializationModal}
+        onClose={() => setShowSpecializationModal(false)}
+        selectedSpecialization={selectedSpecialization}
+        onSpecializationChange={setSelectedSpecialization}
+        availableSpecializations={availableSpecializations}
+      />
     </SafeAreaView>
   );
 }

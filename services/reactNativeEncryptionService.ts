@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import 'react-native-get-random-values';
+import './cryptoPolyfill'; // Ensure crypto polyfills are loaded
 
 interface EncryptedMessage {
   encrypted_content: string;

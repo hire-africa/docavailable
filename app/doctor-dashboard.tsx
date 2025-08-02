@@ -1,8 +1,9 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { authService } from '@/services/authService';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -220,6 +221,26 @@ export default function DoctorDashboard() {
       updateEnabledDaysCount();
     }
   }, [user, activeTab]);
+
+  // Update enabled days count when returning to home tab
+  useEffect(() => {
+    if (user && activeTab === 'home') {
+      updateEnabledDaysCount();
+    }
+  }, [user, activeTab]);
+
+  // Refresh data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        console.log('DoctorDashboard: Screen focused, refreshing data');
+        updateEnabledDaysCount();
+        if (activeTab === 'home') {
+          refreshHomeTab();
+        }
+      }
+    }, [user, activeTab])
+  );
 
   // Sidebar functions
   const openSidebar = () => {
@@ -1068,7 +1089,7 @@ export default function DoctorDashboard() {
 
           <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
             <View style={styles.actionIcon}>
-              <Icon name="dollarSign" size={20} color="#666" />
+              <Icon name="dollar-sign" size={20} color="#666" />
             </View>
             <Text style={styles.actionTitle}>Earnings</Text>
             <Text style={styles.actionSubtitle}>Withdraw funds</Text>
@@ -1496,7 +1517,7 @@ export default function DoctorDashboard() {
           <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2}}>{user?.email || 'Not provided'}</Text>
         </View>
         <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/doctor-withdrawals')}>
-          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><Icon name="dollarSign" size={20} color="#666" /></View>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><Icon name="dollar-sign" size={20} color="#666" /></View>
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Earnings</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>

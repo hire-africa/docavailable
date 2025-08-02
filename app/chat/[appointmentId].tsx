@@ -5,6 +5,7 @@ import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
+    Modal,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -15,6 +16,8 @@ import {
     View,
 } from 'react-native';
 import { apiService } from '../../app/services/apiService';
+import sessionService from '../../app/services/sessionService';
+import RatingModal from '../../components/RatingModal';
 import { useAuth } from '../../contexts/AuthContext';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 
@@ -24,6 +27,8 @@ interface ChatInfo {
   appointment_date: string;
   appointment_time: string;
   status: string;
+  doctor_id?: number;
+  patient_id?: number;
 }
 
 export default function ChatPage() {
@@ -39,8 +44,19 @@ export default function ChatPage() {
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // Session ending modal state
+  const [showEndSessionModal, setShowEndSessionModal] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
+  
+  // Rating modal state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [submittingRating, setSubmittingRating] = useState(false);
+  
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
+  
+  // Check if current user is a patient
+  const isPatient = user?.user_type === 'patient';
   
   // Parse and validate appointment ID
   const isTextSession = appointmentId && appointmentId.startsWith('text_session_');
@@ -161,6 +177,118 @@ export default function ChatPage() {
     };
   }, []);
 
+  // Handle back button press
+  const handleBackPress = () => {
+    console.log('🔍 Back button pressed');
+    console.log('🔍 isPatient:', isPatient);
+    console.log('🔍 isTextSession:', isTextSession);
+    console.log('🔍 appointmentId:', appointmentId);
+    console.log('🔍 user?.user_type:', user?.user_type);
+    
+    if (isPatient) {
+      console.log('🔍 Showing end session modal for patient');
+      // Show end session modal for patients in any chat session
+      setShowEndSessionModal(true);
+    } else {
+      console.log('🔍 Going back directly');
+      // For doctors, just go back
+      router.back();
+    }
+  };
+
+  // Handle session ending
+  const handleEndSession = async () => {
+    setEndingSession(true);
+    try {
+      let sessionId;
+      
+      if (isTextSession) {
+        // For text sessions, remove the prefix
+        sessionId = appointmentId.replace('text_session_', '');
+      } else {
+        // For regular appointments, use the appointment ID directly
+        sessionId = appointmentId;
+      }
+      
+      console.log('🔍 Ending session with ID:', sessionId);
+      const sessionType = isTextSession ? 'text' : 'appointment';
+      console.log('🔍 Session type:', sessionType);
+      const result = await sessionService.endSession(sessionId, sessionType);
+      
+      console.log('🔍 Session end result:', result);
+      
+      if (result.status === 'success') {
+        console.log('🔍 Session ended successfully, showing rating modal');
+        // Show rating modal instead of success alert
+        setShowEndSessionModal(false);
+        setShowRatingModal(true);
+      } else {
+        console.log('🔍 Session end failed:', result);
+        Alert.alert('Error', 'Failed to end session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error ending session:', error);
+      Alert.alert('Error', 'Failed to end session. Please try again.');
+    } finally {
+      setEndingSession(false);
+    }
+  };
+
+  // Cancel session ending
+  const handleCancelEndSession = () => {
+    setShowEndSessionModal(false);
+  };
+
+  // Handle rating submission
+  const handleSubmitRating = async (rating: number, comment: string) => {
+    setSubmittingRating(true);
+    try {
+      let sessionId;
+      if (isTextSession) {
+        sessionId = appointmentId.replace('text_session_', '');
+      } else {
+        sessionId = appointmentId;
+      }
+      
+      // Get doctor and patient IDs from chat info or user context
+      const doctorId = chatInfo?.doctor_id || 0;
+      const patientId = user?.id || 0;
+      
+      console.log('🔍 Submitting rating with doctorId:', doctorId, 'patientId:', patientId);
+      await sessionService.submitRating(sessionId, rating, comment, doctorId, patientId);
+      
+      // Show success message and navigate back
+      Alert.alert(
+        'Thank You!',
+        'Your rating has been submitted successfully.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setShowRatingModal(false);
+              router.back();
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  // Handle rating modal close
+  const handleCloseRatingModal = () => {
+    setShowRatingModal(false);
+    router.back();
+  };
+
+  // Debug modal state
+  console.log('🔍 showEndSessionModal state:', showEndSessionModal);
+  console.log('🔍 showRatingModal state:', showRatingModal);
+
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -187,7 +315,7 @@ export default function ChatPage() {
         borderBottomColor: '#E5E5E5',
         backgroundColor: '#fff',
       }}>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
+        <TouchableOpacity onPress={handleBackPress} style={{ marginRight: 12 }}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         
@@ -310,6 +438,126 @@ export default function ChatPage() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* End Session Modal */}
+      <Modal
+        visible={showEndSessionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelEndSession}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingHorizontal: 20,
+        }}>
+          <View style={{
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            padding: 24,
+            width: '100%',
+            maxWidth: 350,
+            alignItems: 'center',
+          }}>
+            <View style={{
+              backgroundColor: '#FFE6E6',
+              borderRadius: 50,
+              width: 60,
+              height: 60,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 16,
+            }}>
+              <Ionicons name="warning" size={30} color="#FF4444" />
+            </View>
+            
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '600',
+              color: '#333',
+              textAlign: 'center',
+              marginBottom: 8,
+            }}>
+              End Session?
+            </Text>
+            
+            <Text style={{
+              fontSize: 16,
+              color: '#666',
+              textAlign: 'center',
+              lineHeight: 22,
+              marginBottom: 24,
+            }}>
+              Are you sure you want to end this session? This action cannot be undone and will deduct sessions from your plan.
+            </Text>
+            
+            <View style={{
+              flexDirection: 'row',
+              width: '100%',
+              gap: 12,
+            }}>
+              <TouchableOpacity
+                onPress={handleCancelEndSession}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#E5E5E5',
+                  backgroundColor: '#fff',
+                }}
+                disabled={endingSession}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  color: '#666',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                }}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                onPress={handleEndSession}
+                disabled={endingSession}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  backgroundColor: endingSession ? '#E5E5E5' : '#FF4444',
+                }}
+              >
+                {endingSession ? (
+                  <ActivityIndicator size="small" color="#666" />
+                ) : (
+                  <Text style={{
+                    fontSize: 16,
+                    color: '#fff',
+                    textAlign: 'center',
+                    fontWeight: '500',
+                  }}>
+                    End Session
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Rating Modal */}
+      <RatingModal
+        visible={showRatingModal}
+        onClose={handleCloseRatingModal}
+        onSubmit={handleSubmitRating}
+        doctorName={chatInfo?.other_participant_name || 'Doctor'}
+        sessionType={isTextSession ? 'instant' : 'appointment'}
+      />
     </SafeAreaView>
   );
 } 

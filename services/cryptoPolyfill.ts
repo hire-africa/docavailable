@@ -244,9 +244,6 @@ if (typeof global.Buffer === 'undefined') {
           }
         }
         
-        // Don't remove bytes based on padding - the padding is already handled by the base64 algorithm
-        // The issue was that we were removing valid bytes
-        
         return new Uint8Array(bytes);
       }
       if (data instanceof Uint8Array) {
@@ -256,8 +253,12 @@ if (typeof global.Buffer === 'undefined') {
         return new TextEncoder().encode(data);
       }
       return new Uint8Array(data);
-    },
-    toString: function(this: Uint8Array, encoding?: string) {
+    }
+  } as any;
+  
+  // Add toString method to Uint8Array prototype for Buffer compatibility
+  if (!Uint8Array.prototype.toString) {
+    Uint8Array.prototype.toString = function(encoding?: string) {
       if (encoding === 'base64') {
         // Use our base64 encode function
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -286,8 +287,8 @@ if (typeof global.Buffer === 'undefined') {
         return result;
       }
       return new TextDecoder().decode(this);
-    }
-  } as any;
+    };
+  }
 }
 
 export default global.crypto; 

@@ -41,13 +41,32 @@ class SessionService {
   /**
    * End session manually
    */
-  async endSession(sessionId: string): Promise<{
+  async endSession(sessionId: string, sessionType: 'text' | 'appointment' = 'text'): Promise<{
     status: string;
     sessionsUsed: number;
   }> {
     try {
-      const response = await apiService.post(`/text-sessions/${sessionId}/end`);
-      return response.data;
+      let endpoint;
+      if (sessionType === 'text') {
+        endpoint = `/text-sessions/${sessionId}/end`;
+      } else {
+        endpoint = `/appointments/${sessionId}/end-session`;
+      }
+      
+      console.log('🔍 Calling endpoint:', endpoint);
+      const response = await apiService.post(endpoint);
+      
+      // Handle different response formats
+      if (sessionType === 'text') {
+        // Text session response format
+        return response.data;
+      } else {
+        // Appointment response format - convert to expected format
+        return {
+          status: response.data.success ? 'success' : 'error',
+          sessionsUsed: 1 // Default to 1 session used
+        };
+      }
     } catch (error) {
       console.error('Error ending session:', error);
       throw error;
@@ -57,15 +76,22 @@ class SessionService {
   /**
    * Submit rating for session
    */
-  async submitRating(sessionId: string, rating: number, comment: string): Promise<{
+  async submitRating(sessionId: string, rating: number, comment: string, doctorId?: number, patientId?: number): Promise<{
     reviewId: string;
     rating: number;
   }> {
     try {
-      const response = await apiService.post(`/text-sessions/${sessionId}/rating`, {
+      // Use the doctor rating endpoint for both text sessions and appointments
+      const endpoint = `/doctor-ratings/${doctorId}/${patientId}`;
+      const payload = {
         rating,
-        comment
-      });
+        comment,
+        chatId: sessionId
+      };
+      
+      console.log('🔍 Submitting rating to endpoint:', endpoint);
+      console.log('🔍 Payload:', payload);
+      const response = await apiService.post(endpoint, payload);
       return response.data;
     } catch (error) {
       console.error('Error submitting rating:', error);
