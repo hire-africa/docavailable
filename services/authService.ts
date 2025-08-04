@@ -40,10 +40,29 @@ export interface AuthState {
 }
 
 class AuthService {
-  private baseURL = 'http://172.20.10.11:8000/api'; // Update with your backend URL
+  private baseURL: string;
   private currentUser: UserData | null = null;
   private currentToken: string | null = null;
   private listeners: ((state: AuthState) => void)[] = [];
+
+  constructor() {
+    // Get base URL from environment variables, fallback to local IP
+    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || 
+                       process.env.EXPO_PUBLIC_LARAVEL_API_URL || 
+                       'http://172.20.10.11:8000';
+    
+    // Remove trailing /api if it exists to avoid double /api/api/
+    this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL : `${rawBaseURL}/api`;
+    
+    console.log('AuthService: Initialized with base URL:', this.baseURL);
+    
+    // Check if we're in a web environment and warn about local IP
+    if (typeof window !== 'undefined' && this.baseURL.includes('172.20.10.11')) {
+      console.warn('⚠️  AuthService: Using local IP address in web environment');
+      console.warn('   This may cause login issues. Consider updating your .env file.');
+      console.warn('   For web: use localhost:8000 or your public domain');
+    }
+  }
 
   // Initialize auth state
   async initialize(): Promise<AuthState> {

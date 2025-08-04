@@ -2,22 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { apiService } from '../../app/services/apiService';
 import sessionService from '../../app/services/sessionService';
+import { Icon } from '../../components/Icon';
+import ProfilePictureDisplay from '../../components/ProfilePictureDisplay';
 import RatingModal from '../../components/RatingModal';
+import ReadReceipt from '../../components/ReadReceipt';
 import { useAuth } from '../../contexts/AuthContext';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 
@@ -29,6 +32,8 @@ interface ChatInfo {
   status: string;
   doctor_id?: number;
   patient_id?: number;
+  other_participant_profile_picture?: string;
+  other_participant_profile_picture_url?: string;
 }
 
 export default function ChatPage() {
@@ -51,6 +56,13 @@ export default function ChatPage() {
   // Rating modal state
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
+  
+  // Add state to track if messages have been marked as read
+  // This prevents unnecessary API calls and improves performance
+  const [messagesMarkedAsRead, setMessagesMarkedAsRead] = useState(false);
+  const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
+  const [markReadAttempts, setMarkReadAttempts] = useState(0);
+  const MAX_MARK_READ_ATTEMPTS = 3;
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
@@ -91,6 +103,12 @@ export default function ChatPage() {
     try {
       setLoading(true);
       
+      // Safety check
+      if (!messageStorageService) {
+        console.error('❌ messageStorageService not available in loadChat');
+        return;
+      }
+      
       // Preload messages for better performance
       await messageStorageService.preloadMessages(getAppointmentIdForStorage());
       
@@ -119,6 +137,13 @@ export default function ChatPage() {
   // Send message
   const sendMessage = async () => {
     if (!newMessage.trim() || sending) return;
+
+    // Safety check
+    if (!messageStorageService) {
+      console.error('❌ messageStorageService not available in sendMessage');
+      Alert.alert('Error', 'Message service not available');
+      return;
+    }
 
     setSending(true);
     try {
@@ -159,38 +184,136 @@ export default function ChatPage() {
 
   // Load chat on mount
   useEffect(() => {
-    loadChat();
+    if (messageStorageService) {
+      loadChat();
+    } else {
+      console.error('❌ messageStorageService not available for loadChat');
+    }
   }, []);
 
   // Register for message updates and start auto-sync
   useEffect(() => {
+    // Safety check to ensure messageStorageService is available
+    if (!messageStorageService) {
+      console.error('❌ messageStorageService is not available');
+      return;
+    }
+
     messageStorageService.registerUpdateCallback(getAppointmentIdForStorage(), (updatedMessages) => {
+      // Check if there are new messages from other participants
+      const hasNewMessagesFromOthers = updatedMessages.some(message => 
+        message.sender_id !== currentUserId && 
+        !messages.some(existingMessage => existingMessage.id === message.id)
+      );
+      
+      // Debug: Log delivery status changes for own messages
+      updatedMessages.forEach(message => {
+        if (message.sender_id === currentUserId) {
+          console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
+          
+          // Check if delivery status changed
+          const existingMessage = messages.find(m => m.id === message.id);
+          if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
+            console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
+          }
+          
+          // Check if message is read
+          if (message.delivery_status === 'read') {
+            console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
+          }
+        }
+      });
+      
       setMessages(updatedMessages);
+      
+      // Reset the flag when new messages arrive from others so they can be marked as read
+      if (hasNewMessagesFromOthers) {
+        setMessagesMarkedAsRead(false);
+        setMarkReadAttempts(0); // Reset attempts for new messages
+        console.log(`🔄 Reset read flags due to new messages from others`);
+      }
+      
+      // Also check if there are any unread messages that need to be marked
+      const hasUnreadMessages = updatedMessages.some(message => 
+        message.sender_id !== currentUserId && 
+        (!message.read_by || !message.read_by.some(read => read.user_id === currentUserId))
+      );
+      
+      if (hasUnreadMessages && messagesMarkedAsRead) {
+        console.log(`🔄 Found unread messages, resetting read flag`);
+        setMessagesMarkedAsRead(false);
+        setMarkReadAttempts(0);
+      }
     });
 
     // Start auto-sync for real-time updates
     messageStorageService.startAutoSync(getAppointmentIdForStorage());
 
     return () => {
-      messageStorageService.unregisterUpdateCallback(getAppointmentIdForStorage());
-      messageStorageService.stopAutoSync(getAppointmentIdForStorage());
+      if (messageStorageService) {
+        messageStorageService.unregisterUpdateCallback(getAppointmentIdForStorage());
+        messageStorageService.stopAutoSync(getAppointmentIdForStorage());
+      }
     };
-  }, []);
+  }, [messages, currentUserId]);
+
+  // Mark messages as read when chat is viewed
+  const markMessagesAsRead = async () => {
+    if (!user?.id || isMarkingAsRead || markReadAttempts >= MAX_MARK_READ_ATTEMPTS) return;
+    
+    // Safety check
+    if (!messageStorageService) {
+      console.error('❌ messageStorageService not available in markMessagesAsRead');
+      return;
+    }
+    
+    // Check if there are any unread messages from other participants
+    const hasUnreadMessages = messages.some(message => 
+      message.sender_id !== user.id && 
+      (!message.read_by || !message.read_by.some(read => read.user_id === user.id))
+    );
+    
+    if (!hasUnreadMessages) {
+      setMessagesMarkedAsRead(true);
+      return;
+    }
+    
+    try {
+      setIsMarkingAsRead(true);
+      setMarkReadAttempts(prev => prev + 1);
+      await messageStorageService.markMessagesAsRead(getAppointmentIdForStorage(), user.id);
+      setMessagesMarkedAsRead(true); // Set flag to prevent re-marking
+    } catch (error) {
+      console.error('❌ Error marking messages as read:', error);
+    } finally {
+      setIsMarkingAsRead(false);
+    }
+  };
+
+  // Mark messages as read when component mounts and when messages change
+  useEffect(() => {
+    // Check if there are unread messages that need to be marked
+    const hasUnreadMessages = messages.some(message => 
+      message.sender_id !== user?.id && 
+      (!message.read_by || !message.read_by.some(read => read.user_id === user?.id))
+    );
+    
+    if (messages.length > 0 && !loading && hasUnreadMessages && !isMarkingAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS) {
+      // Add a small delay to prevent rapid successive calls
+      const timeoutId = setTimeout(() => {
+        markMessagesAsRead();
+      }, 1000); // Increased delay to prevent rapid calls and ensure messages are fully loaded
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [messages, loading, isMarkingAsRead, markReadAttempts, user?.id]);
 
   // Handle back button press
   const handleBackPress = () => {
-    console.log('🔍 Back button pressed');
-    console.log('🔍 isPatient:', isPatient);
-    console.log('🔍 isTextSession:', isTextSession);
-    console.log('🔍 appointmentId:', appointmentId);
-    console.log('🔍 user?.user_type:', user?.user_type);
-    
     if (isPatient) {
-      console.log('🔍 Showing end session modal for patient');
       // Show end session modal for patients in any chat session
       setShowEndSessionModal(true);
     } else {
-      console.log('🔍 Going back directly');
       // For doctors, just go back
       router.back();
     }
@@ -210,23 +333,17 @@ export default function ChatPage() {
         sessionId = appointmentId;
       }
       
-      console.log('🔍 Ending session with ID:', sessionId);
       const sessionType = isTextSession ? 'text' : 'appointment';
-      console.log('🔍 Session type:', sessionType);
       const result = await sessionService.endSession(sessionId, sessionType);
       
-      console.log('🔍 Session end result:', result);
-      
       if (result.status === 'success') {
-        console.log('🔍 Session ended successfully, showing rating modal');
         // Show rating modal instead of success alert
         setShowEndSessionModal(false);
         setShowRatingModal(true);
       } else {
-        console.log('🔍 Session end failed:', result);
         Alert.alert('Error', 'Failed to end session. Please try again.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error ending session:', error);
       Alert.alert('Error', 'Failed to end session. Please try again.');
     } finally {
@@ -288,6 +405,7 @@ export default function ChatPage() {
   // Debug modal state
   console.log('🔍 showEndSessionModal state:', showEndSessionModal);
   console.log('🔍 showRatingModal state:', showRatingModal);
+  console.log('🔍 endingSession state:', endingSession);
 
   if (loading) {
     return (
@@ -319,20 +437,54 @@ export default function ChatPage() {
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         
+        {/* Profile Picture */}
+        <View style={{ marginRight: 12 }}>
+          <ProfilePictureDisplay
+            imageUri={chatInfo?.other_participant_profile_picture || null}
+            profilePictureUrl={chatInfo?.other_participant_profile_picture_url || null}
+            size={40}
+            borderColor="#4CAF50"
+          />
+        </View>
+        
+        {/* Name */}
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
             {chatInfo?.other_participant_name || 'Chat'}
           </Text>
-          {chatInfo && (
-            <Text style={{ fontSize: 14, color: '#666', marginTop: 2 }}>
-              {chatInfo.appointment_date} at {chatInfo.appointment_time}
-            </Text>
-          )}
         </View>
         
-        <TouchableOpacity onPress={safeRefreshMessages} style={{ padding: 8 }}>
-          <Ionicons name="refresh" size={20} color="#4CAF50" />
-        </TouchableOpacity>
+        {/* Call Icons */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
+          <TouchableOpacity 
+            style={{ 
+              padding: 8, 
+              marginRight: 1,
+            }}
+            onPress={() => {
+              // TODO: Implement video call functionality
+              Alert.alert('Video Call', 'Video call feature coming soon!');
+            }}
+          >
+            <Icon name="video" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={{ 
+              padding: 8,
+            }}
+            onPress={() => {
+              // TODO: Implement audio call functionality
+              Alert.alert('Audio Call', 'Audio call feature coming soon!');
+            }}
+          >
+            <Icon name="voice" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          
+
+        </View>
+        
+
       </View>
 
       {/* Messages */}
@@ -346,15 +498,42 @@ export default function ChatPage() {
           contentContainerStyle={{ padding: 16 }}
           showsVerticalScrollIndicator={false}
         >
-          {messages.map((message) => (
-            <View
-              key={message.id}
-              style={{
-                alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
-                marginBottom: 12,
-                maxWidth: '80%',
-              }}
-            >
+          {/* End-to-End Encryption Message */}
+          <View style={{
+            backgroundColor: '#E8F5E9',
+            borderRadius: 12,
+            padding: 16,
+            marginBottom: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+          }}>
+            <Ionicons 
+              name="shield-checkmark" 
+              size={18} 
+              color="#4CAF50" 
+              style={{ marginRight: 8, marginTop: 1 }}
+            />
+            <Text style={{
+              fontSize: 12,
+              color: '#4CAF50',
+              fontWeight: '500',
+              flex: 1,
+              lineHeight: 16,
+            }}>
+              Messages are end-to-end encrypted, only people in this chat can read, listen or share them.
+            </Text>
+          </View>
+          {messages.map((message, index) => {
+            return (
+              <View
+                key={message.id}
+                style={{
+                  alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
+                  marginBottom: 12,
+                  maxWidth: '80%',
+                }}
+              >
               <View
                 style={{
                   backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
@@ -373,22 +552,22 @@ export default function ChatPage() {
                 >
                   {message.message}
                 </Text>
-                <Text
-                  style={{
-                    color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.7)' : '#666',
-                    fontSize: 12,
-                    marginTop: 4,
-                    alignSelf: 'flex-end',
-                  }}
-                >
-                  {new Date(message.created_at).toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </Text>
+                <ReadReceipt
+                  isOwnMessage={message.sender_id === currentUserId}
+                  deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                  readBy={message.read_by}
+                  otherParticipantId={
+                    chatInfo?.doctor_id === currentUserId 
+                      ? chatInfo?.patient_id 
+                      : chatInfo?.doctor_id || 
+                        (message.sender_id !== currentUserId ? message.sender_id : undefined)
+                  }
+                  messageTime={message.created_at}
+                />
               </View>
             </View>
-          ))}
+          );
+          })}
         </ScrollView>
 
         {/* Input */}
@@ -401,6 +580,34 @@ export default function ChatPage() {
           borderTopColor: '#E5E5E5',
           backgroundColor: '#fff',
         }}>
+          {/* Image Button */}
+          <TouchableOpacity
+            onPress={() => {
+              // TODO: Implement image picker functionality
+              Alert.alert('Image', 'Image picker feature coming soon!');
+            }}
+            style={{
+              padding: 8,
+              marginRight: 8,
+            }}
+          >
+            <Ionicons name="image" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          
+          {/* Camera Button */}
+          <TouchableOpacity
+            onPress={() => {
+              // TODO: Implement camera functionality
+              Alert.alert('Camera', 'Camera feature coming soon!');
+            }}
+            style={{
+              padding: 8,
+              marginRight: 8,
+            }}
+          >
+            <Ionicons name="camera" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          
           <TextInput
             value={newMessage}
             onChangeText={setNewMessage}
@@ -420,8 +627,11 @@ export default function ChatPage() {
           />
           
           <TouchableOpacity
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || sending}
+            onPress={newMessage.trim() ? sendMessage : () => {
+              // TODO: Implement voice note functionality
+              Alert.alert('Voice Note', 'Voice note feature coming soon!');
+            }}
+            disabled={sending}
             style={{
               backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5',
               borderRadius: 20,
@@ -432,8 +642,10 @@ export default function ChatPage() {
           >
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
-            ) : (
+            ) : newMessage.trim() ? (
               <Ionicons name="send" size={20} color="#fff" />
+            ) : (
+              <Ionicons name="mic" size={20} color="#666" />
             )}
           </TouchableOpacity>
         </View>

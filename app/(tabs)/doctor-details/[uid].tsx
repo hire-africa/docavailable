@@ -143,8 +143,9 @@ export default function DoctorProfilePage() {
             {
               text: 'Go to Chat',
               onPress: () => {
-                // Navigate to chat using appointment ID
-                router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: sessionData.appointment_id } });
+                // Navigate to chat using text session ID with proper prefix
+                const chatId = `text_session_${sessionData.session_id}`;
+                router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
               }
             },
             {

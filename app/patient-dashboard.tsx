@@ -1562,8 +1562,9 @@ export default function PatientDashboard() {
               borderColor: '#4CAF50'
             }}
             onPress={() => {
-              // Navigate to chat using appointment ID
-              router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: activeTextSession.appointment_id } });
+              // Navigate to chat using text session ID with proper prefix
+              const chatId = `text_session_${activeTextSession.appointment_id}`;
+              router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
             }}
           >
             {activeTextSession.doctor?.profile_picture_url ? (
@@ -2110,12 +2111,18 @@ export default function PatientDashboard() {
                   <Text style={styles.viewProfileButtonText}>View Profile</Text>
                 </TouchableOpacity>
               </View>
-              <DoctorProfilePicture
-                profilePictureUrl={doctor.profile_picture_url}
-                profilePicture={doctor.profile_picture}
-                size={90}
-                style={styles.doctorImageNew}
-              />
+              <View style={styles.doctorImageContainer}>
+                <DoctorProfilePicture
+                  profilePictureUrl={doctor.profile_picture_url}
+                  profilePicture={doctor.profile_picture}
+                  size={90}
+                  style={styles.doctorImageNew}
+                />
+                {/* Green dot for online doctors */}
+                {doctor.is_online && (
+                  <View style={styles.onlineIndicator} />
+                )}
+              </View>
             </View>
           ))
         )}
@@ -4465,16 +4472,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
-  onlineIndicator: {
-    flexDirection: 'row',
+  doctorImageContainer: {
+    position: 'relative',
     alignItems: 'center',
-    marginRight: 8,
+    justifyContent: 'center',
   },
-  onlineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  onlineIndicator: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: '#4CAF50',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
   appointmentHeader: {
     flexDirection: 'row',

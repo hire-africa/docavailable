@@ -120,7 +120,10 @@ export default function DoctorProfileScreen() {
           [
             {
               text: 'Go to Chat',
-              onPress: () => router.push(`/chat/${data.data.session_id}`),
+              onPress: () => {
+                const chatId = `text_session_${data.data.session_id}`;
+                router.push(`/chat/${chatId}`);
+              },
             },
             {
               text: 'Stay Here',

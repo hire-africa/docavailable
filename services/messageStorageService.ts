@@ -12,15 +12,28 @@ export interface Message {
   timestamp: string;
   created_at: string;
   updated_at: string;
-  // reactions?: MessageReaction[]; // COMMENTED OUT
-  // read_by?: MessageRead[]; // COMMENTED OUT
-  // is_edited?: boolean; // COMMENTED OUT
-  // edited_at?: string; // COMMENTED OUT
-  // reply_to_id?: string; // COMMENTED OUT
-  // reply_to_message?: string; // COMMENTED OUT
-  // reply_to_sender_name?: string; // COMMENTED OUT
-  // delivery_status?: 'sending' | 'sent' | 'delivered' | 'read'; // COMMENTED OUT
+  reactions?: MessageReaction[];
+  read_by?: MessageRead[];
+  is_edited?: boolean;
+  edited_at?: string;
+  reply_to_id?: string;
+  reply_to_message?: string;
+  reply_to_sender_name?: string;
+  delivery_status?: 'sending' | 'sent' | 'delivered' | 'read';
   temp_id?: string;
+}
+
+export interface MessageReaction {
+  reaction: string;
+  user_id: number;
+  user_name: string;
+  timestamp?: string;
+}
+
+export interface MessageRead {
+  user_id: number;
+  user_name: string;
+  read_at: string;
 }
 
 // export interface MessageReaction { // COMMENTED OUT
@@ -187,14 +200,24 @@ class MessageStorageService {
       if (response.success && response.data) {
         const serverData = response.data as LocalStorageData;
         
-        // Update local storage with server data
+        // Merge server data with local data to preserve local read receipts
+        const localData = await this.getLocalData(appointmentId);
+        const mergedMessages = this.mergeMessagesWithReadReceipts(localData.messages, serverData.messages);
+        
+        // Update local storage with merged data
+        const updatedData = {
+          ...serverData,
+          messages: mergedMessages,
+          last_sync: new Date().toISOString()
+        };
+        
         const key = this.getStorageKey(appointmentId);
-        await AsyncStorage.setItem(key, JSON.stringify(serverData));
+        await AsyncStorage.setItem(key, JSON.stringify(updatedData));
         
-        // Notify callbacks with server messages
-        await this.notifyCallbacks(appointmentId, serverData.messages);
+        // Notify callbacks with merged messages
+        await this.notifyCallbacks(appointmentId, mergedMessages);
         
-        return serverData.messages;
+        return mergedMessages;
       }
       
       return [];
@@ -219,11 +242,16 @@ class MessageStorageService {
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        delivery_status: 'sending',
         temp_id: tempId // Store temp_id for tracking
       };
       
       // Store message locally first
       await this.storeMessage(appointmentId, message);
+      
+      // Update delivery status to 'sent'
+      console.log(`📤 Message sent, updating status to 'sent' for tempId: ${tempId}`);
+      await this.updateMessageDeliveryStatus(appointmentId, tempId, 'sent');
       
       // Send to server with temp_id for duplicate detection
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
@@ -235,11 +263,14 @@ class MessageStorageService {
       if (response.success && response.data) {
         const serverMessage = response.data as Message;
         
-        // Update message with server response
+        // Update message with server response and mark as delivered
+        console.log(`📤 Message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
         await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
+        await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
         
         return serverMessage;
       } else {
+        // If server request failed, keep as 'sent' status
         return message;
       }
     } catch (error) {
@@ -256,9 +287,35 @@ class MessageStorageService {
       );
       
       if (messageIndex !== -1) {
-        // Update the message with server data
+        const existingMessage = data.messages[messageIndex];
+        
+        // STRONG PROTECTION: Never allow delivery status downgrades
+        let deliveryStatus = updatedMessage.delivery_status;
+        if (existingMessage.delivery_status && updatedMessage.delivery_status) {
+          const localStatus = this.getDeliveryStatusPriority(existingMessage.delivery_status);
+          const serverStatus = this.getDeliveryStatusPriority(updatedMessage.delivery_status);
+          
+          console.log(`🔍 updateMessageInStorage: Comparing delivery status for message ${tempId}: local=${existingMessage.delivery_status}(${localStatus}) vs server=${updatedMessage.delivery_status}(${serverStatus})`);
+          
+          // ALWAYS preserve local status if it's higher or equal
+          if (localStatus >= serverStatus) {
+            deliveryStatus = existingMessage.delivery_status;
+            console.log(`✅ PROTECTED: Preserved local delivery status: ${existingMessage.delivery_status} over server: ${updatedMessage.delivery_status}`);
+          } else {
+            // This should never happen, but log it as a warning
+            console.log(`⚠️ WARNING: Server tried to downgrade delivery status from ${existingMessage.delivery_status} to ${updatedMessage.delivery_status} - BLOCKED`);
+            deliveryStatus = existingMessage.delivery_status;
+          }
+        } else if (existingMessage.delivery_status && !updatedMessage.delivery_status) {
+          // If server doesn't have delivery status but local does, preserve local
+          deliveryStatus = existingMessage.delivery_status;
+          console.log(`✅ PROTECTED: Preserved local delivery status when server had none: ${existingMessage.delivery_status}`);
+        }
+        
+        // Update the message with server data but preserve local delivery status
         data.messages[messageIndex] = {
           ...updatedMessage,
+          delivery_status: deliveryStatus,
           temp_id: tempId, // Preserve temp_id for tracking
         };
         
@@ -322,7 +379,8 @@ class MessageStorageService {
           await this.loadFromServer(appointmentId);
         }
       } catch (error: any) {
-        // Silent error handling
+        // Silent error handling for auto-sync to prevent spam
+        this.logErrorOnce('Auto-sync error:', error, `auto-sync-${appointmentId}`);
       }
     }, this.SYNC_INTERVAL);
     
@@ -367,6 +425,86 @@ class MessageStorageService {
     return `${this.STORAGE_PREFIX}${appointmentId}`;
   }
 
+  private getDeliveryStatusPriority(status: 'sending' | 'sent' | 'delivered' | 'read'): number {
+    switch (status) {
+      case 'sending': return 1;
+      case 'sent': return 2;
+      case 'delivered': return 3;
+      case 'read': return 4;
+      default: return 0;
+    }
+  }
+
+  private mergeMessagesWithReadReceipts(localMessages: Message[], serverMessages: Message[]): Message[] {
+    const mergedMap = new Map<string, Message>();
+    
+    // Add server messages first (server is authoritative for message content)
+    serverMessages.forEach(message => {
+      mergedMap.set(message.id, message);
+    });
+    
+    // Merge local data (read receipts and delivery status) into server messages
+    let mergedReadReceipts = 0;
+    let mergedDeliveryStatus = 0;
+    let protectedDeliveryStatus = 0;
+    localMessages.forEach(localMessage => {
+      const serverMessage = mergedMap.get(localMessage.id);
+      if (serverMessage) {
+        // Merge read receipts
+        if (localMessage.read_by && localMessage.read_by.length > 0) {
+          // Initialize read_by array if it doesn't exist
+          if (!serverMessage.read_by) {
+            serverMessage.read_by = [];
+          }
+          
+          // Merge read receipts, avoiding duplicates
+          localMessage.read_by.forEach(localRead => {
+            const alreadyExists = serverMessage.read_by!.some(
+              serverRead => serverRead.user_id === localRead.user_id
+            );
+            if (!alreadyExists) {
+              serverMessage.read_by!.push(localRead);
+              mergedReadReceipts++;
+            }
+          });
+        }
+        
+        // STRONG PROTECTION: Never allow delivery status downgrades, BUT allow upgrades for read receipts
+        if (localMessage.delivery_status && serverMessage.delivery_status) {
+          const localStatus = this.getDeliveryStatusPriority(localMessage.delivery_status);
+          const serverStatus = this.getDeliveryStatusPriority(serverMessage.delivery_status);
+          
+          // SPECIAL CASE: Allow upgrade from 'delivered' to 'read' when server has read receipts
+          if (localMessage.delivery_status === 'delivered' && serverMessage.delivery_status === 'read' && 
+              serverMessage.read_by && serverMessage.read_by.length > 0) {
+            serverMessage.delivery_status = 'read';
+            mergedDeliveryStatus++;
+          }
+          // ALWAYS preserve local status if it's higher or equal (for other cases)
+          else if (localStatus >= serverStatus) {
+            serverMessage.delivery_status = localMessage.delivery_status;
+            mergedDeliveryStatus++;
+          } else {
+            // This should never happen, but log it as a warning
+            console.log(`⚠️ WARNING: Server tried to downgrade delivery status from ${localMessage.delivery_status} to ${serverMessage.delivery_status} - BLOCKED`);
+            serverMessage.delivery_status = localMessage.delivery_status;
+            protectedDeliveryStatus++;
+          }
+        } else if (localMessage.delivery_status && !serverMessage.delivery_status) {
+          // If server doesn't have delivery status but local does, preserve local
+          serverMessage.delivery_status = localMessage.delivery_status;
+          mergedDeliveryStatus++;
+        }
+      }
+    });
+    
+
+    
+    return Array.from(mergedMap.values()).sort((a, b) => 
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+  }
+
   async preloadMessages(appointmentId: number): Promise<void> {
     try {
       // Preload messages from server for better performance
@@ -389,48 +527,100 @@ class MessageStorageService {
     }
   }
 
-  // async markMessagesAsRead(appointmentId: number, userId: number): Promise<void> { // COMMENTED OUT
-  //   try {
-  //     // Mark messages as read locally
-  //     const data = await this.getLocalData(appointmentId);
-  //     const updatedMessages = data.messages.map(message => {
-  //       if (!message.read_by) {
-  //         message.read_by = [];
-  //       }
-  //       
-  //       const alreadyRead = message.read_by.some(read => read.user_id === userId);
-  //       if (!alreadyRead) {
-  //         message.read_by.push({
-  //           user_id: userId,
-  //           user_name: `User ${userId}`, // This should be replaced with actual user name
-  //           read_at: new Date().toISOString()
-  //         });
-  //       }
-  //       return message;
-  //     });
-  //     
-  //     data.messages = updatedMessages;
-  //     data.last_sync = new Date().toISOString();
-  //     
-  //     const key = this.getStorageKey(appointmentId);
-  //     await AsyncStorage.setItem(key, JSON.stringify(data));
-  //     
-  //     // Check connectivity before notifying server
-  //     const isConnected = await this.checkConnectivity();
-  //     if (isConnected) {
-  //       try {
-  //         await apiService.post(`/chat/${appointmentId}/mark-read`, {
-  //           user_id: userId,
-  //           timestamp: new Date().toISOString()
-  //         });
-  //       } catch (error) {
-  //         // Silent error for server notification
-  //       }
-  //     }
-  //   } catch (error) {
-  //     this.logErrorOnce('Error marking messages as read:', error, `appointment-${appointmentId}`);
-  //   }
-  // }
+  async markMessagesAsRead(appointmentId: number, userId: number): Promise<void> {
+    try {
+      // Mark messages as read locally
+      const data = await this.getLocalData(appointmentId);
+      
+      const updatedMessages = data.messages.map(message => {
+        if (!message.read_by) {
+          message.read_by = [];
+        }
+        
+        const alreadyRead = message.read_by.some(read => read.user_id === userId);
+        if (!alreadyRead) {
+          message.read_by.push({
+            user_id: userId,
+            user_name: `User ${userId}`, // This should be replaced with actual user name
+            read_at: new Date().toISOString()
+          });
+          
+          // Update delivery status to 'read' for messages that are now read
+          if (message.sender_id !== userId) {
+            // Check if this message should be marked as read (has read_by entries)
+            const hasReadEntries = message.read_by && message.read_by.length > 0;
+            
+            if (hasReadEntries && message.delivery_status !== 'read') {
+              message.delivery_status = 'read';
+            } else if (!message.delivery_status && hasReadEntries) {
+              // If no delivery status but has read entries, set it to 'read'
+              message.delivery_status = 'read';
+            }
+          }
+        }
+        return message;
+      });
+      
+      data.messages = updatedMessages;
+      data.last_sync = new Date().toISOString();
+      
+      const key = this.getStorageKey(appointmentId);
+      await AsyncStorage.setItem(key, JSON.stringify(data));
+      
+      // Notify callbacks
+      await this.notifyCallbacks(appointmentId, data.messages);
+      
+      // Notify server with improved error handling and retry logic
+      try {
+        const response = await apiService.post(`/chat/${appointmentId}/mark-read`, {
+          user_id: userId,
+          timestamp: new Date().toISOString()
+        });
+        
+        if (!response.success) {
+          console.log('❌ Server returned error for mark-read:', response.message);
+        }
+      } catch (error: any) {
+        // Log error but don't throw to prevent infinite loops
+        console.log('❌ Failed to notify server of read status:', error?.message || error);
+        
+        // Don't retry on timeout errors to prevent infinite loops
+        if (error?.message?.includes('timeout') || error?.code === 'ECONNABORTED') {
+          return;
+        }
+        
+        // For other errors, we could implement a retry mechanism in the future
+        // For now, just log the error and continue
+      }
+    } catch (error) {
+      this.logErrorOnce('Error marking messages as read:', error, `appointment-${appointmentId}`);
+    }
+  }
+
+  async updateMessageDeliveryStatus(appointmentId: number, messageId: string, status: 'sending' | 'sent' | 'delivered' | 'read'): Promise<void> {
+    try {
+      const data = await this.getLocalData(appointmentId);
+      const messageIndex = data.messages.findIndex(m => 
+        m.id === messageId || m.temp_id === messageId
+      );
+      
+      if (messageIndex !== -1) {
+        const oldStatus = data.messages[messageIndex].delivery_status;
+        data.messages[messageIndex].delivery_status = status;
+        data.last_sync = new Date().toISOString();
+        
+        console.log(`📤 Delivery status updated: ${oldStatus} → ${status} for messageId: ${messageId}`);
+        
+        const key = this.getStorageKey(appointmentId);
+        await AsyncStorage.setItem(key, JSON.stringify(data));
+        
+        // Notify callbacks
+        await this.notifyCallbacks(appointmentId, data.messages);
+      }
+    } catch (error) {
+      this.logErrorOnce('Error updating message delivery status:', error, `message-${messageId}`);
+    }
+  }
 
   // async startTyping(appointmentId: number, userId: number, userName: string): Promise<void> { // COMMENTED OUT
   //   try {

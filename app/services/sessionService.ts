@@ -54,12 +54,30 @@ class SessionService {
       }
       
       console.log('🔍 Calling endpoint:', endpoint);
+      console.log('🔍 Session type:', sessionType);
+      console.log('🔍 Session ID:', sessionId);
+      
       const response = await apiService.post(endpoint);
+      
+      console.log('🔍 Response received:', response);
+      console.log('🔍 Response data:', response.data);
       
       // Handle different response formats
       if (sessionType === 'text') {
-        // Text session response format
-        return response.data;
+        // Text session response format - check if it has the expected structure
+        if (response.data && response.data.success) {
+          console.log('🔍 Text session ended successfully');
+          return {
+            status: 'success',
+            sessionsUsed: 1
+          };
+        } else {
+          console.error('🔍 Text session response format error:', response.data);
+          return {
+            status: 'error',
+            sessionsUsed: 0
+          };
+        }
       } else {
         // Appointment response format - convert to expected format
         return {
@@ -69,6 +87,12 @@ class SessionService {
       }
     } catch (error) {
       console.error('Error ending session:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        statusText: error?.response?.statusText
+      });
       throw error;
     }
   }
