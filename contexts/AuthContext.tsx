@@ -135,12 +135,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('AuthContext: Fetched user data:', data);
       
       if (data) {
+        // Force immediate update of both user and userData
         setUserData(data);
-        setUser(data); // Set user to be the same as userData
+        setUser(data);
+        
         // Get token from authService
         const storedToken = await authService.getStoredToken();
         setToken(storedToken);
-        console.log('AuthContext: User data refreshed successfully:', data?.user_type);
+        
+        console.log('AuthContext: User data refreshed successfully:', {
+          user_type: data?.user_type,
+          profile_picture_url: data?.profile_picture_url,
+          profile_picture: data?.profile_picture
+        });
+        
+        // Force a re-render by triggering state update
+        setTimeout(() => {
+          setUserData(prev => ({ ...prev, ...data }));
+          setUser(prev => ({ ...prev, ...data }));
+        }, 50);
       } else {
         console.log('AuthContext: No user data received from API, but keeping existing data');
         // Don't clear existing data if API fails - keep what we have

@@ -3,6 +3,8 @@ import { Audio } from 'expo-av';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
+    Platform,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -12,9 +14,55 @@ import {
 interface VoiceMessagePlayerProps {
   audioUri: string;
   isOwnMessage?: boolean;
+  timestamp?: string;
+  deliveryStatus?: 'sending' | 'sent' | 'delivered' | 'read';
+  profilePictureUrl?: string;
 }
 
-export default function VoiceMessagePlayer({ audioUri, isOwnMessage = false }: VoiceMessagePlayerProps) {
+export default function VoiceMessagePlayer({ 
+  audioUri, 
+  isOwnMessage = false, 
+  timestamp,
+  deliveryStatus = 'sent',
+  profilePictureUrl
+}: VoiceMessagePlayerProps) {
+  // Debug profile picture URL
+  console.log('VoiceMessagePlayer Debug:', {
+    profilePictureUrl,
+    isOwnMessage,
+    hasUrl: !!profilePictureUrl
+  });
+
+  const getImageUrl = (uri: string) => {
+    console.log('VoiceMessagePlayer getImageUrl - Input URI:', uri);
+    
+    // If it's already a full URL, return as is
+    if (uri.startsWith('http')) {
+      console.log('VoiceMessagePlayer getImageUrl - Returning full URL as is:', uri);
+      return uri;
+    }
+    
+    // If it's a local storage path, construct the full URL
+    const baseUrl = Platform.select({
+      web: 'http://172.20.10.11:8000',
+      default: 'http://172.20.10.11:8000'
+    });
+    
+    // Remove any leading slash from the URI to avoid double slashes
+    const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
+    
+    // Check if the URI already contains the base URL to avoid double prefixing
+    if (cleanUri.includes('172.20.10.11:8000')) {
+      console.log('VoiceMessagePlayer getImageUrl - URI already contains base URL, returning as is:', cleanUri);
+      return cleanUri;
+    }
+    
+    const fullUrl = `${baseUrl}/storage/${cleanUri}`;
+    console.log('VoiceMessagePlayer getImageUrl - Constructed full URL:', fullUrl);
+    
+    return fullUrl;
+  };
+
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +116,10 @@ export default function VoiceMessagePlayer({ audioUri, isOwnMessage = false }: V
       if (isPlaying) {
         await sound.pauseAsync();
       } else {
+        // If audio has finished, restart from beginning
+        if (position >= duration && duration > 0) {
+          await sound.setPositionAsync(0);
+        }
         await sound.playAsync();
       }
     } catch (error) {
@@ -82,14 +134,29 @@ export default function VoiceMessagePlayer({ audioUri, isOwnMessage = false }: V
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const getProgressPercentage = () => {
-    if (duration === 0) return 0;
-    return (position / duration) * 100;
+
+
+  const renderDeliveryStatus = () => {
+    if (isOwnMessage) {
+      switch (deliveryStatus) {
+        case 'sending':
+          return <ActivityIndicator size={12} color="#fff" />;
+        case 'sent':
+          return <Ionicons name="checkmark" size={12} color="#fff" />;
+        case 'delivered':
+          return <Ionicons name="checkmark-done" size={12} color="#fff" />;
+        case 'read':
+          return <Ionicons name="checkmark-done" size={12} color="#4CAF50" />;
+        default:
+          return null;
+      }
+    }
+    return null;
   };
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
         <ActivityIndicator size="small" color={isOwnMessage ? "#fff" : "#4CAF50"} />
         <Text style={[styles.loadingText, { color: isOwnMessage ? "#fff" : "#666" }]}>
           Loading voice message...
@@ -99,34 +166,89 @@ export default function VoiceMessagePlayer({ audioUri, isOwnMessage = false }: V
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        onPress={playPause}
-        style={styles.playButton}
-        disabled={!sound}
-      >
-        <Ionicons
-          name={isPlaying ? "pause" : "play"}
-          size={20}
-          color={isOwnMessage ? "#fff" : "#4CAF50"}
-        />
-      </TouchableOpacity>
-      
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBar}>
-          <View 
-            style={[
-              styles.progressFill,
-              { 
-                width: `${getProgressPercentage()}%`,
-                backgroundColor: isOwnMessage ? "#fff" : "#4CAF50"
-              }
-            ]} 
-          />
+    <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+      {/* Profile Picture */}
+      <View style={styles.profilePictureContainer}>
+                 {profilePictureUrl ? (
+           <Image
+             source={{ uri: profilePictureUrl }}
+             style={styles.profilePicture}
+             onError={() => {
+               console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
+             }}
+             onLoad={() => {
+               console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
+             }}
+           />
+         ) : (
+          <View style={styles.profilePictureFallback}>
+            <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
+          </View>
+        )}
+      </View>
+
+      {/* Main Content Container */}
+      <View style={styles.contentContainer}>
+        {/* Top Row: Microphone, Play Button, Waveform */}
+        <View style={styles.topRow}>
+          {/* Microphone Icon */}
+          <View style={styles.microphoneContainer}>
+            <Ionicons
+              name="mic"
+              size={18}
+              color={isOwnMessage ? "#fff" : "#666"}
+            />
+          </View>
+
+          {/* Play Button */}
+          <TouchableOpacity
+            onPress={playPause}
+            style={styles.playButton}
+            disabled={!sound}
+          >
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={18}
+              color={isOwnMessage ? "#fff" : "#4CAF50"}
+            />
+          </TouchableOpacity>
+          
+                                                                 {/* Static Waveform */}
+             <View style={styles.waveformContainer}>
+               <View style={styles.waveform}>
+                 {[0.4, 0.6, 0.8, 0.5, 0.9, 0.3, 0.7, 0.6, 0.8, 0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.4, 0.7, 0.5, 0.8, 0.6].map((height, i) => (
+                   <View
+                     key={i}
+                     style={[
+                       styles.waveformBar,
+                       {
+                         height: `${height * 100}%`,
+                         backgroundColor: isOwnMessage ? "#fff" : "#666"
+                       }
+                     ]}
+                   />
+                 ))}
+               </View>
+             </View>
         </View>
-        <Text style={[styles.timeText, { color: isOwnMessage ? "#fff" : "#666" }]}>
-          {formatTime(position)} / {formatTime(duration)}
-        </Text>
+
+        {/* Bottom Row: Duration and Timestamp */}
+        <View style={styles.bottomRow}>
+          {/* Duration */}
+          <Text style={[styles.durationText, { color: isOwnMessage ? "#fff" : "#666" }]}>
+            {formatTime(position)}
+          </Text>
+
+          {/* Timestamp and Delivery Status */}
+          <View style={styles.timestampContainer}>
+            {timestamp && (
+              <Text style={[styles.timestampText, { color: isOwnMessage ? "#fff" : "#666" }]}>
+                {timestamp}
+              </Text>
+            )}
+            {renderDeliveryStatus()}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -135,11 +257,40 @@ export default function VoiceMessagePlayer({ audioUri, isOwnMessage = false }: V
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    maxWidth: '85%',
+    minHeight: 70,
+  },
+  ownMessage: {
+    backgroundColor: '#4CAF50', // Match the bubble green color
+    alignSelf: 'flex-end',
+  },
+  otherMessage: {
+    backgroundColor: '#f0f0f0',
+    alignSelf: 'flex-start',
+  },
+  profilePictureContainer: {
+    marginRight: 8,
+  },
+  profilePicture: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  profilePictureFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 8,
-    marginVertical: 4,
+  },
+  microphoneContainer: {
+    marginRight: 8,
+    opacity: 0.8,
   },
   playButton: {
     width: 32,
@@ -150,25 +301,57 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
   },
-  progressContainer: {
+  waveformContainer: {
     flex: 1,
+    height: 32,
+    justifyContent: 'center',
+    position: 'relative',
+    marginRight: 8,
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
-    marginBottom: 4,
+  waveform: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 20,
+    gap: 2,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
+  waveformBar: {
+    width: 2,
+    borderRadius: 1,
+    minHeight: 4,
   },
-  timeText: {
-    fontSize: 12,
+
+  durationText: {
+    fontSize: 11,
     opacity: 0.8,
   },
+  timestampContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  timestampText: {
+    fontSize: 10,
+    opacity: 0.7,
+  },
   loadingText: {
-    fontSize: 12,
-    marginLeft: 8,
+    fontSize: 14,
+    marginLeft: 12,
+  },
+  contentContainer: {
+    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 6,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    justifyContent: 'space-between',
   },
 }); 

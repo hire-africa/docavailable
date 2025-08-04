@@ -58,7 +58,7 @@ export interface LocalStorageData {
 
 class MessageStorageService {
   private readonly STORAGE_PREFIX = 'chat_messages_';
-  private readonly SYNC_INTERVAL = 5000; // 30 seconds - much longer interval
+  private readonly SYNC_INTERVAL = 5000; // 30 seconds - much longer interval to prevent interference with image uploads
   private syncTimers: Map<number, ReturnType<typeof setInterval>> = new Map();
   private updateCallbacks: Map<number, (messages: Message[]) => void> = new Map();
   
@@ -73,6 +73,16 @@ class MessageStorageService {
     if (!lastLog || (now - lastLog) > this.ERROR_LOG_COOLDOWN) {
       this.errorLogTimestamps.set(key, now);
       console.error(message, error);
+    }
+  }
+
+  // Check if user is authenticated before making API calls
+  private async isAuthenticated(): Promise<boolean> {
+    try {
+      const token = await apiService.getAuthToken();
+      return !!token;
+    } catch (error) {
+      return false;
     }
   }
 
@@ -105,11 +115,15 @@ class MessageStorageService {
   private async notifyCallbacks(appointmentId: number, messages: Message[]): Promise<void> {
     const callback = this.updateCallbacks.get(appointmentId);
     if (callback) {
-      // Sort messages by creation time
-      const sortedMessages = messages.sort((a, b) => 
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-      callback(sortedMessages);
+      try {
+        // Sort messages by creation time
+        const sortedMessages = messages.sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        callback(sortedMessages);
+      } catch (error) {
+        this.logErrorOnce('Error in update callback:', error, `callback-${appointmentId}`);
+      }
     }
   }
 
@@ -166,7 +180,29 @@ class MessageStorageService {
         (m.temp_id && message.id === m.temp_id)
       );
       
-      if (!exists) {
+      // For image messages, also check by media_url to prevent duplicates
+      let imageExists = false;
+      if (message.message_type === 'image' && message.media_url) {
+        imageExists = data.messages.some(m => 
+          m.message_type === 'image' && 
+          m.media_url === message.media_url &&
+          m.sender_id === message.sender_id
+        );
+      }
+      
+      if (!exists && !imageExists) {
+        // Special protection for image messages
+        if (message.message_type === 'image') {
+          console.log(`🔒 Storing image message with strong protection: ${message.id}`);
+          console.log(`📷 Image message details:`, {
+            id: message.id,
+            temp_id: message.temp_id,
+            media_url: message.media_url?.substring(0, 50) + '...',
+            sender_id: message.sender_id,
+            delivery_status: message.delivery_status
+          });
+        }
+        
         data.messages.push(message);
         data.message_count = data.messages.length;
         data.last_sync = new Date().toISOString();
@@ -175,6 +211,22 @@ class MessageStorageService {
         
         // Notify callbacks only once
         await this.notifyCallbacks(appointmentId, data.messages);
+        
+        if (message.message_type === 'image') {
+          console.log(`✅ Image message stored successfully: ${message.id}`);
+        }
+      } else {
+        if (message.message_type === 'image') {
+          console.log(`⚠️ Image message duplicate detected:`, {
+            id: message.id,
+            temp_id: message.temp_id,
+            media_url: message.media_url?.substring(0, 50) + '...',
+            exists,
+            imageExists
+          });
+        } else {
+          console.log(`⚠️ Duplicate message detected, skipping: ${message.id}`);
+        }
       }
     } catch (error) {
       this.logErrorOnce('Error storing message locally:', error, `appointment-${appointmentId}`);
@@ -195,6 +247,13 @@ class MessageStorageService {
 
   async loadFromServer(appointmentId: number): Promise<Message[]> {
     try {
+      // Check authentication before making API call
+      const isAuth = await this.isAuthenticated();
+      if (!isAuth) {
+        console.log('❌ User not authenticated, skipping server load');
+        return await this.getMessages(appointmentId);
+      }
+
       const response = await apiService.get(`/chat/${appointmentId}/local-storage`);
       
       if (response.success && response.data) {
@@ -230,6 +289,13 @@ class MessageStorageService {
 
   async sendMessage(appointmentId: number, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
     try {
+      // Check authentication before sending message
+      const isAuth = await this.isAuthenticated();
+      if (!isAuth) {
+        console.log('❌ User not authenticated, cannot send message');
+        return null;
+      }
+
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       const message: Message = {
@@ -279,6 +345,145 @@ class MessageStorageService {
     }
   }
 
+  async sendVoiceMessage(appointmentId: number, mediaUrl: string, senderId: number, senderName: string, voiceMessageId?: string): Promise<Message | null> {
+    try {
+      // Check authentication before sending message
+      const isAuth = await this.isAuthenticated();
+      if (!isAuth) {
+        console.log('❌ User not authenticated, cannot send voice message');
+        return null;
+      }
+
+      const tempId = voiceMessageId || `voice_temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const message: Message = {
+        id: tempId,
+        appointment_id: appointmentId,
+        sender_id: senderId,
+        sender_name: senderName,
+        message: `🎤 Voice message (${tempId.substring(-8)})`, // Include unique identifier in message
+        message_type: 'voice',
+        media_url: mediaUrl,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        delivery_status: 'sending',
+        temp_id: tempId
+      };
+      
+      // Store message locally first
+      await this.storeMessage(appointmentId, message);
+      
+      // Update delivery status to 'sent'
+      console.log(`📤 Voice message sent, updating status to 'sent' for tempId: ${tempId}`);
+      await this.updateMessageDeliveryStatus(appointmentId, tempId, 'sent');
+      
+      // Send to server with temp_id for duplicate detection
+      const response = await apiService.post(`/chat/${appointmentId}/messages`, {
+        message: '🎤 Voice message',
+        message_type: 'voice',
+        media_url: mediaUrl,
+        temp_id: tempId
+      });
+      
+      if (response.success && response.data) {
+        const serverMessage = response.data as Message;
+        
+        // Update message with server response and mark as delivered
+        console.log(`📤 Voice message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
+        await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
+        await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
+        
+        return serverMessage;
+      } else {
+        // If server request failed, keep as 'sent' status
+        return message;
+      }
+    } catch (error) {
+      this.logErrorOnce('Error sending voice message:', error, `appointment-${appointmentId}`);
+      return null;
+    }
+  }
+
+  async sendImageMessage(appointmentId: number, mediaUrl: string, senderId: number, senderName: string, imageMessageId?: string): Promise<Message | null> {
+    try {
+      // Check authentication before sending message
+      const isAuth = await this.isAuthenticated();
+      if (!isAuth) {
+        console.log('❌ User not authenticated, cannot send image message');
+        return null;
+      }
+
+      const tempId = imageMessageId || `image_temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const message: Message = {
+        id: tempId,
+        appointment_id: appointmentId,
+        sender_id: senderId,
+        sender_name: senderName,
+        message: `📷 Image message (${tempId.substring(-8)})`, // Include unique identifier in message
+        message_type: 'image',
+        media_url: mediaUrl,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        delivery_status: 'sending',
+        temp_id: tempId
+      };
+      
+      // Store message locally first
+      await this.storeMessage(appointmentId, message);
+      
+      // Add a small delay to ensure local storage is complete before any sync
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Update delivery status to 'sent'
+      console.log(`📤 Image message sent, updating status to 'sent' for tempId: ${tempId}`);
+      await this.updateMessageDeliveryStatus(appointmentId, tempId, 'sent');
+      
+      // Send to server with temp_id for duplicate detection
+      const response = await apiService.post(`/chat/${appointmentId}/messages`, {
+        message: '📷 Image message',
+        message_type: 'image',
+        media_url: mediaUrl,
+        temp_id: tempId
+      });
+      
+      if (response.success && response.data) {
+        const serverMessage = response.data as Message;
+        
+        console.log(`📤 Server response for image message:`, {
+          id: serverMessage.id,
+          temp_id: serverMessage.temp_id,
+          media_url: serverMessage.media_url?.substring(0, 50) + '...',
+          message_type: serverMessage.message_type,
+          delivery_status: serverMessage.delivery_status
+        });
+        
+        // Check if server response is missing critical fields
+        if (!serverMessage.media_url) {
+          console.log(`⚠️ WARNING: Server response missing media_url, will preserve local media_url`);
+        }
+        if (serverMessage.message_type !== 'image') {
+          console.log(`⚠️ WARNING: Server response has wrong message_type: ${serverMessage.message_type}, will preserve local`);
+        }
+        
+        // Update message with server response and mark as delivered
+        console.log(`📤 Image message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
+        await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
+        await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
+        
+        return serverMessage;
+      } else {
+        // If server request failed, keep as 'sent' status
+        return message;
+      }
+    } catch (error) {
+      this.logErrorOnce('Error sending image message:', error, `appointment-${appointmentId}`);
+      return null;
+    }
+  }
+
   private async updateMessageInStorage(appointmentId: number, tempId: string, updatedMessage: Message): Promise<void> {
     try {
       const data = await this.getLocalData(appointmentId);
@@ -312,12 +517,23 @@ class MessageStorageService {
           console.log(`✅ PROTECTED: Preserved local delivery status when server had none: ${existingMessage.delivery_status}`);
         }
         
-        // Update the message with server data but preserve local delivery status
+        // Update the message with server data but preserve local delivery status and media_url
         data.messages[messageIndex] = {
           ...updatedMessage,
           delivery_status: deliveryStatus,
           temp_id: tempId, // Preserve temp_id for tracking
+          // CRITICAL: Preserve the original media_url if server doesn't have it
+          media_url: updatedMessage.media_url || existingMessage.media_url,
+          // Ensure message_type is preserved
+          message_type: updatedMessage.message_type || existingMessage.message_type,
         };
+        
+        console.log(`📤 Updated image message in storage:`, {
+          id: data.messages[messageIndex].id,
+          temp_id: data.messages[messageIndex].temp_id,
+          media_url: data.messages[messageIndex].media_url?.substring(0, 50) + '...',
+          delivery_status: data.messages[messageIndex].delivery_status
+        });
         
         data.last_sync = new Date().toISOString();
         
@@ -365,26 +581,10 @@ class MessageStorageService {
   startAutoSync(appointmentId: number): void {
     this.stopAutoSync(appointmentId);
     
-    const timer = setInterval(async () => {
-      try {
-        // Only sync if there are no pending messages to avoid conflicts
-        // This is a simplified check. In a real app, you'd have a pendingMessages map
-        // and only sync if there are no pending messages for this appointment.
-        // For now, we'll just check if the last sync was recent.
-        const data = await this.getLocalData(appointmentId);
-        const lastSyncTime = new Date(data.last_sync).getTime();
-        const now = Date.now();
-
-        if (now - lastSyncTime > this.SYNC_INTERVAL) {
-          await this.loadFromServer(appointmentId);
-        }
-      } catch (error: any) {
-        // Silent error handling for auto-sync to prevent spam
-        this.logErrorOnce('Auto-sync error:', error, `auto-sync-${appointmentId}`);
-      }
-    }, this.SYNC_INTERVAL);
+    // TEMPORARILY DISABLE AUTO-SYNC TO FIX IMAGE MESSAGE DISAPPEARING ISSUE
+    console.log(`🚫 Auto-sync DISABLED for appointment ${appointmentId} to prevent image message loss`);
+    return;
     
-    this.syncTimers.set(appointmentId, timer);
   }
 
   stopAutoSync(appointmentId: number): void {
@@ -447,6 +647,8 @@ class MessageStorageService {
     let mergedReadReceipts = 0;
     let mergedDeliveryStatus = 0;
     let protectedDeliveryStatus = 0;
+    let preservedLocalMessages = 0;
+    
     localMessages.forEach(localMessage => {
       const serverMessage = mergedMap.get(localMessage.id);
       if (serverMessage) {
@@ -495,10 +697,16 @@ class MessageStorageService {
           serverMessage.delivery_status = localMessage.delivery_status;
           mergedDeliveryStatus++;
         }
+      } else {
+        // CRITICAL FIX: Preserve local messages that don't exist on server yet
+        // This prevents newly sent messages (especially images) from disappearing
+        console.log(`🔒 PRESERVING local message not on server: ${localMessage.id} (${localMessage.message_type})`);
+        mergedMap.set(localMessage.id, localMessage);
+        preservedLocalMessages++;
       }
     });
     
-
+    console.log(`📊 Merge stats: ${mergedReadReceipts} read receipts, ${mergedDeliveryStatus} delivery status, ${protectedDeliveryStatus} protected, ${preservedLocalMessages} local messages preserved`);
     
     return Array.from(mergedMap.values()).sort((a, b) => 
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -529,6 +737,13 @@ class MessageStorageService {
 
   async markMessagesAsRead(appointmentId: number, userId: number): Promise<void> {
     try {
+      // Check authentication before making API call
+      const isAuth = await this.isAuthenticated();
+      if (!isAuth) {
+        console.log('❌ User not authenticated, skipping mark as read');
+        return;
+      }
+
       // Mark messages as read locally
       const data = await this.getLocalData(appointmentId);
       

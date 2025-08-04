@@ -63,6 +63,13 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         
         // Remove any leading slash from the URI to avoid double slashes
         const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
+        
+        // Check if the URI already contains the base URL to avoid double prefixing
+        if (cleanUri.includes('172.20.10.11:8000')) {
+            console.log('ProfilePictureDisplay - URI already contains base URL, using as is:', cleanUri);
+            return cleanUri;
+        }
+        
         const fullUrl = `${baseUrl}/storage/${cleanUri}`;
         
         console.log('ProfilePictureDisplay - Constructed URL:', fullUrl);

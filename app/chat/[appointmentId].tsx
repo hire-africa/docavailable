@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -18,11 +19,14 @@ import {
 import { apiService } from '../../app/services/apiService';
 import sessionService from '../../app/services/sessionService';
 import { Icon } from '../../components/Icon';
-import ProfilePictureDisplay from '../../components/ProfilePictureDisplay';
+import ImageMessage from '../../components/ImageMessage';
 import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
+import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
+import { voiceRecordingService } from '../../services/voiceRecordingService';
 
 interface ChatInfo {
   appointment_id: number;
@@ -40,7 +44,7 @@ export default function ChatPage() {
   const params = useLocalSearchParams();
   const appointmentId = params.appointmentId as string;
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading, refreshUserData } = useAuth();
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -56,6 +60,16 @@ export default function ChatPage() {
   // Rating modal state
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [submittingRating, setSubmittingRating] = useState(false);
+  
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recordingUri, setRecordingUri] = useState<string | null>(null);
+  const [sendingVoiceMessage, setSendingVoiceMessage] = useState(false);
+  
+  // Image handling state
+  const [sendingCameraImage, setSendingCameraImage] = useState(false);
+  const [sendingGalleryImage, setSendingGalleryImage] = useState(false);
   
   // Add state to track if messages have been marked as read
   // This prevents unnecessary API calls and improves performance
@@ -73,6 +87,39 @@ export default function ChatPage() {
   // Parse and validate appointment ID
   const isTextSession = appointmentId && appointmentId.startsWith('text_session_');
   const parsedAppointmentId = isTextSession ? appointmentId : (appointmentId ? parseInt(appointmentId, 10) : null);
+  
+  // Check if user is authenticated
+  const isAuthenticated = !!user && !!user.id;
+  
+  // Show authentication error if user is not authenticated
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Ionicons name="lock-closed" size={64} color="#FF4444" />
+          <Text style={{ fontSize: 20, fontWeight: '600', color: '#333', marginTop: 16, textAlign: 'center' }}>
+            Authentication Required
+          </Text>
+          <Text style={{ fontSize: 16, color: '#666', marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
+            You need to be logged in to access this chat. Please log in and try again.
+          </Text>
+          <TouchableOpacity 
+            style={{ 
+              marginTop: 24, 
+              paddingHorizontal: 24, 
+              paddingVertical: 12, 
+              backgroundColor: '#4CAF50', 
+              borderRadius: 8 
+            }}
+            onPress={() => router.replace('/login')}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500' }}>Go to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   
   // Validate appointment ID
   if (!parsedAppointmentId || (!isTextSession && isNaN(parsedAppointmentId as number))) {
@@ -112,23 +159,33 @@ export default function ChatPage() {
       // Preload messages for better performance
       await messageStorageService.preloadMessages(getAppointmentIdForStorage());
       
-      // Load chat info
-      try {
-        const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
-        if (infoResponse.success && infoResponse.data) {
-          setChatInfo(infoResponse.data as ChatInfo);
+      // Load chat info only if authenticated
+      if (isAuthenticated) {
+        try {
+          const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
+          if (infoResponse.success && infoResponse.data) {
+            console.log('🔍 Chat Info Response:', infoResponse.data);
+            setChatInfo(infoResponse.data as ChatInfo);
+          }
+        } catch (error: any) {
+          console.error('Error loading chat info:', error);
+          // Don't show alert for auth errors, just log them
+          if (error?.response?.status !== 401) {
+            Alert.alert('Error', 'Failed to load chat information');
+          }
         }
-      } catch (error) {
-        console.error('Error loading chat info:', error);
       }
 
       // Load initial messages
       const localMessages = await messageStorageService.getMessagesOptimized(getAppointmentIdForStorage());
       setMessages(localMessages);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading chat:', error);
-      Alert.alert('Error', 'Failed to load chat messages');
+      // Don't show alert for auth errors
+      if (error?.response?.status !== 401) {
+        Alert.alert('Error', 'Failed to load chat messages');
+      }
     } finally {
       setLoading(false);
     }
@@ -136,7 +193,7 @@ export default function ChatPage() {
 
   // Send message
   const sendMessage = async () => {
-    if (!newMessage.trim() || sending) return;
+    if (!newMessage.trim() || sending || !isAuthenticated) return;
 
     // Safety check
     if (!messageStorageService) {
@@ -160,7 +217,7 @@ export default function ChatPage() {
       } else {
         Alert.alert('Error', 'Failed to send message');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message');
     } finally {
@@ -170,32 +227,69 @@ export default function ChatPage() {
 
   // Safe manual refresh
   const safeRefreshMessages = async () => {
-    if (isRefreshing) return;
+    if (isRefreshing || !isAuthenticated) return;
     
     try {
       setIsRefreshing(true);
       await messageStorageService.loadFromServer(getAppointmentIdForStorage());
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error refreshing messages:', error);
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // Load chat on mount
+  // Load chat on mount only if authenticated
   useEffect(() => {
-    if (messageStorageService) {
+    if (messageStorageService && isAuthenticated) {
       loadChat();
-    } else {
-      console.error('❌ messageStorageService not available for loadChat');
+      
+      // Debug profile picture data
+      console.log('🔍 Chat Profile Picture Debug:', {
+        user_profile_picture_url: user?.profile_picture_url,
+        user_profile_picture: user?.profile_picture,
+        chatInfo_other_participant_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+        chatInfo_other_participant_profile_picture: chatInfo?.other_participant_profile_picture,
+        currentUserId,
+        user_id: user?.id
+      });
+      
+      // Refresh user data to ensure profile pictures are up to date
+      if (user && (!user.profile_picture_url || !user.profile_picture)) {
+        console.log('🔄 Refreshing user data to update profile pictures...');
+        refreshUserData().catch((error: any) => {
+          console.error('Error refreshing user data:', error);
+        });
+      }
+    } else if (!isAuthenticated && !authLoading) {
+      console.log('❌ User not authenticated, skipping chat load');
     }
-  }, []);
+  }, [isAuthenticated, authLoading]);
 
-  // Register for message updates and start auto-sync
+  // Debug chatInfo changes
   useEffect(() => {
-    // Safety check to ensure messageStorageService is available
-    if (!messageStorageService) {
-      console.error('❌ messageStorageService is not available');
+    if (chatInfo) {
+      console.log('🔍 Chat Header Profile Picture Props:', {
+        imageUri: chatInfo?.other_participant_profile_picture,
+        profilePictureUrl: chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture,
+        chatInfo: chatInfo
+      });
+    }
+    
+    // Debug chat header rendering
+    console.log('🔍 Chat Header Debug:', {
+      hasChatInfo: !!chatInfo,
+      profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
+      profilePicture: chatInfo?.other_participant_profile_picture,
+      participantName: chatInfo?.other_participant_name
+    });
+  }, [chatInfo]);
+
+  // Register for message updates and start auto-sync only if authenticated
+  useEffect(() => {
+    // Safety check to ensure messageStorageService is available and user is authenticated
+    if (!messageStorageService || !isAuthenticated) {
+      console.log('❌ messageStorageService not available or user not authenticated');
       return;
     }
 
@@ -206,7 +300,10 @@ export default function ChatPage() {
         !messages.some(existingMessage => existingMessage.id === message.id)
       );
       
-      // Debug: Log delivery status changes for own messages
+      // Debug: Log delivery status changes for own messages and track image messages
+      const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
+      console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
+      
       updatedMessages.forEach(message => {
         if (message.sender_id === currentUserId) {
           console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
@@ -221,6 +318,17 @@ export default function ChatPage() {
           if (message.delivery_status === 'read') {
             console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
           }
+        }
+        
+        // Special tracking for image messages
+        if (message.message_type === 'image') {
+          console.log(`📷 Image message detected:`, {
+            id: message.id,
+            temp_id: message.temp_id,
+            media_url: message.media_url?.substring(0, 50) + '...',
+            delivery_status: message.delivery_status,
+            sender_id: message.sender_id
+          });
         }
       });
       
@@ -255,11 +363,11 @@ export default function ChatPage() {
         messageStorageService.stopAutoSync(getAppointmentIdForStorage());
       }
     };
-  }, [messages, currentUserId]);
+  }, [currentUserId, isAuthenticated]); // Removed 'messages' from dependency array
 
   // Mark messages as read when chat is viewed
   const markMessagesAsRead = async () => {
-    if (!user?.id || isMarkingAsRead || markReadAttempts >= MAX_MARK_READ_ATTEMPTS) return;
+    if (!user?.id || isMarkingAsRead || markReadAttempts >= MAX_MARK_READ_ATTEMPTS || !isAuthenticated) return;
     
     // Safety check
     if (!messageStorageService) {
@@ -298,7 +406,7 @@ export default function ChatPage() {
       (!message.read_by || !message.read_by.some(read => read.user_id === user?.id))
     );
     
-    if (messages.length > 0 && !loading && hasUnreadMessages && !isMarkingAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS) {
+    if (messages.length > 0 && !loading && hasUnreadMessages && !isMarkingAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS && isAuthenticated) {
       // Add a small delay to prevent rapid successive calls
       const timeoutId = setTimeout(() => {
         markMessagesAsRead();
@@ -306,7 +414,17 @@ export default function ChatPage() {
       
       return () => clearTimeout(timeoutId);
     }
-  }, [messages, loading, isMarkingAsRead, markReadAttempts, user?.id]);
+  }, [messages, loading, isMarkingAsRead, markReadAttempts, user?.id, isAuthenticated]);
+
+  // Cleanup recording interval on unmount
+  useEffect(() => {
+    return () => {
+      if ((window as any).recordingInterval) {
+        clearInterval((window as any).recordingInterval);
+        (window as any).recordingInterval = null;
+      }
+    };
+  }, []);
 
   // Handle back button press
   const handleBackPress = () => {
@@ -402,6 +520,154 @@ export default function ChatPage() {
     router.back();
   };
 
+  // Voice recording functions
+  const startRecording = async () => {
+    try {
+      const success = await voiceRecordingService.startRecording();
+      if (success) {
+        setIsRecording(true);
+        setRecordingDuration(0);
+        setRecordingUri(null);
+        
+        // Start duration timer
+        const interval = setInterval(() => {
+          setRecordingDuration(prev => prev + 1);
+        }, 1000);
+        
+        // Store interval reference for cleanup
+        (window as any).recordingInterval = interval;
+      } else {
+        Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
+      }
+    } catch (error: any) {
+      console.error('Error starting recording:', error);
+      Alert.alert('Error', 'Failed to start recording.');
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      const uri = await voiceRecordingService.stopRecording();
+      if (uri) {
+        setRecordingUri(uri);
+        setIsRecording(false);
+        
+        // Clear duration timer
+        if ((window as any).recordingInterval) {
+          clearInterval((window as any).recordingInterval);
+          (window as any).recordingInterval = null;
+        }
+      }
+    } catch (error: any) {
+      console.error('Error stopping recording:', error);
+      setIsRecording(false);
+    }
+  };
+
+  const cancelRecording = async () => {
+    try {
+      await voiceRecordingService.cancelRecording();
+      setIsRecording(false);
+      setRecordingDuration(0);
+      setRecordingUri(null);
+      
+      // Clear duration timer
+      if ((window as any).recordingInterval) {
+        clearInterval((window as any).recordingInterval);
+        (window as any).recordingInterval = null;
+      }
+    } catch (error: any) {
+      console.error('Error canceling recording:', error);
+    }
+  };
+
+  const sendVoiceMessage = async () => {
+    if (!recordingUri || sendingVoiceMessage) return;
+    
+    setSendingVoiceMessage(true);
+    try {
+      const success = await voiceRecordingService.sendVoiceMessage(
+        getAppointmentIdForStorage(),
+        recordingUri,
+        currentUserId,
+        user?.first_name + ' ' + user?.last_name || 'Unknown User'
+      );
+      
+      if (success) {
+        setRecordingUri(null);
+        setRecordingDuration(0);
+      } else {
+        Alert.alert('Error', 'Failed to send voice message.');
+      }
+    } catch (error: any) {
+      console.error('Error sending voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message.');
+    } finally {
+      setSendingVoiceMessage(false);
+    }
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Image handling functions
+  const handleTakePhoto = async () => {
+    try {
+      setSendingCameraImage(true);
+      
+      const imageUri = await imageService.takePhoto();
+      
+      if (imageUri) {
+        const success = await imageService.sendImageMessage(
+          getAppointmentIdForStorage(),
+          imageUri,
+          currentUserId,
+          `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
+        );
+        
+        if (success) {
+          console.log('📷 Photo sent successfully');
+        } else {
+          console.error('❌ Failed to send photo');
+        }
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+    } finally {
+      setSendingCameraImage(false);
+    }
+  };
+
+  const handlePickImage = async () => {
+    try {
+      setSendingGalleryImage(true);
+      
+      const imageUri = await imageService.pickImage();
+      
+      if (imageUri) {
+        const success = await imageService.sendImageMessage(
+          getAppointmentIdForStorage(),
+          imageUri,
+          currentUserId,
+          `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
+        );
+        
+        if (success) {
+          console.log('📷 Image picked and sent successfully');
+        } else {
+          console.error('❌ Failed to send picked image');
+        }
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+    } finally {
+      setSendingGalleryImage(false);
+    }
+  };
+
   // Debug modal state
   console.log('🔍 showEndSessionModal state:', showEndSessionModal);
   console.log('🔍 showRatingModal state:', showRatingModal);
@@ -439,12 +705,25 @@ export default function ChatPage() {
         
         {/* Profile Picture */}
         <View style={{ marginRight: 12 }}>
-          <ProfilePictureDisplay
-            imageUri={chatInfo?.other_participant_profile_picture || null}
-            profilePictureUrl={chatInfo?.other_participant_profile_picture_url || null}
-            size={40}
-            borderColor="#4CAF50"
-          />
+          {chatInfo?.other_participant_profile_picture_url ? (
+            <Image 
+              source={{ uri: chatInfo.other_participant_profile_picture_url }} 
+              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
+              onError={(error) => console.log('❌ Profile picture URL failed to load:', chatInfo.other_participant_profile_picture_url, error)}
+              onLoad={() => console.log('✅ Profile picture URL loaded successfully:', chatInfo.other_participant_profile_picture_url)}
+            />
+          ) : chatInfo?.other_participant_profile_picture ? (
+            <Image 
+              source={{ uri: chatInfo.other_participant_profile_picture }} 
+              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
+              onError={(error) => console.log('❌ Profile picture failed to load:', chatInfo.other_participant_profile_picture, error)}
+              onLoad={() => console.log('✅ Profile picture loaded successfully:', chatInfo.other_participant_profile_picture)}
+            />
+          ) : (
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
+              <Ionicons name="person" size={20} color="#4CAF50" />
+            </View>
+          )}
         </View>
         
         {/* Name */}
@@ -525,48 +804,89 @@ export default function ChatPage() {
             </Text>
           </View>
           {messages.map((message, index) => {
+            // Create a unique key that combines multiple identifiers to prevent duplicates
+            const uniqueKey = `${message.id}_${message.temp_id || 'no_temp'}_${message.created_at}_${message.sender_id}_${index}`;
+            
+            // Debug logging for duplicate detection
+            if (index > 0) {
+              const prevMessage = messages[index - 1];
+              const prevKey = `${prevMessage.id}_${prevMessage.temp_id || 'no_temp'}_${prevMessage.created_at}_${prevMessage.sender_id}_${index - 1}`;
+              if (uniqueKey === prevKey) {
+                console.warn('⚠️ Duplicate key detected:', uniqueKey);
+              }
+            }
+            
             return (
               <View
-                key={message.id}
+                key={uniqueKey}
                 style={{
                   alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
                   marginBottom: 12,
                   maxWidth: '80%',
                 }}
               >
-              <View
-                style={{
-                  backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  borderRadius: 20,
-                  borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
-                  borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
-                }}
-              >
-                <Text
-                  style={{
-                    color: message.sender_id === currentUserId ? '#fff' : '#333',
-                    fontSize: 16,
-                  }}
-                >
-                  {message.message}
-                </Text>
-                <ReadReceipt
-                  isOwnMessage={message.sender_id === currentUserId}
-                  deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                  readBy={message.read_by}
-                  otherParticipantId={
-                    chatInfo?.doctor_id === currentUserId 
-                      ? chatInfo?.patient_id 
-                      : chatInfo?.doctor_id || 
-                        (message.sender_id !== currentUserId ? message.sender_id : undefined)
-                  }
-                  messageTime={message.created_at}
-                />
+                {message.message_type === 'voice' && message.media_url ? (
+                  // Voice messages render without outer bubble
+                  <VoiceMessagePlayer
+                    audioUri={message.media_url}
+                    isOwnMessage={message.sender_id === currentUserId}
+                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                    profilePictureUrl={message.sender_id === currentUserId ? (user?.profile_picture_url || user?.profile_picture) : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture)}
+                  />
+                ) : message.message_type === 'image' && message.media_url ? (
+                  // Image messages render without outer bubble
+                  <ImageMessage
+                    imageUrl={message.media_url}
+                    isOwnMessage={message.sender_id === currentUserId}
+                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                    profilePictureUrl={message.sender_id === currentUserId ? (user?.profile_picture_url || user?.profile_picture) : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture)}
+                    readBy={message.read_by}
+                    otherParticipantId={
+                      chatInfo?.doctor_id === currentUserId 
+                        ? chatInfo?.patient_id 
+                        : chatInfo?.doctor_id || 
+                          (message.sender_id !== currentUserId ? message.sender_id : undefined)
+                    }
+                    messageTime={message.created_at}
+                  />
+                ) : (
+                  // Regular text messages with bubble
+                  <View
+                    style={{
+                      backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 20,
+                      borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                      borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: message.sender_id === currentUserId ? '#fff' : '#333',
+                        fontSize: 16,
+                      }}
+                    >
+                      {message.message}
+                    </Text>
+                    <ReadReceipt
+                      isOwnMessage={message.sender_id === currentUserId}
+                      deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                      readBy={message.read_by}
+                      otherParticipantId={
+                        chatInfo?.doctor_id === currentUserId 
+                          ? chatInfo?.patient_id 
+                          : chatInfo?.doctor_id || 
+                            (message.sender_id !== currentUserId ? message.sender_id : undefined)
+                      }
+                      messageTime={message.created_at}
+                    />
+                  </View>
+                )}
               </View>
-            </View>
-          );
+            );
           })}
         </ScrollView>
 
@@ -582,30 +902,36 @@ export default function ChatPage() {
         }}>
           {/* Image Button */}
           <TouchableOpacity
-            onPress={() => {
-              // TODO: Implement image picker functionality
-              Alert.alert('Image', 'Image picker feature coming soon!');
-            }}
+            onPress={handlePickImage}
+            disabled={sendingGalleryImage || sendingCameraImage}
             style={{
               padding: 8,
               marginRight: 8,
+              opacity: (sendingGalleryImage || sendingCameraImage) ? 0.5 : 1,
             }}
           >
-            <Ionicons name="image" size={24} color="#4CAF50" />
+            {sendingGalleryImage ? (
+              <ActivityIndicator size="small" color="#4CAF50" />
+            ) : (
+              <Ionicons name="image" size={24} color="#4CAF50" />
+            )}
           </TouchableOpacity>
           
           {/* Camera Button */}
           <TouchableOpacity
-            onPress={() => {
-              // TODO: Implement camera functionality
-              Alert.alert('Camera', 'Camera feature coming soon!');
-            }}
+            onPress={handleTakePhoto}
+            disabled={sendingCameraImage || sendingGalleryImage}
             style={{
               padding: 8,
               marginRight: 8,
+              opacity: (sendingCameraImage || sendingGalleryImage) ? 0.5 : 1,
             }}
           >
-            <Ionicons name="camera" size={24} color="#4CAF50" />
+            {sendingCameraImage ? (
+              <ActivityIndicator size="small" color="#4CAF50" />
+            ) : (
+              <Ionicons name="camera" size={24} color="#4CAF50" />
+            )}
           </TouchableOpacity>
           
           <TextInput
@@ -627,13 +953,10 @@ export default function ChatPage() {
           />
           
           <TouchableOpacity
-            onPress={newMessage.trim() ? sendMessage : () => {
-              // TODO: Implement voice note functionality
-              Alert.alert('Voice Note', 'Voice note feature coming soon!');
-            }}
-            disabled={sending}
+            onPress={newMessage.trim() ? sendMessage : startRecording}
+            disabled={sending || isRecording}
             style={{
-              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5',
+              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',
               borderRadius: 20,
               padding: 12,
               minWidth: 44,
@@ -644,11 +967,126 @@ export default function ChatPage() {
               <ActivityIndicator size="small" color="#fff" />
             ) : newMessage.trim() ? (
               <Ionicons name="send" size={20} color="#fff" />
+            ) : isRecording ? (
+              <Ionicons name="stop" size={20} color="#fff" />
             ) : (
               <Ionicons name="mic" size={20} color="#666" />
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Voice Recording Interface */}
+        {isRecording && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            backgroundColor: '#FFF5F5',
+            borderTopWidth: 1,
+            borderTopColor: '#FFE5E5',
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flex: 1,
+            }}>
+              <View style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: '#FF4444',
+                marginRight: 12,
+              }} />
+              <Text style={{
+                fontSize: 16,
+                color: '#FF4444',
+                fontWeight: '500',
+              }}>
+                Recording... {formatDuration(recordingDuration)}
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              onPress={stopRecording}
+              style={{
+                backgroundColor: '#FF4444',
+                borderRadius: 20,
+                padding: 12,
+                marginRight: 8,
+              }}
+            >
+              <Ionicons name="stop" size={20} color="#fff" />
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={cancelRecording}
+              style={{
+                backgroundColor: '#666',
+                borderRadius: 20,
+                padding: 12,
+              }}
+            >
+              <Ionicons name="close" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Voice Message Preview */}
+        {recordingUri && !isRecording && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            backgroundColor: '#F0F8FF',
+            borderTopWidth: 1,
+            borderTopColor: '#E5F0FF',
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              flex: 1,
+            }}>
+              <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 8 }} />
+              <Text style={{
+                fontSize: 16,
+                color: '#4CAF50',
+                fontWeight: '500',
+              }}>
+                Voice message ready
+              </Text>
+            </View>
+            
+            <TouchableOpacity
+              onPress={sendVoiceMessage}
+              disabled={sendingVoiceMessage}
+              style={{
+                backgroundColor: '#4CAF50',
+                borderRadius: 20,
+                padding: 12,
+                marginRight: 8,
+              }}
+            >
+              {sendingVoiceMessage ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#fff" />
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={cancelRecording}
+              style={{
+                backgroundColor: '#666',
+                borderRadius: 20,
+                padding: 12,
+              }}
+            >
+              <Ionicons name="close" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* End Session Modal */}

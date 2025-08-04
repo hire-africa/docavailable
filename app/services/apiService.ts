@@ -706,13 +706,32 @@ class ApiService {
 
   // File upload method
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
+    console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({ key, type: typeof value })) });
+    
     return this.retryRequest(async () => {
-      const response: AxiosResponse<ApiResponse<T>> = await this.api.post(url, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      return response.data;
+      try {
+        const response: AxiosResponse<ApiResponse<T>> = await this.api.post(url, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          timeout: 30000, // 30 second timeout for file uploads
+        });
+        console.log('✅ [ApiService] UploadFile response:', { 
+          url, 
+          status: response.status, 
+          success: response.data?.success,
+          message: response.data?.message 
+        });
+        return response.data;
+      } catch (error) {
+        console.error('❌ [ApiService] UploadFile error:', { 
+          url, 
+          error: (error as any)?.message,
+          status: (error as any)?.response?.status,
+          data: (error as any)?.response?.data 
+        });
+        throw error;
+      }
     });
   }
 }

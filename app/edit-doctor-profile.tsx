@@ -185,6 +185,12 @@ export default function EditDoctorProfile() {
                 try {
                     await refreshUserData();
                     console.log('EditDoctorProfile: User data refreshed after upload');
+                    
+                    // Force a re-render by updating local state
+                    setTimeout(() => {
+                        console.log('EditDoctorProfile: Forcing re-render after profile picture update');
+                        setProfilePicture(newProfilePictureUrl);
+                    }, 100);
                 } catch (error) {
                     console.error('EditDoctorProfile: Error refreshing user data after upload:', error);
                 }
