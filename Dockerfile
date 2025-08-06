@@ -1,7 +1,6 @@
-# This Dockerfile is for Render deployment
-# It simply copies the backend directory and uses the backend Dockerfile
-
-FROM php:8.2-fpm
+# Multi-stage Dockerfile for DocAvailable
+# Stage 1: Backend (Laravel) - Main service
+FROM php:8.2-fpm as backend
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,7 +11,9 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libzip-dev \
     zip \
-    unzip
+    unzip \
+    supervisor \
+    nginx
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -26,11 +27,14 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy backend directory contents
-COPY backend/ .
+# Copy backend composer files first for better caching
+COPY backend/composer.json backend/composer.lock ./
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Copy backend application directory contents
+COPY backend/ .
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
@@ -66,4 +70,28 @@ RUN php artisan storage:link || echo "Storage link already exists"
 EXPOSE 8000
 
 # Start server
-CMD php artisan serve --host=0.0.0.0 --port=8000 
+CMD php artisan serve --host=0.0.0.0 --port=8000
+
+# Stage 2: Frontend (Expo/React Native) - Optional for web deployment
+FROM node:18-alpine as frontend
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy frontend source
+COPY . .
+
+# Build for web (optional)
+RUN npm run web || echo "Web build not configured"
+
+# Expose port 3000 for web frontend
+EXPOSE 3000
+
+# Start web server (optional)
+CMD ["npm", "start", "--", "--web"] 
