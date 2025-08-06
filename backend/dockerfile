@@ -89,11 +89,8 @@ RUN if [ ! -f .env ]; then cp .env.example .env; fi
 RUN php artisan key:generate --force || echo "Key already exists"
 RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 
-# Run migrations (only if database is available)
-RUN php artisan migrate --force || echo "Migrations failed, will retry at runtime"
-
-# Seed database with test users (only if database is available)
-RUN php artisan db:seed --force || echo "Seeding failed, will retry at runtime"
+# Note: Database operations (migrations and seeding) will be run at runtime
+# when the container starts and database is available
 
 # Cache configurations
 RUN php artisan config:cache || echo "Config cache failed"
@@ -109,8 +106,11 @@ RUN echo "=== Final verification ===" && \
     echo "public: $([ -d public ] && echo 'EXISTS' || echo 'MISSING')" && \
     echo "public/index.php: $([ -f public/index.php ] && echo 'EXISTS' || echo 'MISSING')"
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Expose port 8000
 EXPOSE 8000
 
-# Start server
-CMD php artisan serve --host=0.0.0.0 --port=8000 
+# Start server using the startup script
+CMD ["./start.sh"] 
