@@ -34,6 +34,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 # Copy the entire application
 COPY . .
 
+# Ensure public directory is copied correctly
+RUN ls -la public/ || echo "Public directory not found after copy"
+
 # Run post-install scripts after all files are copied
 RUN composer dump-autoload --optimize
 
@@ -67,9 +70,8 @@ RUN php artisan view:cache || echo "View cache failed"
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
-# Ensure public directory exists and has proper permissions
-RUN mkdir -p public \
-    && chmod -R 755 public \
+# Ensure public directory has proper permissions (don't recreate it)
+RUN chmod -R 755 public \
     && chown -R www-data:www-data public
 
 # Verify public directory exists and has content
