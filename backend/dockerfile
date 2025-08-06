@@ -42,28 +42,26 @@ RUN if [ ! -d "public" ]; then \
 # Create basic index.php if it doesn't exist
 RUN if [ ! -f "public/index.php" ]; then \
         echo "Creating basic index.php..."; \
-        cat > public/index.php << 'EOF'
-<?php
-
-use Illuminate\Foundation\Application;
-use Illuminate\Http\Request;
-
-define('LARAVEL_START', microtime(true));
-
-// Determine if the application is in maintenance mode...
-if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
-    require $maintenance;
-}
-
-// Register the Composer autoloader...
-require __DIR__.'/../vendor/autoload.php';
-
-// Bootstrap Laravel and handle the request...
-/** @var Application $app */
-$app = require_once __DIR__.'/../bootstrap/app.php';
-
-$app->handleRequest(Request::capture());
-EOF
+        echo '<?php' > public/index.php; \
+        echo '' >> public/index.php; \
+        echo 'use Illuminate\Foundation\Application;' >> public/index.php; \
+        echo 'use Illuminate\Http\Request;' >> public/index.php; \
+        echo '' >> public/index.php; \
+        echo 'define("LARAVEL_START", microtime(true));' >> public/index.php; \
+        echo '' >> public/index.php; \
+        echo '// Determine if the application is in maintenance mode...' >> public/index.php; \
+        echo 'if (file_exists($maintenance = __DIR__."/../storage/framework/maintenance.php")) {' >> public/index.php; \
+        echo '    require $maintenance;' >> public/index.php; \
+        echo '}' >> public/index.php; \
+        echo '' >> public/index.php; \
+        echo '// Register the Composer autoloader...' >> public/index.php; \
+        echo 'require __DIR__."/../vendor/autoload.php";' >> public/index.php; \
+        echo '' >> public/index.php; \
+        echo '// Bootstrap Laravel and handle the request...' >> public/index.php; \
+        echo '/** @var Application $app */' >> public/index.php; \
+        echo '$app = require_once __DIR__."/../bootstrap/app.php";' >> public/index.php; \
+        echo '' >> public/index.php; \
+        echo '$app->handleRequest(Request::capture());' >> public/index.php; \
         echo "Created index.php"; \
     else \
         echo "index.php already exists"; \
