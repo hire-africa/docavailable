@@ -138,7 +138,7 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (user) {
       firestoreService.getAppointmentsForUser(user.uid, 'patient').then(appointments => {
-        console.log('PatientDashboard: Fetched appointments:', appointments);
+        // console.log('PatientDashboard: Fetched appointments:', appointments);
         setAppointments(appointments);
       }).catch(error => {
         console.error('PatientDashboard: Error fetching appointments:', error);

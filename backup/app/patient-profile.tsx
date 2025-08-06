@@ -74,9 +74,9 @@ export default function PatientProfile() {
             }
 
             try {
-                console.log('PatientProfile: Fetching user data for:', user.uid);
+                // console.log('PatientProfile: Fetching user data for:', user.uid);
                 const completeData = await firestoreService.getUserById(user.uid) as CompleteUserData;
-                console.log('PatientProfile: User data fetched:', completeData);
+                // console.log('PatientProfile: User data fetched:', completeData);
                 setUserData(completeData);
             } catch (error) {
                 console.error('PatientProfile: Error fetching user data:', error);

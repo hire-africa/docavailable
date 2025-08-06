@@ -45,20 +45,27 @@ export const sessionAutoDeduct = onSchedule('every 5 minutes', async (event) => 
     // 3. Session duration logic: if session started and ended, calculate duration
     if (actualStartTime && actualEndTime) {
       const durationMs = actualEndTime.getTime() - actualStartTime.getTime();
-      const tenMinBlocks = Math.ceil(durationMs / (10 * 60 * 1000));
-      if (sessionsDeducted !== tenMinBlocks) {
+      const elapsedMinutes = Math.floor(durationMs / (60 * 1000));
+      
+      // Calculate auto-deductions (every 10 minutes)
+      const autoDeductions = Math.floor(elapsedMinutes / 10);
+      // Manual end always adds 1 session
+      const manualDeduction = 1;
+      const totalSessionsToDeduct = autoDeductions + manualDeduction;
+      
+      if (sessionsDeducted !== totalSessionsToDeduct) {
         // Deduct sessions for duration
         await admin.firestore().collection('users').doc(patientId).update({
-          sessionCount: admin.firestore.FieldValue.increment(-tenMinBlocks)
+          sessionCount: admin.firestore.FieldValue.increment(-totalSessionsToDeduct)
         });
         
         // Award doctor earnings
         await admin.firestore().collection('users').doc(doctorId).update({
-          earnings: admin.firestore.FieldValue.increment(tenMinBlocks * 3000)
+          earnings: admin.firestore.FieldValue.increment(totalSessionsToDeduct * 3000)
         });
         
         await doc.ref.update({
-          sessionsDeducted: tenMinBlocks,
+          sessionsDeducted: totalSessionsToDeduct,
           status: 'completed',
           completedAt: now,
         });
@@ -66,17 +73,27 @@ export const sessionAutoDeduct = onSchedule('every 5 minutes', async (event) => 
       continue;
     }
 
-    // 4. Auto-end sessions that have exceeded their time window
-    const sessionDuration = 20; // 20 minutes session
-    const sessionEnd = new Date(scheduledTime.getTime() + sessionDuration * 60 * 1000);
-    
-    if (now.toDate() > sessionEnd && !actualEndTime) {
-      // Auto-end the session
-      await doc.ref.update({
-        actualEndTime: now,
-        status: 'completed',
-        completedAt: now,
-      });
+    // 4. Auto-deduction for active sessions (every 10 minutes)
+    if (actualStartTime && !actualEndTime) {
+      const elapsedMs = now.toDate().getTime() - actualStartTime.getTime();
+      const elapsedMinutes = Math.floor(elapsedMs / (60 * 1000));
+      const autoDeductions = Math.floor(elapsedMinutes / 10);
+      
+      if (autoDeductions > (data.autoDeductions || 0)) {
+        // Deduct sessions for auto-deduction
+        await admin.firestore().collection('users').doc(patientId).update({
+          sessionCount: admin.firestore.FieldValue.increment(-autoDeductions)
+        });
+        
+        // Award doctor earnings
+        await admin.firestore().collection('users').doc(doctorId).update({
+          earnings: admin.firestore.FieldValue.increment(autoDeductions * 3000)
+        });
+        
+        await doc.ref.update({
+          autoDeductions: autoDeductions,
+        });
+      }
     }
   }
 });

@@ -37,18 +37,18 @@ export default function ImageMessage({
   messageTime
 }: ImageMessageProps) {
   // Debug profile picture URL
-  console.log('ImageMessage Debug:', {
-    profilePictureUrl,
-    isOwnMessage,
-    hasUrl: !!profilePictureUrl
-  });
+      // console.log('ImageMessage Debug:', {
+    //   profilePictureUrl,
+    //   isOwnMessage,
+    //   hasUrl: !!profilePictureUrl
+    // });
 
   const getImageUrl = (uri: string) => {
-    console.log('ImageMessage getImageUrl - Input URI:', uri);
+    // console.log('ImageMessage getImageUrl - Input URI:', uri);
     
     // If it's already a full URL, return as is
     if (uri.startsWith('http')) {
-      console.log('ImageMessage getImageUrl - Returning full URL as is:', uri);
+      // console.log('ImageMessage getImageUrl - Returning full URL as is:', uri);
       return uri;
     }
     
@@ -63,12 +63,12 @@ export default function ImageMessage({
     
     // Check if the URI already contains the base URL to avoid double prefixing
     if (cleanUri.includes('172.20.10.11:8000')) {
-      console.log('ImageMessage getImageUrl - URI already contains base URL, returning as is:', cleanUri);
+      // console.log('ImageMessage getImageUrl - URI already contains base URL, returning as is:', cleanUri);
       return cleanUri;
     }
     
     const fullUrl = `${baseUrl}/storage/${cleanUri}`;
-    console.log('ImageMessage getImageUrl - Constructed full URL:', fullUrl);
+    // console.log('ImageMessage getImageUrl - Constructed full URL:', fullUrl);
     
     return fullUrl;
   };
@@ -102,10 +102,10 @@ export default function ImageMessage({
              source={{ uri: profilePictureUrl }}
              style={styles.profilePicture}
              onError={() => {
-               console.log('ImageMessage: Profile picture failed to load, showing fallback');
+               // console.log('ImageMessage: Profile picture failed to load, showing fallback');
              }}
              onLoad={() => {
-               console.log('ImageMessage: Profile picture loaded successfully:', profilePictureUrl);
+               // console.log('ImageMessage: Profile picture loaded successfully:', profilePictureUrl);
              }}
            />
          ) : (

@@ -2,12 +2,13 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
+import { apiService } from '../../services/apiService';
 
 const AppointmentDetails = () => {
   const router = router;
@@ -101,13 +102,6 @@ const AppointmentDetails = () => {
           <Text style={styles.value}>{appointment.reason}</Text>
         </View>
       )}
-      <IncomingCallListener
-        callId={incomingCallId}
-        visible={modalVisible}
-        onAccept={handleAccept}
-        onReject={handleReject}
-        onClose={() => setModalVisible(false)}
-      />
     </View>
   );
 };

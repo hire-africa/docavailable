@@ -2,31 +2,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
-import sessionService from '../../app/services/sessionService';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
+import sessionService from '../services/sessionService';
 
 interface ChatInfo {
   appointment_id: number;
@@ -164,7 +164,7 @@ export default function ChatPage() {
         try {
           const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
           if (infoResponse.success && infoResponse.data) {
-            console.log('🔍 Chat Info Response:', infoResponse.data);
+            // console.log('🔍 Chat Info Response:', infoResponse.data);
             setChatInfo(infoResponse.data as ChatInfo);
           }
         } catch (error: any) {
@@ -244,52 +244,52 @@ export default function ChatPage() {
     if (messageStorageService && isAuthenticated) {
       loadChat();
       
-      // Debug profile picture data
-      console.log('🔍 Chat Profile Picture Debug:', {
-        user_profile_picture_url: user?.profile_picture_url,
-        user_profile_picture: user?.profile_picture,
-        chatInfo_other_participant_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-        chatInfo_other_participant_profile_picture: chatInfo?.other_participant_profile_picture,
-        currentUserId,
-        user_id: user?.id
-      });
+            // Debug profile picture data
+      // console.log('🔍 Chat Profile Picture Debug:', {
+      //   user_profile_picture_url: user?.profile_picture_url,
+      //   user_profile_picture: user?.profile_picture,
+      //   chatInfo_other_participant_profile_picture_url: chatInfo?.other_participant_profile_picture_url,    
+      //   chatInfo_other_participant_profile_picture: chatInfo?.other_participant_profile_picture,
+      //   currentUserId,
+      //   user_id: user?.id
+      // });
       
       // Refresh user data to ensure profile pictures are up to date
       if (user && (!user.profile_picture_url || !user.profile_picture)) {
-        console.log('🔄 Refreshing user data to update profile pictures...');
+        // console.log('🔄 Refreshing user data to update profile pictures...');
         refreshUserData().catch((error: any) => {
           console.error('Error refreshing user data:', error);
         });
       }
     } else if (!isAuthenticated && !authLoading) {
-      console.log('❌ User not authenticated, skipping chat load');
+      // console.log('❌ User not authenticated, skipping chat load');
     }
   }, [isAuthenticated, authLoading]);
 
   // Debug chatInfo changes
   useEffect(() => {
     if (chatInfo) {
-      console.log('🔍 Chat Header Profile Picture Props:', {
-        imageUri: chatInfo?.other_participant_profile_picture,
-        profilePictureUrl: chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture,
-        chatInfo: chatInfo
-      });
+      // console.log('🔍 Chat Header Profile Picture Props:', {
+      //   imageUri: chatInfo?.other_participant_profile_picture,
+      //   profilePictureUrl: chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture,
+      //   chatInfo: chatInfo
+      // });
     }
     
     // Debug chat header rendering
-    console.log('🔍 Chat Header Debug:', {
-      hasChatInfo: !!chatInfo,
-      profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
-      profilePicture: chatInfo?.other_participant_profile_picture,
-      participantName: chatInfo?.other_participant_name
-    });
+    // console.log('🔍 Chat Header Debug:', {
+    //   hasChatInfo: !!chatInfo,
+    //   profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
+    //   profilePicture: chatInfo?.other_participant_profile_picture,
+    //   participantName: chatInfo?.other_participant_name
+    // });
   }, [chatInfo]);
 
   // Register for message updates and start auto-sync only if authenticated
   useEffect(() => {
     // Safety check to ensure messageStorageService is available and user is authenticated
     if (!messageStorageService || !isAuthenticated) {
-      console.log('❌ messageStorageService not available or user not authenticated');
+      // console.log('❌ messageStorageService not available or user not authenticated');
       return;
     }
 
@@ -302,33 +302,33 @@ export default function ChatPage() {
       
       // Debug: Log delivery status changes for own messages and track image messages
       const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
-      console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
+      // console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
       
       updatedMessages.forEach(message => {
         if (message.sender_id === currentUserId) {
-          console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
+          // console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
           
           // Check if delivery status changed
           const existingMessage = messages.find(m => m.id === message.id);
           if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
-            console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
+            // console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
           }
           
           // Check if message is read
           if (message.delivery_status === 'read') {
-            console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
+            // console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
           }
         }
         
         // Special tracking for image messages
         if (message.message_type === 'image') {
-          console.log(`📷 Image message detected:`, {
-            id: message.id,
-            temp_id: message.temp_id,
-            media_url: message.media_url?.substring(0, 50) + '...',
-            delivery_status: message.delivery_status,
-            sender_id: message.sender_id
-          });
+          // console.log(`📷 Image message detected:`, {
+          //   id: message.id,
+          //   temp_id: message.temp_id,
+          //   media_url: message.media_url?.substring(0, 50) + '...',
+          //   delivery_status: message.delivery_status,
+          //   sender_id: message.sender_id
+          // });
         }
       });
       
@@ -338,7 +338,7 @@ export default function ChatPage() {
       if (hasNewMessagesFromOthers) {
         setMessagesMarkedAsRead(false);
         setMarkReadAttempts(0); // Reset attempts for new messages
-        console.log(`🔄 Reset read flags due to new messages from others`);
+        // console.log(`🔄 Reset read flags due to new messages from others`);
       }
       
       // Also check if there are any unread messages that need to be marked
@@ -348,7 +348,7 @@ export default function ChatPage() {
       );
       
       if (hasUnreadMessages && messagesMarkedAsRead) {
-        console.log(`🔄 Found unread messages, resetting read flag`);
+        // console.log(`🔄 Found unread messages, resetting read flag`);
         setMessagesMarkedAsRead(false);
         setMarkReadAttempts(0);
       }
@@ -489,7 +489,7 @@ export default function ChatPage() {
       const doctorId = chatInfo?.doctor_id || 0;
       const patientId = user?.id || 0;
       
-      console.log('🔍 Submitting rating with doctorId:', doctorId, 'patientId:', patientId);
+      // console.log('🔍 Submitting rating with doctorId:', doctorId, 'patientId:', patientId);
       await sessionService.submitRating(sessionId, rating, comment, doctorId, patientId);
       
       // Show success message and navigate back
@@ -629,7 +629,7 @@ export default function ChatPage() {
         );
         
         if (success) {
-          console.log('📷 Photo sent successfully');
+          // console.log('📷 Photo sent successfully');
         } else {
           console.error('❌ Failed to send photo');
         }
@@ -656,7 +656,7 @@ export default function ChatPage() {
         );
         
         if (success) {
-          console.log('📷 Image picked and sent successfully');
+          // console.log('📷 Image picked and sent successfully');
         } else {
           console.error('❌ Failed to send picked image');
         }
@@ -669,9 +669,9 @@ export default function ChatPage() {
   };
 
   // Debug modal state
-  console.log('🔍 showEndSessionModal state:', showEndSessionModal);
-  console.log('🔍 showRatingModal state:', showRatingModal);
-  console.log('🔍 endingSession state:', endingSession);
+  // console.log('🔍 showEndSessionModal state:', showEndSessionModal);
+  // console.log('🔍 showRatingModal state:', showRatingModal);
+  // console.log('🔍 endingSession state:', endingSession);
 
   if (loading) {
     return (
@@ -709,15 +709,23 @@ export default function ChatPage() {
             <Image 
               source={{ uri: chatInfo.other_participant_profile_picture_url }} 
               style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
-              onError={(error) => console.log('❌ Profile picture URL failed to load:', chatInfo.other_participant_profile_picture_url, error)}
-              onLoad={() => console.log('✅ Profile picture URL loaded successfully:', chatInfo.other_participant_profile_picture_url)}
+              onError={(error) => {
+                // console.log('❌ Profile picture URL failed to load:', chatInfo.other_participant_profile_picture_url, error);
+              }}
+              onLoad={() => {
+                // console.log('✅ Profile picture URL loaded successfully:', chatInfo.other_participant_profile_picture_url);
+              }}
             />
           ) : chatInfo?.other_participant_profile_picture ? (
             <Image 
               source={{ uri: chatInfo.other_participant_profile_picture }} 
               style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
-              onError={(error) => console.log('❌ Profile picture failed to load:', chatInfo.other_participant_profile_picture, error)}
-              onLoad={() => console.log('✅ Profile picture loaded successfully:', chatInfo.other_participant_profile_picture)}
+              onError={(error) => {
+                // console.log('❌ Profile picture failed to load:', chatInfo.other_participant_profile_picture, error);
+              }}
+              onLoad={() => {
+                // console.log('✅ Profile picture loaded successfully:', chatInfo.other_participant_profile_picture);
+              }}
             />
           ) : (
             <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>

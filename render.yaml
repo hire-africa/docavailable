@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: docavailable-backend
+    env: docker
+    buildCommand: 
+    startCommand: 
+    rootDir: backend
+    envVars:
+      - key: APP_NAME
+        value: DocAvailable
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_TIMEZONE
+        value: UTC
+      - key: APP_LOCALE
+        value: en
+      - key: APP_FALLBACK_LOCALE
+        value: en
+      - key: APP_FAKER_LOCALE
+        value: en_US
+      - key: LOG_CHANNEL
+        value: stack
+      - key: LOG_DEPRECATIONS_CHANNEL
+        value: null
+      - key: LOG_LEVEL
+        value: error
+      - key: CACHE_STORE
+        value: database
+      - key: CACHE_PREFIX
+        value: laravel-cache-
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: QUEUE_FAILED_DRIVER
+        value: database-uuids
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_LIFETIME
+        value: 120
+      - key: FILESYSTEM_DISK
+        value: local 

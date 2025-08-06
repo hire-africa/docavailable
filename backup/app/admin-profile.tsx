@@ -61,9 +61,9 @@ export default function AdminProfile() {
             }
 
             try {
-                console.log('AdminProfile: Fetching admin data for:', user.uid);
+                // console.log('AdminProfile: Fetching admin data for:', user.uid);
                 const completeData = await firestoreService.getUserById(user.uid) as CompleteAdminData;
-                console.log('AdminProfile: Admin data fetched:', completeData);
+                // console.log('AdminProfile: Admin data fetched:', completeData);
                 setAdminData(completeData);
             } catch (error) {
                 console.error('AdminProfile: Error fetching admin data:', error);

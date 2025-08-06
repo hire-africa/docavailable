@@ -73,7 +73,7 @@ const WorkingHours: React.FC = () => {
     useFocusEffect(
         useCallback(() => {
             if (user?.id) {
-                console.log('WorkingHours: Screen focused, reloading availability');
+                // console.log('WorkingHours: Screen focused, reloading availability');
                 loadAvailability();
             }
         }, [user?.id])
@@ -82,20 +82,20 @@ const WorkingHours: React.FC = () => {
     const loadAvailability = async () => {
         try {
             setLoading(true);
-            console.log('WorkingHours: Loading availability for user:', user?.id);
+            // console.log('WorkingHours: Loading availability for user:', user?.id);
             
             if (!user?.id) {
-                console.log('WorkingHours: No user ID found');
+                // console.log('WorkingHours: No user ID found');
                 return;
             }
             
             const response = await authService.getDoctorAvailability(user.id.toString());
-            console.log('WorkingHours: API response:', response);
+            // console.log('WorkingHours: API response:', response);
             
             if (response.success && response.data) {
                 // Map backend snake_case to frontend camelCase
                 const data = response.data;
-                console.log('WorkingHours: Mapped data:', data);
+                // console.log('WorkingHours: Mapped data:', data);
                 
                 setAvailability({
                     isOnline: data.is_online || false,
@@ -104,7 +104,7 @@ const WorkingHours: React.FC = () => {
                     autoAcceptAppointments: data.auto_accept_appointments || false,
                 });
             } else {
-                console.log('WorkingHours: API call failed:', response.message);
+                // console.log('WorkingHours: API call failed:', response.message);
             }
         } catch (error) {
             console.error('WorkingHours: Error loading availability:', error);
@@ -116,7 +116,7 @@ const WorkingHours: React.FC = () => {
     const saveAvailability = async () => {
         try {
             setSaving(true);
-            console.log('WorkingHours: Saving availability for user:', user?.id);
+            // console.log('WorkingHours: Saving availability for user:', user?.id);
             
             if (!user?.id) {
                 Alert.alert('Error', 'User not found');
@@ -131,10 +131,10 @@ const WorkingHours: React.FC = () => {
                 auto_accept_appointments: availability.autoAcceptAppointments,
             };
             
-            console.log('WorkingHours: Sending data to backend:', backendData);
+            // console.log('WorkingHours: Sending data to backend:', backendData);
             
             const response = await authService.updateDoctorAvailability(user.id.toString(), backendData);
-            console.log('WorkingHours: Save response:', response);
+            // console.log('WorkingHours: Save response:', response);
             
             if (response.success) {
                 Alert.alert('Success', 'Availability settings updated successfully!');

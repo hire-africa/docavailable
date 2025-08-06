@@ -75,6 +75,33 @@ const specializations = {
         'Hearing Problems',
         'Sinus & Allergy',
         'Voice & Speech'
+    ],
+    'Sexual Health': [
+        'General Sexual Health',
+        'Sexual Function',
+        'Sexual Education',
+        'Sexual Therapy'
+    ],
+    'Oncology (Cancer Care)': [
+        'General Oncology',
+        'Breast Cancer',
+        'Lung Cancer',
+        'Blood Cancer',
+        'Pediatric Oncology'
+    ],
+    'Endocrinology (Hormones & Metabolism)': [
+        'Diabetes Care',
+        'Thyroid Disorders',
+        'Hormone Therapy',
+        'Metabolic Disorders',
+        'Reproductive Endocrinology'
+    ],
+    'Gastroenterology (Digestive Health)': [
+        'General Gastroenterology',
+        'Liver Disease',
+        'Inflammatory Bowel Disease',
+        'Digestive Disorders',
+        'Endoscopy'
     ]
 };
 

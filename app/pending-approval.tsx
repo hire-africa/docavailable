@@ -10,12 +10,12 @@ const PendingApproval: React.FC = () => {
   const { user, userData, refreshUserData } = useAuth();
 
   const handleRefresh = async () => {
-    console.log('PendingApproval: Manual refresh requested');
+    // console.log('PendingApproval: Manual refresh requested');
     await refreshUserData();
   };
 
   const handleGoHome = async () => {
-    console.log('PendingApproval: Signing out and navigating to home page');
+    // console.log('PendingApproval: Signing out and navigating to home page');
     try {
       await authService.signOut();
       router.replace('/');

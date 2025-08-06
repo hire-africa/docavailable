@@ -83,19 +83,19 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (user) {
-      console.log('AdminDashboard: User loaded, fetching stats and pending doctors');
+      // console.log('AdminDashboard: User loaded, fetching stats and pending doctors');
       const fetchStats = async () => {
         try {
           const statsResponse = await adminService.getDashboardStats();
-          console.log('AdminDashboard: Stats response:', statsResponse);
+          // console.log('AdminDashboard: Stats response:', statsResponse);
           if (statsResponse.success && statsResponse.data) {
             const stats = statsResponse.data;
-            console.log('AdminDashboard: Stats data:', stats);
+            // console.log('AdminDashboard: Stats data:', stats);
             setTotalUsersCount(stats.total_users || 0);
             setDoctorsCount(stats.total_doctors || 0);
             setPatientsCount(stats.total_patients || 0);
           } else {
-            console.log('AdminDashboard: Invalid stats response');
+            // console.log('AdminDashboard: Invalid stats response');
           }
         } catch (error) {
           console.error('Error fetching dashboard stats:', error);
@@ -116,7 +116,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (activeTab === 'verification') {
-      console.log('AdminDashboard: Loading pending doctors for verification tab');
+      // console.log('AdminDashboard: Loading pending doctors for verification tab');
       fetchPendingDoctors();
     }
   }, [activeTab]);
@@ -124,30 +124,30 @@ export default function AdminDashboard() {
   // Also load pending doctors when component mounts if verification tab is active
   useEffect(() => {
     if (user && activeTab === 'verification') {
-      console.log('AdminDashboard: Initial load of pending doctors');
+      // console.log('AdminDashboard: Initial load of pending doctors');
       fetchPendingDoctors();
     }
   }, [user]);
 
   const fetchPendingDoctors = async () => {
-      console.log('AdminDashboard: fetchPendingDoctors called');
+      // console.log('AdminDashboard: fetchPendingDoctors called');
       setLoadingDoctors(true);
     try {
-      console.log('AdminDashboard: Calling adminService.getPendingDoctors');
+      // console.log('AdminDashboard: Calling adminService.getPendingDoctors');
       const response = await adminService.getPendingDoctors(1, searchQuery);
-      console.log('AdminDashboard: Response received:', {
-        success: response.success,
-        hasData: !!response.data,
-        dataLength: response.data?.data?.length,
-        total: response.data?.total
-      });
+      // console.log('AdminDashboard: Response received:', {
+      //   success: response.success,
+      //   hasData: !!response.data,
+      //   dataLength: response.data?.data?.length,
+      //   total: response.data?.total
+      // });
       
       if (response.success && response.data) {
-        console.log('AdminDashboard: Setting pending doctors:', response.data.data.length);
+        // console.log('AdminDashboard: Setting pending doctors:', response.data.data.length);
         setPendingDoctors(response.data.data);
         setPendingCount(response.data.total);
       } else {
-        console.log('AdminDashboard: No valid response data');
+        // console.log('AdminDashboard: No valid response data');
         setPendingDoctors([]);
         setPendingCount(0);
       }
@@ -293,7 +293,7 @@ export default function AdminDashboard() {
   );
 
   const renderVerificationQueue = () => {
-    console.log('AdminDashboard: renderVerificationQueue called, pendingDoctors:', pendingDoctors.length);
+    // console.log('AdminDashboard: renderVerificationQueue called, pendingDoctors:', pendingDoctors.length);
     
     // Filter doctors based on search query
     const filteredDoctors = pendingDoctors.filter(doctor => {
@@ -305,7 +305,7 @@ export default function AdminDashboard() {
       );
     });
     
-    console.log('AdminDashboard: Filtered doctors:', filteredDoctors.length);
+    // console.log('AdminDashboard: Filtered doctors:', filteredDoctors.length);
 
     // Sort doctors based on selected sort option
     const sortedDoctors = [...filteredDoctors].sort((a, b) => {

@@ -46,11 +46,11 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
 
     const getImageUrl = (uri: string) => {
         // Debug logging
-        console.log('ProfilePictureDisplay - Original URI:', uri);
+        // console.log('ProfilePictureDisplay - Original URI:', uri);
         
         // If it's already a full URL, return as is
         if (uri.startsWith('http')) {
-            console.log('ProfilePictureDisplay - Using full URL:', uri);
+            // console.log('ProfilePictureDisplay - Using full URL:', uri);
             return uri;
         }
         
@@ -66,32 +66,32 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         
         // Check if the URI already contains the base URL to avoid double prefixing
         if (cleanUri.includes('172.20.10.11:8000')) {
-            console.log('ProfilePictureDisplay - URI already contains base URL, using as is:', cleanUri);
+            // console.log('ProfilePictureDisplay - URI already contains base URL, using as is:', cleanUri);
             return cleanUri;
         }
         
         const fullUrl = `${baseUrl}/storage/${cleanUri}`;
         
-        console.log('ProfilePictureDisplay - Constructed URL:', fullUrl);
+        // console.log('ProfilePictureDisplay - Constructed URL:', fullUrl);
         return fullUrl;
     };
 
     // Use profilePictureUrl if available, otherwise fall back to imageUri
     const finalImageUri = profilePictureUrl || imageUri;
     
-    console.log('ProfilePictureDisplay - Props:', {
-        imageUri,
-        profilePictureUrl,
-        finalImageUri,
-        size
-    });
+    // console.log('ProfilePictureDisplay - Props:', {
+    //   profilePictureUrl,
+    //   profilePicture,
+    //   size,
+    //   style
+    // });
 
     // Add more detailed debugging for troubleshooting
     if (finalImageUri) {
-        console.log('ProfilePictureDisplay - Final image URI:', finalImageUri);
-        console.log('ProfilePictureDisplay - Is full URL:', finalImageUri.startsWith('http'));
+        // console.log('ProfilePictureDisplay - Final image URI:', finalImageUri);
+        // console.log('ProfilePictureDisplay - Is full URL:', finalImageUri.startsWith('http'));
     } else {
-        console.log('ProfilePictureDisplay - No image URI available');
+        // console.log('ProfilePictureDisplay - No image URI available');
     }
 
     return (
@@ -104,7 +104,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
                         console.error('ProfilePictureDisplay - Image load error:', error);
                     }}
                     onLoad={() => {
-                        console.log('ProfilePictureDisplay - Image loaded successfully:', finalImageUri);
+                        // console.log('ProfilePictureDisplay - Image loaded successfully:', finalImageUri);
                     }}
                 />
             ) : (

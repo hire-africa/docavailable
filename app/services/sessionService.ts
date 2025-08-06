@@ -185,7 +185,33 @@ class SessionService {
   }
 
   /**
-   * Check if session should auto-end based on time or sessions
+   * Calculate sessions to deduct based on elapsed time
+   * Auto-deductions happen at 10-minute intervals
+   * Manual end always adds 1 session
+   */
+  calculateSessionsToDeduct(elapsedMinutes: number, isManualEnd: boolean = false): number {
+    const autoDeductions = Math.floor(elapsedMinutes / 10);
+    const manualDeduction = isManualEnd ? 1 : 0;
+    return autoDeductions + manualDeduction;
+  }
+
+  /**
+   * Calculate total allowed time based on sessions remaining
+   */
+  calculateTotalAllowedTime(sessionsRemaining: number): number {
+    return sessionsRemaining * 10; // minutes
+  }
+
+  /**
+   * Get time remaining until next auto-deduction
+   */
+  getTimeUntilNextDeduction(elapsedMinutes: number): number {
+    const nextDeductionMinute = Math.ceil(elapsedMinutes / 10) * 10;
+    return Math.max(0, nextDeductionMinute - elapsedMinutes);
+  }
+
+  /**
+   * Check if session should auto-end based on total time
    */
   shouldAutoEndSession(
     sessionState: SessionState,
@@ -193,8 +219,9 @@ class SessionService {
   ): boolean {
     if (!sessionState.isActive) return false;
 
-    // Check if max duration reached
-    if (sessionState.maxDurationMinutes && elapsedMinutes >= sessionState.maxDurationMinutes) {
+    // Check if total time reached
+    const totalAllowedTime = this.calculateTotalAllowedTime(sessionState.remainingSessions);
+    if (elapsedMinutes >= totalAllowedTime) {
       return true;
     }
 
@@ -207,10 +234,21 @@ class SessionService {
   }
 
   /**
-   * Calculate sessions to deduct based on elapsed time
+   * Get session billing information
    */
-  calculateSessionsToDeduct(elapsedMinutes: number): number {
-    return Math.max(1, Math.ceil(elapsedMinutes / 10));
+  getSessionBillingInfo(elapsedMinutes: number, isManualEnd: boolean = false) {
+    const autoDeductions = Math.floor(elapsedMinutes / 10);
+    const manualDeduction = isManualEnd ? 1 : 0;
+    const totalDeductions = autoDeductions + manualDeduction;
+    const timeUntilNextDeduction = this.getTimeUntilNextDeduction(elapsedMinutes);
+    
+    return {
+      autoDeductions,
+      manualDeduction,
+      totalDeductions,
+      timeUntilNextDeduction,
+      elapsedMinutes
+    };
   }
 }
 

@@ -64,7 +64,7 @@ const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
 );
 
 export default function DoctorDashboard() {
-  console.log('DoctorDashboard mounted');
+  // console.log('DoctorDashboard mounted');
   const { user, userData, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
@@ -232,7 +232,7 @@ export default function DoctorDashboard() {
     // Test chat with a hardcoded patient ID for testing
     const testPatientId = 'test-patient-123';
     const chatId = `chat_${testPatientId}_${user?.uid}`;
-    console.log('DoctorDashboard: Testing chat with ID:', chatId);
+    // console.log('DoctorDashboard: Testing chat with ID:', chatId);
     router.push(`/chat/${chatId}` as any);
   };
 

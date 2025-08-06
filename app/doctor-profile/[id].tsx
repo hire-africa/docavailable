@@ -12,9 +12,9 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
 
 const { width } = Dimensions.get('window');
 

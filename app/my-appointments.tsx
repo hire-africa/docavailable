@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from './services/apiService';
+import { apiService } from '../services/apiService';
 
 const MyAppointments = () => {
   const { user } = useAuth();
@@ -27,11 +27,11 @@ const MyAppointments = () => {
     // Use Laravel API instead of Firestore
     apiService.get('/appointments')
       .then((response: any) => {
-        console.log('MyAppointments: Raw API response:', response);
+        // console.log('MyAppointments: Raw API response:', response);
         if (response.success && response.data) {
           // Handle paginated response from Laravel
           const appointmentsData = response.data.data || response.data;
-          console.log('MyAppointments: Fetched appointments:', appointmentsData);
+          // console.log('MyAppointments: Fetched appointments:', appointmentsData);
           setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
         } else {
           setAppointments([]);

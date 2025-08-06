@@ -430,10 +430,6 @@ class AuthService {
     });
   }
 
-  getCurrentUser(): UserData | null {
-    return this.currentUser;
-  }
-
   isAuthenticated(): boolean {
     return !!this.currentToken && !!this.currentUser;
   }

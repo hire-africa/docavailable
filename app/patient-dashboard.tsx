@@ -23,7 +23,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from '../components/Icon';
+import Icon, { IconName } from '../components/Icon';
 
 import AlertDialog from '../components/AlertDialog';
 import ChatbotModal from '../components/ChatbotModal';
@@ -31,9 +31,9 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 
+import { apiService } from '../services/apiService';
 import { APPOINTMENT_STATUS, appointmentService, type Appointment } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
-import { apiService } from './services/apiService';
 
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,7 +150,7 @@ export default function PatientDashboard() {
   useEffect(() => {
     const refreshData = async () => {
       try {
-        console.log('PatientDashboard: Refreshing user data...');
+        // console.log('PatientDashboard: Refreshing user data...');
         await refreshUserData();
       } catch (error) {
         console.error('PatientDashboard: Error refreshing user data:', error);
@@ -163,10 +163,10 @@ export default function PatientDashboard() {
   // Log when user data changes
   useEffect(() => {
     if (userData) {
-      console.log('PatientDashboard: User data updated:', {
-        profile_picture_url: userData.profile_picture_url,
-        profile_picture: userData.profile_picture
-      });
+      // // console.log('PatientDashboard: User data updated:', {
+      //   profile_picture_url: userData.profile_picture_url,
+      //   profile_picture: userData.profile_picture
+      // });
     }
   }, [userData]);
 
@@ -225,8 +225,8 @@ export default function PatientDashboard() {
     if (user) {
       appointmentService.getAppointments()
         .then((appointmentsData) => {
-          console.log('PatientDashboard: Fetched appointments:', appointmentsData);
-          console.log('PatientDashboard: Appointment statuses:', appointmentsData.map(apt => ({ id: apt.id, status: apt.status, type: apt.appointment_type })));
+          // // console.log('PatientDashboard: Fetched appointments:', appointmentsData);
+          // // console.log('PatientDashboard: Appointment statuses:', appointmentsData.map(apt => ({ id: apt.id, status: apt.status, type: apt.appointment_type })));
           setAppointments(appointmentsData);
         })
         .catch(error => {
@@ -242,7 +242,7 @@ export default function PatientDashboard() {
       apiService.get('/subscription')
         .then((response: any) => {
           if (response.success && response.data) {
-            console.log('PatientDashboard: Loaded subscription:', response.data);
+            // // console.log('PatientDashboard: Loaded subscription:', response.data);
             setCurrentSubscription(response.data);
           } else {
             setCurrentSubscription(null);
@@ -255,7 +255,7 @@ export default function PatientDashboard() {
           
           // If it's an authentication error, don't retry
           if (error.response?.status === 401) {
-            console.log('PatientDashboard: Authentication error loading subscription, not retrying');
+            // // console.log('PatientDashboard: Authentication error loading subscription, not retrying');
           }
         });
     }
@@ -288,7 +288,7 @@ export default function PatientDashboard() {
             setSubscriptionPlans(transformedPlans);
                   } else {
           // Handle invalid API response
-          console.log('PatientDashboard: Invalid plans API response');
+          // console.log('PatientDashboard: Invalid plans API response');
           setPlansError('Unable to load subscription plans. Please try again later.');
           setSubscriptionPlans([]);
         }
@@ -309,15 +309,15 @@ export default function PatientDashboard() {
       
       // Load plans from Laravel API based on user's country
       try {
-        console.log('PatientDashboard: Loading plans for country:', registrationCountry);
+        // console.log('PatientDashboard: Loading plans for country:', registrationCountry);
         const response = await apiService.get('/plans');
-        console.log('PatientDashboard: Plans API response:', response);
+        // console.log('PatientDashboard: Plans API response:', response);
         
         if (response.success && (response as any).plans) {
           // Get user's currency and show all plans for now (remove strict filtering)
           const userCurrency = LocationService.getCurrencyForCountry(registrationCountry);
-          console.log('PatientDashboard: User currency:', userCurrency);
-          console.log('PatientDashboard: Available plans:', (response as any).plans);
+          // console.log('PatientDashboard: User currency:', userCurrency);
+          // console.log('PatientDashboard: Available plans:', (response as any).plans);
           
           // Show all plans instead of filtering by currency
           const allPlans = (response as any).plans;
@@ -335,13 +335,13 @@ export default function PatientDashboard() {
             bestValue: plan.name.toLowerCase().includes('premium')
           }));
           
-          console.log('PatientDashboard: Transformed plans:', transformedPlans);
-          console.log('PatientDashboard: Plan IDs available:', transformedPlans.map((p: any) => ({ id: p.id, name: p.name })));
+          // console.log('PatientDashboard: Transformed plans:', transformedPlans);
+          // console.log('PatientDashboard: Plan IDs available:', transformedPlans.map((p: any) => ({ id: p.id, name: p.name })));
           setSubscriptionPlans(transformedPlans);
         } else {
           // Handle invalid API response
-          console.log('PatientDashboard: Invalid plans API response');
-          console.log('PatientDashboard: Response structure:', response);
+          // console.log('PatientDashboard: Invalid plans API response');
+          // console.log('PatientDashboard: Response structure:', response);
           setPlansError('Unable to load subscription plans. Please try again later.');
           setSubscriptionPlans([]);
         }
@@ -367,11 +367,11 @@ export default function PatientDashboard() {
       // Fetch real doctors from Laravel API
       apiService.get('/doctors/active')
         .then((response: any) => {
-          console.log('PatientDashboard: Raw doctors API response:', response);
+          // console.log('PatientDashboard: Raw doctors API response:', response);
           if (response.success && response.data) {
             // Handle paginated response from Laravel
             const doctorsData = response.data.data || response.data;
-            console.log('PatientDashboard: Fetched doctors:', doctorsData);
+            // console.log('PatientDashboard: Fetched doctors:', doctorsData);
             
             if (Array.isArray(doctorsData)) {
               // Filter for approved doctors and add default values for missing fields
@@ -435,14 +435,14 @@ export default function PatientDashboard() {
       
       // Set up periodic refresh every 30 seconds when messages tab is active
       refreshInterval = setInterval(() => {
-        console.log('🔄 Auto-refreshing messages tab...');
+        // console.log('🔄 Auto-refreshing messages tab...');
         loadEndedSessions();
         
         // Also refresh appointments to check for status changes
         if (user) {
           appointmentService.getAppointments()
             .then((appointmentsData) => {
-              console.log('PatientDashboard: Auto-refresh - Fetched appointments:', appointmentsData);
+              // console.log('PatientDashboard: Auto-refresh - Fetched appointments:', appointmentsData);
               setAppointments(appointmentsData);
             })
             .catch(error => {
@@ -463,14 +463,14 @@ export default function PatientDashboard() {
   useEffect(() => {
     const handleAppStateChange = (nextAppState: string) => {
       if (nextAppState === 'active' && activeTab === 'messages' && user?.id) {
-        console.log('🔄 App returned to foreground, refreshing messages...');
+        // console.log('🔄 App returned to foreground, refreshing messages...');
         loadEndedSessions();
         
         // Also refresh appointments
         if (user) {
           appointmentService.getAppointments()
             .then((appointmentsData) => {
-              console.log('PatientDashboard: App foreground refresh - Fetched appointments:', appointmentsData);
+              // console.log('PatientDashboard: App foreground refresh - Fetched appointments:', appointmentsData);
               setAppointments(appointmentsData);
             })
             .catch(error => {
@@ -490,7 +490,7 @@ export default function PatientDashboard() {
     
     setRefreshingMessages(true);
     try {
-      console.log('🔄 Manual refresh of messages tab...');
+      // console.log('🔄 Manual refresh of messages tab...');
       await loadEndedSessions().catch(err => console.error('Error refreshing ended sessions:', err));
       
       // Also refresh appointments
@@ -498,7 +498,7 @@ export default function PatientDashboard() {
         console.error('Error refreshing appointments:', err);
         return [];
       });
-      console.log('PatientDashboard: Manual refresh - Fetched appointments:', appointmentsData);
+      // console.log('PatientDashboard: Manual refresh - Fetched appointments:', appointmentsData);
       setAppointments(appointmentsData);
     } catch (error) {
       console.error('PatientDashboard: Manual refresh - Error:', error);
@@ -513,7 +513,7 @@ export default function PatientDashboard() {
     
     setRefreshingHome(true);
     try {
-      console.log('🔄 Manual refresh of home tab...');
+      // console.log('🔄 Manual refresh of home tab...');
       
       // Refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
@@ -540,16 +540,16 @@ export default function PatientDashboard() {
     
     setRefreshingDoctors(true);
     try {
-      console.log('🔄 Manual refresh of doctors tab...');
+      // console.log('🔄 Manual refresh of doctors tab...');
       
       // Use the same endpoint as the original loading logic
       const response = await apiService.get('/doctors/active');
-      console.log('PatientDashboard: Doctors API response:', response);
+      // console.log('PatientDashboard: Doctors API response:', response);
       
       if (response && response.success && response.data) {
         // Handle paginated response from Laravel (same as original logic)
         const doctorsData = response.data.data || response.data;
-        console.log('PatientDashboard: Fetched doctors:', doctorsData);
+        // console.log('PatientDashboard: Fetched doctors:', doctorsData);
         
         if (Array.isArray(doctorsData)) {
           // Filter for approved doctors and add default values for missing fields (same as original logic)
@@ -578,14 +578,14 @@ export default function PatientDashboard() {
             }));
           setDoctors(approvedDoctors);
           setDoctorsError(null);
-          console.log('PatientDashboard: Successfully refreshed doctors:', approvedDoctors.length);
+          // console.log('PatientDashboard: Successfully refreshed doctors:', approvedDoctors.length);
         } else {
-          console.log('PatientDashboard: Invalid doctors data structure:', response.data);
+          // console.log('PatientDashboard: Invalid doctors data structure:', response.data);
           setDoctors([]);
           setDoctorsError('Invalid data format received from server');
         }
       } else {
-        console.log('PatientDashboard: Invalid API response:', response);
+        // console.log('PatientDashboard: Invalid API response:', response);
         setDoctors([]);
         setDoctorsError('Failed to load doctors data');
       }
@@ -626,7 +626,7 @@ export default function PatientDashboard() {
     
     setRefreshingAppointments(true);
     try {
-      console.log('🔄 Manual refresh of appointments tab...');
+      // console.log('🔄 Manual refresh of appointments tab...');
       
       // Refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
@@ -647,7 +647,7 @@ export default function PatientDashboard() {
     
     setRefreshingSubscriptions(true);
     try {
-      console.log('🔄 Manual refresh of subscriptions tab...');
+      // console.log('🔄 Manual refresh of subscriptions tab...');
       
       // Refresh subscription
       await refreshSubscription().catch(err => console.error('Error refreshing subscription:', err));
@@ -664,7 +664,7 @@ export default function PatientDashboard() {
     
     setRefreshingProfile(true);
     try {
-      console.log('🔄 Manual refresh of profile tab...');
+      // console.log('🔄 Manual refresh of profile tab...');
       
       // Refresh user data
       const { refreshUserData } = useAuth();
@@ -682,7 +682,7 @@ export default function PatientDashboard() {
       try {
         // Check if there's a session parameter
         if (params.sessionId) {
-          console.log('PatientDashboard: Session ID from params:', params.sessionId);
+          // console.log('PatientDashboard: Session ID from params:', params.sessionId);
           
           // Try to get appointment details from API
           try {
@@ -700,7 +700,7 @@ export default function PatientDashboard() {
                 started_at: appointment.created_at,
                 last_activity_at: appointment.updated_at
               });
-              console.log('PatientDashboard: Active appointment loaded:', appointment);
+              // console.log('PatientDashboard: Active appointment loaded:', appointment);
             }
           } catch (error) {
             console.error('Error loading appointment:', error);
@@ -723,7 +723,7 @@ export default function PatientDashboard() {
                 started_at: activeTextSession.started_at,
                 last_activity_at: activeTextSession.last_activity_at
               });
-              console.log('PatientDashboard: Active text session found:', activeTextSession);
+              // console.log('PatientDashboard: Active text session found:', activeTextSession);
               return; // Don't check appointments if we have an active text session
             }
           } catch (error) {
@@ -754,7 +754,7 @@ export default function PatientDashboard() {
                     started_at: activeAppointment.created_at,
                     last_activity_at: activeAppointment.updated_at
                   });
-                  console.log('PatientDashboard: Active appointment found:', activeAppointment);
+                  // console.log('PatientDashboard: Active appointment found:', activeAppointment);
                 }
               }
             }
@@ -830,7 +830,7 @@ export default function PatientDashboard() {
         const isConnected = await apiService.checkConnectivity();
         setApiStatus(isConnected ? 'connected' : 'disconnected');
         if (isConnected) {
-          console.log('PatientDashboard: API connectivity check successful');
+          // console.log('PatientDashboard: API connectivity check successful');
           // Reset circuit breaker on successful connectivity
           apiService.resetCircuitBreaker();
         } else {
@@ -911,7 +911,7 @@ export default function PatientDashboard() {
         return;
       }
       
-      console.log('PatientDashboard: Found plan:', plan);
+      // console.log('PatientDashboard: Found plan:', plan);
 
       // Check if user is authenticated
       if (!user) {
@@ -919,9 +919,9 @@ export default function PatientDashboard() {
         return;
       }
 
-      console.log('PatientDashboard: User authenticated:', user.email);
-      console.log('PatientDashboard: User ID:', user.id);
-      console.log('PatientDashboard: User object:', user);
+      // console.log('PatientDashboard: User authenticated:', user.email);
+      // console.log('PatientDashboard: User ID:', user.id);
+      // console.log('PatientDashboard: User object:', user);
       
       // Show processing message
       showProcessing(
@@ -955,14 +955,14 @@ export default function PatientDashboard() {
         }
       };
 
-      console.log('PatientDashboard: Sending subscription data with transaction ID:', subscriptionData);
-      console.log('PatientDashboard: Plan ID being sent:', subscriptionData.plan_id);
-      console.log('PatientDashboard: Plan ID type:', typeof subscriptionData.plan_id);
+      // console.log('PatientDashboard: Sending subscription data with transaction ID:', subscriptionData);
+      // console.log('PatientDashboard: Plan ID being sent:', subscriptionData.plan_id);
+      // console.log('PatientDashboard: Plan ID type:', typeof subscriptionData.plan_id);
       
       // Test API connection first
       try {
         const healthCheck = await apiService.get('/health');
-        console.log('PatientDashboard: API health check:', healthCheck);
+        // console.log('PatientDashboard: API health check:', healthCheck);
       } catch (error) {
         console.error('PatientDashboard: API health check failed:', error);
       }
@@ -970,7 +970,7 @@ export default function PatientDashboard() {
       // Directly activate subscription via Laravel API
       const response = await apiService.post('/create_subscription', subscriptionData);
       
-      console.log('PatientDashboard: Subscription response:', response);
+      // console.log('PatientDashboard: Subscription response:', response);
 
       hideAlert();
       
@@ -1043,9 +1043,14 @@ export default function PatientDashboard() {
 
     // Filter by specialization if selected
     if (selectedSpecialization) {
-      filteredDoctors = filteredDoctors.filter(doctor => 
-        doctor.specialization === selectedSpecialization
-      );
+      filteredDoctors = filteredDoctors.filter(doctor => {
+        // Check both old single specialization and new multiple specializations
+        const hasSpecialization = 
+          doctor.specialization === selectedSpecialization ||
+          (doctor.specializations && Array.isArray(doctor.specializations) && 
+           doctor.specializations.includes(selectedSpecialization));
+        return hasSpecialization;
+      });
     }
 
     // Filter by search query (name, specialization, or location)
@@ -1054,10 +1059,14 @@ export default function PatientDashboard() {
       filteredDoctors = filteredDoctors.filter(doctor => {
         const name = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase();
         const specialization = (doctor.specialization || '').toLowerCase();
+        const specializations = Array.isArray(doctor.specializations) 
+          ? doctor.specializations.join(' ').toLowerCase() 
+          : '';
         const location = (doctor.city || doctor.country || '').toLowerCase();
         
         return name.includes(query) || 
                specialization.includes(query) || 
+               specializations.includes(query) ||
                location.includes(query);
       });
     }
@@ -1117,7 +1126,7 @@ export default function PatientDashboard() {
     // Check circuit breaker status before making request
     const circuitStatus = apiService.getCircuitBreakerStatus();
     if (circuitStatus.isOpen) {
-      console.log('PatientDashboard: Circuit breaker is open, skipping subscription refresh');
+      // console.log('PatientDashboard: Circuit breaker is open, skipping subscription refresh');
       return;
     }
     
@@ -1126,7 +1135,7 @@ export default function PatientDashboard() {
       const response = await apiService.get('/subscription');
       const subscription = response.success ? response.data as UserSubscription : null;
       setCurrentSubscription(subscription);
-      console.log('PatientDashboard: Subscription refreshed successfully');
+      // console.log('PatientDashboard: Subscription refreshed successfully');
     } catch (error: any) {
       console.error('PatientDashboard: Failed to refresh subscription:', error);
       // Don't show error to user for background refresh
@@ -1162,7 +1171,7 @@ export default function PatientDashboard() {
     try {
       setLoadingEndedSessions(true);
       const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
-      console.log('📱 Loaded ended sessions:', sessions);
+      // console.log('📱 Loaded ended sessions:', sessions);
       setEndedSessions(sessions || []);
     } catch (error) {
       console.error('Error loading ended sessions:', error);
@@ -1175,7 +1184,7 @@ export default function PatientDashboard() {
   const handleDeleteEndedSession = async (appointmentId: number) => {
     try {
       await endedSessionStorageService.deleteEndedSession(appointmentId);
-      setEndedSessions(prev => prev.filter(session => session.appointment_id !== appointmentId));
+              setEndedSessions(prev => prev.filter(session => session.appointmentId !== appointmentId));
       setShowEndedSessionMenu(null);
       showSuccess('Session deleted successfully');
     } catch (error) {
@@ -1189,7 +1198,7 @@ export default function PatientDashboard() {
       const exportData = await endedSessionStorageService.exportEndedSession(appointmentId);
       // For now, we'll just show a success message
       // In a real app, you might want to share the data or save it to a file
-      console.log('Export data:', exportData);
+      // console.log('Export data:', exportData);
       setShowEndedSessionMenu(null);
       showSuccess('Session exported successfully');
     } catch (error) {
@@ -1713,11 +1722,11 @@ export default function PatientDashboard() {
             } else {
               // Render ended session
               return (
-                <View key={`ended_${item.appointment_id}`} style={{ position: 'relative' }}>
+                <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
                     onPress={() => {
-                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointment_id.toString() } });
+                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
                     }}
                   >
                     <DoctorProfilePicture
@@ -1752,13 +1761,13 @@ export default function PatientDashboard() {
                       padding: 8,
                       zIndex: 1,
                     }}
-                    onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointment_id ? null : item.appointment_id)}
+                    onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
                   >
                     <Icon name="more" size={20} color="#666" />
                   </TouchableOpacity>
                   
                   {/* Menu dropdown */}
-                  {showEndedSessionMenu === item.appointment_id && (
+                  {showEndedSessionMenu === item.appointmentId && (
                     <View style={{
                       position: 'absolute',
                       right: 20,
@@ -1781,7 +1790,7 @@ export default function PatientDashboard() {
                           paddingHorizontal: 16,
                           paddingVertical: 12,
                         }}
-                        onPress={() => handleExportEndedSession(item.appointment_id)}
+                        onPress={() => handleExportEndedSession(item.appointmentId)}
                       >
                         <Icon name="export" size={20} color="#666" />
                         <Text style={{ fontSize: 14, color: '#222' }}>Export</Text>
@@ -1793,7 +1802,7 @@ export default function PatientDashboard() {
                           paddingHorizontal: 16,
                           paddingVertical: 12,
                         }}
-                        onPress={() => handleDeleteEndedSession(item.appointment_id)}
+                        onPress={() => handleDeleteEndedSession(item.appointmentId)}
                       >
                         <Icon name="delete" size={20} color="#666" />
                         <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
@@ -2102,7 +2111,15 @@ export default function PatientDashboard() {
                   {`${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Unknown Doctor'}
                 </Text>
                 <Text style={styles.doctorDescNew}>
-                  {`${doctor.specialization || 'General Medicine'} with ${doctor.years_of_experience || 0}+ years of experience`}
+                  {(() => {
+                    let specializationText = '';
+                    if (doctor.specializations && Array.isArray(doctor.specializations) && doctor.specializations.length > 0) {
+                      specializationText = doctor.specializations.join(', ');
+                    } else {
+                      specializationText = doctor.specialization || 'General Medicine';
+                    }
+                    return `${specializationText} with ${doctor.years_of_experience || 0}+ years of experience`;
+                  })()}
                 </Text>
                 <TouchableOpacity 
                   style={styles.viewProfileButton}

@@ -79,9 +79,9 @@ export default function DoctorProfile() {
             }
 
             try {
-                console.log('DoctorProfile: Fetching doctor data for:', user.uid);
+                // console.log('DoctorProfile: Fetching doctor data for:', user.uid);
                 const completeData = await firestoreService.getUserById(user.uid) as CompleteDoctorData;
-                console.log('DoctorProfile: Doctor data fetched:', completeData);
+                // console.log('DoctorProfile: Doctor data fetched:', completeData);
                 setDoctorData(completeData);
             } catch (error) {
                 console.error('DoctorProfile: Error fetching doctor data:', error);

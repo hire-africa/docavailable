@@ -16,7 +16,7 @@ import {
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import { authService } from '../services/authService';
+import { authService } from '@/services/authService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -372,26 +372,26 @@ export default function PatientSignUp() {
                 formData.append('profile_picture', base64);
             }
 
-            console.log('PatientSignup: Starting registration with form data');
-            console.log('PatientSignup: First Name:', firstName);
-            console.log('PatientSignup: Last Name (surname):', surname);
-            console.log('PatientSignup: Date of Birth:', dob);
-            console.log('PatientSignup: Gender:', gender);
-            console.log('PatientSignup: Country:', country);
-            console.log('PatientSignup: City:', city);
-            console.log('PatientSignup: Profile Picture:', profilePicture);
+            // console.log('PatientSignup: Starting registration with form data');
+            // console.log('PatientSignup: First Name:', firstName);
+            // console.log('PatientSignup: Last Name (surname):', surname);
+            // console.log('PatientSignup: Date of Birth:', dob);
+            // console.log('PatientSignup: Gender:', gender);
+            // console.log('PatientSignup: Country:', country);
+            // console.log('PatientSignup: City:', city);
+            // console.log('PatientSignup: Profile Picture:', profilePicture);
 
             const authState = await authService.signUp(formData);
             
             if (authState.user) {
-                console.log('PatientSignup: Signup successful, user:', authState.user);
+                // console.log('PatientSignup: Signup successful, user:', authState.user);
                 
                 // Store user type immediately after successful signup for routing
                 if (Platform.OS === 'web' && typeof window !== 'undefined') {
                   try {
                     sessionStorage.setItem('lastSignupUserType', 'patient');
                     sessionStorage.setItem('lastSignupUID', authState.user.id.toString());
-                    console.log('PatientSignup: Stored user type and UID for routing');
+                    // console.log('PatientSignup: Stored user type and UID for routing');
                   } catch (error) {
                     console.warn('PatientSignup: Could not store user type:', error);
                   }
@@ -401,7 +401,7 @@ export default function PatientSignUp() {
             }
             
             // Redirect directly to patient dashboard without alert
-            console.log('PatientSignup: Signup successful, redirecting to patient dashboard');
+            // console.log('PatientSignup: Signup successful, redirecting to patient dashboard');
             router.replace('/patient-dashboard');
         } catch (error: any) {
             console.error('Sign up error:', error);

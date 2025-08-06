@@ -27,18 +27,18 @@ export default function VoiceMessagePlayer({
   profilePictureUrl
 }: VoiceMessagePlayerProps) {
   // Debug profile picture URL
-  console.log('VoiceMessagePlayer Debug:', {
-    profilePictureUrl,
-    isOwnMessage,
-    hasUrl: !!profilePictureUrl
-  });
+      // console.log('VoiceMessagePlayer Debug:', {
+    //   profilePictureUrl,
+    //   isOwnMessage,
+    //   hasUrl: !!profilePictureUrl
+    // });
 
   const getImageUrl = (uri: string) => {
-    console.log('VoiceMessagePlayer getImageUrl - Input URI:', uri);
+    // console.log('VoiceMessagePlayer getImageUrl - Input URI:', uri);
     
     // If it's already a full URL, return as is
     if (uri.startsWith('http')) {
-      console.log('VoiceMessagePlayer getImageUrl - Returning full URL as is:', uri);
+      // console.log('VoiceMessagePlayer getImageUrl - Returning full URL as is:', uri);
       return uri;
     }
     
@@ -53,12 +53,12 @@ export default function VoiceMessagePlayer({
     
     // Check if the URI already contains the base URL to avoid double prefixing
     if (cleanUri.includes('172.20.10.11:8000')) {
-      console.log('VoiceMessagePlayer getImageUrl - URI already contains base URL, returning as is:', cleanUri);
+      // console.log('VoiceMessagePlayer getImageUrl - URI already contains base URL, returning as is:', cleanUri);
       return cleanUri;
     }
     
     const fullUrl = `${baseUrl}/storage/${cleanUri}`;
-    console.log('VoiceMessagePlayer getImageUrl - Constructed full URL:', fullUrl);
+    // console.log('VoiceMessagePlayer getImageUrl - Constructed full URL:', fullUrl);
     
     return fullUrl;
   };
@@ -174,10 +174,10 @@ export default function VoiceMessagePlayer({
              source={{ uri: profilePictureUrl }}
              style={styles.profilePicture}
              onError={() => {
-               console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
+               // console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
              }}
              onLoad={() => {
-               console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
+               // console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
              }}
            />
          ) : (

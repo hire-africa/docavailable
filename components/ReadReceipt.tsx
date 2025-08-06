@@ -44,7 +44,7 @@ const ReadReceipt: React.FC<ReadReceiptProps> = ({
   const renderDeliveryStatus = () => {
     // Debug logging
     if (isOwnMessage) {
-      console.log(`🔍 ReadReceipt Debug - deliveryStatus: ${deliveryStatus}, otherParticipantId: ${otherParticipantId}, readBy:`, readBy);
+      // console.log(`🔍 ReadReceipt Debug - deliveryStatus: ${deliveryStatus}, otherParticipantId: ${otherParticipantId}, readBy:`, readBy);
     }
     
     switch (deliveryStatus) {
@@ -70,7 +70,7 @@ const ReadReceipt: React.FC<ReadReceiptProps> = ({
       case 'read':
         // When delivery status is 'read', show blue ticks
         // This means the message has been read by the recipient
-        console.log(`🔵 BLUE TICKS: Showing blue ticks for read status`);
+        // console.log(`🔵 BLUE TICKS: Showing blue ticks for read status`);
         return (
           <View style={styles.tickContainer}>
             <Ionicons name="checkmark" size={12} color="#2196F3" />

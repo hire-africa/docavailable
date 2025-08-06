@@ -5,21 +5,21 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 import AlertDialog from '../components/AlertDialog';
@@ -28,7 +28,7 @@ import Icon from '../components/Icon';
 import { RescheduleModal } from '../components/RescheduleModal';
 import WorkingHours from '../components/WorkingHours';
 import WorkingHoursCard from '../components/WorkingHoursCard';
-import { apiService } from './services/apiService';
+import { apiService } from '../services/apiService';
 
 const profileImage = require('../assets/images/profile.jpg');
 const { width } = Dimensions.get('window');
@@ -130,7 +130,7 @@ export default function DoctorDashboard() {
   useEffect(() => {
     const refreshData = async () => {
       try {
-        console.log('DoctorDashboard: Refreshing user data...');
+        // // console.log('DoctorDashboard: Refreshing user data...');
         await refreshUserData();
       } catch (error) {
         console.error('DoctorDashboard: Error refreshing user data:', error);
@@ -143,10 +143,10 @@ export default function DoctorDashboard() {
   // Log when user data changes
   useEffect(() => {
     if (userData) {
-      console.log('DoctorDashboard: User data updated:', {
-        profile_picture_url: userData.profile_picture_url,
-        profile_picture: userData.profile_picture
-      });
+      // // console.log('DoctorDashboard: User data updated:', {
+      //   profile_picture_url: userData.profile_picture_url,
+      //   profile_picture: userData.profile_picture
+      // });
     }
   }, [userData]);
 
@@ -233,7 +233,7 @@ export default function DoctorDashboard() {
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        console.log('DoctorDashboard: Screen focused, refreshing data');
+        // // console.log('DoctorDashboard: Screen focused, refreshing data');
         updateEnabledDaysCount();
         if (activeTab === 'home') {
           refreshHomeTab();
@@ -303,7 +303,7 @@ export default function DoctorDashboard() {
       const response = await apiService.get('/appointments');
       if (response.success && response.data) {
         const rawRequests = response.data.data || response.data;
-        console.log('📋 [fetchBookingRequests] Raw appointment data:', rawRequests);
+        // // console.log('📋 [fetchBookingRequests] Raw appointment data:', rawRequests);
         
         // Transform the data to match the BookingRequest interface
         const requests = rawRequests.map((request: any) => ({
@@ -326,13 +326,13 @@ export default function DoctorDashboard() {
         
         // Log each transformed appointment's date and time
         requests.forEach((request: any, index: number) => {
-          console.log(`📅 [fetchBookingRequests] Transformed Appointment ${index + 1}:`, {
-            id: request.id,
-            date: request.date,
-            time: request.time,
-            patientName: request.patientName,
-            status: request.status
-          });
+          // // console.log(`📅 [fetchBookingRequests] Transformed Appointment ${index + 1}:`, {
+          //   id: request.id,
+          //   date: request.date,
+          //   time: request.time,
+          //   patientName: request.patientName,
+          //   status: request.status
+          // });
         });
         
         setBookingRequests(requests);
@@ -355,11 +355,11 @@ export default function DoctorDashboard() {
         const rawConfirmed = response.data.data || response.data;
         
         // Transform the data to match the BookingRequest interface and filter for confirmed/completed only
-        console.log('📋 [fetchConfirmedAppointments] Raw appointments before filtering:', rawConfirmed.map((r: any) => ({
-          id: r.id,
-          status: r.status,
-          patientName: r.patientName || `${r.patient?.first_name || ''} ${r.patient?.last_name || ''}`.trim()
-        })));
+        // // console.log('📋 [fetchConfirmedAppointments] Raw appointments before filtering:', rawConfirmed.map((r: any) => ({
+        //   id: r.id,
+        //   status: r.status,
+        //   patientName: r.patientName || `${r.patient?.first_name || ''} ${r.patient?.last_name || ''}`.trim()
+        // })));
         
         const confirmed = rawConfirmed
           .filter((request: any) => request.status === 1 || request.status === 3) // Only confirmed (1) and completed (3)
@@ -381,11 +381,11 @@ export default function DoctorDashboard() {
             reschedulePending: false
           }));
         
-        console.log('📋 [fetchConfirmedAppointments] Filtered appointments:', confirmed.map((r: any) => ({
-          id: r.id,
-          status: r.status,
-          patientName: r.patientName
-        })));
+        // // console.log('📋 [fetchConfirmedAppointments] Filtered appointments:', confirmed.map((r: any) => ({
+        //   id: r.id,
+        //   status: r.status,
+        //   patientName: r.patientName
+        // })));
         
         setConfirmedAppointments(confirmed);
       }
@@ -459,20 +459,20 @@ export default function DoctorDashboard() {
     }
 
     try {
-      console.log('🔄 [DoctorDashboard] Accepting appointment:', request.id);
-      console.log('🔄 [DoctorDashboard] Request data:', {
-        id: request.id,
-        patientName: request.patientName,
-        date: request.date,
-        time: request.time,
-        status: request.status
-      });
+      // // console.log('🔄 [DoctorDashboard] Accepting appointment:', request.id);
+      // // console.log('🔄 [DoctorDashboard] Request data:', {
+      //   id: request.id,
+      //   patientName: request.patientName,
+      //   date: request.date,
+      //   time: request.time,
+      //   status: request.status
+      // });
       
       const response = await apiService.patch(`/doctor/appointments/${request.id}/status`, {
         status: 'confirmed'
       });
 
-      console.log('✅ [DoctorDashboard] Accept API response:', response);
+      // // console.log('✅ [DoctorDashboard] Accept API response:', response);
 
       if (response.success) {
         showSuccess('Success', 'Booking request accepted successfully!');
@@ -480,7 +480,7 @@ export default function DoctorDashboard() {
         fetchBookingRequests();
         fetchConfirmedAppointments();
       } else {
-        console.error('❌ [DoctorDashboard] API returned success: false:', response);
+        // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to accept booking request. Please try again.');
       }
     } catch (error) {
@@ -496,20 +496,20 @@ export default function DoctorDashboard() {
 
   const handleRejectBooking = async (request: BookingRequest) => {
     try {
-      console.log('🔄 [DoctorDashboard] Rejecting appointment:', request.id);
-      console.log('🔄 [DoctorDashboard] Request data:', {
-        id: request.id,
-        patientName: request.patientName,
-        date: request.date,
-        time: request.time,
-        status: request.status
-      });
+      // // console.log('🔄 [DoctorDashboard] Rejecting appointment:', request.id);
+      // // console.log('🔄 [DoctorDashboard] Request data:', {
+      //   id: request.id,
+      //   patientName: request.patientName,
+      //   date: request.date,
+      //   time: request.time,
+      //   status: request.status
+      // });
       
       const response = await apiService.patch(`/doctor/appointments/${request.id}/status`, {
         status: 'cancelled'
       });
 
-      console.log('✅ [DoctorDashboard] Reject API response:', response);
+      // // console.log('✅ [DoctorDashboard] Reject API response:', response);
 
       if (response.success) {
         showSuccess('Success', 'Booking request rejected.');
@@ -517,7 +517,7 @@ export default function DoctorDashboard() {
         fetchBookingRequests();
         fetchConfirmedAppointments();
       } else {
-        console.error('❌ [DoctorDashboard] API returned success: false:', response);
+        // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to reject booking request. Please try again.');
       }
     } catch (error) {
@@ -532,14 +532,14 @@ export default function DoctorDashboard() {
   };
 
   const handleDeleteExpiredAppointment = async (request: BookingRequest) => {
-    console.log('🗑️ [DoctorDashboard] Delete button clicked for appointment:', {
-      id: request.id,
-      patientName: request.patientName,
-      date: request.date,
-      time: request.time,
-      status: request.status,
-      isExpired: isAppointmentExpired(request.date, request.time)
-    });
+    // // console.log('🗑️ [DoctorDashboard] Delete button clicked for appointment:', {
+    //   id: request.id,
+    //   patientName: request.patientName,
+    //   date: request.date,
+    //   time: request.time,
+    //   status: request.status,
+    //   isExpired: isAppointmentExpired(request.date, request.time)
+    // });
     
     // Show confirmation dialog
     Alert.alert(
@@ -555,21 +555,20 @@ export default function DoctorDashboard() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log('🗑️ [DoctorDashboard] Confirmed deletion for appointment:', request.id);
+              // // console.log('🗑️ [DoctorDashboard] Confirmed deletion for appointment:', request.id);
               
               const response = await apiService.delete(`/doctor/appointments/${request.id}`);
-              console.log('🗑️ [DoctorDashboard] Delete API response:', response);
+              // // console.log('🗑️ [DoctorDashboard] Delete API response:', response);
 
               if (response.success) {
                 showSuccess('Success', 'Expired appointment deleted successfully.');
-                console.log('🗑️ [DoctorDashboard] Delete successful, refreshing list...');
                 // Refresh the booking requests
                 await fetchBookingRequests();
-                console.log('🗑️ [DoctorDashboard] List refreshed after deletion');
+                // // console.log('🗑️ [DoctorDashboard] List refreshed after deletion');
               } else {
-                console.error('❌ [DoctorDashboard] Delete failed - API returned success: false', {
-                  response: response
-                });
+                // console.error('❌ [DoctorDashboard] Delete failed - API returned success: false', {
+                //   response: response
+                // });
                 showError('Error', response.message || 'Failed to delete expired appointment. Please try again.');
               }
             } catch (error: any) {
@@ -673,7 +672,7 @@ export default function DoctorDashboard() {
     
     setRefreshingHome(true);
     try {
-      console.log('🔄 Manual refresh of home tab...');
+      // // console.log('🔄 Manual refresh of home tab...');
       
       // Refresh all home data with better error handling
       const promises = [
@@ -699,7 +698,7 @@ export default function DoctorDashboard() {
     
     setRefreshingAppointments(true);
     try {
-      console.log('🔄 Manual refresh of appointments tab...');
+      // // console.log('🔄 Manual refresh of appointments tab...');
       
       // Refresh appointments data with better error handling
       const promises = [
@@ -721,7 +720,7 @@ export default function DoctorDashboard() {
     
     setRefreshingMessages(true);
     try {
-      console.log('🔄 Manual refresh of messages tab...');
+      // // console.log('🔄 Manual refresh of messages tab...');
       
       // Refresh messages data with better error handling
       const promises = [
@@ -743,7 +742,7 @@ export default function DoctorDashboard() {
     
     setRefreshingWorkingHours(true);
     try {
-      console.log('🔄 Manual refresh of working hours tab...');
+      // // console.log('🔄 Manual refresh of working hours tab...');
       
       // Refresh working hours data
       await updateEnabledDaysCount();
@@ -760,7 +759,7 @@ export default function DoctorDashboard() {
     
     setRefreshingProfile(true);
     try {
-      console.log('🔄 Manual refresh of profile tab...');
+      // // console.log('🔄 Manual refresh of profile tab...');
       
       // Refresh user data
       const { refreshUserData } = useAuth();
@@ -867,7 +866,7 @@ export default function DoctorDashboard() {
         hour12: true
       });
       
-      console.log('✅ [formatTime] Formatted time:', formattedTime);
+      // // console.log('✅ [formatTime] Formatted time:', formattedTime);
       return formattedTime;
     } catch (error) {
       console.error('❌ [formatTime] Error formatting time:', error, 'Input:', timeString);
@@ -896,15 +895,15 @@ export default function DoctorDashboard() {
   // Check if appointment has expired (past appointment time)
   const isAppointmentExpired = (date: string, time: string) => {
     try {
-      console.log('🔍 [isAppointmentExpired] Checking:', { date, time });
+      // // console.log('🔍 [isAppointmentExpired] Checking:', { date, time });
       const appointmentDateTime = new Date(`${date}T${time}`);
       const now = new Date();
       const isExpired = appointmentDateTime < now;
-      console.log('🔍 [isAppointmentExpired] Result:', { 
-        appointmentDateTime: appointmentDateTime.toISOString(), 
-        now: now.toISOString(), 
-        isExpired 
-      });
+      // // console.log('🔍 [isAppointmentExpired] Result:', { 
+      //   appointmentDateTime: appointmentDateTime.toISOString(), 
+      //   now: now.toISOString(), 
+      //   isExpired 
+      // });
       return isExpired;
     } catch (error) {
       console.error('❌ [isAppointmentExpired] Error checking appointment expiration:', error);
@@ -944,7 +943,7 @@ export default function DoctorDashboard() {
     setModalVisible(false);
     try {
       // Placeholder: Implement call rejection logic here
-      console.log('Call rejected:', callId);
+      // // console.log('Call rejected:', callId);
     } catch (error) {
       console.error('Error rejecting call:', error);
     }
@@ -1175,23 +1174,23 @@ export default function DoctorDashboard() {
             <Icon name="calendar" size={20} color="#666" />
           </View>
           <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Pending Requests</Text>
-          <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>When patients book appointments, they'll appear here for your review</Text>
+          <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>When patients book appointments, they&apos;ll appear here for your review</Text>
         </View>
       ) : (
-        <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+        <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
             {bookingRequests.filter(request => !request.reschedulePending && (request.status === 'pending' || isAppointmentExpired(request.date, request.time))).map((request) => {
               const isExpired = isAppointmentExpired(request.date, request.time);
-              console.log('📋 [DoctorDashboard] Rendering appointment:', {
-                id: request.id,
-                patientName: request.patientName,
-                date: request.date,
-                time: request.time,
-                status: request.status,
-                isExpired
-              });
+              // // console.log('📋 [DoctorDashboard] Rendering appointment:', {
+              //   id: request.id,
+              //   patientName: request.patientName,
+              //   date: request.date,
+              //   time: request.time,
+              //   status: request.status,
+              //   isExpired
+              // });
               
               return (
-              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
               <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
                 <Icon name="user" size={20} color="#666" />
               </View>
@@ -1217,14 +1216,14 @@ export default function DoctorDashboard() {
                       <TouchableOpacity 
                         style={{backgroundColor: '#6C757D', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}
                         onPress={() => {
-                          console.log('🔍 [DoctorDashboard] Debug appointment details:', {
-                            id: request.id,
-                            status: request.status,
-                            date: request.date,
-                            time: request.time,
-                            isExpired: isAppointmentExpired(request.date, request.time),
-                            canDelete: request.status === 'pending' || request.status === 'cancelled'
-                          });
+                          // // console.log('🔍 [DoctorDashboard] Debug appointment details:', {
+                          //   id: request.id,
+                          //   status: request.status,
+                          //   date: request.date,
+                          //   time: request.time,
+                          //   isExpired: isAppointmentExpired(request.date, request.time),
+                          //   canDelete: request.status === 'pending' || request.status === 'cancelled'
+                          // });
                           Alert.alert('Debug Info', `ID: ${request.id}\nStatus: ${request.status}\nDate: ${request.date}\nTime: ${request.time}\nExpired: ${isAppointmentExpired(request.date, request.time)}\nCan Delete: ${request.status === 'pending' || request.status === 'cancelled'}`);
                         }}
                       >
@@ -1242,7 +1241,7 @@ export default function DoctorDashboard() {
                       <TouchableOpacity 
                         style={[
                           {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
-                          {backgroundColor: '#FF3B30'}
+                          {backgroundColor: '#ADB5BD'}
                         ]}
                         onPress={() => handleRejectBooking(request)}
                       >
@@ -1298,18 +1297,18 @@ export default function DoctorDashboard() {
             <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>Accepted and completed sessions will appear here for your records</Text>
           </View>
         ) : (
-          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
+          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 4}}>
             {(() => {
               const filteredRequests = bookingRequests.filter(request => request.status === 'confirmed' || request.status === 'completed');
-              console.log('📋 [DoctorDashboard] Rendering accepted tab with appointments:', filteredRequests.map((r: any) => ({
-                id: r.id,
-                status: r.status,
-                patientName: r.patientName,
-                date: r.date,
-                time: r.time
-              })));
+              // // console.log('📋 [DoctorDashboard] Rendering accepted tab with appointments:', filteredRequests.map((r: any) => ({
+              //   id: r.id,
+              //   status: r.status,
+              //   patientName: r.patientName,
+              //   date: r.date,
+              //   time: r.time
+              // })));
               return filteredRequests.map((request) => (
-              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
                 <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
                   <Icon name="user" size={20} color="#666" />
                 </View>
@@ -2669,7 +2668,7 @@ const styles = StyleSheet.create({
   userInfo: {
     flex: 1,
   },
-  welcomeText: {
+  sidebarWelcomeText: {
     fontSize: 16,
     color: '#666666',
   },

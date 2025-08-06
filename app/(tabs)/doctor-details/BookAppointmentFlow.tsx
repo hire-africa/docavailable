@@ -16,7 +16,7 @@ import {
     View
 } from 'react-native';
 import { useAuth } from '../../../contexts/AuthContext';
-import { apiService } from '../../services/apiService';
+import { apiService } from '../../../services/apiService';
 
 const availableTimes = [
   '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -619,24 +619,24 @@ export default function BookAppointmentFlow() {
 
   // Handle confirm booking
   async function handleConfirm() {
-    console.log('🔍 [BookAppointmentFlow] handleConfirm started');
+    // console.log('🔍 [BookAppointmentFlow] handleConfirm started');
     
     if (!user) {
-      console.log('❌ [BookAppointmentFlow] No user found');
+      // console.log('❌ [BookAppointmentFlow] No user found');
       Alert.alert('Error', 'Please login to book an appointment');
       return;
     }
     
     if (!doctorId || !doctorName) {
-      console.log('❌ [BookAppointmentFlow] Missing doctor info:', { doctorId, doctorName });
+      // console.log('❌ [BookAppointmentFlow] Missing doctor info:', { doctorId, doctorName });
       Alert.alert('Error', 'Doctor information not available');
       return;
     }
     
     if (!selectedDate || !customTime || !consultationType || !reason) {
-      console.log('❌ [BookAppointmentFlow] Missing required fields:', { 
-        selectedDate, customTime, consultationType, reason 
-      });
+      // console.log('❌ [BookAppointmentFlow] Missing required fields:', { 
+      //   selectedDate, customTime, consultationType, reason 
+      // });
       Alert.alert('Error', 'Please fill all fields');
       return;
     }
@@ -648,10 +648,10 @@ export default function BookAppointmentFlow() {
     selectedDateOnly.setHours(0, 0, 0, 0); // Reset time to start of day
     
     if (selectedDateOnly <= today) {
-      console.log('❌ [BookAppointmentFlow] Selected date is not in the future:', { 
-        selectedDate: selectedDateOnly, 
-        today: today 
-      });
+      // console.log('❌ [BookAppointmentFlow] Selected date is not in the future:', { 
+      //   selectedDate: selectedDateOnly, 
+      //   today: today 
+      // });
       Alert.alert('Error', 'Please select a future date for your appointment');
       return;
     }
@@ -667,15 +667,15 @@ export default function BookAppointmentFlow() {
         status: 0, // 0 = pending
       };
       
-      console.log('📤 [BookAppointmentFlow] Sending appointment data:', appointmentData);
-      console.log('👤 [BookAppointmentFlow] User info:', { 
-        id: user.id, 
-        email: user.email, 
-        userType: user.user_type 
-      });
+      // console.log('📤 [BookAppointmentFlow] Sending appointment data:', appointmentData);
+      // console.log('👤 [BookAppointmentFlow] User info:', { 
+      //   id: user.id, 
+      //   email: user.email, 
+      //   userType: user.user_type 
+      // });
       
       const response = await apiService.post('/appointments', appointmentData);
-      console.log('✅ [BookAppointmentFlow] Appointment created successfully:', response);
+      // console.log('✅ [BookAppointmentFlow] Appointment created successfully:', response);
       setStep(3);
     } catch (error) {
       console.error('❌ [BookAppointmentFlow] Appointment creation failed:', error);

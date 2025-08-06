@@ -75,19 +75,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const fetchUserData = async (): Promise<UserData | null> => {
     try {
-      console.log('AuthContext: Fetching user data from Laravel backend...');
+      // console.log('AuthContext: Fetching user data from Laravel backend...');
       
       // Get token from authService
       const token = await authService.getStoredToken();
-      console.log('AuthContext: Stored token found:', !!token);
+      // console.log('AuthContext: Stored token found:', !!token);
       
       if (!token) {
-        console.log('AuthContext: No token found');
+        // console.log('AuthContext: No token found');
         return null;
       }
       
       // Get current user from Laravel backend using direct fetch
-      console.log('AuthContext: Making request to /api/user...');
+      // console.log('AuthContext: Making request to /api/user...');
       const response = await fetch('http://172.20.10.11:8000/api/user', {
         method: 'GET',
         headers: {
@@ -96,29 +96,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
       });
       
-      console.log('AuthContext: Response status:', response.status);
+      // console.log('AuthContext: Response status:', response.status);
       
       if (!response.ok) {
         if (response.status === 401) {
-          console.log('AuthContext: Authentication failed, clearing token');
+          // console.log('AuthContext: Authentication failed, clearing token');
           await authService.clearStoredToken();
         }
         return null;
       }
       
       const apiResponse = await response.json();
-      console.log('AuthContext: API response:', apiResponse);
+      // console.log('AuthContext: API response:', apiResponse);
       
       // Handle the wrapped response structure
       if (apiResponse.success && apiResponse.data) {
-        console.log('AuthContext: Retrieved user data from Laravel:', apiResponse.data);
+        // console.log('AuthContext: Retrieved user data from Laravel:', apiResponse.data);
         const userData = convertApiUserToUserData(apiResponse.data);
-        console.log('AuthContext: Converted to UserData format:', userData);
-        console.log('AuthContext: User type:', userData.user_type);
-        console.log('AuthContext: User status:', userData.status);
+        // console.log('AuthContext: Converted to UserData format:', userData);
+        // console.log('AuthContext: User type:', userData.user_type);
+        // console.log('AuthContext: User status:', userData.status);
         return userData;
       } else {
-        console.log('AuthContext: API response indicates failure:', apiResponse.message);
+        // console.log('AuthContext: API response indicates failure:', apiResponse.message);
         return null;
       }
       
@@ -130,9 +130,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const refreshUserData = async () => {
     try {
-      console.log('AuthContext: Refreshing user data...');
+      // console.log('AuthContext: Refreshing user data...');
       const data = await fetchUserData();
-      console.log('AuthContext: Fetched user data:', data);
+      // console.log('AuthContext: Fetched user data:', data);
       
       if (data) {
         // Force immediate update of both user and userData
@@ -143,11 +143,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const storedToken = await authService.getStoredToken();
         setToken(storedToken);
         
-        console.log('AuthContext: User data refreshed successfully:', {
-          user_type: data?.user_type,
-          profile_picture_url: data?.profile_picture_url,
-          profile_picture: data?.profile_picture
-        });
+        // console.log('AuthContext: User data refreshed successfully:', {
+        //   user_type: data?.user_type,
+        //   profile_picture_url: data?.profile_picture_url,
+        //   profile_picture: data?.profile_picture,
+        //   id: data?.id
+        // });
         
         // Force a re-render by triggering state update
         setTimeout(() => {
@@ -155,25 +156,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(prev => ({ ...prev, ...data }));
         }, 50);
       } else {
-        console.log('AuthContext: No user data received from API, but keeping existing data');
+        // console.log('AuthContext: No user data received from API, but keeping existing data');
         // Don't clear existing data if API fails - keep what we have
         // Only clear if we explicitly get a null response
       }
     } catch (error) {
       console.error('AuthContext: Error refreshing user data:', error);
       // Don't clear state on error - keep existing data
-      console.log('AuthContext: Keeping existing user data despite refresh error');
+      // console.log('AuthContext: Keeping existing user data despite refresh error');
     }
   };
 
   // Initialize authentication state
   useEffect(() => {
     const initializeAuth = async () => {
-      console.log('AuthContext: Starting initialization...');
+      // console.log('AuthContext: Starting initialization...');
       
       // Add a timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
-        console.log('AuthContext: Initialization timeout, setting loading to false');
+        // console.log('AuthContext: Initialization timeout, setting loading to false');
         setLoading(false);
         setUser(null);
         setUserData(null);
@@ -181,11 +182,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       try {
         // Test API connection first
-        console.log('AuthContext: Testing API connection...');
+        // console.log('AuthContext: Testing API connection...');
         try {
                      const healthResponse = await fetch('http://172.20.10.11:8000/api/health');
           if (healthResponse.ok) {
-            console.log('AuthContext: API health check successful');
+            // console.log('AuthContext: API health check successful');
           } else {
             console.error('AuthContext: API health check failed');
           }
@@ -195,17 +196,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Initialize authService first
         const authState = await authService.initialize();
-        console.log('AuthContext: AuthService initialized:', authState);
+        // console.log('AuthContext: AuthService initialized:', authState);
         
         if (authState.user) {
-          console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
+          // console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
           setUser(authState.user);
           setUserData(authState.user);
           // Get token from authService
           const storedToken = await authService.getStoredToken();
           setToken(storedToken);
         } else {
-          console.log('AuthContext: No authenticated user found');
+          // console.log('AuthContext: No authenticated user found');
           setUser(null);
           setUserData(null);
           setToken(null);
@@ -216,7 +217,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserData(null);
       } finally {
         clearTimeout(timeoutId);
-        console.log('AuthContext: Setting loading to false');
+        // console.log('AuthContext: Setting loading to false');
         setLoading(false);
       }
     };
@@ -225,9 +226,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen to authService state changes
     const handleAuthStateChange = (authState: any) => {
-      console.log('AuthContext: Auth state changed:', authState);
+      // console.log('AuthContext: Auth state changed:', authState);
       if (authState.user) {
-        console.log('AuthContext: Setting user data:', authState.user);
+        // console.log('AuthContext: Setting user data:', authState.user);
         setUser(authState.user);
         setUserData(authState.user);
         // Get token from authService (synchronous)
@@ -237,7 +238,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.error('AuthContext: Error getting stored token:', error);
         });
       } else {
-        console.log('AuthContext: Clearing user data');
+        // console.log('AuthContext: Clearing user data');
         setUser(null);
         setUserData(null);
         setToken(null);
@@ -250,7 +251,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Get current state immediately if available
     const currentUser = authService.getCurrentUser();
     if (currentUser) {
-      console.log('AuthContext: Found current user on initialization:', currentUser);
+      // console.log('AuthContext: Found current user on initialization:', currentUser);
       setUser(currentUser);
       setUserData(currentUser);
       // Get token from authService (synchronous)
@@ -276,7 +277,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshUserData: refreshUserData || (() => Promise.resolve())
   };
 
-  console.log('AuthContext: Rendering with loading:', loading, 'user:', user ? user.email : 'null');
+  // console.log('AuthContext: Rendering with loading:', loading, 'user:', user ? user.email : 'null');
 
   return (
     <AuthContext.Provider value={value}>

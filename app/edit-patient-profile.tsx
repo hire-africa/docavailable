@@ -17,7 +17,7 @@ import { Icon } from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from './services/apiService';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -62,7 +62,7 @@ export default function EditPatientProfile() {
                     // Then try to refresh in background (don't block UI)
                     setTimeout(async () => {
                         try {
-                            console.log('EditPatientProfile: Refreshing user data in background...');
+                            // console.log('EditPatientProfile: Refreshing user data in background...');
                             await refreshUserData();
                             // Reload data after refresh
                             loadUserData();
@@ -72,7 +72,7 @@ export default function EditPatientProfile() {
                         }
                     }, 100);
                 } else {
-                    console.log('EditPatientProfile: User data already complete, skipping refresh');
+                    // console.log('EditPatientProfile: User data already complete, skipping refresh');
                 }
             } catch (error) {
                 console.error('EditPatientProfile: Error in initialization:', error);
@@ -92,19 +92,19 @@ export default function EditPatientProfile() {
     }, [userData]);
 
     const loadUserData = () => {
-        console.log('EditPatientProfile: Loading user data...');
-        console.log('EditPatientProfile: userData:', userData);
-        console.log('EditPatientProfile: user:', user);
-        console.log('EditPatientProfile: userData type:', typeof userData);
-        console.log('EditPatientProfile: user type:', typeof user);
+        // console.log('EditPatientProfile: Loading user data...');
+        // console.log('EditPatientProfile: userData:', userData);
+        // console.log('EditPatientProfile: user:', user);
+        // console.log('EditPatientProfile: userData type:', typeof userData);
+        // console.log('EditPatientProfile: user type:', typeof user);
         
         try {
             if (userData || user) {
                 // Use userData first, then fallback to user
                 const currentUser = userData || user;
                 
-                console.log('EditPatientProfile: Using currentUser:', currentUser);
-                console.log('EditPatientProfile: currentUser keys:', Object.keys(currentUser || {}));
+                // console.log('EditPatientProfile: Using currentUser:', currentUser);
+                // console.log('EditPatientProfile: currentUser keys:', Object.keys(currentUser || {}));
                 
                 // Validate that we have the expected user data structure
                 if (!currentUser || typeof currentUser !== 'object') {
@@ -122,19 +122,18 @@ export default function EditPatientProfile() {
                 setCity(currentUser?.city || '');
                 setProfilePicture(currentUser?.profile_picture || currentUser?.profile_picture_url || null);
                 
-                console.log('EditPatientProfile: Loaded data:', {
-                    firstName: currentUser?.first_name,
-                    lastName: currentUser?.last_name,
-                    dateOfBirth: currentUser?.date_of_birth,
-                    dateOfBirthType: typeof currentUser?.date_of_birth,
-                    gender: currentUser?.gender,
-                    bio: currentUser?.bio,
-                    country: currentUser?.country,
-                    city: currentUser?.city,
-                    profilePicture: currentUser?.profile_picture || currentUser?.profile_picture_url
-                });
+                // console.log('EditPatientProfile: Loaded data:', {
+                //   firstName: currentUser?.first_name,
+                //   lastName: currentUser?.last_name,
+                //   dateOfBirth: currentUser?.date_of_birth,
+                //   gender: currentUser?.gender,
+                //   bio: currentUser?.bio,
+                //   country: currentUser?.country,
+                //   city: currentUser?.city,
+                //   profilePicture: currentUser?.profile_picture || currentUser?.profile_picture_url
+                // });
             } else {
-                console.log('EditPatientProfile: No user data available');
+                // console.log('EditPatientProfile: No user data available');
                 Alert.alert('Error', 'No user data available. Please log in again.');
             }
         } catch (error) {
@@ -149,8 +148,8 @@ export default function EditPatientProfile() {
         try {
             setUploadingImage(true);
             
-            console.log('EditPatientProfile: Starting image upload...');
-            console.log('EditPatientProfile: Image URI:', imageUri);
+            // console.log('EditPatientProfile: Starting image upload...');
+            // console.log('EditPatientProfile: Image URI:', imageUri);
             
             // Create form data for image upload
             const formData = new FormData();
@@ -160,25 +159,25 @@ export default function EditPatientProfile() {
                 name: 'profile_picture.jpg'
             } as any);
 
-            console.log('EditPatientProfile: FormData created, making API request...');
+            // console.log('EditPatientProfile: FormData created, making API request...');
 
             const response = await apiService.uploadFile('/upload/profile-picture', formData);
 
-            console.log('EditPatientProfile: Upload response:', response);
+            // console.log('EditPatientProfile: Upload response:', response);
 
             if (response.success) {
                 const newProfilePictureUrl = response.data?.profile_picture_url || imageUri;
                 setProfilePicture(newProfilePictureUrl);
-                console.log('EditPatientProfile: Profile picture updated successfully:', newProfilePictureUrl);
+                // console.log('EditPatientProfile: Profile picture updated successfully:', newProfilePictureUrl);
                 
                 // Refresh user data to update the profile picture in AuthContext
                 try {
                     await refreshUserData();
-                    console.log('EditPatientProfile: User data refreshed after upload');
+                    // console.log('EditPatientProfile: User data refreshed after upload');
                     
                     // Force a re-render by updating local state
                     setTimeout(() => {
-                        console.log('EditPatientProfile: Forcing re-render after profile picture update');
+                        // console.log('EditPatientProfile: Forcing re-render after profile picture update');
                         setProfilePicture(newProfilePictureUrl);
                     }, 100);
                 } catch (error) {
@@ -234,7 +233,7 @@ export default function EditPatientProfile() {
 
         setSaving(true);
         try {
-            console.log('EditPatientProfile: Starting profile update...');
+            // console.log('EditPatientProfile: Starting profile update...');
             
             const updateData: any = {
                 first_name: firstName.trim(),
@@ -261,11 +260,11 @@ export default function EditPatientProfile() {
                 updateData.city = city.trim();
             }
 
-            console.log('EditPatientProfile: Update data:', updateData);
+            // console.log('EditPatientProfile: Update data:', updateData);
 
             const response = await apiService.patch('/profile', updateData);
 
-            console.log('EditPatientProfile: Profile update response:', response);
+            // console.log('EditPatientProfile: Profile update response:', response);
 
             if (response.success) {
                 // Refresh user data to get the updated information

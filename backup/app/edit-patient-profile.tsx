@@ -137,9 +137,9 @@ export default function EditPatientProfile() {
             }
 
             try {
-                console.log('EditProfile: Fetching complete user data for:', user.uid);
+                // console.log('EditProfile: Fetching complete user data for:', user.uid);
                 const completeData = await firestoreService.getUserById(user.uid) as CompleteUserData;
-                console.log('EditProfile: Complete user data fetched:', completeData);
+                // console.log('EditProfile: Complete user data fetched:', completeData);
                 setCompleteUserData(completeData);
                 
                 if (completeData) {
@@ -169,7 +169,7 @@ export default function EditPatientProfile() {
                     });
                     
                     // Log the loaded data for debugging
-                    console.log('EditProfile: Loaded user data:', {
+                    // console.log('EditProfile: Loaded user data:', {
                         firstName: completeData.firstName,
                         lastName: completeData.lastName,
                         dateOfBirth: completeData.dateOfBirth,

@@ -353,7 +353,7 @@ export default function PatientSignUp() {
               try {
                 sessionStorage.setItem('lastSignupUserType', 'patient');
                 sessionStorage.setItem('lastSignupUID', user.uid);
-                console.log('PatientSignup: Stored user type and UID for routing');
+                // console.log('PatientSignup: Stored user type and UID for routing');
               } catch (error) {
                 console.warn('PatientSignup: Could not store user type:', error);
               }

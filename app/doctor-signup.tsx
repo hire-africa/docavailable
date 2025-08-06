@@ -1,3 +1,4 @@
+import { authService } from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
@@ -17,9 +18,8 @@ import {
 } from 'react-native';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
+import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import SpecializationPicker from '../components/SpecializationPicker';
-import { authService } from '@/services/authService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -44,10 +44,8 @@ interface Step1Props {
     setPassword: (password: string) => void;
     yearsOfExperience: string;
     setYearsOfExperience: (years: string) => void;
-    specialization: string;
-    setSpecialization: (specialization: string) => void;
-    subSpecialization: string;
-    setSubSpecialization: (subSpecialization: string) => void;
+    specializations: string[];
+    setSpecializations: (specializations: string[]) => void;
     professionalBio: string;
     setProfessionalBio: (bio: string) => void;
     country: string;
@@ -74,7 +72,7 @@ const Step1: React.FC<Step1Props> = ({
     profilePicture, setProfilePicture,
     dob, setDob, gender, setGender,
     email, setEmail, password, setPassword, yearsOfExperience, setYearsOfExperience,
-    specialization, setSpecialization, subSpecialization, setSubSpecialization,
+    specializations, setSpecializations,
     professionalBio, setProfessionalBio, country, setCountry, city, setCity, errors,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
@@ -170,14 +168,12 @@ const Step1: React.FC<Step1Props> = ({
                 />
                 {errors.yearsOfExperience && <Text style={styles.errorText}>{errors.yearsOfExperience}</Text>}
 
-                <SpecializationPicker
-                    selectedSpecialization={specialization}
-                    selectedSubSpecialization={subSpecialization}
-                    onSpecializationChange={(spec, subSpec) => {
-                        setSpecialization(spec);
-                        setSubSpecialization(subSpec);
-                    }}
-                    error={errors.specialization || errors.subSpecialization}
+                <Text style={styles.inputLabel}>Specializations</Text>
+                <MultipleSpecializationPicker
+                    selectedSpecializations={specializations}
+                    onSpecializationsChange={setSpecializations}
+                    error={errors.specializations}
+                    maxSelections={3}
                 />
 
                 <Text style={styles.inputLabel}>Professional Bio</Text>
@@ -352,8 +348,7 @@ export default function DoctorSignUp() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [yearsOfExperience, setYearsOfExperience] = useState('');
-    const [specialization, setSpecialization] = useState('');
-    const [subSpecialization, setSubSpecialization] = useState('');
+    const [specializations, setSpecializations] = useState<string[]>([]);
     const [professionalBio, setProfessionalBio] = useState('');
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');
@@ -401,8 +396,8 @@ export default function DoctorSignUp() {
             newErrors.password = 'Password must be at least 8 characters.';
         }
         
-        if (!specialization.trim()) {
-            newErrors.specialization = 'Specialization is required.';
+        if (specializations.length === 0) {
+            newErrors.specializations = 'At least one specialization is required.';
         }
         
         if (!yearsOfExperience.trim()) {
@@ -470,8 +465,7 @@ export default function DoctorSignUp() {
             formData.append('country', country);
             formData.append('city', city);
             formData.append('user_type', 'doctor');
-            formData.append('specialization', specialization);
-            formData.append('sub_specialization', subSpecialization);
+            formData.append('specializations', JSON.stringify(specializations));
             formData.append('years_of_experience', yearsOfExperience.toString());
             formData.append('bio', professionalBio);
 
@@ -529,19 +523,19 @@ export default function DoctorSignUp() {
                 formData.append('medical_licence', base64);
             }
 
-            console.log('DoctorSignup: Starting registration with form data');
+            // console.log('DoctorSignup: Starting registration with form data');
             const response = await authService.signUp(formData);
             
-            console.log('DoctorSignup: Registration response:', {
-                success: response.user ? 'yes' : 'no',
-                userType: response.user?.user_type,
-                userId: response.user?.id,
-                status: response.user?.status
-            });
+            // console.log('DoctorSignup: Registration response:', {
+            //   success: response.user ? 'yes' : 'no',
+            //   userType: response.user?.user_type,
+            //   userId: response.user?.id,
+            //   status: response.user?.status
+            // });
             
             // For doctors, we expect a successful registration but no token
             if (response.user?.user_type === 'doctor') {
-                console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
+                // console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
                 // Redirect to pending approval page
                 router.replace('/pending-approval' as any);
                 return;
@@ -599,10 +593,8 @@ export default function DoctorSignUp() {
                         setPassword={setPassword}
                         yearsOfExperience={yearsOfExperience}
                         setYearsOfExperience={setYearsOfExperience}
-                        specialization={specialization}
-                        setSpecialization={setSpecialization}
-                        subSpecialization={subSpecialization}
-                        setSubSpecialization={setSubSpecialization}
+                        specializations={specializations}
+                        setSpecializations={setSpecializations}
                         professionalBio={professionalBio}
                         setProfessionalBio={setProfessionalBio}
                         country={country}

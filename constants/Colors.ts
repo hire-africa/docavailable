@@ -30,4 +30,7 @@ export const Colors = {
   lightGray: '#F5F5F5',
   text: '#11181C',
   background: '#fff',
+  white: '#FFFFFF',
+  warning: '#FF9800',
+  lightBackground: '#F8F9FA',
 };

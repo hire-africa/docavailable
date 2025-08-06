@@ -94,7 +94,7 @@ function formatDate(date: Date, format: 'MM/DD/YYYY' | 'YYYY-MM-DD' = 'YYYY-MM-D
 function parseDate(str: string): Date | null {
     if (!str || str.trim() === '') return null;
     
-    console.log('DatePickerField: Parsing date string:', str);
+    // console.log('DatePickerField: Parsing date string:', str);
     
     // Handle different date formats
     let parts: string[] = [];
@@ -103,7 +103,7 @@ function parseDate(str: string): Date | null {
     if (str.includes('T') || str.includes('Z')) {
         const date = new Date(str);
         if (!isNaN(date.getTime())) {
-            console.log('DatePickerField: Parsed as ISO string:', date);
+            // console.log('DatePickerField: Parsed as ISO string:', date);
             return date;
         }
     }
@@ -118,7 +118,7 @@ function parseDate(str: string): Date | null {
             
             if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
                 const date = new Date(year, month, day);
-                console.log('DatePickerField: Parsed as YYYY-MM-DD:', date);
+                // console.log('DatePickerField: Parsed as YYYY-MM-DD:', date);
                 return date;
             }
         }
@@ -134,7 +134,7 @@ function parseDate(str: string): Date | null {
             
             if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
                 const date = new Date(year, month, day);
-                console.log('DatePickerField: Parsed as MM/DD/YYYY:', date);
+                // console.log('DatePickerField: Parsed as MM/DD/YYYY:', date);
                 return date;
             }
         }
@@ -147,11 +147,11 @@ function parseDate(str: string): Date | null {
             // Check if it's a Unix timestamp (seconds since epoch)
             if (timestamp > 1000000000) { // Likely a Unix timestamp
                 const date = new Date(timestamp * 1000);
-                console.log('DatePickerField: Parsed as Unix timestamp:', date);
+                // console.log('DatePickerField: Parsed as Unix timestamp:', date);
                 return date;
             } else {
                 const date = new Date(timestamp);
-                console.log('DatePickerField: Parsed as JavaScript timestamp:', date);
+                // console.log('DatePickerField: Parsed as JavaScript timestamp:', date);
                 return date;
             }
         }
@@ -160,11 +160,11 @@ function parseDate(str: string): Date | null {
     // 5. Try parsing as is (fallback)
     const date = new Date(str);
     if (!isNaN(date.getTime())) {
-        console.log('DatePickerField: Parsed as generic date:', date);
+        // console.log('DatePickerField: Parsed as generic date:', date);
         return date;
     }
     
-    console.log('DatePickerField: Failed to parse date string:', str);
+    // console.log('DatePickerField: Failed to parse date string:', str);
     return null;
 }
 
@@ -187,9 +187,9 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
     
     // Log the parsing result for debugging
     if (value) {
-        console.log('DatePickerField: Input value:', value);
-        console.log('DatePickerField: Parsed date object:', dateObj);
-        console.log('DatePickerField: Is valid:', isValidValue);
+        // console.log('DatePickerField: Input value:', value);
+        // console.log('DatePickerField: Parsed date object:', dateObj);
+        // console.log('DatePickerField: Is valid:', isValidValue);
     }
 
     if (Platform.OS === 'web') {

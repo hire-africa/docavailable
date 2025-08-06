@@ -12,7 +12,7 @@ import {
 import { Icon } from '../components/Icon';
 import ProfilePictureDisplay from '../components/ProfilePictureDisplay';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from './services/apiService';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -34,7 +34,7 @@ export default function DoctorProfile() {
     useEffect(() => {
         const refreshData = async () => {
             try {
-                console.log('DoctorProfile: Refreshing user data...');
+                // console.log('DoctorProfile: Refreshing user data...');
                 await refreshUserData();
             } catch (error) {
                 console.error('DoctorProfile: Error refreshing user data:', error);
@@ -47,7 +47,7 @@ export default function DoctorProfile() {
     // Refresh when userData changes
     useEffect(() => {
         if (userData) {
-            console.log('DoctorProfile: User data updated:', userData.profile_picture_url);
+            // console.log('DoctorProfile: User data updated:', userData.profile_picture_url);
         }
     }, [userData]);
 

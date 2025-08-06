@@ -388,7 +388,7 @@ export default function DoctorSignUp() {
                 bio: formData.bio,
             };
 
-            console.log('DoctorSignup: Starting signup with userType:', userData.userType);
+            // console.log('DoctorSignup: Starting signup with userType:', userData.userType);
             const user = await authService.signUp(formData.email, formData.password, userData);
             
             // Store user type immediately after successful signup for routing
@@ -396,13 +396,13 @@ export default function DoctorSignUp() {
               try {
                 sessionStorage.setItem('lastSignupUserType', 'doctor');
                 sessionStorage.setItem('lastSignupUID', user.uid);
-                console.log('DoctorSignup: Stored user type and UID for routing');
+                // console.log('DoctorSignup: Stored user type and UID for routing');
               } catch (error) {
                 console.warn('DoctorSignup: Could not store user type:', error);
               }
             }
             
-            console.log('DoctorSignup: Signup successful, navigating to pending approval');
+            // console.log('DoctorSignup: Signup successful, navigating to pending approval');
             // Redirect to pending approval page after successful signup
             router.replace('/pending-approval');
         } catch (error: any) {

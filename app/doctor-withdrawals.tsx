@@ -14,7 +14,7 @@ import {
     View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { walletApiService } from '../services/walletApiService';
+import { walletApiService } from '@/services/walletApiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';

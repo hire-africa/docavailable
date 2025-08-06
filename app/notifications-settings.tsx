@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from './services/apiService';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';

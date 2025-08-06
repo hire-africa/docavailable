@@ -33,7 +33,7 @@ export default function LoginPage() {
         setLoading(true);
         try {
             const authState = await authService.signIn(email, password);
-            console.log('Login successful');
+            // console.log('Login successful');
             
             if (authState.user) {
                 if (authState.user.user_type === 'admin') {
@@ -171,7 +171,7 @@ export default function LoginPage() {
             // Uncomment the following code when Google sign-in is implemented:
             /*
             const authState = await authService.signInWithGoogle(idToken);
-            console.log('Google login successful');
+            // console.log('Google login successful');
             
             if (authState.user) {
                 if (authState.user.user_type === 'admin') {

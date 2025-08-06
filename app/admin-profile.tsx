@@ -3,6 +3,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Dimensions,
     Platform,
@@ -60,9 +61,9 @@ export default function AdminProfile() {
             }
 
             try {
-                console.log('AdminProfile: Fetching admin data for:', user.uid);
+                // console.log('AdminProfile: Fetching admin data for:', user.uid);
                 const completeData = await authService.getUserById(user.uid) as CompleteAdminData;
-                console.log('AdminProfile: Admin data fetched:', completeData);
+                // console.log('AdminProfile: Admin data fetched:', completeData);
                 setAdminData(completeData);
             } catch (error) {
                 console.error('AdminProfile: Error fetching admin data:', error);
