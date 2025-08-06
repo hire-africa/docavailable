@@ -1,578 +1,217 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios, { AxiosInstance } from 'axios';
 
-export interface UserData {
-  id: number;
-  email: string;
-  first_name: string;
-  last_name: string;
-  display_name: string;
-  user_type: 'patient' | 'doctor' | 'admin';
-  date_of_birth?: string;
-  gender?: string;
-  country?: string;
-  city?: string;
-  years_of_experience?: number;
-  specialization?: string;
-  sub_specialization?: string;
-  bio?: string;
-  health_history?: string;
-  status: 'pending' | 'approved' | 'rejected' | 'active';
-  rating?: number;
-  total_ratings?: number;
-  created_at: string;
-  updated_at: string;
-  // Image fields
-  profile_picture?: string;
-  profile_picture_url?: string;
-  national_id?: string;
-  national_id_url?: string;
-  medical_degree?: string;
-  medical_degree_url?: string;
-  medical_licence?: string;
-  medical_licence_url?: string;
+interface AuthResponse {
+  success: boolean;
+  message: string;
+  data: {
+    user: {
+      id: number;
+      email: string;
+      first_name: string;
+      last_name: string;
+      display_name: string;
+      user_type: 'patient' | 'doctor' | 'admin';
+      date_of_birth?: string;
+      gender?: 'male' | 'female' | 'other';
+      country?: string;
+      city?: string;
+      years_of_experience?: number;
+      occupation?: string;
+      bio?: string;
+      health_history?: string;
+      status: 'active' | 'pending' | 'suspended';
+      rating: number;
+      total_ratings: number;
+      created_at: string;
+      updated_at: string;
+      profile_picture?: string;
+      profile_picture_url?: string;
+      national_id?: string;
+      national_id_url?: string;
+      medical_degree?: string;
+      medical_degree_url?: string;
+      medical_licence?: string;
+      medical_licence_url?: string;
+      specialization?: string;
+      sub_specialization?: string;
+    };
+    token: string;
+    token_type: string;
+    expires_in: number;
+  };
 }
 
-export interface AuthState {
-  user: UserData | null;
-  token: string | null;
-  loading: boolean;
-  error: string | null;
+interface ApiResponse<T = any> {
+  success: boolean;
+  message: string;
+  data?: T;
+  errors?: any;
 }
 
 class AuthService {
+  private api: AxiosInstance;
   private baseURL: string;
-  private currentUser: UserData | null = null;
-  private currentToken: string | null = null;
-  private listeners: ((state: AuthState) => void)[] = [];
 
   constructor() {
-    // Get base URL from environment variables, fallback to local IP
-    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || 
-                       process.env.EXPO_PUBLIC_LARAVEL_API_URL || 
-                       'http://172.20.10.11:8000';
+    // Get base URL without /api suffix
+    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_LARAVEL_API_URL || 'https://docavailable-1.onrender.com';
     
     // Remove trailing /api if it exists to avoid double /api/api/
-    this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL : `${rawBaseURL}/api`;
+    this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL.slice(0, -4) : rawBaseURL;
     
     console.log('AuthService: Initialized with base URL:', this.baseURL);
     
-    // Check if we're in a web environment and warn about local IP
-    if (typeof window !== 'undefined' && this.baseURL.includes('172.20.10.11')) {
-      console.warn('⚠️  AuthService: Using local IP address in web environment');
-      console.warn('   This may cause login issues. Consider updating your .env file.');
-      console.warn('   For web: use localhost:8000 or your public domain');
+    // Check if we're in a web environment and using localhost
+    if (typeof window !== 'undefined' && this.baseURL.includes('docavailable-1.onrender.com')) {
+      console.log('AuthService: Using live backend URL');
     }
-  }
+    
+    this.api = axios.create({
+      baseURL: `${this.baseURL}/api`,
+      timeout: 15000,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    });
 
-  // Initialize auth state
-  async initialize(): Promise<AuthState> {
-    try {
-      console.log('AuthService: Starting initialization...');
-      
-      const token = await this.getStoredToken();
-      console.log('AuthService: Stored token found:', !!token);
-      
-      if (token) {
-        console.log('AuthService: Token found, getting current user...');
-        const userData = await this.getCurrentUserWithToken(token);
-        console.log('AuthService: User data retrieved:', !!userData);
-        
-        if (userData) {
-          console.log('AuthService: Valid user found, setting state...');
-          this.currentUser = userData;
-          this.currentToken = token;
-          
-          return {
-            user: userData,
-            token,
-            loading: false,
-            error: null
-          };
-        } else {
-          console.log('AuthService: Invalid token, clearing...');
-          await this.clearStoredToken();
+    // Request interceptor to add auth token
+    this.api.interceptors.request.use(
+      async (config) => {
+        const token = await AsyncStorage.getItem('auth_token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
       }
-      
-      return {
-        user: null,
-        token: null,
-        loading: false,
-        error: null
-      };
-    } catch (error: any) {
-      console.error('AuthService: Error during initialization:', error);
-      await this.clearStoredToken();
-      
-      return {
-        user: null,
-        token: null,
-        loading: false,
-        error: null
-      };
-    }
+    );
+
+    // Response interceptor to handle token refresh
+    this.api.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+
+          try {
+            const refreshToken = await AsyncStorage.getItem('refresh_token');
+            if (refreshToken) {
+              const response = await this.api.post('/auth/refresh', {
+                refresh_token: refreshToken,
+              });
+
+              const { token } = response.data.data;
+              await AsyncStorage.setItem('auth_token', token);
+
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+              return this.api(originalRequest);
+            }
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+            await this.logout();
+          }
+        }
+
+        return Promise.reject(error);
+      }
+    );
   }
 
-  async signIn(email: string, password: string): Promise<AuthState> {
+  async register(formData: FormData): Promise<AuthResponse> {
     try {
-      console.log('AuthService: Attempting sign in...');
-      
-      const response = await fetch(`${this.baseURL}/login`, {
-        method: 'POST',
+      const response = await this.api.post('/auth/register', formData, {
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'multipart/form-data',
         },
-        body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
+      const { user, token } = response.data.data;
+      await AsyncStorage.setItem('auth_token', token);
+      await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
-      const data = await response.json();
-      
-      // Handle the nested data structure from Laravel
-      const responseData = data.data || data;
-      const token = responseData.token;
-      const user = responseData.user;
-      
-      if (!token) {
-        throw new Error('No token received from server');
-      }
-      
-      // Store auth data
-      await this.storeToken(token);
-      this.currentUser = user;
-      this.currentToken = token;
-      
-      const authState = {
-        user: user,
-        token: token,
-        loading: false,
-        error: null
-      };
-
-      this.notifyListeners(authState);
-      return authState;
-    } catch (error: any) {
-      console.error('Sign in error:', error);
-      const authState = {
-        user: null,
-        token: null,
-        loading: false,
-        error: error.message
-      };
-      this.notifyListeners(authState);
+      return response.data;
+    } catch (error) {
+      console.error('Registration error:', error);
       throw error;
     }
   }
 
-  async signInWithGoogle(idToken: string): Promise<AuthState> {
+  async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
     try {
-      console.log('AuthService: Attempting Google sign in...');
-      
-      const response = await fetch(`${this.baseURL}/google-login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ id_token: idToken }),
-      });
+      const response = await this.api.post('/auth/login', credentials);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Google login failed');
-      }
+      const { user, token } = response.data.data;
+      await AsyncStorage.setItem('auth_token', token);
+      await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
-      const data = await response.json();
-      
-      // Handle the nested data structure from Laravel
-      const responseData = data.data || data;
-      const token = responseData.token;
-      const user = responseData.user;
-      
-      if (!token) {
-        throw new Error('No token received from server');
-      }
-      
-      // Store auth data
-      await this.storeToken(token);
-      this.currentUser = user;
-      this.currentToken = token;
-      
-      const authState = {
-        user: user,
-        token: token,
-        loading: false,
-        error: null
-      };
-
-      this.notifyListeners(authState);
-      return authState;
-    } catch (error: any) {
-      console.error('Google sign in error:', error);
-      const authState = {
-        user: null,
-        token: null,
-        loading: false,
-        error: error.message
-      };
-      this.notifyListeners(authState);
+      return response.data;
+    } catch (error) {
+      console.error('Login error:', error);
       throw error;
     }
   }
 
-  async signUp(formData: FormData): Promise<AuthState> {
+  async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
     try {
-      console.log('AuthService: Attempting sign up...');
-      
-      const response = await fetch(`${this.baseURL}/auth/register`, {
-        method: 'POST',
-        body: formData,
-      });
+      const response = await this.api.post('/auth/google', credentials);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Registration failed');
-      }
+      const { user, token } = response.data.data;
+      await AsyncStorage.setItem('auth_token', token);
+      await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
-      const data = await response.json();
-      
-      // Handle the nested data structure from Laravel
-      const responseData = data.data || data;
-      const token = responseData.token;
-      const user = responseData.user;
-      
-      if (!token) {
-        throw new Error('No token received from server');
-      }
-      
-      // Store auth data
-      await this.storeToken(token);
-      this.currentUser = user;
-      this.currentToken = token;
-      
-      const authState = {
-        user: data.user,
-        token: data.token,
-        loading: false,
-        error: null
-      };
-
-      this.notifyListeners(authState);
-      return authState;
-    } catch (error: any) {
-      console.error('Sign up error:', error);
-      const authState = {
-        user: null,
-        token: null,
-        loading: false,
-        error: error.message
-      };
-      this.notifyListeners(authState);
+      return response.data;
+    } catch (error) {
+      console.error('Google login error:', error);
       throw error;
     }
   }
 
-  async signOut(): Promise<void> {
+  async logout(): Promise<void> {
     try {
-      console.log('AuthService: Signing out...');
-      
-      if (this.currentToken) {
-        // Call logout endpoint
-        await fetch(`${this.baseURL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.currentToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
+      await this.api.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear local data regardless of server response
-      await this.clearStoredToken();
-      this.currentUser = null;
-      this.currentToken = null;
-      
-      const authState = {
-        user: null,
-        token: null,
-        loading: false,
-        error: null
-      };
-      
-      this.notifyListeners(authState);
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
     }
   }
 
-  getCurrentUser(): UserData | null {
-    return this.currentUser;
-  }
-
-  getCurrentToken(): string | null {
-    return this.currentToken;
-  }
-
-  async updateUser(userId: number, data: Partial<UserData>): Promise<UserData> {
+  async getCurrentUser(): Promise<any> {
     try {
-      const response = await fetch(`${this.baseURL}/users/${userId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.currentToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Update failed');
-      }
-
-      const updatedUser = await response.json();
-      this.currentUser = updatedUser;
-      
-      const authState = {
-        user: updatedUser,
-        token: this.currentToken,
-        loading: false,
-        error: null
-      };
-      
-      this.notifyListeners(authState);
-      return updatedUser;
-    } catch (error: any) {
-      console.error('Update user error:', error);
-      throw error;
-    }
-  }
-
-  onAuthStateChanged(callback: (state: AuthState) => void): () => void {
-    this.listeners.push(callback);
-    
-    // Return unsubscribe function
-    return () => {
-      const index = this.listeners.indexOf(callback);
-      if (index > -1) {
-        this.listeners.splice(index, 1);
-      }
-    };
-  }
-
-  subscribe(callback: (state: AuthState) => void): void {
-    this.listeners.push(callback);
-  }
-
-  unsubscribe(callback: (state: AuthState) => void): void {
-    const index = this.listeners.indexOf(callback);
-    if (index > -1) {
-      this.listeners.splice(index, 1);
-    }
-  }
-
-  private async getCurrentUserWithToken(token: string): Promise<UserData | null> {
-    try {
-      const response = await fetch(`${this.baseURL}/auth/user`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const userData = await response.json();
-      return userData;
+      const userData = await AsyncStorage.getItem('user_data');
+      return userData ? JSON.parse(userData) : null;
     } catch (error) {
       console.error('Get current user error:', error);
       return null;
     }
   }
 
-  private async storeToken(token: string): Promise<void> {
+  async isAuthenticated(): Promise<boolean> {
     try {
-      await AsyncStorage.setItem('auth_token', token);
+      const token = await AsyncStorage.getItem('auth_token');
+      return !!token;
     } catch (error) {
-      console.error('Store token error:', error);
-    }
-  }
-
-  private async getStoredToken(): Promise<string | null> {
-    try {
-      return await AsyncStorage.getItem('auth_token');
-    } catch (error) {
-      console.error('Get stored token error:', error);
-      return null;
-    }
-  }
-
-  private async clearStoredToken(): Promise<void> {
-    try {
-      await AsyncStorage.removeItem('auth_token');
-    } catch (error) {
-      console.error('Clear stored token error:', error);
-    }
-  }
-
-  private notifyListeners(state: AuthState) {
-    this.listeners.forEach(listener => {
-      try {
-        listener(state);
-      } catch (error) {
-        console.error('Listener error:', error);
-      }
-    });
-  }
-
-  isAuthenticated(): boolean {
-    return !!this.currentToken && !!this.currentUser;
-  }
-
-  isDoctor(): boolean {
-    return this.currentUser?.user_type === 'doctor';
-  }
-
-  isPatient(): boolean {
-    return this.currentUser?.user_type === 'patient';
-  }
-
-  isAdmin(): boolean {
-    return this.currentUser?.user_type === 'admin';
-  }
-
-  isApproved(): boolean {
-    return this.currentUser?.status === 'approved';
-  }
-
-  getUserId(): number | null {
-    return this.currentUser?.id || null;
-  }
-
-  async checkAndRefreshToken(): Promise<boolean> {
-    // Simplified token refresh logic
-    if (!this.currentToken) {
+      console.error('Check authentication error:', error);
       return false;
     }
+  }
 
+  async healthCheck(): Promise<ApiResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.currentToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        this.currentToken = data.token;
-        await this.storeToken(data.token);
-        return true;
-      }
+      const response = await this.api.get('/health');
+      return response.data;
     } catch (error) {
-      console.error('Token refresh error:', error);
-    }
-
-    return false;
-  }
-
-  async getDoctorAvailability(doctorId: string): Promise<{ success: boolean; data?: any; message?: string }> {
-    try {
-      const response = await fetch(`${this.baseURL}/doctors/${doctorId}/availability`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${this.currentToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        return { success: false, message: errorData.message || 'Failed to get availability' };
-      }
-
-      const data = await response.json();
-      return { success: true, data };
-    } catch (error: any) {
-      console.error('Get doctor availability error:', error);
-      return { success: false, message: error.message || 'Network error' };
-    }
-  }
-
-  async updateDoctorAvailability(doctorId: string, availability: any): Promise<{ success: boolean; data?: any; message?: string }> {
-    try {
-      const response = await fetch(`${this.baseURL}/doctors/${doctorId}/availability`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${this.currentToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(availability),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        return { success: false, message: errorData.message || 'Failed to update availability' };
-      }
-
-      const data = await response.json();
-      return { success: true, data };
-    } catch (error: any) {
-      console.error('Update doctor availability error:', error);
-      return { success: false, message: error.message || 'Network error' };
-    }
-  }
-
-  async sendPasswordResetLink(email: string): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseURL}/auth/forgot-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to send reset link');
-      }
-    } catch (error: any) {
-      console.error('Send password reset link error:', error);
-      throw error;
-    }
-  }
-
-  async resetPassword(token: string, email: string, password: string, passwordConfirmation: string): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseURL}/auth/reset-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token,
-          email,
-          password,
-          password_confirmation: passwordConfirmation,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to reset password');
-      }
-    } catch (error: any) {
-      console.error('Reset password error:', error);
+      console.error('Health check error:', error);
       throw error;
     }
   }
 }
 
-export const authService = new AuthService(); 
+export default new AuthService(); 
