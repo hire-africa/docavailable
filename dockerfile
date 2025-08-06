@@ -28,13 +28,13 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 
 # Copy backend composer files first for better caching
-COPY backend/composer.json backend/composer.lock ./
+COPY backend/backend/composer.json backend/backend/composer.lock ./
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Copy backend application directory contents
-COPY backend/ .
+COPY backend/backend/ .
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
@@ -65,6 +65,11 @@ RUN php artisan view:cache || echo "View cache failed"
 
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
+
+# Ensure public directory exists and has proper permissions
+RUN mkdir -p public \
+    && chmod -R 755 public \
+    && chown -R www-data:www-data public
 
 # Expose port 8000
 EXPOSE 8000
