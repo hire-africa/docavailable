@@ -15,4 +15,7 @@ yarn-error.log
 /.vscode
 .git
 .gitignore
-README.md 
+README.md
+*.log
+.DS_Store
+Thumbs.db 

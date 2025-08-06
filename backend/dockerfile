@@ -28,11 +28,14 @@ WORKDIR /var/www
 # Copy composer files first for better caching
 COPY composer.json composer.lock ./
 
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# Install dependencies without running post-install scripts
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
 
-# Copy existing application directory contents
+# Copy the entire application
 COPY . .
+
+# Run post-install scripts after all files are copied
+RUN composer dump-autoload --optimize
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
