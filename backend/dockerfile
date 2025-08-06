@@ -92,6 +92,9 @@ RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 # Run migrations (only if database is available)
 RUN php artisan migrate --force || echo "Migrations failed, will retry at runtime"
 
+# Seed database with test users (only if database is available)
+RUN php artisan db:seed --force || echo "Seeding failed, will retry at runtime"
+
 # Cache configurations
 RUN php artisan config:cache || echo "Config cache failed"
 RUN php artisan route:cache || echo "Route cache failed"

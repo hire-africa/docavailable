@@ -191,7 +191,7 @@ class AuthService {
 
   async register(formData: FormData): Promise<AuthResponse> {
     try {
-      const response = await this.api.post('/auth/register', formData, {
+      const response = await this.api.post('/register', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -218,7 +218,7 @@ class AuthService {
 
   async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
     try {
-      const response = await this.api.post('/auth/login', credentials);
+      const response = await this.api.post('/login', credentials);
 
       const { user, token } = response.data.data;
       await AsyncStorage.setItem('auth_token', token);
@@ -241,7 +241,7 @@ class AuthService {
 
   async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
     try {
-      const response = await this.api.post('/auth/google', credentials);
+      const response = await this.api.post('/google-login', credentials);
 
       const { user, token } = response.data.data;
       await AsyncStorage.setItem('auth_token', token);
@@ -264,7 +264,7 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
-      await this.api.post('/auth/logout');
+      await this.api.post('/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -329,7 +329,13 @@ class AuthService {
   async healthCheck(): Promise<ApiResponse> {
     try {
       const response = await this.api.get('/health');
-      return response.data;
+      // The backend returns { status: 'ok', timestamp: '...', message: '...' }
+      // Convert it to the expected ApiResponse format
+      return {
+        success: response.data.status === 'ok',
+        message: response.data.message || 'Health check completed',
+        data: response.data
+      };
     } catch (error) {
       console.error('Health check error:', error);
       throw error;

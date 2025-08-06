@@ -14,7 +14,7 @@ class WorkingHoursSeeder extends Seeder
     public function run(): void
     {
         // Get all doctors
-        $doctors = User::where('role', 'doctor')->get();
+        $doctors = User::where('user_type', 'doctor')->get();
 
         foreach ($doctors as $doctor) {
             // Standard working hours for each doctor

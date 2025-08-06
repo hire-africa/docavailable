@@ -476,8 +476,14 @@ class ApiService {
   // Health check
   async healthCheck(): Promise<ApiResponse> {
     try {
-      const response: AxiosResponse<ApiResponse> = await this.api.get('/health');
-      return response.data;
+      const response = await this.api.get('/health');
+      // The backend returns { status: 'ok', timestamp: '...', message: '...' }
+      // Convert it to the expected ApiResponse format
+      return {
+        success: response.data.status === 'ok',
+        message: response.data.message || 'Health check completed',
+        data: response.data
+      };
     } catch (error: any) {
       throw this.handleError(error);
     }

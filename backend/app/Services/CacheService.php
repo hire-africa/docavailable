@@ -50,7 +50,7 @@ class CacheService
         if ($data === null) {
             $data = User::with(['workingHours', 'reviews'])
                 ->where('id', $doctorId)
-                ->where('role', 'doctor')
+                ->where('user_type', 'doctor')
                 ->first();
         }
         
@@ -68,7 +68,7 @@ class CacheService
         
         return Cache::remember($key, self::CACHE_DURATION, function () {
             return User::with('workingHours')
-                ->where('role', 'doctor')
+                ->where('user_type', 'doctor')
                 ->where('is_active', true)
                 ->get();
         });
@@ -130,8 +130,8 @@ class CacheService
         return Cache::remember($key, self::CACHE_DURATION, function () {
             return [
                 'total_users' => User::count(),
-                'total_doctors' => User::where('role', 'doctor')->count(),
-                'total_patients' => User::where('role', 'patient')->count(),
+                'total_doctors' => User::where('user_type', 'doctor')->count(),
+                'total_patients' => User::where('user_type', 'patient')->count(),
                 'total_appointments' => Appointment::count(),
                 'pending_appointments' => Appointment::where('status', 0)->count(),
                 'completed_appointments' => Appointment::where('status', 3)->count(),

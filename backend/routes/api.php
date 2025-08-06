@@ -73,6 +73,57 @@ Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
 Route::post('/forgot-password', [\App\Http\Controllers\Auth\PasswordResetLinkController::class, 'store'])->withoutMiddleware(['throttle']);
 Route::post('/reset-password', [\App\Http\Controllers\Auth\NewPasswordController::class, 'store'])->withoutMiddleware(['throttle']);
 
+// Create test user endpoint (for development/testing)
+Route::post('/create-test-user', function () {
+    try {
+        // Check if user already exists
+        $existingUser = \App\Models\User::where('email', 'test@docavailable.com')->first();
+        
+        if ($existingUser) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Test user already exists',
+                'data' => [
+                    'email' => $existingUser->email,
+                    'password' => 'password123',
+                    'user_type' => $existingUser->user_type,
+                    'status' => $existingUser->status
+                ]
+            ]);
+        }
+        
+        // Create new test user
+        $user = \App\Models\User::create([
+            'first_name' => 'Test',
+            'last_name' => 'User',
+            'email' => 'test@docavailable.com',
+            'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+            'user_type' => 'patient',
+            'status' => 'active',
+            'display_name' => 'Test User',
+            'rating' => 0,
+            'total_ratings' => 0,
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Test user created successfully',
+            'data' => [
+                'email' => $user->email,
+                'password' => 'password123',
+                'user_type' => $user->user_type,
+                'status' => $user->status
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error creating test user: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
 // Development: View password reset links (only in local environment)
 if (app()->environment('local')) {
     Route::get('/dev/password-reset-links', function () {
@@ -92,6 +143,8 @@ if (app()->environment('local')) {
         }
         return response()->json(['message' => 'No password reset links found']);
     });
+    
+
     
     // Test email configuration
     Route::get('/dev/test-email', function () {
