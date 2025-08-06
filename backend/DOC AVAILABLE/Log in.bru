@@ -1,0 +1,22 @@
+meta {
+  name: Log in
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://172.20.10.11:8000/api/login
+  body: json
+  auth: inherit
+}
+
+headers {
+  Authorization: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vMTcyLjIwLjEwLjExOjgwMDAvYXBpL2xvZ2luIiwiaWF0IjoxNzUyNDE1MDkyLCJleHAiOjE3NTI0MTg2OTIsIm5iZiI6MTc1MjQxNTA5MiwianRpIjoiVG4yd1FxRGhhUU1qZFM2MSIsInN1YiI6IjEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.oBa2wpxZVLjnfxrEBWmbN0jtASHn1RlbjTp5QgJ6yVM
+}
+
+body:json {
+  {
+    "email": "test@example.com",
+    "password": "password"
+  }
+}
