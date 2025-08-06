@@ -75,6 +75,9 @@ RUN mkdir -p public \
 # Verify public directory exists and has content
 RUN ls -la public/ || echo "Public directory check failed"
 
+# Final verification that public directory exists
+RUN ls -la /var/www/public/ || echo "Final public directory check failed"
+
 # Expose port 8000
 EXPOSE 8000
 

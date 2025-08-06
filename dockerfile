@@ -28,13 +28,13 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 
 # Copy backend composer files first for better caching
-COPY backend/backend/composer.json backend/backend/composer.lock ./
+COPY backend/composer.json backend/composer.lock ./
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Copy backend application directory contents
-COPY backend/backend/ .
+COPY backend/ .
 
 # Verify public directory exists and has content
 RUN ls -la public/ || echo "Public directory check failed"
