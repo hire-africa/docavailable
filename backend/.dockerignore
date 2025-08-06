@@ -1,21 +1,42 @@
-/node_modules
+# Node modules (if any)
+node_modules/
+
+# Laravel specific exclusions
 /public/hot
 /public/storage
 /storage/*.key
-/vendor
+/vendor/
+
+# Environment files
 .env
 .env.backup
+
+# Cache files
 .phpunit.result.cache
+
+# Docker files
 docker-compose.override.yml
+
+# Development files
 Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
-/.idea
-/.vscode
-.git
+
+# IDE files
+.idea/
+.vscode/
+
+# Git files
+.git/
 .gitignore
+
+# Documentation
 README.md
+
+# Log files
 *.log
+
+# OS files
 .DS_Store
 Thumbs.db 
