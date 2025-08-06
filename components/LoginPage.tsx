@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { authService } from '../services/authService';
+import authService from '../services/authService';
 
 const { width } = Dimensions.get('window');
 
@@ -35,17 +35,17 @@ export default function LoginPage() {
             const authState = await authService.signIn(email, password);
             // console.log('Login successful');
             
-            if (authState.user) {
-                if (authState.user.user_type === 'admin') {
+            if (authState.data && authState.data.user) {
+                if (authState.data.user.user_type === 'admin') {
                     router.replace('/admin-dashboard');
-                } else if (authState.user.user_type === 'doctor') {
-                    if (authState.user.status !== 'approved') {
+                } else if (authState.data.user.user_type === 'doctor') {
+                    if (authState.data.user.status !== 'approved') {
                         Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
                         await authService.signOut();
                         return;
                     }
                     router.replace('/doctor-dashboard');
-                } else if (authState.user.user_type === 'patient') {
+                } else if (authState.data.user.user_type === 'patient') {
                     router.replace('/patient-dashboard');
                 } else {
                     router.replace('/'); // fallback

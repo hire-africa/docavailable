@@ -5,6 +5,7 @@ services:
     buildCommand: 
     startCommand: 
     rootDir: backend
+    dockerfilePath: dockerfile.simple
     envVars:
       - key: APP_NAME
         value: DocAvailable

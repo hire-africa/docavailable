@@ -21,6 +21,22 @@ export interface UserData {
   total_ratings?: number;
   created_at: string;
   updated_at: string;
+  // Profile picture fields
+  profile_picture?: string;
+  profile_picture_url?: string;
+  // Document fields
+  national_id?: string;
+  national_id_url?: string;
+  medical_degree?: string;
+  medical_degree_url?: string;
+  medical_licence?: string;
+  medical_licence_url?: string;
+  // Doctor specific fields
+  specialization?: string;
+  sub_specialization?: string;
+  // Additional fields that might be used
+  role?: string;
+  is_online_for_instant_sessions?: boolean;
 }
 
 // Appointment interfaces

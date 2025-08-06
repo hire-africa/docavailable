@@ -52,6 +52,7 @@ interface ApiResponse<T = any> {
 class AuthService {
   private api: AxiosInstance;
   private baseURL: string;
+  private subscribers: Array<(authState: any) => void> = [];
 
   constructor() {
     // Get base URL without /api suffix
@@ -123,6 +124,71 @@ class AuthService {
     );
   }
 
+  // Subscribe to auth state changes
+  subscribe(callback: (authState: any) => void): void {
+    this.subscribers.push(callback);
+  }
+
+  // Unsubscribe from auth state changes
+  unsubscribe(callback: (authState: any) => void): void {
+    const index = this.subscribers.indexOf(callback);
+    if (index > -1) {
+      this.subscribers.splice(index, 1);
+    }
+  }
+
+  // Notify all subscribers of auth state changes
+  private notifySubscribers(authState: any): void {
+    this.subscribers.forEach(callback => {
+      try {
+        callback(authState);
+      } catch (error) {
+        console.error('Error in auth subscriber callback:', error);
+      }
+    });
+  }
+
+  // Initialize auth service and return current state
+  async initialize(): Promise<{ user: any; token: string | null }> {
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      const userData = await AsyncStorage.getItem('user_data');
+      
+      const user = userData ? JSON.parse(userData) : null;
+      
+      // Notify subscribers of initial state
+      this.notifySubscribers({ user, token });
+      
+      return { user, token };
+    } catch (error) {
+      console.error('AuthService initialization error:', error);
+      return { user: null, token: null };
+    }
+  }
+
+
+
+  // Get stored token
+  async getStoredToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem('auth_token');
+    } catch (error) {
+      console.error('Get stored token error:', error);
+      return null;
+    }
+  }
+
+  // Clear stored token
+  async clearStoredToken(): Promise<void> {
+    try {
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
+      this.notifySubscribers({ user: null, token: null });
+    } catch (error) {
+      console.error('Clear stored token error:', error);
+    }
+  }
+
   async register(formData: FormData): Promise<AuthResponse> {
     try {
       const response = await this.api.post('/auth/register', formData, {
@@ -135,11 +201,19 @@ class AuthService {
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
+      // Notify subscribers of new auth state
+      this.notifySubscribers({ user, token });
+
       return response.data;
     } catch (error) {
       console.error('Registration error:', error);
       throw error;
     }
+  }
+
+  // Alias for register method to maintain compatibility
+  async signUp(formData: FormData): Promise<AuthResponse> {
+    return this.register(formData);
   }
 
   async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
@@ -150,11 +224,19 @@ class AuthService {
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
+      // Notify subscribers of new auth state
+      this.notifySubscribers({ user, token });
+
       return response.data;
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
+  }
+
+  // Alias for login method to maintain compatibility
+  async signIn(email: string, password: string): Promise<AuthResponse> {
+    return this.login({ email, password });
   }
 
   async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
@@ -165,11 +247,19 @@ class AuthService {
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
+      // Notify subscribers of new auth state
+      this.notifySubscribers({ user, token });
+
       return response.data;
     } catch (error) {
       console.error('Google login error:', error);
       throw error;
     }
+  }
+
+  // Alias for googleLogin method to maintain compatibility
+  async signInWithGoogle(idToken: string): Promise<AuthResponse> {
+    return this.googleLogin({ id_token: idToken });
   }
 
   async logout(): Promise<void> {
@@ -180,7 +270,15 @@ class AuthService {
     } finally {
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
+      
+      // Notify subscribers of logout
+      this.notifySubscribers({ user: null, token: null });
     }
+  }
+
+  // Alias for logout method to maintain compatibility
+  async signOut(): Promise<void> {
+    return this.logout();
   }
 
   async getCurrentUser(): Promise<any> {
@@ -189,6 +287,31 @@ class AuthService {
       return userData ? JSON.parse(userData) : null;
     } catch (error) {
       console.error('Get current user error:', error);
+      return null;
+    }
+  }
+
+  // Get current user from API
+  async getCurrentUserFromAPI(): Promise<any> {
+    try {
+      const response = await this.api.get('/user');
+      return response.data;
+    } catch (error) {
+      console.error('Get current user from API error:', error);
+      return null;
+    }
+  }
+
+  // Synchronous version for immediate access
+  getCurrentUserSync(): any {
+    try {
+      // This is a synchronous method that returns the last known user
+      // For immediate access during initialization
+      // Note: This will return null on first call, but will be populated
+      // after initialize() is called and subscribers are notified
+      return null; // Will be set by initialize() method
+    } catch (error) {
+      console.error('Get current user sync error:', error);
       return null;
     }
   }
@@ -209,6 +332,48 @@ class AuthService {
       return response.data;
     } catch (error) {
       console.error('Health check error:', error);
+      throw error;
+    }
+  }
+
+  // Doctor availability methods
+  async getDoctorAvailability(doctorId: string): Promise<any> {
+    try {
+      const response = await this.api.get(`/doctor/${doctorId}/availability`);
+      return response.data;
+    } catch (error) {
+      console.error('Get doctor availability error:', error);
+      throw error;
+    }
+  }
+
+  async updateDoctorAvailability(doctorId: string, availabilityData: any): Promise<any> {
+    try {
+      const response = await this.api.put(`/doctor/${doctorId}/availability`, availabilityData);
+      return response.data;
+    } catch (error) {
+      console.error('Update doctor availability error:', error);
+      throw error;
+    }
+  }
+
+  // User management methods
+  async getUserById(userId: string): Promise<any> {
+    try {
+      const response = await this.api.get(`/users/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Get user by ID error:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(userId: string, userData: any): Promise<any> {
+    try {
+      const response = await this.api.put(`/users/${userId}`, userData);
+      return response.data;
+    } catch (error) {
+      console.error('Update user error:', error);
       throw error;
     }
   }

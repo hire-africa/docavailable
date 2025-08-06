@@ -1,4 +1,4 @@
-FROM php:8.2-fpm
+FROM php:8.2-cli
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -9,9 +9,7 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libzip-dev \
     zip \
-    unzip \
-    supervisor \
-    nginx
+    unzip
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -25,20 +23,15 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy composer files first for better caching
-COPY composer.json composer.lock ./
-
-# Install dependencies without running post-install scripts
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
-
 # Copy the entire application
 COPY . .
 
-# Ensure public directory is copied correctly
-RUN ls -la public/ || echo "Public directory not found after copy"
+# Debug: List what was copied
+RUN echo "=== Files copied to /var/www ===" && ls -la /var/www
+RUN echo "=== Checking for public directory ===" && ls -la public/ 2>/dev/null || echo "Public directory not found"
 
-# Run post-install scripts after all files are copied
-RUN composer dump-autoload --optimize
+# Install dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
@@ -55,7 +48,7 @@ RUN mkdir -p storage/framework/{sessions,views,cache} \
 # Copy environment file if it doesn't exist
 RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
-# Generate application key and JWT secret (only if not already set)
+# Generate application key and JWT secret
 RUN php artisan key:generate --force || echo "Key already exists"
 RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 
@@ -70,15 +63,13 @@ RUN php artisan view:cache || echo "View cache failed"
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
-# Ensure public directory has proper permissions (don't recreate it)
-RUN chmod -R 755 public \
-    && chown -R www-data:www-data public
-
-# Verify public directory exists and has content
-RUN ls -la public/ || echo "Public directory check failed"
-
-# Final verification that public directory exists
-RUN ls -la /var/www/public/ || echo "Final public directory check failed"
+# Verify public directory exists and has content (with error handling)
+RUN if [ -d "public" ]; then \
+        echo "Public directory found:" && ls -la public/ && echo "Public directory verified"; \
+    else \
+        echo "Public directory not found - this is a deployment issue"; \
+        exit 1; \
+    fi
 
 # Expose port 8000
 EXPOSE 8000

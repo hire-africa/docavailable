@@ -493,6 +493,15 @@ class ApiService {
           'Accept': 'application/json',
         }
       });
+      
+      // Check if response is actually JSON
+      const contentType = response.headers['content-type'] || '';
+      if (!contentType.includes('application/json')) {
+        console.error('ApiService: Backend returned non-JSON response:', contentType);
+        console.error('ApiService: Response content:', response.data.substring(0, 200));
+        return false;
+      }
+      
       console.log('ApiService: Connectivity check successful');
       
       // Circuit breaker disabled - no reset needed
@@ -504,8 +513,15 @@ class ApiService {
       console.error('ApiService: Connectivity check failed:', {
         message: error.message,
         code: error.code,
-        status: error.response?.status
+        status: error.response?.status,
+        contentType: error.response?.headers?.['content-type']
       });
+      
+      // Check if error response is HTML (deployment issue)
+      if (error.response?.data && typeof error.response.data === 'string' && error.response.data.includes('<br />')) {
+        console.error('ApiService: Backend appears to have deployment issues - returning HTML instead of JSON');
+      }
+      
       return false;
     }
   }

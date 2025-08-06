@@ -1,3 +1,4 @@
+import authService from '@/services/authService';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -16,7 +17,6 @@ import {
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import { authService } from '@/services/authService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -383,14 +383,14 @@ export default function PatientSignUp() {
 
             const authState = await authService.signUp(formData);
             
-            if (authState.user) {
-                // console.log('PatientSignup: Signup successful, user:', authState.user);
+            if (authState.data && authState.data.user) {
+                // console.log('PatientSignup: Signup successful, user:', authState.data.user);
                 
                 // Store user type immediately after successful signup for routing
                 if (Platform.OS === 'web' && typeof window !== 'undefined') {
                   try {
                     sessionStorage.setItem('lastSignupUserType', 'patient');
-                    sessionStorage.setItem('lastSignupUID', authState.user.id.toString());
+                    sessionStorage.setItem('lastSignupUID', authState.data.user.id.toString());
                     // console.log('PatientSignup: Stored user type and UID for routing');
                   } catch (error) {
                     console.warn('PatientSignup: Could not store user type:', error);

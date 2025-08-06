@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserData, authService } from '../services/authService';
+import authService from '../services/authService';
+import { UserData } from '../services/laravelService';
 
 interface AuthContextType {
   user: UserData | null;
@@ -86,31 +87,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return null;
       }
       
-      // Get current user from Laravel backend using direct fetch
+      // Get current user from API using authService
       // console.log('AuthContext: Making request to /api/user...');
-      const response = await fetch('http://172.20.10.11:8000/api/user', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const apiResponse = await authService.getCurrentUserFromAPI();
       
-      // console.log('AuthContext: Response status:', response.status);
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          // console.log('AuthContext: Authentication failed, clearing token');
-          await authService.clearStoredToken();
-        }
-        return null;
-      }
-      
-      const apiResponse = await response.json();
       // console.log('AuthContext: API response:', apiResponse);
       
       // Handle the wrapped response structure
-      if (apiResponse.success && apiResponse.data) {
+      if (apiResponse && apiResponse.success && apiResponse.data) {
         // console.log('AuthContext: Retrieved user data from Laravel:', apiResponse.data);
         const userData = convertApiUserToUserData(apiResponse.data);
         // console.log('AuthContext: Converted to UserData format:', userData);
@@ -118,7 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // console.log('AuthContext: User status:', userData.status);
         return userData;
       } else {
-        // console.log('AuthContext: API response indicates failure:', apiResponse.message);
+        // console.log('AuthContext: API response indicates failure:', apiResponse?.message);
         return null;
       }
       
@@ -184,14 +168,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Test API connection first
         // console.log('AuthContext: Testing API connection...');
         try {
-                     const healthResponse = await fetch('http://172.20.10.11:8000/api/health');
-          if (healthResponse.ok) {
+          const healthResponse = await authService.healthCheck();
+          if (healthResponse.success) {
             // console.log('AuthContext: API health check successful');
           } else {
             console.error('AuthContext: API health check failed');
           }
-        } catch (healthError) {
+        } catch (healthError: any) {
           console.error('AuthContext: API health check failed:', healthError);
+          
+          // Check if this is a deployment issue (HTML response instead of JSON)
+          if (healthError.response?.data && typeof healthError.response.data === 'string' && healthError.response.data.includes('<br />')) {
+            console.error('AuthContext: Backend deployment issue detected - returning HTML instead of JSON');
+            console.error('AuthContext: This indicates the Laravel application is not properly deployed');
+          }
         }
         
         // Initialize authService first
@@ -249,7 +239,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     authService.subscribe(handleAuthStateChange);
     
     // Get current state immediately if available
-    const currentUser = authService.getCurrentUser();
+    const currentUser = authService.getCurrentUserSync();
     if (currentUser) {
       // console.log('AuthContext: Found current user on initialization:', currentUser);
       setUser(currentUser);

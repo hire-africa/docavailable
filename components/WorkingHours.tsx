@@ -13,7 +13,7 @@ import {
     View,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../services/authService';
+import authService from '../services/authService';
 
 interface WorkingHours {
     [key: string]: {
