@@ -36,6 +36,9 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction
 # Copy backend application directory contents
 COPY backend/backend/ .
 
+# Verify public directory exists and has content
+RUN ls -la public/ || echo "Public directory check failed"
+
 # Set proper permissions
 RUN chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www \
@@ -70,6 +73,9 @@ RUN php artisan storage:link || echo "Storage link already exists"
 RUN mkdir -p public \
     && chmod -R 755 public \
     && chown -R www-data:www-data public
+
+# Final verification that public directory exists
+RUN ls -la /var/www/public/ || echo "Final public directory check failed"
 
 # Expose port 8000
 EXPOSE 8000

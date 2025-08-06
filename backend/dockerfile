@@ -67,6 +67,14 @@ RUN php artisan view:cache || echo "View cache failed"
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
+# Ensure public directory exists and has proper permissions
+RUN mkdir -p public \
+    && chmod -R 755 public \
+    && chown -R www-data:www-data public
+
+# Verify public directory exists and has content
+RUN ls -la public/ || echo "Public directory check failed"
+
 # Expose port 8000
 EXPOSE 8000
 
