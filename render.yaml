@@ -2,8 +2,13 @@ services:
   - type: web
     name: docavailable-backend
     env: docker
-    buildCommand: 
-    startCommand: 
+    buildCommand: |
+      # Clear any cached config
+      php artisan config:clear
+      php artisan cache:clear
+      php artisan route:clear
+      php artisan view:clear
+    startCommand: /usr/local/bin/start.sh
     rootDir: backend
     dockerfilePath: ../dockerfile
     envVars:

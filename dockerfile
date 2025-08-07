@@ -61,14 +61,6 @@ RUN if [ ! -f .env ]; then cp .env.example .env; fi
 RUN php artisan key:generate --force || echo "Key already exists"
 RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 
-# Run migrations (only if database is available)
-RUN php artisan migrate --force || echo "Migrations failed, will retry at runtime"
-
-# Cache configurations
-RUN php artisan config:cache || echo "Config cache failed"
-RUN php artisan route:cache || echo "Route cache failed"
-RUN php artisan view:cache || echo "View cache failed"
-
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
@@ -77,14 +69,15 @@ RUN mkdir -p public \
     && chmod -R 755 public \
     && chown -R www-data:www-data public
 
-# Final verification that public directory exists
-RUN ls -la /var/www/public/ || echo "Final public directory check failed"
+# Copy startup script
+COPY scripts/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000
 EXPOSE 8000
 
-# Start server
-CMD php artisan serve --host=0.0.0.0 --port=8000
+# Start using our script
+CMD ["/usr/local/bin/start.sh"]
 
 # Stage 2: Frontend (Expo/React Native) - Optional for web deployment
 FROM node:18-alpine as frontend
