@@ -26,6 +26,14 @@ if [ $COUNT -eq $RETRIES ]; then
     exit 1
 fi
 
+# Show effective database configuration
+echo "\n🔎 Effective database configuration:"
+echo -n " - Default connection: "
+php artisan tinker --execute='echo config("database.default");'
+echo -n "\n - Database name: "
+php artisan tinker --execute='echo DB::connection()->getDatabaseName();'
+echo "\n"
+
 # Clear any cached config
 php artisan config:clear
 php artisan cache:clear

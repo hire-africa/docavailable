@@ -19,6 +19,7 @@ use App\Http\Controllers\TextSessionController;
 use App\Http\Controllers\PaymentController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
+use Illuminate\Support\Facades\DB;
 
 /*
 |--------------------------------------------------------------------------
