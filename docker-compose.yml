@@ -11,6 +11,17 @@ services:
     environment:
       - APP_ENV=production
       - APP_DEBUG=false
+      # Neon PostgreSQL Configuration
+      - DB_CONNECTION=pgsql_simple
+      - DB_HOST=ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech
+      - DB_PORT=5432
+      - DB_DATABASE=neondb
+      - DB_USERNAME=neondb_owner
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_URL=postgresql://neondb_owner:${DB_PASSWORD}@ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-hidden-brook-aemmopjb
+      - DB_CONNECT_TIMEOUT=10
+      - DB_SOCKET_TIMEOUT=30
+      - DB_PERSISTENT=false
     volumes:
       - ./backend/storage:/var/www/storage
     restart: unless-stopped
