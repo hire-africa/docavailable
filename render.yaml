@@ -42,17 +42,19 @@ services:
       - key: FILESYSTEM_DISK
         value: local
       - key: DB_CONNECTION
-        value: mysql
+        value: pgsql
       - key: DB_HOST
-        value: localhost
+        value: ${DB_HOST}
       - key: DB_PORT
-        value: 3306
+        value: 5432
       - key: DB_DATABASE
-        value: laravel
+        value: ${DB_DATABASE}
       - key: DB_USERNAME
-        value: root
+        value: ${DB_USERNAME}
       - key: DB_PASSWORD
-        value: ""
+        value: ${DB_PASSWORD}
+      - key: DB_SSLMODE
+        value: require
       - key: BROADCAST_DRIVER
         value: log
       - key: CACHE_DRIVER

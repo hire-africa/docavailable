@@ -15,7 +15,7 @@ return new class extends Migration
         // Copy data from old columns to new columns
         DB::statement('UPDATE users SET user_type = role WHERE role IS NOT NULL AND user_type IS NULL');
         DB::statement('UPDATE users SET bio = professional_bio WHERE professional_bio IS NOT NULL AND bio IS NULL');
-        DB::statement('UPDATE users SET display_name = first_name || " " || last_name WHERE display_name IS NULL');
+        DB::statement("UPDATE users SET display_name = first_name || ' ' || last_name WHERE display_name IS NULL");
 
         // Drop old columns
         Schema::table('users', function (Blueprint $table) {
