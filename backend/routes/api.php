@@ -28,11 +28,40 @@ use App\Notifications\ChatMessageNotification;
 
 // Health check endpoint
 Route::get('/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'timestamp' => now()->toISOString(),
-        'message' => 'Backend is running'
-    ]);
+    try {
+        // Test database connection
+        $dbStatus = 'ok';
+        $dbDriver = config('database.default');
+        $dbConnection = null;
+        $error = null;
+
+        try {
+            $dbConnection = DB::connection()->getPdo();
+        } catch (\Exception $e) {
+            $dbStatus = 'error';
+            $error = $e->getMessage();
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'timestamp' => now()->toISOString(),
+            'message' => 'Backend is running',
+            'database' => [
+                'status' => $dbStatus,
+                'driver' => $dbDriver,
+                'connected' => $dbConnection !== null,
+                'name' => $dbConnection ? DB::connection()->getDatabaseName() : null,
+                'error' => $error
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'timestamp' => now()->toISOString(),
+            'message' => 'Error checking health',
+            'error' => $e->getMessage()
+        ], 500);
+    }
 });
 
 // Debug endpoint for testing chat
