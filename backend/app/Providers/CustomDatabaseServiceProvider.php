@@ -43,56 +43,58 @@ class CustomDatabaseServiceProvider extends ServiceProvider
      */
     public function createCustomConnection()
     {
-        // Use the exact DSN from DB_URL
         $dbUrl = env('DB_URL');
-        
+
+        $dsn = 'pgsql:';
+        $username = null;
+        $password = null;
+        $database = null;
+
         if ($dbUrl) {
-            // Parse the URL to get connection details
             $urlParts = parse_url($dbUrl);
-            
-            // Build DSN without credentials
-            $dsn = 'pgsql:';
-            $dsn .= 'host=' . $urlParts['host'] . ';';
-            $dsn .= 'port=' . ($urlParts['port'] ?? '5432') . ';';
-            $dsn .= 'dbname=' . ltrim($urlParts['path'], '/') . ';';
-            
-            // Add query parameters if they exist
-            if (isset($urlParts['query'])) {
+
+            $host = $urlParts['host'] ?? env('DB_HOST', '127.0.0.1');
+            $port = $urlParts['port'] ?? env('DB_PORT', '5432');
+            $database = ltrim($urlParts['path'] ?? '', '/');
+            $username = $urlParts['user'] ?? env('DB_USERNAME');
+            $password = $urlParts['pass'] ?? env('DB_PASSWORD');
+
+            $dsn .= "host={$host};port={$port};dbname={$database};";
+
+            // Parse query params from DB_URL and map to DSN
+            $queryParams = [];
+            if (!empty($urlParts['query'])) {
                 parse_str($urlParts['query'], $queryParams);
-                foreach ($queryParams as $key => $value) {
-                    $dsn .= $key . '=' . $value . ';';
-                }
             }
-            
-            $username = $urlParts['user'];
-            $password = $urlParts['pass'];
-            $database = ltrim($urlParts['path'], '/');
+
+            // Ensure sslmode=require if not provided
+            if (empty($queryParams['sslmode'])) {
+                $dsn .= 'sslmode=require;';
+            }
+
+            // Add connect_timeout (seconds)
+            $connectTimeout = env('DB_CONNECT_TIMEOUT', '10');
+            $dsn .= "connect_timeout={$connectTimeout};";
+
+            // Preserve options (e.g., Neon endpoint)
+            if (!empty($queryParams['options'])) {
+                $dsn .= 'options=' . $queryParams['options'] . ';';
+            }
         } else {
-            // Fallback to building DSN manually
-            $config = [
-                'driver' => 'pgsql',
-                'host' => env('DB_HOST', 'ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech'),
-                'port' => env('DB_PORT', '5432'),
-                'database' => env('DB_DATABASE', 'neondb'),
-                'username' => env('DB_USERNAME', 'neondb_owner'),
-                'password' => env('DB_PASSWORD', 'npg_FjoWxz8OU4CQ'),
-                'charset' => 'utf8',
-                'prefix' => '',
-                'prefix_indexes' => true,
-                'search_path' => 'public',
-                'sslmode' => 'require',
-                'options' => [
-                    'endpoint' => 'ep-hidden-brook-aemmopjb',
-                ],
-            ];
-            
-            $dsn = $this->buildPostgresDSN($config);
-            $username = $config['username'];
-            $password = $config['password'];
-            $database = $config['database'];
+            $host = env('DB_HOST', 'ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech');
+            $port = env('DB_PORT', '5432');
+            $database = env('DB_DATABASE', 'neondb');
+            $username = env('DB_USERNAME', 'neondb_owner');
+            $password = env('DB_PASSWORD', '');
+            $endpoint = 'endpoint%3Dep-hidden-brook-aemmopjb';
+
+            $dsn .= "host={$host};port={$port};dbname={$database};sslmode=require;";
+            $dsn .= 'connect_timeout=' . env('DB_CONNECT_TIMEOUT', '10') . ';';
+            $dsn .= "options={$endpoint};";
         }
-        
-        // Create PDO connection manually with SSL options
+
+        $persistent = filter_var(env('DB_PERSISTENT', false), FILTER_VALIDATE_BOOL);
+
         $pdo = new PDO(
             $dsn,
             $username,
@@ -101,11 +103,26 @@ class CustomDatabaseServiceProvider extends ServiceProvider
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
-                PDO::ATTR_PERSISTENT => false,
-                // Add SSL context for Neon compatibility
-                PDO::ATTR_TIMEOUT => 30,
+                PDO::ATTR_PERSISTENT => $persistent,
+                PDO::ATTR_TIMEOUT => (int) env('DB_SOCKET_TIMEOUT', 30),
             ]
         );
+
+        // Post-connect session config
+        try {
+            $pdo->exec("SET search_path TO public");
+        } catch (\Throwable $t) {
+            // ignore
+        }
+
+        // Optional: disable server-side prepares to avoid certain driver bugs
+        if (defined('PDO::PGSQL_ATTR_DISABLE_PREPARES')) {
+            try {
+                $pdo->setAttribute(PDO::PGSQL_ATTR_DISABLE_PREPARES, true);
+            } catch (\Throwable $t) {
+                // ignore
+            }
+        }
 
         // Create a custom connection instance that extends PostgresConnection
         $connection = new class($pdo, $database, '', [
@@ -117,8 +134,7 @@ class CustomDatabaseServiceProvider extends ServiceProvider
             {
                 parent::__construct($pdo, $database, $tablePrefix, $config);
             }
-            
-            // Override methods that might be affected by Laravel 12 bug
+
             public function getDriverName()
             {
                 return 'pgsql';

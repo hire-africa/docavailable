@@ -5,7 +5,7 @@ services:
     buildCommand: 
     startCommand: 
     rootDir: backend
-    dockerfilePath: dockerfile
+    dockerfilePath: ../dockerfile
     envVars:
       - key: APP_NAME
         value: DocAvailable
@@ -42,19 +42,25 @@ services:
       - key: FILESYSTEM_DISK
         value: local
       - key: DB_CONNECTION
-        value: pgsql
+        value: pgsql_simple
       - key: DB_HOST
-        value: ${DB_HOST}
+        value: ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech
       - key: DB_PORT
         value: 5432
       - key: DB_DATABASE
-        value: ${DB_DATABASE}
+        value: neondb
       - key: DB_USERNAME
-        value: ${DB_USERNAME}
+        value: neondb_owner
       - key: DB_PASSWORD
         value: ${DB_PASSWORD}
-      - key: DB_SSLMODE
-        value: require
+      - key: DB_URL
+        value: postgresql://neondb_owner:${DB_PASSWORD}@ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-hidden-brook-aemmopjb
+      - key: DB_CONNECT_TIMEOUT
+        value: 10
+      - key: DB_SOCKET_TIMEOUT
+        value: 30
+      - key: DB_PERSISTENT
+        value: false
       - key: BROADCAST_DRIVER
         value: log
       - key: CACHE_DRIVER
