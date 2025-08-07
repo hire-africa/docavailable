@@ -4,6 +4,13 @@
 echo "Waiting for database to be ready..."
 sleep 10
 
+# Clear cached configurations to ensure environment variables are used
+echo "Clearing cached configurations..."
+php artisan config:clear
+php artisan cache:clear
+php artisan route:clear
+php artisan view:clear
+
 # Run migrations
 echo "Running database migrations..."
 php artisan migrate --force

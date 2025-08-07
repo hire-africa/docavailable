@@ -70,8 +70,6 @@ services:
         value: log
       - key: CACHE_DRIVER
         value: file
-      - key: SESSION_DRIVER
-        value: file
       - key: SESSION_LIFETIME
         value: 120
       - key: MEMCACHED_HOST
