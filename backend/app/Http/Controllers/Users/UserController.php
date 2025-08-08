@@ -308,15 +308,13 @@ class UserController extends Controller
                 'specialization',
                 'years_of_experience',
                 'bio',
-                'rating',
-                'total_ratings',
                 'city',
                 'country',
                 'status',
                 'profile_picture'
             ])
-            ->orderBy('rating', 'desc')
             ->orderBy('years_of_experience', 'desc')
+            ->orderBy('id', 'desc')
             ->paginate($perPage);
             
             // Add profile picture URLs and availability info to each doctor
