@@ -166,8 +166,6 @@ class AuthenticationController extends Controller
                 'occupation' => $request->occupation,
                 'bio' => $request->bio,
                 'status' => $request->user_type === 'doctor' ? 'pending' : 'active',
-                'rating' => 0,
-                'total_ratings' => 0,
                 'profile_picture' => $profilePicturePath,
                 'specialization' => $request->specialization,
                 'sub_specialization' => $request->sub_specialization,
