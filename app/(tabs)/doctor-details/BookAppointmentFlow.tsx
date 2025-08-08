@@ -15,8 +15,10 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { useAuth } from '../../../contexts/AuthContext';
 import { apiService } from '../../../services/apiService';
+import { paymentsService } from '../../../services/paymentsService';
 
 const availableTimes = [
   '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -44,6 +46,8 @@ export default function BookAppointmentFlow() {
   const [submitting, setSubmitting] = useState(false);
   const [workingHours, setWorkingHours] = useState<any>(null);
   const [loadingHours, setLoadingHours] = useState(true);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [txRef, setTxRef] = useState<string | null>(null);
 
   // Doctor info from params
   const doctorId = params.doctorId as string;
@@ -545,6 +549,23 @@ export default function BookAppointmentFlow() {
   // Step 2: Confirm details
   const renderStep2 = () => (
     <SafeAreaView style={styles.container}>
+      {checkoutUrl ? (
+        <View style={{ flex: 1 }}>
+          <WebView
+            source={{ uri: checkoutUrl }}
+            onShouldStartLoadWithRequest={(req) => {
+              const url = req.url;
+              const callback = 'https://docavailable-1.onrender.com/api/payments/paychangu/callback';
+              const ret = 'https://docavailable-1.onrender.com/api/payments/paychangu/return';
+              if (url.startsWith(callback) || url.startsWith(ret)) {
+                setCheckoutUrl(null);
+                return false;
+              }
+              return true;
+            }}
+          />
+        </View>
+      ) : null}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => setStep(1)} style={styles.backBtn}>
           <FontAwesome name="arrow-left" size={22} color="#222" />
@@ -659,24 +680,12 @@ export default function BookAppointmentFlow() {
     setSubmitting(true);
     
     try {
-      const appointmentData = {
-        doctor_id: parseInt(doctorId),
-        appointment_date: `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`,
-        appointment_time: to24HourFormat(customTime),
-        appointment_type: consultationType,
-        status: 0, // 0 = pending
-      };
-      
-      // console.log('📤 [BookAppointmentFlow] Sending appointment data:', appointmentData);
-      // console.log('👤 [BookAppointmentFlow] User info:', { 
-      //   id: user.id, 
-      //   email: user.email, 
-      //   userType: user.user_type 
-      // });
-      
-      const response = await apiService.post('/appointments', appointmentData);
-      // console.log('✅ [BookAppointmentFlow] Appointment created successfully:', response);
-      setStep(3);
+      // For plan purchase (deposit): show sample Basic plan id = 1
+      const res = await paymentsService.initiatePlanPurchase(1);
+      if (res?.success && res.checkout_url) {
+        setCheckoutUrl(res.checkout_url);
+        setTxRef(res.tx_ref);
+      }
     } catch (error) {
       console.error('❌ [BookAppointmentFlow] Appointment creation failed:', error);
       console.error('❌ [BookAppointmentFlow] Error details:', {

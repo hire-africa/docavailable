@@ -32,14 +32,16 @@ return [
     ],
 
     'paychangu' => [
-        'api_key' => env('PAYCHANGU_API_KEY'),
+        'public_key' => env('PAYCHANGU_PUBLIC_KEY'),
         'secret_key' => env('PAYCHANGU_SECRET_KEY'),
         'merchant_id' => env('PAYCHANGU_MERCHANT_ID'),
         'webhook_secret' => env('PAYCHANGU_WEBHOOK_SECRET'),
-        'environment' => env('PAYCHANGU_ENVIRONMENT', 'sandbox'),
-        'base_url' => env('PAYCHANGU_ENVIRONMENT') === 'production' 
-            ? 'https://api.paychangu.com/v1'
-            : 'https://sandbox-api.paychangu.com/v1',
+        'environment' => env('PAYCHANGU_ENVIRONMENT', 'production'),
+        // Explicit endpoints so we can change without code edits if docs update
+        'payment_url' => env('PAYCHANGU_PAYMENT_URL', 'https://api.paychangu.com/payment'),
+        'verify_url' => env('PAYCHANGU_VERIFY_URL', 'https://api.paychangu.com/payment/verify'),
+        'callback_url' => env('PAYCHANGU_CALLBACK_URL'),
+        'return_url' => env('PAYCHANGU_RETURN_URL'),
     ],
 
     'slack' => [
