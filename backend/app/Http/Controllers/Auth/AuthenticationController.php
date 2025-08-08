@@ -58,12 +58,10 @@ class AuthenticationController extends Controller
                 'country' => 'nullable|string|max:255',
                 'city' => 'nullable|string|max:255',
                 'years_of_experience' => 'nullable|integer|min:0',
-                'occupation' => 'nullable|string|max:255',
                 'bio' => 'nullable|string',
                 'dob' => 'nullable|date',
                 'surname' => 'nullable|string|max:255',
                 'specialization' => 'nullable|string|max:255',
-                'sub_specialization' => 'nullable|string|max:255',
                 'specializations' => 'nullable|string', // JSON array of specializations
                 'profile_picture' => 'nullable|string', // Base64 encoded
                 'national_id' => 'nullable|string', // Base64 encoded
@@ -163,12 +161,10 @@ class AuthenticationController extends Controller
                 'country' => $request->country,
                 'city' => $request->city,
                 'years_of_experience' => $request->years_of_experience,
-                'occupation' => $request->occupation,
                 'bio' => $request->bio,
                 'status' => $request->user_type === 'doctor' ? 'pending' : 'active',
                 'profile_picture' => $profilePicturePath,
                 'specialization' => $request->specialization,
-                'sub_specialization' => $request->sub_specialization,
                 'specializations' => $request->specializations ? json_decode($request->specializations, true) : null,
                 'national_id' => $nationalIdPath,
                 'medical_degree' => $medicalDegreePath,
