@@ -17,7 +17,7 @@ class PlanSeeder extends Seeder
             'name' => 'Basic life',
             'features' => json_encode(['3 text sessions', '1 voice call' ]),
             'currency' => 'MWK',
-            'price' => 20000,
+            'price' => 100,
             'duration' => 30,
         ]);
 
@@ -25,7 +25,7 @@ class PlanSeeder extends Seeder
             'name' => 'Executive life',
             'features' => json_encode(['10 text sessions', '2 voice call', '1 video call' ]),
             'currency' => 'MWK',
-            'price' => 50000,
+            'price' => 150,
             'duration' => 30,
         ]);
 
@@ -33,7 +33,7 @@ class PlanSeeder extends Seeder
             'name' => 'Premium life',
             'features' => json_encode(['50 text sessions', '15 voice call', '5 video calls' ]),
             'currency' => 'MWK',
-            'price' => 200000,
+            'price' => 200,
             'duration' => 30,
         ]);
     }

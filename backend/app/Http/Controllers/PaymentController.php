@@ -498,7 +498,7 @@ class PaymentController extends Controller
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'expires_at' => now()->addMonth(),
-                'status' => 'active'
+                'status' => 1
             ]
         );
 
@@ -543,7 +543,7 @@ class PaymentController extends Controller
                 'payment_metadata' => $transaction->webhook_data,
                 'activated_at' => now(),
                 'expires_at' => now()->addDays((int) ($plan->duration ?? 30)),
-                'status' => 'active',
+                'status' => 1,
             ]
         );
 
