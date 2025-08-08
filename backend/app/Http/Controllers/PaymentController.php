@@ -251,21 +251,64 @@ class PaymentController extends Controller
             // Get user_id and plan_id from request parameters or use defaults
             $userId = $request->input('user_id', 1);
             $planId = $request->input('plan_id', 1);
-            $reference = $request->input('reference', 'PLAN_7fe13f9b-7e01-442e-a55b-0534e7faec51');
+            $reference = $request->input('reference', 'TEST_' . time());
+            $amount = $request->input('amount', 100.00);
+            $currency = $request->input('currency', 'MWK');
             
-            // Simulate PayChangu webhook data based on your transaction logs
+            // Step 1: Create a transaction first (simulating payment initiation)
+            Log::info('Creating test transaction', [
+                'reference' => $reference,
+                'user_id' => $userId,
+                'plan_id' => $planId,
+                'amount' => $amount
+            ]);
+            
+            // Create the transaction in the database
+            $transaction = PaymentTransaction::updateOrCreate(
+                ['reference' => $reference],
+                [
+                    'transaction_id' => $reference, // temporary until webhook
+                    'amount' => $amount,
+                    'currency' => $currency,
+                    'status' => 'pending',
+                    'payment_method' => 'mobile_money',
+                    'gateway' => 'paychangu',
+                    'webhook_data' => [
+                        'meta' => [
+                            'user_id' => $userId,
+                            'plan_id' => $planId,
+                        ],
+                        'plan' => [
+                            'name' => 'Test Plan',
+                            'price' => $amount,
+                            'currency' => $currency,
+                            'text_sessions' => 5,
+                            'voice_calls' => 2,
+                            'video_calls' => 1,
+                            'duration' => 30,
+                        ],
+                    ],
+                ]
+            );
+            
+            Log::info('Test transaction created', [
+                'transaction_id' => $transaction->id,
+                'reference' => $transaction->reference
+            ]);
+            
+            // Step 2: Simulate PayChangu webhook data
             $testData = [
-                'transaction_id' => '6749243344', // Payment Reference from your logs
-                'reference' => $reference, // API Reference from your logs
-                'amount' => 97.00, // Amount Received from your logs
+                'transaction_id' => 'WEBHOOK_' . time(),
+                'reference' => $reference,
+                'amount' => 97.00, // Amount after fees
                 'currency' => 'MWK',
-                'status' => 'success', // or 'confirmed' or 'completed'
+                'status' => 'success',
                 'phone_number' => '+265123456789',
                 'payment_method' => 'mobile_money',
                 'payment_channel' => 'Mobile Money',
-                'name' => 'Jsjdjd djdjd',
-                'email' => 'josa@gmail.com',
-                'paid_at' => '2025-08-08 06:27:00',
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+                'paid_at' => date('Y-m-d H:i:s'),
                 'meta' => [
                     'user_id' => $userId,
                     'plan_id' => $planId,
