@@ -37,7 +37,8 @@ export default function ImageMessage({
     if (uri.startsWith('http')) {
       return uri;
     }
-    return `https://docavailable-1.onrender.com/storage/${uri}`;
+    // Use the new image serving route instead of direct storage access
+    return `https://docavailable-1.onrender.com/api/images/${uri}`;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);

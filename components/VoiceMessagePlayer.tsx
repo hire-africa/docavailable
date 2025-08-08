@@ -29,7 +29,8 @@ export default function VoiceMessagePlayer({
     if (uri.startsWith('http')) {
       return uri;
     }
-    return `https://docavailable-1.onrender.com/storage/${uri}`;
+    // Use the new image serving route instead of direct storage access
+    return `https://docavailable-1.onrender.com/api/images/${uri}`;
   };
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);

@@ -359,4 +359,54 @@ class FileUploadController extends Controller
             abort(404);
         }
     }
+
+    // Serve image files with proper headers
+    public function serveImageFile($path)
+    {
+        try {
+            // Validate the path to prevent directory traversal
+            if (str_contains($path, '..') || !preg_match('/^(profile_pictures|profile-pictures|chat_images|documents|national_ids|medical_degrees|medical_licences|id_documents)\//', $path)) {
+                abort(404);
+            }
+            
+            $fullPath = Storage::disk('public')->path($path);
+            
+            if (!file_exists($fullPath)) {
+                abort(404);
+            }
+            
+            $extension = pathinfo($path, PATHINFO_EXTENSION);
+            $mimeTypes = [
+                'jpg' => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png' => 'image/png',
+                'gif' => 'image/gif',
+                'webp' => 'image/webp',
+                'bmp' => 'image/bmp',
+                'svg' => 'image/svg+xml',
+            ];
+            
+            $mimeType = $mimeTypes[strtolower($extension)] ?? 'image/jpeg';
+            $fileSize = filesize($fullPath);
+            
+            // Set proper headers for image serving
+            $headers = [
+                'Content-Type' => $mimeType,
+                'Content-Length' => $fileSize,
+                'Cache-Control' => 'public, max-age=31536000',
+                'Access-Control-Allow-Origin' => '*',
+                'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            ];
+            
+            // Return full file
+            return response()->file($fullPath, $headers);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error serving image file:', [
+                'path' => $path,
+                'error' => $e->getMessage()
+            ]);
+            abort(404);
+        }
+    }
 } 

@@ -260,6 +260,9 @@ Route::middleware(['auth:api'])->group(function () {
     
     // Audio file serving route (no auth required for streaming)
     Route::get('/audio/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
+    
+    // Image file serving route (no auth required for images)
+    Route::get('/images/{path}', [FileUploadController::class, 'serveImageFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
     Route::post('/user/push-token', [UserController::class, 'updatePushToken']);
     Route::post('/user/active-status', [UserController::class, 'setActiveStatus']);
     
