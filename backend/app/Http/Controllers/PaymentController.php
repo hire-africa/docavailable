@@ -233,6 +233,7 @@ class PaymentController extends Controller
         } catch (\Exception $e) {
             Log::error('Paychangu webhook processing failed', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'data' => $request->all()
             ]);
 
@@ -392,11 +393,13 @@ class PaymentController extends Controller
             $userId = $webhookData['meta']['user_id'] ?? 
                      $webhookData['user_id'] ?? 
                      $webhookData['metadata']['user_id'] ?? 
+                     $webhookData['meta']['user_id'] ?? 
                      null;
             
             $planId = $webhookData['meta']['plan_id'] ?? 
                      $webhookData['plan_id'] ?? 
                      $webhookData['metadata']['plan_id'] ?? 
+                     $webhookData['meta']['plan_id'] ?? 
                      null;
 
             Log::info('Extracted payment metadata', [
@@ -444,6 +447,7 @@ class PaymentController extends Controller
             DB::rollBack();
             Log::error('Failed to process successful payment', [
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
                 'transaction_id' => $transaction->transaction_id
             ]);
             throw $e;
@@ -488,17 +492,30 @@ class PaymentController extends Controller
             throw new \Exception('Unknown payment amount');
         }
 
+        // Calculate subscription dates
+        $startDate = now();
+        $endDate = now()->addMonth();
+
         // Update or create subscription
         $subscription = Subscription::updateOrCreate(
             ['user_id' => $user->id],
             [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
                 'text_sessions_remaining' => $plan['text_sessions'],
                 'voice_calls_remaining' => $plan['voice_calls'],
                 'video_calls_remaining' => $plan['video_calls'],
+                'total_text_sessions' => $plan['text_sessions'],
+                'total_voice_calls' => $plan['voice_calls'],
+                'total_video_calls' => $plan['video_calls'],
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
-                'expires_at' => now()->addMonth(),
-                'status' => 1
+                'payment_status' => 'completed',
+                'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
+                'activated_at' => now(),
+                'expires_at' => $endDate,
+                'status' => 1,
+                'is_active' => true,
             ]
         );
 
@@ -524,26 +541,33 @@ class PaymentController extends Controller
             return;
         }
 
+        // Calculate subscription dates
+        $startDate = now();
+        $endDate = now()->addDays((int) ($plan->duration ?? 30));
+
         $subscription = Subscription::updateOrCreate(
             ['user_id' => $user->id],
             [
+                'start_date' => $startDate,
+                'end_date' => $endDate,
                 'plan_id' => $plan->id,
                 'plan_name' => $plan->name,
                 'plan_price' => $plan->price,
                 'plan_currency' => $plan->currency,
-                'text_sessions_remaining' => $plan->text_sessions,
-                'voice_calls_remaining' => $plan->voice_calls,
-                'video_calls_remaining' => $plan->video_calls,
-                'total_text_sessions' => $plan->text_sessions,
-                'total_voice_calls' => $plan->voice_calls,
-                'total_video_calls' => $plan->video_calls,
+                'text_sessions_remaining' => $plan->text_sessions ?? 0,
+                'voice_calls_remaining' => $plan->voice_calls ?? 0,
+                'video_calls_remaining' => $plan->video_calls ?? 0,
+                'total_text_sessions' => $plan->text_sessions ?? 0,
+                'total_voice_calls' => $plan->voice_calls ?? 0,
+                'total_video_calls' => $plan->video_calls ?? 0,
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
-                'payment_status' => 'paid',
+                'payment_status' => 'completed',
                 'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
                 'activated_at' => now(),
-                'expires_at' => now()->addDays((int) ($plan->duration ?? 30)),
+                'expires_at' => $endDate,
                 'status' => 1,
+                'is_active' => true,
             ]
         );
 

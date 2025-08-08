@@ -1,4 +1,4 @@
-import { authService } from '@/services/authService';
+import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';

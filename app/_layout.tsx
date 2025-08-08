@@ -15,8 +15,10 @@ export default function RootLayout() {
         <Stack.Screen name="doctor-signup" options={{ headerShown: false }} />
         <Stack.Screen name="patient-signup" options={{ headerShown: false }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
-        <Stack.Screen name="doctor-dashboard" options={{ headerShown: false }} />
-        <Stack.Screen name="patient-dashboard" options={{ headerShown: false }} />
+        <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+        <Stack.Screen name="pending-approval" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="doctor-profile" options={{ headerShown: false }} />
         <Stack.Screen name="patient-profile" options={{ headerShown: false }} />
         <Stack.Screen name="edit-doctor-profile" options={{ headerShown: false }} />
@@ -28,7 +30,7 @@ export default function RootLayout() {
         <Stack.Screen name="doctor-approval/[uid]" options={{ headerShown: false }} />
         <Stack.Screen name="appointment-details/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="my-appointments" options={{ headerShown: false }} />
-        <Stack.Screen name="instant-sessions" options={{ headerShown: false }} />
+        
         <Stack.Screen name="text-session-history" options={{ headerShown: false }} />
         <Stack.Screen name="blog" options={{ headerShown: false }} />
         <Stack.Screen name="blog-article" options={{ headerShown: false }} />

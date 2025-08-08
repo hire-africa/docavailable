@@ -1,13 +1,34 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import authService from '@/services/authService';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+    BackHandler,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
 const PendingApproval: React.FC = () => {
   const { user, userData, refreshUserData } = useAuth();
+
+  // Prevent back button navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Prevent back navigation - users must use logout button
+        return true; // Return true to prevent default back behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [])
+  );
 
   const handleRefresh = async () => {
     // console.log('PendingApproval: Manual refresh requested');

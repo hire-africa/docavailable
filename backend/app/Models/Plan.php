@@ -25,6 +25,15 @@ class Plan extends Model
         'features' => 'array'
     ];
 
+    // Add default values for missing fields
+    protected $attributes = [
+        'text_sessions' => 0,
+        'voice_calls' => 0,
+        'video_calls' => 0,
+        'duration' => 30,
+        'status' => 1,
+    ];
+
     public function subscriptions()
     {
         return $this->hasMany(Subscription::class);

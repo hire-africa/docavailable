@@ -1,11 +1,13 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { adminService, PendingDoctor } from '@/services/adminService';
-import { authService } from '@/services/authService';
+import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+    BackHandler,
     Dimensions,
     Image,
     Platform,
@@ -74,6 +76,20 @@ export default function AdminDashboard() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name');
+
+  // Prevent back button navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Prevent back navigation - users must use logout button
+        return true; // Return true to prevent default back behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [])
+  );
 
   useEffect(() => {
     if (!loading && !user) {

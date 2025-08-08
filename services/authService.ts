@@ -191,10 +191,22 @@ class AuthService {
 
   async register(formData: FormData): Promise<AuthResponse> {
     try {
+      console.log('AuthService: Making registration request to:', `${this.baseURL}/api/register`);
+      console.log('AuthService: FormData contents:');
+      for (let [key, value] of formData.entries()) {
+        console.log(`  ${key}: ${typeof value === 'string' ? value : '[File/Blob]'}`);
+      }
+      
       const response = await this.api.post('/register', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+      });
+
+      console.log('AuthService: Registration response:', {
+        success: response.data.success,
+        message: response.data.message,
+        status: response.status
       });
 
       const { user, token } = response.data.data;
@@ -205,8 +217,17 @@ class AuthService {
       this.notifySubscribers({ user, token });
 
       return response.data;
-    } catch (error) {
-      console.error('Registration error:', error);
+    } catch (error: any) {
+      console.error('AuthService: Registration error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL
+        }
+      });
       throw error;
     }
   }

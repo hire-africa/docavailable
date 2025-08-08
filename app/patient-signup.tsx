@@ -372,14 +372,17 @@ export default function PatientSignUp() {
                 formData.append('profile_picture', base64);
             }
 
-            // console.log('PatientSignup: Starting registration with form data');
-            // console.log('PatientSignup: First Name:', firstName);
-            // console.log('PatientSignup: Last Name (surname):', surname);
-            // console.log('PatientSignup: Date of Birth:', dob);
-            // console.log('PatientSignup: Gender:', gender);
-            // console.log('PatientSignup: Country:', country);
-            // console.log('PatientSignup: City:', city);
-            // console.log('PatientSignup: Profile Picture:', profilePicture);
+            // Debug logging to see what's being sent
+            console.log('PatientSignup: Registration data being sent:');
+            console.log('First Name:', firstName);
+            console.log('Last Name (surname):', surname);
+            console.log('Email:', email);
+            console.log('Date of Birth:', dob);
+            console.log('Gender:', gender);
+            console.log('Country:', country);
+            console.log('City:', city);
+            console.log('User Type: patient');
+            console.log('Profile Picture:', profilePicture ? 'Yes' : 'No');
 
             const authState = await authService.signUp(formData);
             
@@ -408,7 +411,20 @@ export default function PatientSignUp() {
             let errorMessage = 'Sign up failed. Please try again.';
             
             // Handle Laravel backend validation errors
-            if (error.message && error.message.includes('Validation failed')) {
+            if (error.response?.status === 422) {
+                console.log('PatientSignup: 422 Validation error details:', error.response.data);
+                if (error.response.data && error.response.data.errors) {
+                    const validationErrors = error.response.data.errors;
+                    console.log('PatientSignup: Validation errors:', validationErrors);
+                    const errorFields = Object.keys(validationErrors);
+                    if (errorFields.length > 0) {
+                        const firstError = validationErrors[errorFields[0]][0];
+                        errorMessage = firstError;
+                    }
+                } else {
+                    errorMessage = 'Please check your input and try again.';
+                }
+            } else if (error.message && error.message.includes('Validation failed')) {
                 if (error.data && error.data.errors) {
                     const validationErrors = error.data.errors;
                     const errorFields = Object.keys(validationErrors);

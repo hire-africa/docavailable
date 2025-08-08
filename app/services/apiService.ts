@@ -97,19 +97,38 @@ class ApiService {
       },
     });
 
-    // Request interceptor to add auth token
-    this.api.interceptors.request.use(
-      async (config) => {
-        const token = await this.getAuthToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+      // Request interceptor to add auth token
+  this.api.interceptors.request.use(
+    async (config) => {
+      const token = await this.getAuthToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        // If no token is available, don't make the request for protected endpoints
+        const protectedEndpoints = [
+          '/subscription',
+          '/appointments',
+          '/plans',
+          '/text-sessions/active-sessions',
+          '/available-doctors',
+          '/user'
+        ];
+        
+        const isProtectedEndpoint = protectedEndpoints.some(endpoint => 
+          config.url?.includes(endpoint)
+        );
+        
+        if (isProtectedEndpoint) {
+          console.log('ApiService: No token available for protected endpoint, skipping request');
+          return Promise.reject(new Error('No authentication token available'));
         }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
       }
-    );
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
+    }
+  );
 
     // Response interceptor to handle token refresh
     this.api.interceptors.response.use(

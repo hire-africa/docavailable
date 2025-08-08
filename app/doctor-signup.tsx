@@ -1,4 +1,4 @@
-import { authService } from '@/services/authService';
+import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';

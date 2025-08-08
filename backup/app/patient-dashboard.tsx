@@ -39,7 +39,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: 'basic',
     name: 'Basic Life',
-    price: 20000,
+    price: 100,
     currency: 'MWK',
     textSessions: 3,
     voiceCalls: 1,
@@ -54,7 +54,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: 'executive',
     name: 'Executive Life',
-    price: 50000,
+    price: 150,
     currency: 'MWK',
     textSessions: 10,
     voiceCalls: 2,
@@ -72,7 +72,7 @@ const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: 'premium',
     name: 'Premium Life',
-    price: 200000,
+    price: 200,
     currency: 'MWK',
     textSessions: 50,
     voiceCalls: 15,

@@ -1,34 +1,35 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
-import { authService } from '@/services/authService';
+import authService from '@/services/authService';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    BackHandler,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
+import { apiService } from '../app/services/apiService';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Icon from '../components/Icon';
 import { RescheduleModal } from '../components/RescheduleModal';
 import WorkingHours from '../components/WorkingHours';
 import WorkingHoursCard from '../components/WorkingHoursCard';
-import { apiService } from '../services/apiService';
 
 const profileImage = require('../assets/images/profile.jpg');
 const { width } = Dimensions.get('window');
@@ -126,6 +127,20 @@ export default function DoctorDashboard() {
   const sidebarAnim = useRef(new Animated.Value(0)).current;
   const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
 
+  // Prevent back button navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Prevent back navigation - users must use logout button
+        return true; // Return true to prevent default back behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [])
+  );
+
   // Refresh user data when component mounts or when user data changes
   useEffect(() => {
     const refreshData = async () => {
@@ -172,7 +187,7 @@ export default function DoctorDashboard() {
 
   // Fetch confirmed appointments immediately when user logs in
   useEffect(() => {
-    if (user) {
+    if (user && user.id) { // Add user.id check
       fetchConfirmedAppointments();
       fetchActiveTextSessions();
     }
@@ -188,14 +203,14 @@ export default function DoctorDashboard() {
 
   // Fetch ratings immediately when user logs in
   useEffect(() => {
-    if (user) {
+    if (user && user.id) { // Add user.id check
       fetchRatings();
     }
   }, [user]);
 
   // Fetch wallet info immediately when user logs in
   useEffect(() => {
-    if (user) {
+    if (user && user.id) { // Add user.id check
       fetchWalletInfo();
     }
   }, [user]);

@@ -16,13 +16,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { apiService } from '../../app/services/apiService';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiService } from '../../services/apiService';
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
