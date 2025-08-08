@@ -11,9 +11,17 @@ php artisan cache:clear
 php artisan route:clear
 php artisan view:clear
 
+# Refresh database connection and schema
+echo "Refreshing database connection..."
+php artisan db:show --force || echo "Database show failed"
+
 # Run migrations
 echo "Running database migrations..."
 php artisan migrate --force
+
+# Check database schema
+echo "Checking database schema..."
+php artisan tinker --execute="echo 'Users table columns: '; print_r(Schema::getColumnListing('users'));" || echo "Schema check failed"
 
 # Seed database (will only create users if they don't exist)
 echo "Seeding database..."
