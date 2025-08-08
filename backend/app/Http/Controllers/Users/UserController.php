@@ -18,9 +18,10 @@ class UserController extends Controller
         
         if (!$subscription) {
             return response()->json([
-                'success' => false,
+                'success' => true,
+                'data' => null,
                 'message' => 'No subscription found'
-            ], 404);
+            ]);
         }
 
         return response()->json([
@@ -236,9 +237,10 @@ class UserController extends Controller
 
             if (!$subscription) {
                 return response()->json([
-                    'success' => false,
+                    'success' => true,
+                    'data' => null,
                     'message' => 'No active subscription found'
-                ], 404);
+                ]);
             }
 
             return response()->json([
