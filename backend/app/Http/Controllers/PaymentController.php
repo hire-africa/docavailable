@@ -213,7 +213,7 @@ class PaymentController extends Controller
                 'phone_number' => $phoneNumber,
                 'payment_method' => $paymentMethod,
                 'gateway' => 'paychangu',
-                'webhook_data' => json_encode($data)
+                'webhook_data' => $data
             ]);
 
             // Process based on status
