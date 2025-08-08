@@ -11,9 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        echo "Adding status column to users table...\n";
+        
         Schema::table('users', function (Blueprint $table) {
-            $table->enum('status', ['active', 'inactive', 'pending', 'approved', 'rejected'])->default('active')->after('user_type');
+            $table->string('status')->default('active')->after('user_type');
         });
+        
+        echo "Status column added successfully!\n";
     }
 
     /**
