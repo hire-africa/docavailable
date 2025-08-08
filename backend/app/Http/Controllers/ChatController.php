@@ -372,13 +372,26 @@ class ChatController extends Controller
                     ], 403);
                 }
                 
-                // Determine the other participant's name for text session
-                $otherParticipantName = '';
-                if ($user->id === $textSession->doctor_id) {
-                    $otherParticipantName = $textSession->patient_first_name . ' ' . $textSession->patient_last_name;
-                } else {
-                    $otherParticipantName = 'Dr. ' . $textSession->doctor_first_name . ' ' . $textSession->doctor_last_name;
-                }
+        // Determine the other participant's name and profile picture for text session
+        $otherParticipantName = '';
+        $otherParticipantId = null;
+        if ($user->id === $textSession->doctor_id) {
+            $otherParticipantName = $textSession->patient_first_name . ' ' . $textSession->patient_last_name;
+            $otherParticipantId = $textSession->patient_id;
+        } else {
+            $otherParticipantName = 'Dr. ' . $textSession->doctor_first_name . ' ' . $textSession->doctor_last_name;
+            $otherParticipantId = $textSession->doctor_id;
+        }
+
+        $otherParticipantProfilePath = null;
+        $otherParticipantProfileUrl = null;
+        if ($otherParticipantId) {
+            $otherUser = \App\Models\User::find($otherParticipantId);
+            if ($otherUser) {
+                $otherParticipantProfilePath = $otherUser->profile_picture;
+                $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+            }
+        }
                 
                 return response()->json([
                     'success' => true,
@@ -387,9 +400,11 @@ class ChatController extends Controller
                         'other_participant_name' => $otherParticipantName,
                         'appointment_date' => $textSession->started_at,
                         'appointment_time' => date('H:i', strtotime($textSession->started_at)),
-                        'status' => $textSession->status,
-                        'doctor_id' => $textSession->doctor_id,
-                        'patient_id' => $textSession->patient_id
+                    'status' => $textSession->status,
+                    'doctor_id' => $textSession->doctor_id,
+                    'patient_id' => $textSession->patient_id,
+                    'other_participant_profile_picture' => $otherParticipantProfilePath,
+                    'other_participant_profile_picture_url' => $otherParticipantProfileUrl
                     ]
                 ]);
             }
@@ -408,12 +423,25 @@ class ChatController extends Controller
             ], 403);
         }
         
-        // Determine the other participant's name
+        // Determine the other participant's name and profile picture
         $otherParticipantName = '';
+        $otherParticipantId = null;
         if ($user->id === $appointment->doctor_id) {
             $otherParticipantName = $appointment->patient_first_name . ' ' . $appointment->patient_last_name;
+            $otherParticipantId = $appointment->patient_id;
         } else {
             $otherParticipantName = 'Dr. ' . $appointment->doctor_first_name . ' ' . $appointment->doctor_last_name;
+            $otherParticipantId = $appointment->doctor_id;
+        }
+
+        $otherParticipantProfilePath = null;
+        $otherParticipantProfileUrl = null;
+        if ($otherParticipantId) {
+            $otherUser = \App\Models\User::find($otherParticipantId);
+            if ($otherUser) {
+                $otherParticipantProfilePath = $otherUser->profile_picture;
+                $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+            }
         }
         
         return response()->json([
@@ -425,7 +453,9 @@ class ChatController extends Controller
                 'appointment_time' => $appointment->appointment_time,
                 'status' => $appointment->status,
                 'doctor_id' => $appointment->doctor_id,
-                'patient_id' => $appointment->patient_id
+                'patient_id' => $appointment->patient_id,
+                'other_participant_profile_picture' => $otherParticipantProfilePath,
+                'other_participant_profile_picture_url' => $otherParticipantProfileUrl
             ]
         ]);
     }
