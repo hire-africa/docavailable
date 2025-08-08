@@ -24,6 +24,13 @@ RUN apt-get update && apt-get install -y libpq-dev
 # Install PHP extensions (including PostgreSQL)
 RUN docker-php-ext-install pdo_pgsql pdo_mysql mbstring exif pcntl bcmath gd zip
 
+# Verify PostgreSQL extension is installed
+RUN php -m | grep pdo_pgsql || echo "WARNING: pdo_pgsql extension not found"
+RUN php -m | grep pgsql || echo "WARNING: pgsql extension not found"
+
+# Test PDO PostgreSQL driver
+RUN php -r "var_dump(PDO::getAvailableDrivers());" || echo "WARNING: PDO drivers test failed"
+
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
