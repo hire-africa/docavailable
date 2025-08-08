@@ -37,7 +37,7 @@ export default function ImageMessage({
     if (uri.startsWith('http')) {
       return uri;
     }
-    return `http://172.20.10.11:8000/storage/${uri}`;
+    return `https://docavailable-1.onrender.com/storage/${uri}`;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);

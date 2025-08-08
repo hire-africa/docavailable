@@ -29,7 +29,7 @@ export default function VoiceMessagePlayer({
     if (uri.startsWith('http')) {
       return uri;
     }
-    return `http://172.20.10.11:8000/storage/${uri}`;
+    return `https://docavailable-1.onrender.com/storage/${uri}`;
   };
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);

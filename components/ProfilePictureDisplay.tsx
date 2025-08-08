@@ -43,7 +43,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         if (uri.startsWith('http')) {
             return uri;
         }
-        return `http://172.20.10.11:8000/storage/${uri}`;
+        return `https://docavailable-1.onrender.com/storage/${uri}`;
     };
 
     // Use profilePictureUrl if available, otherwise fall back to imageUri
