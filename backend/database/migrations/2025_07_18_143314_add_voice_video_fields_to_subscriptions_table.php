@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::table('subscriptions', function (Blueprint $table) {
             $table->integer('voice_calls_remaining')->default(0)->after('text_sessions_remaining');
             $table->integer('video_calls_remaining')->default(0)->after('voice_calls_remaining');
-            $table->integer('total_voice_calls')->default(0)->after('appointments_remaining');
+            $table->integer('total_voice_calls')->default(0)->after('text_sessions_remaining');
             $table->integer('total_video_calls')->default(0)->after('total_voice_calls');
             $table->string('plan_name')->nullable()->after('plan_id');
             $table->integer('plan_price')->default(0)->after('plan_name');
