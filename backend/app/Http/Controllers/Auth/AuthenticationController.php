@@ -32,6 +32,21 @@ class AuthenticationController extends Controller
     public function register(Request $request): JsonResponse
     {
         try {
+            // Normalize common alternate/camelCase field names
+            $normalized = [];
+            if ($request->has('firstName')) { $normalized['first_name'] = $request->input('firstName'); }
+            if ($request->has('lastName')) { $normalized['last_name'] = $request->input('lastName'); }
+            if ($request->has('userType')) { $normalized['user_type'] = $request->input('userType'); }
+            if ($request->has('dateOfBirth')) { $normalized['date_of_birth'] = $request->input('dateOfBirth'); }
+            if ($request->has('subSpecialization')) { $normalized['sub_specialization'] = $request->input('subSpecialization'); }
+            if ($request->has('specializationsJson')) { $normalized['specializations'] = $request->input('specializationsJson'); }
+            if (!empty($normalized)) { $request->merge($normalized); }
+
+            // Provide password_confirmation fallback when not provided by clients
+            if ($request->filled('password') && !$request->has('password_confirmation')) {
+                $request->merge(['password_confirmation' => $request->input('password')]);
+            }
+
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:8|confirmed',
