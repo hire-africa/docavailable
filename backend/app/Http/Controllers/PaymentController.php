@@ -204,9 +204,10 @@ class PaymentController extends Controller
             }
 
             // Update the transaction with webhook data
+            // Note: webhook amount may be different from plan price due to fees
             $paymentTransaction->update([
                 'transaction_id' => $transactionId,
-                'amount' => $amount,
+                'amount' => $amount, // This is the amount received after fees
                 'currency' => $currency,
                 'status' => $status,
                 'phone_number' => $phoneNumber,
