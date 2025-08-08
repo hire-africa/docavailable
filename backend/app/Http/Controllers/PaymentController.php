@@ -540,7 +540,7 @@ class PaymentController extends Controller
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'payment_status' => 'paid',
-                'payment_metadata' => $transaction->webhook_data,
+                'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
                 'activated_at' => now(),
                 'expires_at' => now()->addDays((int) ($plan->duration ?? 30)),
                 'status' => 1,
