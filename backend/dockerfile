@@ -103,10 +103,11 @@ RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 # Note: Database operations (migrations and seeding) will be run at runtime
 # when the container starts and database is available
 
-# Cache configurations
-RUN php artisan config:cache || echo "Config cache failed"
-RUN php artisan route:cache || echo "Route cache failed"
-RUN php artisan view:cache || echo "View cache failed"
+# Note: Configuration caching is done at runtime in start.sh 
+# to ensure environment variables are properly loaded
+# RUN php artisan config:cache || echo "Config cache failed"
+# RUN php artisan route:cache || echo "Route cache failed" 
+# RUN php artisan view:cache || echo "View cache failed"
 
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
