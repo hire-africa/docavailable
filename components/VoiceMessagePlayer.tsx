@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { toImageUrl } from '../services/url';
 
 interface VoiceMessagePlayerProps {
   audioUri: string;
@@ -26,7 +25,12 @@ export default function VoiceMessagePlayer({
     //   hasUrl: !!profilePictureUrl
     // });
 
-  const getImageUrl = (uri: string) => toImageUrl(uri) as string;
+  const getImageUrl = (uri: string) => {
+    if (uri.startsWith('http')) {
+      return uri;
+    }
+    return `http://172.20.10.11:8000/storage/${uri}`;
+  };
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);

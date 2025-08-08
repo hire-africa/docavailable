@@ -25,7 +25,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
-import { toImageUrl } from '../../services/url';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import sessionService from '../services/sessionService';
 
@@ -843,8 +842,8 @@ export default function ChatPage() {
                     deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
                     profilePictureUrl={
                       message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || toImageUrl(user?.profile_picture) || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || toImageUrl(chatInfo?.other_participant_profile_picture) || undefined)
+                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
                     }
                   />
                 ) : message.message_type === 'image' && message.media_url ? (
@@ -856,8 +855,8 @@ export default function ChatPage() {
                     deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
                     profilePictureUrl={
                       message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || toImageUrl(user?.profile_picture) || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || toImageUrl(chatInfo?.other_participant_profile_picture) || undefined)
+                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
                     }
                     readBy={message.read_by}
                     otherParticipantId={

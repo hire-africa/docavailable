@@ -1,7 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import React from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { toImageUrl } from '../services/url';
 
 interface ProfilePictureDisplayProps {
     imageUri: string | null;
@@ -40,7 +39,12 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         },
     });
 
-    const getImageUrl = (uri: string) => toImageUrl(uri) as string;
+    const getImageUrl = (uri: string) => {
+        if (uri.startsWith('http')) {
+            return uri;
+        }
+        return `http://172.20.10.11:8000/storage/${uri}`;
+    };
 
     // Use profilePictureUrl if available, otherwise fall back to imageUri
     const finalImageUri = profilePictureUrl || imageUri;

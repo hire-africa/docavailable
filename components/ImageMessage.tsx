@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { toImageUrl } from '../services/url';
 import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -34,7 +33,12 @@ export default function ImageMessage({
     //   hasUrl: !!profilePictureUrl
     // });
 
-  const getImageUrl = (uri: string) => toImageUrl(uri) as string;
+  const getImageUrl = (uri: string) => {
+    if (uri.startsWith('http')) {
+      return uri;
+    }
+    return `http://172.20.10.11:8000/storage/${uri}`;
+  };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);

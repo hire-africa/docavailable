@@ -19,7 +19,6 @@ import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import SpecializationPicker from '../components/SpecializationPicker';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
-import { toImageUrl } from '../services/url';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -128,7 +127,7 @@ export default function EditDoctorProfile() {
                 setBio(currentUser?.bio || '');
                 setCountry(currentUser?.country || '');
                 setCity(currentUser?.city || '');
-                setProfilePicture(currentUser?.profile_picture_url || toImageUrl(currentUser?.profile_picture) || null);
+                setProfilePicture(currentUser?.profile_picture_url || currentUser?.profile_picture || null);
                 
                 // console.log('EditDoctorProfile: Loaded data:', {
                 //   firstName: currentUser?.first_name,

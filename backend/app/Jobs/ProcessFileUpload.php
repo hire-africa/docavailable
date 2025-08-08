@@ -235,8 +235,8 @@ class ProcessFileUpload implements ShouldQueue
             $user = \App\Models\User::find($this->userId);
             if ($user) {
                 $user->update([
-                    // Store only the relative storage path
-                    'profile_picture' => $imagePath
+                    // Store the full URL in database
+                    'profile_picture' => Storage::disk('public')->url($imagePath)
                 ]);
                 
                 Log::info("User profile picture updated: {$this->userId}");

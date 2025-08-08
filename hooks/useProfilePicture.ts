@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { toImageUrl } from '../services/url';
 
 export const useProfilePicture = () => {
   const { user, refreshUserData } = useAuth();
@@ -8,7 +7,7 @@ export const useProfilePicture = () => {
 
   useEffect(() => {
     // Update profile picture URL when user data changes
-  const url = user?.profile_picture_url || (user?.profile_picture ? toImageUrl(user?.profile_picture) : null);
+    const url = user?.profile_picture_url || user?.profile_picture;
     setProfilePictureUrl(url);
   }, [user?.profile_picture_url, user?.profile_picture]);
 
