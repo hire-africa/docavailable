@@ -18,6 +18,7 @@ import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
+import { toImageUrl } from '../services/url';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -120,7 +121,7 @@ export default function EditPatientProfile() {
                 setBio(currentUser?.bio || '');
                 setCountry(currentUser?.country || '');
                 setCity(currentUser?.city || '');
-                setProfilePicture(currentUser?.profile_picture || currentUser?.profile_picture_url || null);
+                setProfilePicture(currentUser?.profile_picture_url || toImageUrl(currentUser?.profile_picture) || null);
                 
                 // console.log('EditPatientProfile: Loaded data:', {
                 //   firstName: currentUser?.first_name,

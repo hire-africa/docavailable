@@ -1,4 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
+import * as AuthSession from 'expo-auth-session';
 import { Link, router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
 
 const { width } = Dimensions.get('window');
@@ -153,46 +155,98 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         try {
-            // TODO: Implement Google Sign-In
-            // This requires installing @expo/google-sign-in and configuring Google OAuth
-            // For now, show a message that this feature is not yet implemented
-            
-            Alert.alert(
-                'Google Sign-In Not Available',
-                'Google sign-in is not yet implemented. Please use email and password to sign in.',
-                [
+            // Check if Google OAuth is configured
+            if (!GOOGLE_OAUTH_CONFIG.clientId || GOOGLE_OAUTH_CONFIG.clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+                Alert.alert(
+                    'Google OAuth Not Configured',
+                    'Please configure your Google OAuth credentials in the environment variables.',
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
+
+            // Google OAuth configuration
+            const redirectUri = AuthSession.makeRedirectUri({
+                scheme: 'docavailable',
+            });
+
+            const request = new AuthSession.AuthRequest({
+                clientId: GOOGLE_OAUTH_CONFIG.clientId,
+                scopes: GOOGLE_OAUTH_CONFIG.scopes,
+                redirectUri,
+                responseType: AuthSession.ResponseType.Code,
+                additionalParameters: {},
+                extraParams: {
+                    access_type: 'offline',
+                },
+            });
+
+            const result = await request.promptAsync(GOOGLE_OAUTH_CONFIG.discovery);
+
+            if (result.type === 'success') {
+                // Exchange authorization code for tokens
+                const tokenResponse = await AuthSession.exchangeCodeAsync(
                     {
-                        text: 'OK',
-                        onPress: () => setLoading(false)
+                        clientId: GOOGLE_OAUTH_CONFIG.clientId,
+                        clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
+                        code: result.params.code,
+                        redirectUri,
+                        extraParams: {
+                            code_verifier: request.codeVerifier,
+                        },
+                    },
+                    GOOGLE_OAUTH_CONFIG.discovery
+                );
+
+                // Get user info from Google
+                const userInfoResponse = await fetch(
+                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
+                );
+                
+                if (!userInfoResponse.ok) {
+                    throw new Error(GOOGLE_AUTH_ERRORS.USER_INFO_FAILED);
+                }
+                
+                const userInfo = await userInfoResponse.json();
+
+                // Create a JWT-like token for your backend
+                const googleToken = {
+                    sub: userInfo.id,
+                    email: userInfo.email,
+                    name: userInfo.name,
+                    given_name: userInfo.given_name,
+                    family_name: userInfo.family_name,
+                    picture: userInfo.picture,
+                };
+
+                // Send to your backend
+                const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
+                
+                if (authState.success && authState.data.user) {
+                    const user = authState.data.user;
+                    
+                    if (user.user_type === 'admin') {
+                        router.replace('/admin-dashboard');
+                    } else if (user.user_type === 'doctor') {
+                        if (user.status !== 'approved') {
+                            Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                            await authService.signOut();
+                            return;
+                        }
+                        router.replace('/doctor-dashboard');
+                    } else if (user.user_type === 'patient') {
+                        router.replace('/patient-dashboard');
+                    } else {
+                        router.replace('/');
                     }
-                ]
-            );
-            
-            // Uncomment the following code when Google sign-in is implemented:
-            /*
-            const authState = await authService.signInWithGoogle(idToken);
-            // console.log('Google login successful');
-            
-            if (authState.user) {
-                if (authState.user.user_type === 'admin') {
-                    router.replace('/admin-dashboard');
-                } else if (authState.user.user_type === 'doctor') {
-                    if (authState.user.status !== 'approved') {
-                        Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
-                        await authService.signOut();
-                        return;
-                    }
-                    router.replace('/doctor-dashboard');
-                } else if (authState.user.user_type === 'patient') {
-                    router.replace('/patient-dashboard');
                 } else {
-                    router.replace('/'); // fallback
+                    Alert.alert('Login Failed', 'Google authentication failed.');
+                    await authService.signOut();
                 }
             } else {
-                Alert.alert('Login Failed', 'User data not found.');
-                await authService.signOut();
+                // User cancelled the sign-in
+                console.log('Google sign-in was cancelled');
             }
-            */
         } catch (error: any) {
             console.error('Google login error:', error);
             

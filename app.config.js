@@ -28,6 +28,7 @@ export default {
     web: {
       favicon: "./assets/images/favicon.png"
     },
+    scheme: "docavailable",
     extra: {
       // API Configuration
       apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL || "http://172.20.10.11:8000",
@@ -56,6 +57,10 @@ export default {
       paymentApiKey: process.env.PAYMENT_API_KEY || "",
       smsApiKey: process.env.SMS_API_KEY || "",
       emailApiKey: process.env.EMAIL_API_KEY || "",
+      
+      // Google OAuth Configuration
+      googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "",
+      googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || "",
       
       // EAS Configuration
       eas: {

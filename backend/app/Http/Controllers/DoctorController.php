@@ -183,7 +183,7 @@ class DoctorController extends Controller
         // Add profile picture URL and online status
         $doctorData = $doctor->toArray();
         if ($doctor->profile_picture) {
-            $doctorData['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->profile_picture);
+            $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
         }
         $doctorData['is_online'] = $isOnline;
 

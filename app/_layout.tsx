@@ -39,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
         <Stack.Screen name="help-support" options={{ headerShown: false }} />
+        <Stack.Screen name="payments/checkout" options={{ headerShown: false }} />
       </Stack>
     </AuthProvider>
   );

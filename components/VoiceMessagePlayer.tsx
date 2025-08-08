@@ -1,15 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import React, { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { toImageUrl } from '../services/url';
 
 interface VoiceMessagePlayerProps {
   audioUri: string;
@@ -33,35 +26,7 @@ export default function VoiceMessagePlayer({
     //   hasUrl: !!profilePictureUrl
     // });
 
-  const getImageUrl = (uri: string) => {
-    // console.log('VoiceMessagePlayer getImageUrl - Input URI:', uri);
-    
-    // If it's already a full URL, return as is
-    if (uri.startsWith('http')) {
-      // console.log('VoiceMessagePlayer getImageUrl - Returning full URL as is:', uri);
-      return uri;
-    }
-    
-    // If it's a local storage path, construct the full URL
-    const baseUrl = Platform.select({
-      web: 'http://172.20.10.11:8000',
-      default: 'http://172.20.10.11:8000'
-    });
-    
-    // Remove any leading slash from the URI to avoid double slashes
-    const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
-    
-    // Check if the URI already contains the base URL to avoid double prefixing
-    if (cleanUri.includes('172.20.10.11:8000')) {
-      // console.log('VoiceMessagePlayer getImageUrl - URI already contains base URL, returning as is:', cleanUri);
-      return cleanUri;
-    }
-    
-    const fullUrl = `${baseUrl}/storage/${cleanUri}`;
-    // console.log('VoiceMessagePlayer getImageUrl - Constructed full URL:', fullUrl);
-    
-    return fullUrl;
-  };
+  const getImageUrl = (uri: string) => toImageUrl(uri) as string;
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);

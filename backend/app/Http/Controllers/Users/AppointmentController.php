@@ -95,7 +95,7 @@ class AppointmentController extends Controller
                 // Add doctor profile picture URL and name
                 if ($appointment->doctor) {
                     if ($appointment->doctor->profile_picture) {
-                        $appointmentData['doctor']['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($appointment->doctor->profile_picture);
+                        $appointmentData['doctor']['profile_picture_url'] = $appointment->doctor->profile_picture_url;
                     }
                     $appointmentData['doctorName'] = $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name;
                 }
@@ -103,7 +103,7 @@ class AppointmentController extends Controller
                 // Add patient profile picture URL and name
                 if ($appointment->patient) {
                     if ($appointment->patient->profile_picture) {
-                        $appointmentData['patient']['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($appointment->patient->profile_picture);
+                        $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
                     }
                     $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
                 }

@@ -1,11 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import React from 'react';
-import {
-    Image,
-    Platform,
-    StyleSheet,
-    View,
-} from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
+import { toImageUrl } from '../services/url';
 
 interface ProfilePictureDisplayProps {
     imageUri: string | null;
@@ -44,37 +40,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         },
     });
 
-    const getImageUrl = (uri: string) => {
-        // Debug logging
-        // console.log('ProfilePictureDisplay - Original URI:', uri);
-        
-        // If it's already a full URL, return as is
-        if (uri.startsWith('http')) {
-            // console.log('ProfilePictureDisplay - Using full URL:', uri);
-            return uri;
-        }
-        
-        // If it's a local storage path, construct the full URL
-        // Use your backend URL here
-        const baseUrl = Platform.select({
-            web: 'http://172.20.10.11:8000',
-            default: 'http://172.20.10.11:8000'
-        });
-        
-        // Remove any leading slash from the URI to avoid double slashes
-        const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
-        
-        // Check if the URI already contains the base URL to avoid double prefixing
-        if (cleanUri.includes('172.20.10.11:8000')) {
-            // console.log('ProfilePictureDisplay - URI already contains base URL, using as is:', cleanUri);
-            return cleanUri;
-        }
-        
-        const fullUrl = `${baseUrl}/storage/${cleanUri}`;
-        
-        // console.log('ProfilePictureDisplay - Constructed URL:', fullUrl);
-        return fullUrl;
-    };
+    const getImageUrl = (uri: string) => toImageUrl(uri) as string;
 
     // Use profilePictureUrl if available, otherwise fall back to imageUri
     const finalImageUri = profilePictureUrl || imageUri;

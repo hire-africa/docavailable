@@ -321,9 +321,9 @@ class UserController extends Controller
             $doctors->getCollection()->transform(function ($doctor) {
                 $doctorData = $doctor->toArray();
                 
-                // Add profile picture URL
+                // Add profile picture URL using model accessor (handles absolute/relative)
                 if ($doctor->profile_picture) {
-                    $doctorData['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->profile_picture);
+                    $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
                 }
                 
                 // Add availability info

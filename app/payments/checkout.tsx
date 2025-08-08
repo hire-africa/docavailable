@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { apiService } from '../../services/apiService';
 
@@ -40,7 +41,7 @@ export default function PayChanguCheckout() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <WebView
         source={{ uri: checkoutUrl }}
         startInLoadingState
@@ -51,6 +52,6 @@ export default function PayChanguCheckout() {
         )}
         onShouldStartLoadWithRequest={(req) => handleIntercept(req.url)}
       />
-    </View>
+    </SafeAreaView>
   );
 }

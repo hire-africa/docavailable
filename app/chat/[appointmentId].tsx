@@ -25,6 +25,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
+import { toImageUrl } from '../../services/url';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import sessionService from '../services/sessionService';
 
@@ -840,7 +841,11 @@ export default function ChatPage() {
                     isOwnMessage={message.sender_id === currentUserId}
                     timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                    profilePictureUrl={message.sender_id === currentUserId ? (user?.profile_picture_url || user?.profile_picture) : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture)}
+                    profilePictureUrl={
+                      message.sender_id === currentUserId
+                        ? (user?.profile_picture_url || toImageUrl(user?.profile_picture) || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || toImageUrl(chatInfo?.other_participant_profile_picture) || undefined)
+                    }
                   />
                 ) : message.message_type === 'image' && message.media_url ? (
                   // Image messages render without outer bubble
@@ -849,7 +854,11 @@ export default function ChatPage() {
                     isOwnMessage={message.sender_id === currentUserId}
                     timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                    profilePictureUrl={message.sender_id === currentUserId ? (user?.profile_picture_url || user?.profile_picture) : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture)}
+                    profilePictureUrl={
+                      message.sender_id === currentUserId
+                        ? (user?.profile_picture_url || toImageUrl(user?.profile_picture) || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || toImageUrl(chatInfo?.other_participant_profile_picture) || undefined)
+                    }
                     readBy={message.read_by}
                     otherParticipantId={
                       chatInfo?.doctor_id === currentUserId 

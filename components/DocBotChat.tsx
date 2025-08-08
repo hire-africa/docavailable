@@ -207,28 +207,12 @@ export default function DocBotChat() {
                 message.isUser ? styles.userMessage : styles.botMessage,
               ]}
             >
-              {!message.isUser && (
-                <View style={[styles.botMessageAvatar, { backgroundColor: getMessageColor(message.type) }]}>
-                  <FontAwesome name={getMessageIcon(message.type)} size={16} color="#FFFFFF" />
-                </View>
-              )}
               <View
                 style={[
                   styles.messageCard,
                   message.isUser ? styles.userCard : styles.botCard,
                 ]}
               >
-                {!message.isUser && message.type && (
-                  <View style={[styles.messageTypeHeader, { backgroundColor: getMessageColor(message.type) }]}>
-                    <FontAwesome name={getMessageIcon(message.type)} size={14} color="#FFFFFF" />
-                    <Text style={styles.messageTypeText}>
-                      {message.type === 'symptom' ? 'Symptom Check' :
-                       message.type === 'advice' ? 'Health Advice' :
-                       message.type === 'booking' ? 'Booking Help' :
-                       message.type === 'emergency' ? 'Emergency Alert' : 'General'}
-                    </Text>
-                  </View>
-                )}
                 <View style={styles.messageContent}>
                   <Text
                     style={[
@@ -251,9 +235,6 @@ export default function DocBotChat() {
           
           {isTyping && (
             <View style={styles.messageContainer}>
-              <View style={[styles.botMessageAvatar, { backgroundColor: '#4CAF50' }]}>
-                <FontAwesome name="user-md" size={16} color="#FFFFFF" />
-              </View>
               <View style={styles.typingCard}>
                 <View style={styles.typingDots}>
                   <View style={[styles.dot, styles.dot1]} />
@@ -481,8 +462,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   userCard: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FFFFFF',
     borderBottomRightRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   botCard: {
     backgroundColor: '#FFFFFF',
@@ -512,7 +495,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   userText: {
-    color: '#FFFFFF',
+    color: '#222',
   },
   botText: {
     color: '#222',
@@ -522,7 +505,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   userTime: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#999',
     alignSelf: 'flex-end',
   },
   botTime: {

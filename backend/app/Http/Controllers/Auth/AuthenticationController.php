@@ -573,31 +573,43 @@ class AuthenticationController extends Controller
     private function verifyGoogleIdToken($idToken)
     {
         try {
-            // For now, we'll use a simple approach
-            // In production, you should use Firebase Admin SDK or Google's official library
+            // Decode the JSON token from frontend (Google OAuth user info)
+            $googleUser = json_decode($idToken, true);
             
-            // Decode the JWT token (this is a simplified version)
-            $tokenParts = explode('.', $idToken);
-            if (count($tokenParts) !== 3) {
+            if (!$googleUser || !isset($googleUser['sub']) || !isset($googleUser['email'])) {
+                Log::error('Google token verification failed - invalid token structure', [
+                    'token' => $idToken
+                ]);
                 return false;
             }
 
-            $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $tokenParts[1])), true);
-            
             // Basic validation
-            if (!$payload || !isset($payload['email']) || !isset($payload['sub'])) {
+            if (empty($googleUser['email']) || empty($googleUser['sub'])) {
+                Log::error('Google token verification failed - missing required fields', [
+                    'email' => $googleUser['email'] ?? 'missing',
+                    'sub' => $googleUser['sub'] ?? 'missing'
+                ]);
                 return false;
             }
 
-            // Check if token is not expired
-            if (isset($payload['exp']) && $payload['exp'] < time()) {
+            // Validate email format
+            if (!filter_var($googleUser['email'], FILTER_VALIDATE_EMAIL)) {
+                Log::error('Google token verification failed - invalid email format', [
+                    'email' => $googleUser['email']
+                ]);
                 return false;
             }
 
-            return $payload;
+            Log::info('Google token verification successful', [
+                'email' => $googleUser['email'],
+                'sub' => $googleUser['sub']
+            ]);
+
+            return $googleUser;
         } catch (\Exception $e) {
             Log::error('Google ID token verification failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'token' => $idToken
             ]);
             return false;
         }

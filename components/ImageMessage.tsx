@@ -1,16 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import {
-    ActivityIndicator,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
-} from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { toImageUrl } from '../services/url';
 import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -43,35 +34,7 @@ export default function ImageMessage({
     //   hasUrl: !!profilePictureUrl
     // });
 
-  const getImageUrl = (uri: string) => {
-    // console.log('ImageMessage getImageUrl - Input URI:', uri);
-    
-    // If it's already a full URL, return as is
-    if (uri.startsWith('http')) {
-      // console.log('ImageMessage getImageUrl - Returning full URL as is:', uri);
-      return uri;
-    }
-    
-    // If it's a local storage path, construct the full URL
-    const baseUrl = Platform.select({
-      web: 'http://172.20.10.11:8000',
-      default: 'http://172.20.10.11:8000'
-    });
-    
-    // Remove any leading slash from the URI to avoid double slashes
-    const cleanUri = uri.startsWith('/') ? uri.substring(1) : uri;
-    
-    // Check if the URI already contains the base URL to avoid double prefixing
-    if (cleanUri.includes('172.20.10.11:8000')) {
-      // console.log('ImageMessage getImageUrl - URI already contains base URL, returning as is:', cleanUri);
-      return cleanUri;
-    }
-    
-    const fullUrl = `${baseUrl}/storage/${cleanUri}`;
-    // console.log('ImageMessage getImageUrl - Constructed full URL:', fullUrl);
-    
-    return fullUrl;
-  };
+  const getImageUrl = (uri: string) => toImageUrl(uri) as string;
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
@@ -133,7 +96,7 @@ export default function ImageMessage({
           ) : (
             <TouchableOpacity onPress={handleImagePress} activeOpacity={0.8}>
               <Image
-                source={{ uri: imageUrl }}
+                source={{ uri: getImageUrl(imageUrl) }}
                 style={styles.image}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
@@ -183,7 +146,7 @@ export default function ImageMessage({
             activeOpacity={1}
           >
             <Image
-              source={{ uri: imageUrl }}
+              source={{ uri: getImageUrl(imageUrl) }}
               style={styles.modalImage}
               resizeMode="contain"
             />

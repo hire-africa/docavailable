@@ -26,8 +26,8 @@ class FileUploadController extends Controller
         $user = $request->user();
         $path = $request->file('profile_picture')->store('profile_pictures', 'public');
         
-        // Update user's profile picture URL
-        $user->profile_picture = Storage::disk('public')->url($path);
+        // Store the relative storage path (not full URL)
+        $user->profile_picture = $path;
         $user->save();
         
         // Dispatch job to process image asynchronously

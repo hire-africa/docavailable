@@ -161,7 +161,7 @@ class AdminController extends Controller
         $doctors->getCollection()->transform(function ($doctor) {
             $doctorData = $doctor->toArray();
             if ($doctor->profile_picture) {
-                $doctorData['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->profile_picture);
+                $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
             }
             return $doctorData;
         });

@@ -258,8 +258,8 @@ class AuthService {
   }
 
   // Alias for googleLogin method to maintain compatibility
-  async signInWithGoogle(idToken: string): Promise<AuthResponse> {
-    return this.googleLogin({ id_token: idToken });
+  async signInWithGoogle(googleToken: string): Promise<AuthResponse> {
+    return this.googleLogin({ id_token: googleToken });
   }
 
   async logout(): Promise<void> {
