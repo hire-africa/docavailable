@@ -275,69 +275,78 @@ class UserController extends Controller
      */
     public function getActiveDoctors(Request $request)
     {
-        $perPage = $request->get('per_page', 20);
-        $search = $request->get('search');
-        $specialty = $request->get('specialty');
-        
-        $query = User::with(['doctorAvailability'])
-            ->where('user_type', 'doctor')
-            ->where('status', 'approved');
-        
-        // Apply search filter
-        if ($search) {
-            $query->where(function($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('display_name', 'like', "%{$search}%")
-                  ->orWhere('specialization', 'like', "%{$search}%");
+        try {
+            $perPage = $request->get('per_page', 20);
+            $search = $request->get('search');
+            $specialty = $request->get('specialty');
+            
+            $query = User::with(['doctorAvailability'])
+                ->where('user_type', 'doctor')
+                ->where('status', 'approved');
+            
+            // Apply search filter
+            if ($search) {
+                $query->where(function($q) use ($search) {
+                    $q->where('first_name', 'like', "%{$search}%")
+                      ->orWhere('last_name', 'like', "%{$search}%")
+                      ->orWhere('display_name', 'like', "%{$search}%")
+                      ->orWhere('specialization', 'like', "%{$search}%");
+                });
+            }
+            
+            // Apply specialty filter
+            if ($specialty) {
+                $query->where('specialization', 'like', "%{$specialty}%");
+            }
+            
+            $doctors = $query->select([
+                'id',
+                'first_name',
+                'last_name',
+                'display_name',
+                'email',
+                'specialization',
+                'years_of_experience',
+                'bio',
+                'rating',
+                'total_ratings',
+                'city',
+                'country',
+                'status',
+                'profile_picture'
+            ])
+            ->orderBy('rating', 'desc')
+            ->orderBy('years_of_experience', 'desc')
+            ->paginate($perPage);
+            
+            // Add profile picture URLs and availability info to each doctor
+            $doctors->getCollection()->transform(function ($doctor) {
+                $doctorData = $doctor->toArray();
+                
+                // Add profile picture URL
+                if ($doctor->profile_picture) {
+                    $doctorData['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->profile_picture);
+                }
+                
+                // Add availability info
+                if ($doctor->doctorAvailability) {
+                    $doctorData['is_online'] = $doctor->doctorAvailability->is_online;
+                    $doctorData['working_hours'] = json_decode($doctor->doctorAvailability->working_hours, true);
+                    $doctorData['max_patients_per_day'] = $doctor->doctorAvailability->max_patients_per_day;
+                }
+                
+                return $doctorData;
             });
+            
+            return $this->success($doctors, 'Active doctors fetched successfully');
+        } catch (\Exception $e) {
+            \Log::error('Error fetching active doctors:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return $this->error('Failed to fetch active doctors: ' . $e->getMessage(), 500);
         }
-        
-        // Apply specialty filter
-        if ($specialty) {
-            $query->where('specialization', 'like', "%{$specialty}%");
-        }
-        
-        $doctors = $query->select([
-            'id',
-            'first_name',
-            'last_name',
-            'display_name',
-            'email',
-            'specialization',
-            'years_of_experience',
-            'bio',
-            'rating',
-            'total_ratings',
-            'city',
-            'country',
-            'status',
-            'profile_picture'
-        ])
-        ->orderBy('rating', 'desc')
-        ->orderBy('years_of_experience', 'desc')
-        ->paginate($perPage);
-        
-        // Add profile picture URLs and availability info to each doctor
-        $doctors->getCollection()->transform(function ($doctor) {
-            $doctorData = $doctor->toArray();
-            
-            // Add profile picture URL
-            if ($doctor->profile_picture) {
-                $doctorData['profile_picture_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->profile_picture);
-            }
-            
-            // Add availability info
-            if ($doctor->doctorAvailability) {
-                $doctorData['is_online'] = $doctor->doctorAvailability->is_online;
-                $doctorData['working_hours'] = json_decode($doctor->doctorAvailability->working_hours, true);
-                $doctorData['max_patients_per_day'] = $doctor->doctorAvailability->max_patients_per_day;
-            }
-            
-            return $doctorData;
-        });
-        
-        return $this->success($doctors, 'Active doctors fetched successfully');
     }
 
     /**
