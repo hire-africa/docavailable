@@ -42,6 +42,7 @@ import { authService } from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
+import { paymentsService } from '../services/paymentsService';
 import Blog from './blog';
 const profileImage = require('../assets/images/profile.jpg');
 const doctorAvatar = require('../assets/images/doctor-illustration.png');
@@ -895,134 +896,30 @@ export default function PatientDashboard() {
   };
 
   const handlePurchaseSubscription = async (plan: SubscriptionPlan) => {
-    setSelectedPlanId(plan.id);
-    // Directly process the purchase without showing payment modal
-    await handlePaymentSuccess();
-  };
-
-  const handlePaymentSuccess = async (transactionId?: string) => {
     try {
-      if (!selectedPlanId) return;
-
-      const plan = subscriptionPlans.find(p => p.id === selectedPlanId);
-      if (!plan) {
-        console.error('PatientDashboard: Plan not found for ID:', selectedPlanId);
-        showError('Subscription Error', 'Selected plan not found. Please try again.');
+      setSelectedPlanId(plan.id);
+      // Initiate hosted checkout via backend
+      const res = await paymentsService.initiatePlanPurchase(parseInt(plan.id));
+      if (res?.success && res.checkout_url) {
+        // Navigate to a dedicated WebView screen for checkout
+        router.push({
+          pathname: '/payments/checkout',
+          params: { url: res.checkout_url, tx_ref: res.tx_ref }
+        });
         return;
       }
-      
-      // console.log('PatientDashboard: Found plan:', plan);
-
-      // Check if user is authenticated
-      if (!user) {
-        showError('Authentication Error', 'Please login to purchase a subscription.');
-        return;
-      }
-
-      // console.log('PatientDashboard: User authenticated:', user.email);
-      // console.log('PatientDashboard: User ID:', user.id);
-      // console.log('PatientDashboard: User object:', user);
-      
-      // Show processing message
-      showProcessing(
-        'Processing Subscription',
-        'Please wait while we activate your subscription...'
-      );
-      
-      // Prepare subscription data with payment transaction ID
-      const subscriptionData = {
-        plan_id: parseInt(plan.id), // Convert string ID to integer for Laravel validation
-        plan_name: plan.name,
-        plan_price: parseInt(plan.price.toString()), // Ensure it's an integer
-        plan_currency: plan.currency,
-        text_sessions_remaining: parseInt(plan.textSessions.toString()),
-        voice_calls_remaining: parseInt(plan.voiceCalls.toString()),
-        video_calls_remaining: parseInt(plan.videoCalls.toString()),
-        total_text_sessions: parseInt(plan.textSessions.toString()),
-        total_voice_calls: parseInt(plan.voiceCalls.toString()),
-        total_video_calls: parseInt(plan.videoCalls.toString()),
-        start_date: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
-        end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-        status: 'active',
-        is_active: true,
-        activated_at: new Date().toISOString().split('T')[0], // Format as YYYY-MM-DD
-        payment_transaction_id: transactionId || 'simulated_transaction_' + Date.now(),
-        payment_gateway: 'simulated',
-        payment_status: 'completed',
-        payment_metadata: {
-          payment_method: 'mobile_money',
-          transaction_timestamp: new Date().toISOString()
-        }
-      };
-
-      // console.log('PatientDashboard: Sending subscription data with transaction ID:', subscriptionData);
-      // console.log('PatientDashboard: Plan ID being sent:', subscriptionData.plan_id);
-      // console.log('PatientDashboard: Plan ID type:', typeof subscriptionData.plan_id);
-      
-      // Test API connection first
-      try {
-        const healthCheck = await apiService.get('/health');
-        // console.log('PatientDashboard: API health check:', healthCheck);
-      } catch (error) {
-        console.error('PatientDashboard: API health check failed:', error);
-      }
-      
-      // Directly activate subscription via Laravel API
-      const response = await apiService.post('/create_subscription', subscriptionData);
-      
-      // console.log('PatientDashboard: Subscription response:', response);
-
-      hideAlert();
-      
-      // Check if sessions were added to existing subscription or new subscription created
-      if (response.message && response.message.includes('Sessions added to existing subscription')) {
-        showSuccess('Sessions Added Successfully!', 'Additional sessions have been added to your existing subscription.');
-      } else {
-        showSuccess('Subscription activated successfully!', 'Your subscription has been activated.');
-      }
-      
-      setShowSubscriptions(false);
-      setSelectedPlanId(null);
-      
-      // Refresh subscription data
-      await refreshSubscription();
-    } catch (error: any) {
-      console.error('PatientDashboard: Error creating subscription:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        data: error.response?.data,
-        fullError: error
-      });
-      
-      // Log the full error details
-      console.error('PatientDashboard: Full error object:', JSON.stringify(error, null, 2));
-      
-      hideAlert();
-      
-      // Show more specific error message
-      let errorMessage = 'Failed to activate subscription. Please try again.';
-      
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.errors) {
-        // Handle validation errors
-        const validationErrors = error.response.data.errors;
-        const errorKeys = Object.keys(validationErrors);
-        if (errorKeys.length > 0) {
-          errorMessage = `Validation error: ${validationErrors[errorKeys[0]][0]}`;
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      showError('Subscription Error', errorMessage);
+      showError('Payment Error', 'Failed to start payment. Please try again.');
+    } catch (e: any) {
+      console.error('Purchase initiate error:', e);
+      showError('Payment Error', 'Could not start payment. Please try again.');
     }
   };
 
-
-
-
+  const handlePaymentSuccess = async (transactionId?: string) => {
+    // Deprecated: real activation now happens via PayChangu callback/webhook
+    // Keep as no-op to avoid accidental simulated activations
+    return;
+  };
 
   const cancelPurchase = () => {
     setShowPurchaseConfirm(false);
