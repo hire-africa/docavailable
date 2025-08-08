@@ -88,8 +88,8 @@ class UserSeeder extends Seeder
             'status' => 'active',
         ]);
 
-        // Create additional test users if needed
-        if (app()->environment('local')) {
+        // Create additional test users if needed (only in local environment with Faker available)
+        if (app()->environment('local') && class_exists('Faker\Factory')) {
             // Create more test users for local development
             User::factory(5)->create(['user_type' => 'doctor']);
             User::factory(10)->create(['user_type' => 'patient']);
