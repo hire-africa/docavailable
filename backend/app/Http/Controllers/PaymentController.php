@@ -63,7 +63,8 @@ class PaymentController extends Controller
         }
 
         // Record pending transaction keyed by tx_ref as reference
-        PaymentTransaction::updateOrCreate(
+        try {
+            $transaction = PaymentTransaction::updateOrCreate(
             ['reference' => $txRef],
             [
                 'transaction_id' => $txRef, // until we get real transaction id from webhook/verify
@@ -89,6 +90,29 @@ class PaymentController extends Controller
                 ],
             ]
         );
+
+            Log::info('Payment transaction created/updated', [
+                'transaction_id' => $transaction->id,
+                'reference' => $transaction->reference,
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+                'amount' => $transaction->amount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to create payment transaction', [
+                'error' => $e->getMessage(),
+                'tx_ref' => $txRef,
+                'user_id' => $user->id,
+                'plan_id' => $plan->id
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create payment transaction',
+                'error' => $e->getMessage()
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,
@@ -198,9 +222,50 @@ class PaymentController extends Controller
             if (!$paymentTransaction) {
                 Log::error('Payment transaction not found', [
                     'reference' => $reference,
-                    'transaction_id' => $transactionId
+                    'transaction_id' => $transactionId,
+                    'webhook_data' => $data,
+                    'available_transactions' => PaymentTransaction::where('gateway', 'paychangu')
+                        ->orderBy('created_at', 'desc')
+                        ->limit(5)
+                        ->get(['id', 'reference', 'transaction_id', 'status', 'created_at'])
+                        ->toArray()
                 ]);
+                
+                // Try to create the transaction if it doesn't exist (for testing)
+                if (config('app.debug')) {
+                    Log::info('Attempting to create missing transaction for testing', [
+                        'reference' => $reference,
+                        'transaction_id' => $transactionId
+                    ]);
+                    
+                    try {
+                        $paymentTransaction = PaymentTransaction::create([
+                            'transaction_id' => $transactionId,
+                            'reference' => $reference,
+                            'amount' => $amount,
+                            'currency' => $currency,
+                            'status' => $status,
+                            'phone_number' => $phoneNumber,
+                            'payment_method' => $paymentMethod,
+                            'gateway' => 'paychangu',
+                            'webhook_data' => $data
+                        ]);
+                        
+                        Log::info('Created missing transaction for testing', [
+                            'transaction_id' => $paymentTransaction->id,
+                            'reference' => $paymentTransaction->reference
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Failed to create missing transaction', [
+                            'error' => $e->getMessage(),
+                            'reference' => $reference,
+                            'transaction_id' => $transactionId
+                        ]);
+                        return response()->json(['error' => 'Transaction not found and could not be created'], 404);
+                    }
+                } else {
                 return response()->json(['error' => 'Transaction not found'], 404);
+                }
             }
 
             // Update the transaction with webhook data
@@ -342,6 +407,69 @@ class PaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Test webhook failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a test transaction manually (for debugging)
+     */
+    public function createTestTransaction(Request $request)
+    {
+        try {
+            $request->validate([
+                'reference' => 'required|string',
+                'amount' => 'required|numeric',
+                'currency' => 'required|string',
+                'user_id' => 'required|integer',
+                'plan_id' => 'required|integer'
+            ]);
+
+            $transaction = PaymentTransaction::create([
+                'transaction_id' => $request->reference,
+                'reference' => $request->reference,
+                'amount' => $request->amount,
+                'currency' => $request->currency,
+                'status' => 'pending',
+                'payment_method' => 'mobile_money',
+                'gateway' => 'paychangu',
+                'webhook_data' => [
+                    'meta' => [
+                        'user_id' => $request->user_id,
+                        'plan_id' => $request->plan_id,
+                    ]
+                ]
+            ]);
+
+            Log::info('Test transaction created manually', [
+                'transaction_id' => $transaction->id,
+                'reference' => $transaction->reference,
+                'user_id' => $request->user_id,
+                'plan_id' => $request->plan_id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Test transaction created',
+                'transaction' => [
+                    'id' => $transaction->id,
+                    'reference' => $transaction->reference,
+                    'amount' => $transaction->amount,
+                    'currency' => $transaction->currency,
+                    'status' => $transaction->status
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to create test transaction', [
+                'error' => $e->getMessage(),
+                'request_data' => $request->all()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create test transaction',
                 'error' => $e->getMessage()
             ], 500);
         }
