@@ -2,13 +2,15 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Animated,
     AppState,
+    BackHandler,
     Dimensions,
     Easing,
     Image,
@@ -31,14 +33,14 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 
-import { apiService } from '../services/apiService';
+import { apiService } from '../app/services/apiService';
 import { APPOINTMENT_STATUS, appointmentService, type Appointment } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
-import { authService } from '@/services/authService';
+import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
@@ -147,6 +149,20 @@ export default function PatientDashboard() {
 
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
 
+  // Prevent back button navigation
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Prevent back navigation - users must use logout button
+        return true; // Return true to prevent default back behavior
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [])
+  );
+
   // Refresh user data when component mounts or when user data changes
   useEffect(() => {
     const refreshData = async () => {
@@ -238,7 +254,7 @@ export default function PatientDashboard() {
   }, [user]);
 
   useEffect(() => {
-    if (user) {
+    if (user && user.id) { // Add user.id check to ensure user is fully loaded
       // Load user's current subscription from Laravel API
       apiService.get('/subscription')
         .then((response: any) => {
@@ -308,22 +324,12 @@ export default function PatientDashboard() {
       const locationInfo = LocationService.getLocationInfo(registrationCountry);
       setCurrentLocationInfo(locationInfo);
       
-      // Load plans from Laravel API based on user's country
+      // Load plans from Laravel API instead of hardcoded plans
       try {
-        // console.log('PatientDashboard: Loading plans for country:', registrationCountry);
         const response = await apiService.get('/plans');
-        // console.log('PatientDashboard: Plans API response:', response);
-        
         if (response.success && (response as any).plans) {
-          // Get user's currency and show all plans for now (remove strict filtering)
-          const userCurrency = LocationService.getCurrencyForCountry(registrationCountry);
-          // console.log('PatientDashboard: User currency:', userCurrency);
-          // console.log('PatientDashboard: Available plans:', (response as any).plans);
-          
-          // Show all plans instead of filtering by currency
-          const allPlans = (response as any).plans;
-          
-          const transformedPlans = allPlans.map((plan: any) => ({
+          // Transform Laravel plan data to match SubscriptionPlan interface
+          const transformedPlans = (response as any).plans.map((plan: any) => ({
             id: plan.id.toString(), // Convert to string to match interface
             name: plan.name,
             price: plan.price,
@@ -332,17 +338,12 @@ export default function PatientDashboard() {
             voiceCalls: plan.voice_calls || 0,
             videoCalls: plan.video_calls || 0,
             features: Array.isArray(plan.features) ? plan.features : [],
-            popular: plan.name.toLowerCase().includes('executive'),
-            bestValue: plan.name.toLowerCase().includes('premium')
+            popular: plan.name.toLowerCase().includes('executive')
           }));
-          
-          // console.log('PatientDashboard: Transformed plans:', transformedPlans);
-          // console.log('PatientDashboard: Plan IDs available:', transformedPlans.map((p: any) => ({ id: p.id, name: p.name })));
           setSubscriptionPlans(transformedPlans);
         } else {
           // Handle invalid API response
           // console.log('PatientDashboard: Invalid plans API response');
-          // console.log('PatientDashboard: Response structure:', response);
           setPlansError('Unable to load subscription plans. Please try again later.');
           setSubscriptionPlans([]);
         }
@@ -353,8 +354,10 @@ export default function PatientDashboard() {
       }
     };
 
-    initializeLocationTracking();
-  }, [userData]);
+    if (user && user.id) { // Add user.id check
+      initializeLocationTracking();
+    }
+  }, [userData, user]);
 
   // Request location permissions if not granted
   const requestLocationPermission = async () => {
@@ -898,9 +901,12 @@ export default function PatientDashboard() {
   const handlePurchaseSubscription = async (plan: SubscriptionPlan) => {
     try {
       setSelectedPlanId(plan.id);
+      console.log('Initiating payment for plan:', plan);
       // Initiate hosted checkout via backend
       const res = await paymentsService.initiatePlanPurchase(parseInt(plan.id));
+      console.log('Payment API response:', res);
       if (res?.success && res.checkout_url) {
+        console.log('Navigating to checkout with URL:', res.checkout_url);
         // Navigate to a dedicated WebView screen for checkout
         router.push({
           pathname: '/payments/checkout',
@@ -908,6 +914,7 @@ export default function PatientDashboard() {
         });
         return;
       }
+      console.log('Payment failed - no checkout URL in response');
       showError('Payment Error', 'Failed to start payment. Please try again.');
     } catch (e: any) {
       console.error('Purchase initiate error:', e);

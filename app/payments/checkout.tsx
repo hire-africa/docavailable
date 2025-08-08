@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -10,7 +10,16 @@ export default function PayChanguCheckout() {
   const checkoutUrl = (params.url as string) || '';
   const txRef = (params.tx_ref as string) || '';
 
+  useEffect(() => {
+    console.log('Checkout Debug:', {
+      checkoutUrl,
+      txRef,
+      params: params
+    });
+  }, [checkoutUrl, txRef, params]);
+
   const handleIntercept = useCallback(async (url: string) => {
+    console.log('WebView URL intercepted:', url);
     const callback = 'https://docavailable-1.onrender.com/api/payments/paychangu/callback';
     const ret = 'https://docavailable-1.onrender.com/api/payments/paychangu/return';
 
@@ -36,9 +45,12 @@ export default function PayChanguCheckout() {
   }, [txRef]);
 
   if (!checkoutUrl) {
+    console.log('No checkout URL provided, going back');
     router.back();
     return null;
   }
+
+  console.log('Rendering WebView with URL:', checkoutUrl);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -51,6 +63,14 @@ export default function PayChanguCheckout() {
           </View>
         )}
         onShouldStartLoadWithRequest={(req) => handleIntercept(req.url)}
+        onError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.log('WebView error:', nativeEvent);
+        }}
+        onHttpError={(syntheticEvent) => {
+          const { nativeEvent } = syntheticEvent;
+          console.log('WebView HTTP error:', nativeEvent);
+        }}
       />
     </SafeAreaView>
   );
