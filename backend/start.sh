@@ -15,6 +15,10 @@ php artisan view:clear
 echo "Refreshing database connection..."
 php artisan db:show --force || echo "Database show failed"
 
+# Check current database configuration
+echo "Checking database configuration..."
+php artisan tinker --execute="echo 'DB_CONNECTION: ' . config('database.default'); echo 'DB_HOST: ' . config('database.connections.pgsql_simple.host');" || echo "Config check failed"
+
 # Run migrations
 echo "Running database migrations..."
 php artisan migrate --force
