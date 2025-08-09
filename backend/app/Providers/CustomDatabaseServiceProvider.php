@@ -86,7 +86,7 @@ class CustomDatabaseServiceProvider extends ServiceProvider
             $database = env('DB_DATABASE', 'neondb');
             $username = env('DB_USERNAME', 'neondb_owner');
             $password = env('DB_PASSWORD', '');
-            $endpoint = 'endpoint%3Dep-hidden-brook-aemmopjb';
+            $endpoint = 'endpoint%3Dep-hidden-brook-aemmopjb-pooler';
 
             $dsn .= "host={$host};port={$port};dbname={$database};sslmode=require;";
             $dsn .= 'connect_timeout=' . env('DB_CONNECT_TIMEOUT', '10') . ';';
