@@ -44,83 +44,62 @@ class CustomDatabaseServiceProvider extends ServiceProvider
     public function createCustomConnection()
     {
         try {
-            $host = env('DB_HOST', 'ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech');
-            $port = env('DB_PORT', '5432');
-            $database = env('DB_DATABASE', 'neondb');
-            $username = env('DB_USERNAME', 'neondb_owner');
-            $password = env('DB_PASSWORD', '');
+            // Get database configuration
+            $dbUrl = env('DB_URL');
 
-            // Extract endpoint from host
-            if (preg_match('/^(ep-[a-zA-Z0-9-]+)/', $host, $matches)) {
-                $endpoint = $matches[1];
+            if ($dbUrl) {
+                // If DB_URL is provided, use it directly
+                $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
+                
+                // Parse URL for username/password
+                $parsed = parse_url($dbUrl);
+                $username = $parsed['user'] ?? env('DB_USERNAME');
+                $password = $parsed['pass'] ?? env('DB_PASSWORD');
+                
+                \Log::info('Using database URL connection');
             } else {
-                $endpoint = 'ep-hidden-brook-aemmopjb';
+                // Otherwise build connection string from individual parts
+                $host = env('DB_HOST', '127.0.0.1');
+                $port = env('DB_PORT', '5432');
+                $database = env('DB_DATABASE', 'laravel');
+                $username = env('DB_USERNAME', 'root');
+                $password = env('DB_PASSWORD', '');
+                
+                $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
+                if (env('DB_SSLMODE')) {
+                    $dsn .= ";sslmode=" . env('DB_SSLMODE');
+                }
+                
+                \Log::info('Using individual connection parameters');
             }
 
-            // Build connection string with connect_timeout
-            $dsn = sprintf(
-                'pgsql:host=%s;port=%s;dbname=%s;sslmode=require;connect_timeout=10;application_name=%s',
-                $host,
-                $port,
-                $database,
-                'docavailable_' . $endpoint // Set application name with endpoint
-            );
-
-            // Log connection attempt (without sensitive info)
             \Log::info('Attempting database connection', [
-                'host' => $host,
-                'database' => $database,
-                'endpoint' => $endpoint,
                 'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
             ]);
 
-            // Create PDO instance with basic parameters
-            $pdo = new PDO(
-                $dsn,
-                $username,
-                $password,
-                [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    PDO::ATTR_EMULATE_PREPARES => false,
-                    PDO::ATTR_PERSISTENT => filter_var(env('DB_PERSISTENT', false), FILTER_VALIDATE_BOOL),
-                    PDO::ATTR_TIMEOUT => (int) env('DB_SOCKET_TIMEOUT', 30)
-                ]
-            );
-            
-            // Set statement timeout
-            $pdo->exec('SET statement_timeout = 30000'); // 30 seconds
+            // Create PDO instance with minimal options
+            $pdo = new PDO($dsn, $username, $password, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false
+            ]);
             
             // Set search path
             $pdo->exec("SET search_path TO public");
             
             \Log::info('Database connection successful');
 
-            // Create a custom connection instance that extends PostgresConnection
-            $connection = new class($pdo, $database, '', [
+            // Create a custom connection instance
+            return new PostgresConnection($pdo, $database ?? '', '', [
                 'name' => 'pgsql_simple',
                 'driver' => 'pgsql',
-                'database' => $database,
-            ]) extends PostgresConnection {
-                public function __construct($pdo, $database, $tablePrefix, $config)
-                {
-                    parent::__construct($pdo, $database, $tablePrefix, $config);
-                }
+                'database' => $database ?? ''
+            ]);
 
-                public function getDriverName()
-                {
-                    return 'pgsql';
-                }
-            };
-
-            return $connection;
         } catch (\PDOException $e) {
             \Log::error('Database connection failed', [
                 'error' => $e->getMessage(),
-                'code' => $e->getCode(),
-                'host' => $host ?? 'unknown',
-                'database' => $database ?? 'unknown',
-                'endpoint' => $endpoint ?? 'unknown'
+                'code' => $e->getCode()
             ]);
             throw $e;
         }
