@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Models\Plan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
 
 class PaymentController extends Controller
 {
@@ -14,6 +15,15 @@ class PaymentController extends Controller
     {
         try {
             Log::info('Payment webhook received', ['data' => $request->all()]);
+            
+            // Log database configuration (without sensitive info)
+            Log::info('Database configuration:', [
+                'driver' => Config::get('database.default'),
+                'host' => Config::get('database.connections.pgsql_simple.host'),
+                'database' => Config::get('database.connections.pgsql_simple.database'),
+                'port' => Config::get('database.connections.pgsql_simple.port'),
+                'sslmode' => Config::get('database.connections.pgsql_simple.sslmode'),
+            ]);
             
             $data = $request->all();
             
@@ -42,6 +52,19 @@ class PaymentController extends Controller
     protected function processSuccessfulPayment($data, $meta)
     {
         try {
+            // Test database connection before transaction
+            try {
+                DB::connection()->getPdo();
+                Log::info('Database connection successful');
+            } catch (\Exception $e) {
+                Log::error('Database connection failed', [
+                    'error' => $e->getMessage(),
+                    'connection' => Config::get('database.default'),
+                    'host' => Config::get('database.connections.pgsql_simple.host')
+                ]);
+                throw $e;
+            }
+            
             DB::beginTransaction();
             
             $userId = $meta['user_id'];
@@ -53,11 +76,17 @@ class PaymentController extends Controller
             $plan = null;
             if ($planId) {
                 $plan = Plan::find($planId);
+                Log::info('Looking up plan by ID', ['plan_id' => $planId, 'found' => !is_null($plan)]);
             }
             if (!$plan) {
                 $plan = Plan::where('price', $amount)
                           ->where('currency', $currency)
                           ->first();
+                Log::info('Looking up plan by amount/currency', [
+                    'amount' => $amount,
+                    'currency' => $currency,
+                    'found' => !is_null($plan)
+                ]);
             }
             
             $subscriptionData = [
