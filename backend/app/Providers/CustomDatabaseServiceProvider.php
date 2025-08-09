@@ -57,9 +57,9 @@ class CustomDatabaseServiceProvider extends ServiceProvider
                 $endpoint = 'ep-hidden-brook-aemmopjb';
             }
 
-            // Build connection string with connection_init parameters
+            // Build connection string with connect_timeout
             $dsn = sprintf(
-                'pgsql:host=%s;port=%s;dbname=%s;sslmode=require;application_name=%s',
+                'pgsql:host=%s;port=%s;dbname=%s;sslmode=require;connect_timeout=10;application_name=%s',
                 $host,
                 $port,
                 $database,
@@ -74,7 +74,7 @@ class CustomDatabaseServiceProvider extends ServiceProvider
                 'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
             ]);
 
-            // Create PDO instance with connection parameters
+            // Create PDO instance with basic parameters
             $pdo = new PDO(
                 $dsn,
                 $username,
@@ -84,12 +84,12 @@ class CustomDatabaseServiceProvider extends ServiceProvider
                     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                     PDO::ATTR_EMULATE_PREPARES => false,
                     PDO::ATTR_PERSISTENT => filter_var(env('DB_PERSISTENT', false), FILTER_VALIDATE_BOOL),
-                    PDO::ATTR_TIMEOUT => (int) env('DB_SOCKET_TIMEOUT', 30),
-                    // Add connection initialization parameters
-                    PDO::ATTR_CONNECTION_TIMEOUT => 10,
-                    PDO::ATTR_STATEMENT_TIMEOUT => 30000, // 30 seconds
+                    PDO::ATTR_TIMEOUT => (int) env('DB_SOCKET_TIMEOUT', 30)
                 ]
             );
+            
+            // Set statement timeout
+            $pdo->exec('SET statement_timeout = 30000'); // 30 seconds
             
             // Set search path
             $pdo->exec("SET search_path TO public");
