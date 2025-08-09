@@ -43,30 +43,32 @@ class CustomDatabaseServiceProvider extends ServiceProvider
      */
     public function createCustomConnection()
     {
-        $dbUrl = env('DB_URL');
-        $host = env('DB_HOST', 'ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech');
-        $port = env('DB_PORT', '5432');
-        $database = env('DB_DATABASE', 'neondb');
-        $username = env('DB_USERNAME', 'neondb_owner');
-        $password = env('DB_PASSWORD', '');
-        $endpoint = 'ep-hidden-brook-aemmopjb-pooler'; // Extract from host
-
-        // Extract endpoint from host if not explicitly set
-        if (preg_match('/^(ep-[a-zA-Z0-9-]+)/', $host, $matches)) {
-            $endpoint = $matches[1];
-        }
-
-        $dsn = "pgsql:host={$host};port={$port};dbname={$database};sslmode=require;options=endpoint%3D{$endpoint}";
-        
-        // Log connection attempt (without sensitive info)
-        \Log::info('Attempting database connection', [
-            'host' => $host,
-            'database' => $database,
-            'endpoint' => $endpoint,
-            'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
-        ]);
-
         try {
+            $host = env('DB_HOST', 'ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech');
+            $port = env('DB_PORT', '5432');
+            $database = env('DB_DATABASE', 'neondb');
+            $username = env('DB_USERNAME', 'neondb_owner');
+            $password = env('DB_PASSWORD', '');
+
+            // Extract endpoint from host
+            if (preg_match('/^(ep-[a-zA-Z0-9-]+)/', $host, $matches)) {
+                $endpoint = $matches[1];
+            } else {
+                $endpoint = 'ep-hidden-brook-aemmopjb';
+            }
+
+            // Build connection string without options first
+            $dsn = "pgsql:host={$host};port={$port};dbname={$database};sslmode=require";
+
+            // Log connection attempt (without sensitive info)
+            \Log::info('Attempting database connection', [
+                'host' => $host,
+                'database' => $database,
+                'endpoint' => $endpoint,
+                'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
+            ]);
+
+            // Create PDO instance
             $pdo = new PDO(
                 $dsn,
                 $username,
@@ -80,7 +82,10 @@ class CustomDatabaseServiceProvider extends ServiceProvider
                 ]
             );
 
-            // Post-connect session config
+            // Set the endpoint after connection
+            $pdo->exec("SET SESSION \"endpoint\" = '{$endpoint}'");
+            
+            // Set search path
             $pdo->exec("SET search_path TO public");
             
             \Log::info('Database connection successful');
@@ -107,9 +112,9 @@ class CustomDatabaseServiceProvider extends ServiceProvider
             \Log::error('Database connection failed', [
                 'error' => $e->getMessage(),
                 'code' => $e->getCode(),
-                'host' => $host,
-                'database' => $database,
-                'endpoint' => $endpoint
+                'host' => $host ?? 'unknown',
+                'database' => $database ?? 'unknown',
+                'endpoint' => $endpoint ?? 'unknown'
             ]);
             throw $e;
         }
