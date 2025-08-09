@@ -9,17 +9,17 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     libzip-dev \
     zip \
-    unzip
+    unzip \
+    libpq-dev \
+    postgresql \
+    postgresql-client
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-# Install PostgreSQL dependencies
-RUN apt-get update && apt-get install -y libpq-dev
-
-# Install PHP extensions (including PostgreSQL)
-RUN docker-php-ext-install pdo_pgsql pdo_mysql mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
+    && docker-php-ext-install pdo pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
 
 # Verify PostgreSQL extension is installed
 RUN php -m | grep pdo_pgsql || echo "WARNING: pdo_pgsql extension not found"
@@ -100,15 +100,6 @@ RUN if [ ! -f .env ]; then cp .env.example .env; fi
 RUN php artisan key:generate --force || echo "Key already exists"
 RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 
-# Note: Database operations (migrations and seeding) will be run at runtime
-# when the container starts and database is available
-
-# Note: Configuration caching is done at runtime in start.sh 
-# to ensure environment variables are properly loaded
-# RUN php artisan config:cache || echo "Config cache failed"
-# RUN php artisan route:cache || echo "Route cache failed" 
-# RUN php artisan view:cache || echo "View cache failed"
-
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
@@ -116,7 +107,11 @@ RUN php artisan storage:link || echo "Storage link already exists"
 RUN echo "=== Final verification ===" && \
     echo "artisan: $([ -f artisan ] && echo 'EXISTS' || echo 'MISSING')" && \
     echo "public: $([ -d public ] && echo 'EXISTS' || echo 'MISSING')" && \
-    echo "public/index.php: $([ -f public/index.php ] && echo 'EXISTS' || echo 'MISSING')"
+    echo "public/index.php: $([ -f public/index.php ] && echo 'EXISTS' || echo 'MISSING')" && \
+    echo "=== PHP Modules ===" && \
+    php -m && \
+    echo "=== PDO Drivers ===" && \
+    php -r "var_dump(PDO::getAvailableDrivers());"
 
 # Make startup script executable
 RUN chmod +x start.sh
@@ -125,4 +120,4 @@ RUN chmod +x start.sh
 EXPOSE 8000
 
 # Start server using the startup script
-CMD ["./start.sh"] 
+CMD ["./start.sh"]
