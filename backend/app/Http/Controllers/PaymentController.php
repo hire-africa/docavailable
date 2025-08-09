@@ -185,18 +185,18 @@ class PaymentController extends Controller
             $data = $request->all();
             
         // Extract payment information from PayChangu webhook
-        $transactionId = $data['transaction_id'] ?? $data['payment_reference'] ?? null;
-        $reference = $data['reference'] ?? $data['tx_ref'] ?? null;
-        $amount = $data['amount'] ?? $data['amount_received'] ?? 0;
-        $currency = $data['currency'] ?? 'MWK';
-        $status = $data['status'] ?? 'pending';
-        $phoneNumber = $data['phone_number'] ?? null;
-        $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
+$transactionId = $data['transaction_id'] ?? $data['payment_reference'] ?? null;
+$reference = $data['reference'] ?? $data['tx_ref'] ?? null;
+$amount = $data['amount'] ?? $data['amount_received'] ?? 0;
+$currency = $data['currency'] ?? 'MWK';
+$status = $data['status'] ?? 'pending';
+$phoneNumber = $data['phone_number'] ?? null;
+$paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
 
         // Handle PayChangu specific status mapping - do this immediately
         if ($status === 'confirmed' || $status === 'completed' || $status === 'success') {
             $status = 'completed'; // Use 'completed' instead of 'success' for database compatibility
-        }
+}
             Log::info('Extracted webhook data', [
                 'transaction_id' => $transactionId,
                 'reference' => $reference,
@@ -232,31 +232,31 @@ class PaymentController extends Controller
                 
                 // Always try to create the transaction if it doesn't exist (for testing)
                 Log::info('Attempting to create missing transaction', [
-                    'reference' => $reference,
-                    'transaction_id' => $transactionId
-                ]);
-                
-                try {
-                    $paymentTransaction = PaymentTransaction::create([
-                        'transaction_id' => $transactionId,
                         'reference' => $reference,
-                        'amount' => $amount,
-                        'currency' => $currency,
-                        'status' => $status,
-                        'phone_number' => $phoneNumber,
-                        'payment_method' => $paymentMethod,
-                        'gateway' => 'paychangu',
-                        'webhook_data' => $data
+                        'transaction_id' => $transactionId
                     ]);
                     
+                    try {
+                        $paymentTransaction = PaymentTransaction::create([
+                            'transaction_id' => $transactionId,
+                            'reference' => $reference,
+                            'amount' => $amount,
+                            'currency' => $currency,
+                            'status' => $status,
+                            'phone_number' => $phoneNumber,
+                            'payment_method' => $paymentMethod,
+                            'gateway' => 'paychangu',
+                            'webhook_data' => $data
+                        ]);
+                        
                     Log::info('Created missing transaction successfully', [
-                        'transaction_id' => $paymentTransaction->id,
-                        'reference' => $paymentTransaction->reference
-                    ]);
-                } catch (\Exception $e) {
-                    Log::error('Failed to create missing transaction', [
-                        'error' => $e->getMessage(),
-                        'reference' => $reference,
+                            'transaction_id' => $paymentTransaction->id,
+                            'reference' => $paymentTransaction->reference
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error('Failed to create missing transaction', [
+                            'error' => $e->getMessage(),
+                            'reference' => $reference,
                         'transaction_id' => $transactionId,
                         'trace' => $e->getTraceAsString()
                     ]);
@@ -275,15 +275,15 @@ class PaymentController extends Controller
             // Update the transaction with webhook data
             // Note: webhook amount may be different from plan price due to fees
             try {
-                $paymentTransaction->update([
-                    'transaction_id' => $transactionId,
-                    'amount' => $amount, // This is the amount received after fees
-                    'currency' => $currency,
-                    'status' => $status,
-                    'phone_number' => $phoneNumber,
-                    'payment_method' => $paymentMethod,
-                    'gateway' => 'paychangu',
-                    'webhook_data' => $data
+            $paymentTransaction->update([
+                'transaction_id' => $transactionId,
+                'amount' => $amount, // This is the amount received after fees
+                'currency' => $currency,
+                'status' => $status,
+                'phone_number' => $phoneNumber,
+                'payment_method' => $paymentMethod,
+                'gateway' => 'paychangu',
+                'webhook_data' => $data
                 ]);
             } catch (\Exception $e) {
                 // Handle potential duplicate transaction_id
@@ -684,7 +684,7 @@ class PaymentController extends Controller
                 'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
                 'activated_at' => now(),
                 'expires_at' => $endDate,
-                'status' => 1,
+                'status' => '1', // Use string '1' instead of integer 1
                 'is_active' => true,
             ]
         );
@@ -737,7 +737,7 @@ class PaymentController extends Controller
                 'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
                 'activated_at' => now(),
                 'expires_at' => $endDate,
-                'status' => 1,
+                'status' => '1', // Use string '1' instead of integer 1
                 'is_active' => true,
             ]
         );
