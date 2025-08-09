@@ -45,9 +45,9 @@ class CustomDatabaseServiceProvider extends ServiceProvider
     {
         try {
             // Get database configuration
-            $dbUrl = env('DB_URL');
+        $dbUrl = env('DB_URL');
 
-            if ($dbUrl) {
+        if ($dbUrl) {
                 // If DB_URL is provided, use it directly
                 $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
                 
@@ -91,8 +91,8 @@ class CustomDatabaseServiceProvider extends ServiceProvider
 
             // Create a custom connection instance
             return new PostgresConnection($pdo, $database ?? '', '', [
-                'name' => 'pgsql_simple',
-                'driver' => 'pgsql',
+            'name' => 'pgsql_simple',
+            'driver' => 'pgsql',
                 'database' => $database ?? ''
             ]);
 
@@ -104,4 +104,4 @@ class CustomDatabaseServiceProvider extends ServiceProvider
             throw $e;
         }
     }
-}
+} 
