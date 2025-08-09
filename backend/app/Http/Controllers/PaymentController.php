@@ -689,8 +689,8 @@ $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_
                 ]),
                 'activated_at' => now(),
                 'expires_at' => $endDate,
-                'status' => '1', // Use string '1' instead of integer 1
-                'is_active' => true,
+                'status' => 1, // Use integer 1 as shown in CSV
+                'is_active' => 'true', // Use string 'true' to match CSV format
             ]
         );
 
@@ -747,8 +747,8 @@ $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_
                 ]),
                 'activated_at' => now(),
                 'expires_at' => $endDate,
-                'status' => '1', // Use string '1' instead of integer 1
-                'is_active' => true,
+                'status' => 1, // Use integer 1 as shown in CSV
+                'is_active' => 'true', // Use string 'true' to match CSV format
             ]
         );
 
