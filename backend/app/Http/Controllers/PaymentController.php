@@ -681,7 +681,12 @@ $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'payment_status' => 'completed',
-                'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
+                'payment_metadata' => json_encode([
+                    'payment_method' => $transaction->payment_method ?? 'mobile_money',
+                    'transaction_timestamp' => now()->toISOString(),
+                    'amount' => $transaction->amount,
+                    'currency' => $transaction->currency,
+                ]),
                 'activated_at' => now(),
                 'expires_at' => $endDate,
                 'status' => '1', // Use string '1' instead of integer 1
@@ -734,7 +739,12 @@ $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'payment_status' => 'completed',
-                'payment_metadata' => is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data,
+                'payment_metadata' => json_encode([
+                    'payment_method' => $transaction->payment_method ?? 'mobile_money',
+                    'transaction_timestamp' => now()->toISOString(),
+                    'amount' => $transaction->amount,
+                    'currency' => $transaction->currency,
+                ]),
                 'activated_at' => now(),
                 'expires_at' => $endDate,
                 'status' => '1', // Use string '1' instead of integer 1
