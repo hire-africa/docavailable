@@ -16,15 +16,17 @@ class PaymentController extends Controller
             Log::info('Payment webhook received', ['data' => $request->all()]);
             
             $data = $request->all();
-            $meta = $data['meta'] ?? [];
             
-            if (!isset($meta['user_id'])) {
+            // Parse meta data which comes as a JSON string
+            $meta = json_decode($data['meta'] ?? '{}', true);
+            
+            if (empty($meta['user_id'])) {
                 Log::error('Payment webhook missing user_id in meta', ['data' => $data]);
                 return response()->json(['error' => 'Missing user_id in meta data'], 400);
             }
             
             if ($data['status'] === 'success') {
-                return $this->processSuccessfulPayment($data);
+                return $this->processSuccessfulPayment($data, $meta);
             }
             
             return response()->json(['message' => 'Payment status not success'], 200);
@@ -37,19 +39,26 @@ class PaymentController extends Controller
         }
     }
 
-    protected function processSuccessfulPayment($data)
+    protected function processSuccessfulPayment($data, $meta)
     {
         try {
             DB::beginTransaction();
             
-            $userId = $data['meta']['user_id'];
+            $userId = $meta['user_id'];
+            $planId = $meta['plan_id'] ?? null;
             $amount = $data['amount'];
             $currency = $data['currency'];
             
-            // Find matching plan by amount and currency
-            $plan = Plan::where('price', $amount)
-                       ->where('currency', $currency)
-                       ->first();
+            // Find plan either by ID or by amount/currency
+            $plan = null;
+            if ($planId) {
+                $plan = Plan::find($planId);
+            }
+            if (!$plan) {
+                $plan = Plan::where('price', $amount)
+                          ->where('currency', $currency)
+                          ->first();
+            }
             
             $subscriptionData = [
                 'user_id' => $userId,
@@ -57,13 +66,18 @@ class PaymentController extends Controller
                 'start_date' => now(),
                 'end_date' => now()->addDays($plan ? $plan->duration : 30),
                 'payment_metadata' => [
-                    'transaction_id' => $data['transaction_id'],
+                    'transaction_id' => $data['tx_ref'],
                     'reference' => $data['reference'],
                     'amount' => $amount,
                     'currency' => $currency,
-                    'payment_method' => $data['payment_method'],
-                    'payment_channel' => $data['payment_channel'],
-                    'paid_at' => $data['paid_at']
+                    'payment_method' => $data['authorization']['channel'] ?? 'Mobile Money',
+                    'payment_channel' => $data['authorization']['mobile_money']['operator'] ?? 'Unknown',
+                    'paid_at' => $data['created_at'],
+                    'customer' => [
+                        'name' => $data['first_name'] . ' ' . $data['last_name'],
+                        'email' => $data['email'],
+                        'phone' => $data['customer']['phone'] ?? null
+                    ]
                 ]
             ];
             
@@ -76,6 +90,8 @@ class PaymentController extends Controller
                 $subscriptionData['voice_calls'] = $plan->voice_calls;
                 $subscriptionData['video_calls'] = $plan->video_calls;
             }
+            
+            Log::info('Creating subscription with data:', ['data' => $subscriptionData]);
             
             $subscription = Subscription::updateOrCreate(
                 ['user_id' => $userId, 'status' => 1],
@@ -93,7 +109,9 @@ class PaymentController extends Controller
             DB::rollBack();
             Log::error('Error processing payment', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'data' => $data,
+                'meta' => $meta
             ]);
             
             if (strpos($e->getMessage(), 'constraint') !== false) {
@@ -109,49 +127,36 @@ class PaymentController extends Controller
     public function testWebhook(Request $request)
     {
         try {
-            // Get table structure for debugging
-            $tableInfo = DB::select("
-                SELECT column_name, data_type, is_nullable, column_default
-                FROM information_schema.columns
-                WHERE table_name = 'subscriptions'
-                ORDER BY ordinal_position;
-            ");
-            
-            $constraints = DB::select("
-                SELECT tc.constraint_name, tc.constraint_type, 
-                       kcu.column_name, 
-                       ccu.table_name AS foreign_table_name,
-                       ccu.column_name AS foreign_column_name
-                FROM information_schema.table_constraints tc
-                JOIN information_schema.key_column_usage kcu
-                  ON tc.constraint_name = kcu.constraint_name
-                LEFT JOIN information_schema.constraint_column_usage ccu
-                  ON tc.constraint_name = ccu.constraint_name
-                WHERE tc.table_name = 'subscriptions';
-            ");
-            
-            // Log the structure info
-            Log::info('Subscriptions table structure:', [
-                'columns' => $tableInfo,
-                'constraints' => $constraints
-            ]);
-            
-            // Create test payment data
+            // Create test payment data in PayChangu format
             $testData = [
-                'transaction_id' => 'TEST_' . time(),
-                'reference' => 'TEST_' . time(),
-                'amount' => $request->input('amount', 100.00),
-                'currency' => $request->input('currency', 'MWK'),
-                'status' => 'success',
-                'phone_number' => '+265123456789',
-                'payment_method' => 'mobile_money',
-                'payment_channel' => 'Mobile Money',
-                'name' => 'Test User',
+                'event_type' => 'checkout.payment',
+                'first_name' => 'Test',
+                'last_name' => 'User',
                 'email' => 'test@example.com',
-                'paid_at' => now()->toDateTimeString(),
-                'meta' => [
-                    'user_id' => $request->input('user_id', 11)
-                ]
+                'currency' => $request->input('currency', 'MWK'),
+                'amount' => $request->input('amount', 100.00),
+                'status' => 'success',
+                'reference' => 'TEST_' . time(),
+                'tx_ref' => 'TEST_TX_' . time(),
+                'meta' => json_encode([
+                    'user_id' => $request->input('user_id', 11),
+                    'plan_id' => $request->input('plan_id')
+                ]),
+                'customer' => [
+                    'phone' => '+265123456789',
+                    'email' => 'test@example.com',
+                    'first_name' => 'Test',
+                    'last_name' => 'User'
+                ],
+                'authorization' => [
+                    'channel' => 'Mobile Money',
+                    'mobile_money' => [
+                        'operator' => 'Airtel Money',
+                        'mobile_number' => '+265123xxxx89'
+                    ]
+                ],
+                'created_at' => now()->toISOString(),
+                'updated_at' => now()->toISOString()
             ];
             
             return $this->webhook(new Request($testData));
