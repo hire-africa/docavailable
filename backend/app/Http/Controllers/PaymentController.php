@@ -230,55 +230,82 @@ if ($status === 'confirmed' || $status === 'completed') {
                         ->toArray()
                 ]);
                 
-                // Try to create the transaction if it doesn't exist (for testing)
-                if (config('app.debug')) {
-                    Log::info('Attempting to create missing transaction for testing', [
+                // Always try to create the transaction if it doesn't exist (for testing)
+                Log::info('Attempting to create missing transaction', [
+                    'reference' => $reference,
+                    'transaction_id' => $transactionId
+                ]);
+                
+                try {
+                    $paymentTransaction = PaymentTransaction::create([
+                        'transaction_id' => $transactionId,
                         'reference' => $reference,
-                        'transaction_id' => $transactionId
+                        'amount' => $amount,
+                        'currency' => $currency,
+                        'status' => $status,
+                        'phone_number' => $phoneNumber,
+                        'payment_method' => $paymentMethod,
+                        'gateway' => 'paychangu',
+                        'webhook_data' => $data
                     ]);
                     
-                    try {
-                        $paymentTransaction = PaymentTransaction::create([
-                            'transaction_id' => $transactionId,
-                            'reference' => $reference,
-                            'amount' => $amount,
-                            'currency' => $currency,
-                            'status' => $status,
-                            'phone_number' => $phoneNumber,
-                            'payment_method' => $paymentMethod,
-                            'gateway' => 'paychangu',
-                            'webhook_data' => $data
-                        ]);
-                        
-                        Log::info('Created missing transaction for testing', [
-                            'transaction_id' => $paymentTransaction->id,
-                            'reference' => $paymentTransaction->reference
-                        ]);
-                    } catch (\Exception $e) {
-                        Log::error('Failed to create missing transaction', [
-                            'error' => $e->getMessage(),
-                            'reference' => $reference,
-                            'transaction_id' => $transactionId
-                        ]);
-                        return response()->json(['error' => 'Transaction not found and could not be created'], 404);
+                    Log::info('Created missing transaction successfully', [
+                        'transaction_id' => $paymentTransaction->id,
+                        'reference' => $paymentTransaction->reference
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to create missing transaction', [
+                        'error' => $e->getMessage(),
+                        'reference' => $reference,
+                        'transaction_id' => $transactionId,
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    
+                    // Return a more specific error message
+                    if (str_contains($e->getMessage(), 'Duplicate entry')) {
+                        return response()->json(['error' => 'Transaction already exists with this ID'], 409);
+                    } elseif (str_contains($e->getMessage(), 'SQLSTATE')) {
+                        return response()->json(['error' => 'Database error creating transaction: ' . $e->getMessage()], 500);
+                    } else {
+                        return response()->json(['error' => 'Transaction not found and could not be created: ' . $e->getMessage()], 404);
                     }
-                } else {
-                return response()->json(['error' => 'Transaction not found'], 404);
                 }
             }
 
             // Update the transaction with webhook data
             // Note: webhook amount may be different from plan price due to fees
-            $paymentTransaction->update([
-                'transaction_id' => $transactionId,
-                'amount' => $amount, // This is the amount received after fees
-                'currency' => $currency,
-                'status' => $status,
-                'phone_number' => $phoneNumber,
-                'payment_method' => $paymentMethod,
-                'gateway' => 'paychangu',
-                'webhook_data' => $data
-            ]);
+            try {
+                $paymentTransaction->update([
+                    'transaction_id' => $transactionId,
+                    'amount' => $amount, // This is the amount received after fees
+                    'currency' => $currency,
+                    'status' => $status,
+                    'phone_number' => $phoneNumber,
+                    'payment_method' => $paymentMethod,
+                    'gateway' => 'paychangu',
+                    'webhook_data' => $data
+                ]);
+            } catch (\Exception $e) {
+                // Handle potential duplicate transaction_id
+                if (str_contains($e->getMessage(), 'Duplicate entry') || str_contains($e->getMessage(), 'transaction_id')) {
+                    Log::warning('Duplicate transaction_id detected, updating existing transaction', [
+                        'transaction_id' => $transactionId,
+                        'reference' => $reference
+                    ]);
+                    
+                    // Try to find existing transaction with this transaction_id
+                    $existingTransaction = PaymentTransaction::where('transaction_id', $transactionId)->first();
+                    if ($existingTransaction && $existingTransaction->id !== $paymentTransaction->id) {
+                        Log::info('Found existing transaction with same transaction_id, using that instead', [
+                            'existing_id' => $existingTransaction->id,
+                            'current_id' => $paymentTransaction->id
+                        ]);
+                        $paymentTransaction = $existingTransaction;
+                    }
+                } else {
+                    throw $e;
+                }
+            }
 
             // Process based on status
             if ($status === 'success') {
@@ -298,8 +325,20 @@ if ($status === 'confirmed' || $status === 'completed') {
             Log::error('Paychangu webhook processing failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'data' => $request->all()
+                'data' => $request->all(),
+                'transaction_id' => $transactionId ?? 'unknown',
+                'reference' => $reference ?? 'unknown'
             ]);
+
+            // Check if it's a database constraint violation
+            if (str_contains($e->getMessage(), 'SQLSTATE') || str_contains($e->getMessage(), 'constraint')) {
+                Log::error('Database constraint violation detected', [
+                    'error' => $e->getMessage(),
+                    'transaction_id' => $transactionId ?? 'unknown',
+                    'reference' => $reference ?? 'unknown'
+                ]);
+                return response()->json(['error' => 'Database constraint violation - check subscription table structure'], 500);
+            }
 
             return response()->json(['error' => 'Webhook processing failed'], 500);
         }
@@ -575,7 +614,10 @@ if ($status === 'confirmed' || $status === 'completed') {
             Log::error('Failed to process successful payment', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'transaction_id' => $transaction->transaction_id
+                'transaction_id' => $transaction->transaction_id,
+                'webhook_data' => $transaction->webhook_data,
+                'user_id' => $userId ?? 'unknown',
+                'plan_id' => $planId ?? 'unknown'
             ]);
             throw $e;
         }
@@ -599,7 +641,7 @@ if ($status === 'confirmed' || $status === 'completed') {
     /**
      * Update user subscription based on payment
      */
-    private function updateUserSubscription(User $user, PaymentTransaction $transaction)
+    private function updateUserSubscription(User $user, PaymentTransaction $transaction): void
     {
         // Define subscription plans based on payment amounts
         $plans = [
@@ -632,6 +674,7 @@ if ($status === 'confirmed' || $status === 'completed') {
                 'text_sessions_remaining' => $plan['text_sessions'],
                 'voice_calls_remaining' => $plan['voice_calls'],
                 'video_calls_remaining' => $plan['video_calls'],
+                'appointments_remaining' => 0, // Add missing field
                 'total_text_sessions' => $plan['text_sessions'],
                 'total_voice_calls' => $plan['voice_calls'],
                 'total_video_calls' => $plan['video_calls'],
@@ -684,6 +727,7 @@ if ($status === 'confirmed' || $status === 'completed') {
                 'text_sessions_remaining' => $plan->text_sessions ?? 0,
                 'voice_calls_remaining' => $plan->voice_calls ?? 0,
                 'video_calls_remaining' => $plan->video_calls ?? 0,
+                'appointments_remaining' => 0, // Add missing field
                 'total_text_sessions' => $plan->text_sessions ?? 0,
                 'total_voice_calls' => $plan->voice_calls ?? 0,
                 'total_video_calls' => $plan->video_calls ?? 0,
