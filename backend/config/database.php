@@ -84,7 +84,7 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL'),
+            // Do not use DB_URL here to avoid passing unsupported 'options' string into connector
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -99,19 +99,19 @@ return [
 
         'pgsql_simple' => [
             'driver' => 'pgsql',
+            // Do not use DB_URL here; CustomDatabaseServiceProvider will handle DSN if enabled
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
             'username' => env('DB_USERNAME', 'root'),
             'password' => env('DB_PASSWORD', ''),
-            'charset' => 'utf8',
+            'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => 'require',
-            'options' => [
-                'endpoint' => 'ep-hidden-brook-aemmopjb',
-            ],
+            'sslmode' => env('DB_SSLMODE', 'require'),
+            // options must be array; when using Neon, pass options via DB_URL (e.g., options=endpoint%3D<id>)
+            'options' => [],
         ],
 
         'sqlsrv' => [

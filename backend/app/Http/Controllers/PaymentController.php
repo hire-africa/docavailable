@@ -196,7 +196,18 @@ class PaymentController extends Controller
         // Handle PayChangu specific status mapping - do this immediately
         if ($status === 'confirmed' || $status === 'completed' || $status === 'success') {
             $status = 'completed'; // Use 'completed' instead of 'success' for database compatibility
-}
+        }
+        
+        Log::info('Extracted webhook data', [
+            'transaction_id' => $transactionId,
+            'reference' => $reference,
+            'amount' => $amount,
+            'status' => $status,
+            'phone_number' => $phoneNumber,
+            'payment_method' => $paymentMethod,
+            'raw_data' => $data
+        ]);
+
             Log::info('Extracted webhook data', [
                 'transaction_id' => $transactionId,
                 'reference' => $reference,
@@ -663,6 +674,11 @@ class PaymentController extends Controller
         $amount = $transaction->amount;
         $plan = $plans[$amount] ?? null;
 
+        // Try to resolve an actual Plan record by amount (and currency if available)
+        $resolvedPlan = \App\Models\Plan::where('price', (int) $amount)
+            ->when($transaction->currency, fn($q) => $q->where('currency', $transaction->currency))
+            ->first();
+
         if (!$plan) {
             Log::error('Unknown payment amount for subscription', [
                 'amount' => $amount,
@@ -681,6 +697,11 @@ class PaymentController extends Controller
             [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
+                // Include plan linkage/details when known
+                'plan_id' => $resolvedPlan?->id,
+                'plan_name' => $resolvedPlan?->name,
+                'plan_price' => $resolvedPlan->price ?? (int) $amount,
+                'plan_currency' => $resolvedPlan->currency ?? ($transaction->currency ?? 'USD'),
                 'text_sessions_remaining' => $plan['text_sessions'],
                 'voice_calls_remaining' => $plan['voice_calls'],
                 'video_calls_remaining' => $plan['video_calls'],
@@ -691,16 +712,17 @@ class PaymentController extends Controller
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'payment_status' => 'completed',
-                'payment_metadata' => json_encode([
+                // Store as array; model casts will encode JSON as needed
+                'payment_metadata' => [
                     'payment_method' => $transaction->payment_method ?? 'mobile_money',
                     'transaction_timestamp' => now()->toISOString(),
                     'amount' => $transaction->amount,
                     'currency' => $transaction->currency,
-                ]),
+                ],
                 'activated_at' => now(),
                 'expires_at' => $endDate,
                 'status' => 1, // Use integer 1 as shown in CSV
-                'is_active' => 'true', // Use string 'true' to match CSV format
+                'is_active' => true,
             ]
         );
 
@@ -749,16 +771,16 @@ class PaymentController extends Controller
                 'payment_transaction_id' => $transaction->transaction_id,
                 'payment_gateway' => 'paychangu',
                 'payment_status' => 'completed',
-                'payment_metadata' => json_encode([
+                'payment_metadata' => [
                     'payment_method' => $transaction->payment_method ?? 'mobile_money',
                     'transaction_timestamp' => now()->toISOString(),
                     'amount' => $transaction->amount,
                     'currency' => $transaction->currency,
-                ]),
+                ],
                 'activated_at' => now(),
                 'expires_at' => $endDate,
                 'status' => 1, // Use integer 1 as shown in CSV
-                'is_active' => 'true', // Use string 'true' to match CSV format
+                'is_active' => true,
             ]
         );
 

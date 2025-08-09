@@ -28,7 +28,8 @@ class SubscriptionFactory extends Factory
             'end_date' => $endDate,
             'plan_id' => Plan::factory(),
             'user_id' => User::factory(),
-            'status' => $this->faker->randomElement(['active', 'expired', 'cancelled']),
+            // Column is integer in DB; use numeric status codes (1 active, 2 expired, 0 inactive)
+            'status' => $this->faker->randomElement([1, 2, 0]),
             'text_sessions_remaining' => $this->faker->numberBetween(0, 10),
             'appointments_remaining' => $this->faker->numberBetween(0, 20),
         ];

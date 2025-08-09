@@ -32,6 +32,27 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_plan_id ON subscriptions(plan_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_is_active ON subscriptions(is_active);
 
+-- Ensure plan_id allows NULL (webhook amount-mapped subscriptions may not have a plan record)
+ALTER TABLE subscriptions ALTER COLUMN plan_id DROP NOT NULL;
+
+-- Align id column types to bigint (optional but recommended for consistency with users/plans)
+DO $$
+BEGIN
+  -- Safely attempt to cast plan_id to bigint
+  BEGIN
+    ALTER TABLE subscriptions ALTER COLUMN plan_id TYPE bigint USING plan_id::bigint;
+  EXCEPTION WHEN others THEN
+    -- ignore if already bigint or casting fails
+    NULL;
+  END;
+  -- Safely attempt to cast user_id to bigint
+  BEGIN
+    ALTER TABLE subscriptions ALTER COLUMN user_id TYPE bigint USING user_id::bigint;
+  EXCEPTION WHEN others THEN
+    NULL;
+  END;
+END$$;
+
 -- Verify the changes
 SELECT 
     column_name, 
