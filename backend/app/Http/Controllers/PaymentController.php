@@ -185,13 +185,13 @@ class PaymentController extends Controller
             $data = $request->all();
             
         // Extract payment information from PayChangu webhook
-$transactionId = $data['transaction_id'] ?? $data['payment_reference'] ?? null;
-$reference = $data['reference'] ?? $data['tx_ref'] ?? null;
-$amount = $data['amount'] ?? $data['amount_received'] ?? 0;
-$currency = $data['currency'] ?? 'MWK';
-$status = $data['status'] ?? 'pending';
-$phoneNumber = $data['phone_number'] ?? null;
-$paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
+        $transactionId = $data['tx_ref'] ?? $data['transaction_id'] ?? $data['payment_reference'] ?? null;
+        $reference = $data['reference'] ?? $data['tx_ref'] ?? null;
+        $amount = $data['amount'] ?? $data['amount_received'] ?? 0;
+        $currency = $data['currency'] ?? 'MWK';
+        $status = $data['status'] ?? 'pending';
+        $phoneNumber = $data['customer']['phone'] ?? $data['phone_number'] ?? null;
+        $paymentMethod = $data['authorization']['channel'] ?? $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
 
         // Handle PayChangu specific status mapping - do this immediately
         if ($status === 'confirmed' || $status === 'completed' || $status === 'success') {
@@ -555,17 +555,27 @@ $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_
             // Try to extract metadata from webhook data
             $webhookData = is_string($transaction->webhook_data) ? json_decode($transaction->webhook_data, true) : $transaction->webhook_data;
             
+            // Parse meta field if it's a JSON string
+            $meta = null;
+            if (isset($webhookData['meta'])) {
+                if (is_string($webhookData['meta'])) {
+                    $meta = json_decode($webhookData['meta'], true);
+                } else {
+                    $meta = $webhookData['meta'];
+                }
+            }
+            
             // Look for user_id and plan_id in various possible locations
-            $userId = $webhookData['meta']['user_id'] ?? 
+            $userId = $meta['user_id'] ?? 
+                     $webhookData['meta']['user_id'] ?? 
                      $webhookData['user_id'] ?? 
                      $webhookData['metadata']['user_id'] ?? 
-                     $webhookData['meta']['user_id'] ?? 
                      null;
             
-            $planId = $webhookData['meta']['plan_id'] ?? 
+            $planId = $meta['plan_id'] ?? 
+                     $webhookData['meta']['plan_id'] ?? 
                      $webhookData['plan_id'] ?? 
                      $webhookData['metadata']['plan_id'] ?? 
-                     $webhookData['meta']['plan_id'] ?? 
                      null;
 
             Log::info('Extracted payment metadata', [
