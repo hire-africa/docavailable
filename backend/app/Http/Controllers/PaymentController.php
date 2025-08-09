@@ -184,20 +184,19 @@ class PaymentController extends Controller
 
             $data = $request->all();
             
-            // Extract payment information from PayChangu webhook
-            $transactionId = $data['transaction_id'] ?? $data['payment_reference'] ?? null;
-            $reference = $data['reference'] ?? $data['tx_ref'] ?? null;
-            $amount = $data['amount'] ?? $data['amount_received'] ?? 0;
-            $currency = $data['currency'] ?? 'MWK';
-            $status = $data['status'] ?? 'pending';
-            $phoneNumber = $data['phone_number'] ?? null;
-            $paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
+        // Extract payment information from PayChangu webhook
+$transactionId = $data['transaction_id'] ?? $data['payment_reference'] ?? null;
+$reference = $data['reference'] ?? $data['tx_ref'] ?? null;
+$amount = $data['amount'] ?? $data['amount_received'] ?? 0;
+$currency = $data['currency'] ?? 'MWK';
+$status = $data['status'] ?? 'pending';
+$phoneNumber = $data['phone_number'] ?? null;
+$paymentMethod = $data['payment_method'] ?? $data['payment_channel'] ?? 'mobile_money';
 
-            // Handle PayChangu specific status mapping
-            if ($status === 'confirmed' || $status === 'completed') {
-                $status = 'success';
-            }
-
+// Handle PayChangu specific status mapping
+if ($status === 'confirmed' || $status === 'completed') {
+    $status = 'success';
+}
             Log::info('Extracted webhook data', [
                 'transaction_id' => $transactionId,
                 'reference' => $reference,
