@@ -67,8 +67,8 @@ if (!Schema::hasColumn('users', 'status')) {
 echo "Seeding database..."
 php artisan db:seed --force
 
-# Start the application with Apache
-echo "Starting Laravel application with Apache..."
+# Start the application with PHP built-in server
+echo "Starting Laravel application with PHP built-in server..."
 
-# Start Apache in foreground
-apache2-foreground 
+# Start PHP built-in server
+php -S 0.0.0.0:8000 -t public public/index.php 
