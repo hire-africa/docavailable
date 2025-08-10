@@ -81,4 +81,5 @@ fi
 
 # Start PHP built-in server with router.php
 echo "Starting server with router.php..."
-php -S 0.0.0.0:8000 -t public public/router.php 
+echo "Using PORT: $PORT"
+php -S 0.0.0.0:$PORT -t public public/router.php 
