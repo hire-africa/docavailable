@@ -82,4 +82,7 @@ fi
 # Start PHP built-in server with router.php
 echo "Starting server with router.php..."
 echo "Using PORT: $PORT"
+echo "Current directory: $(pwd)"
+echo "Files in public directory:"
+ls -la public/
 php -S 0.0.0.0:$PORT -t public public/router.php 
