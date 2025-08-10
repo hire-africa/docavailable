@@ -70,5 +70,15 @@ php artisan db:seed --force
 # Start the application with PHP built-in server
 echo "Starting Laravel application with PHP built-in server..."
 
-# Start PHP built-in server with router
-php -S 0.0.0.0:8000 -t public public/router.php 
+# Check if index.php exists
+if [ ! -f "public/index.php" ]; then
+    echo "ERROR: public/index.php not found!"
+    echo "Current directory: $(pwd)"
+    echo "Files in public directory:"
+    ls -la public/
+    exit 1
+fi
+
+# Start PHP built-in server with index.php (standard Laravel entry point)
+echo "Starting server with index.php..."
+php -S 0.0.0.0:8000 -t public public/index.php 

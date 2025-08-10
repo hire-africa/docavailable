@@ -59,6 +59,14 @@ RUN php artisan storage:link || echo "Storage link already exists"
 COPY backend/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
+# Debug: Check what files were copied
+RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
+RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public
+RUN echo "=== Debug: Checking for key Laravel files ===" && \
+    echo "artisan exists: $(test -f artisan && echo 'YES' || echo 'NO')" && \
+    echo "index.php exists: $(test -f public/index.php && echo 'YES' || echo 'NO')" && \
+    echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
+
 # Expose port 8000
 EXPOSE 8000
 

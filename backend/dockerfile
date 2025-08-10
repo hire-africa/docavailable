@@ -24,15 +24,22 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy application first
+# Copy composer files first for better caching
+COPY composer.json composer.lock ./
+
+# Install dependencies
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Copy the entire Laravel application
 COPY . .
 
 # Debug: Check what files were copied
 RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
-RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public || echo "public directory not found"
-
-# Install dependencies (now artisan file exists)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public
+RUN echo "=== Debug: Checking for key Laravel files ===" && \
+    echo "artisan exists: $(test -f artisan && echo 'YES' || echo 'NO')" && \
+    echo "index.php exists: $(test -f public/index.php && echo 'YES' || echo 'NO')" && \
+    echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www \

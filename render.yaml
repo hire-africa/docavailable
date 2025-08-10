@@ -16,7 +16,7 @@ services:
       php artisan view:clear
       php artisan migrate --force
       php artisan db:seed --force
-      php -S 0.0.0.0:$PORT -t public public/router.php
+      php -S 0.0.0.0:$PORT -t public public/index.php
     rootDir: backend
     envVars:
       - key: APP_NAME
