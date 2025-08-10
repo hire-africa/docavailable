@@ -67,6 +67,14 @@ if (!Schema::hasColumn('users', 'status')) {
 echo "Seeding database..."
 php artisan db:seed --force
 
-# Start the application
-echo "Starting Laravel application..."
-php artisan serve --host=0.0.0.0 --port=8000 
+# Start the application with nginx and php-fpm
+echo "Starting Laravel application with nginx and php-fpm..."
+
+# Start PHP-FPM
+php-fpm -D
+
+# Copy nginx configuration
+cp /usr/local/bin/nginx.conf /etc/nginx/sites-available/default
+
+# Start nginx
+nginx -g "daemon off;" 

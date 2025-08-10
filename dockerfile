@@ -76,8 +76,9 @@ RUN mkdir -p public \
     && chmod -R 755 public \
     && chown -R www-data:www-data public
 
-# Copy startup script
-COPY scripts/start.sh /usr/local/bin/start.sh
+# Copy startup script and nginx config
+COPY backend/start.sh /usr/local/bin/start.sh
+COPY backend/nginx.conf /usr/local/bin/nginx.conf
 RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000
