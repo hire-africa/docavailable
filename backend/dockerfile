@@ -30,6 +30,12 @@ COPY . .
 # Force cache bust with timestamp
 RUN echo "BUILD_TIMESTAMP_$(date +%s)" > .build_timestamp
 
+# Update composer lock file first to match composer.json
+RUN echo "=== Updating composer lock file ===" && \
+    composer update --no-interaction --prefer-dist --no-progress || \
+    (echo "=== Lock update failed, trying with memory limit ===" && \
+     COMPOSER_MEMORY_LIMIT=-1 composer update --no-interaction --prefer-dist --no-progress)
+
 # Install dependencies with more debugging and fallback options
 RUN echo "=== Starting composer install ===" && \
     echo "=== PHP version: $(php -v)" && \
