@@ -99,7 +99,6 @@ return [
 
         'pgsql_simple' => [
             'driver' => 'pgsql',
-            // Do not use DB_URL here; CustomDatabaseServiceProvider will handle DSN if enabled
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '5432'),
             'database' => env('DB_DATABASE', 'laravel'),
@@ -110,8 +109,12 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'require'),
-            // options must be array; when using Neon, pass options via DB_URL (e.g., options=endpoint%3D<id>)
-            'options' => [],
+            // Add the endpoint as an array to avoid Laravel 12 bug
+            'options' => [
+                'endpoint' => 'ep-hidden-brook-aemmopjb-pooler'
+            ],
+            // Use custom connector for Neon
+            'connector' => \App\Connectors\NeonPostgresConnector::class,
         ],
 
         'sqlsrv' => [

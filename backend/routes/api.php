@@ -29,40 +29,75 @@ use Illuminate\Support\Facades\DB;
 
 // Health check endpoint
 Route::get('/health', function () {
+    $health = [
+        'status' => 'ok',
+        'timestamp' => now()->toISOString(),
+        'message' => 'Backend is running',
+        'services' => []
+    ];
+
+    // Test database connection
     try {
-        // Test database connection
-        $dbStatus = 'ok';
-        $dbDriver = config('database.default');
-        $dbConnection = null;
-        $error = null;
-
-        try {
-            $dbConnection = DB::connection()->getPdo();
-        } catch (\Exception $e) {
-            $dbStatus = 'error';
-            $error = $e->getMessage();
-        }
-
-        return response()->json([
+        $dbConnection = DB::connection()->getPdo();
+        $health['services']['database'] = [
             'status' => 'ok',
-            'timestamp' => now()->toISOString(),
-            'message' => 'Backend is running',
-            'database' => [
-                'status' => $dbStatus,
-                'driver' => $dbDriver,
-                'connected' => $dbConnection !== null,
-                'name' => $dbConnection ? DB::connection()->getDatabaseName() : null,
-                'error' => $error
-            ]
-        ]);
+            'driver' => config('database.default'),
+            'connected' => true,
+            'name' => DB::connection()->getDatabaseName(),
+            'host' => config('database.connections.' . config('database.default') . '.host'),
+            'connection_name' => DB::connection()->getName()
+        ];
     } catch (\Exception $e) {
-        return response()->json([
+        $health['services']['database'] = [
             'status' => 'error',
-            'timestamp' => now()->toISOString(),
-            'message' => 'Error checking health',
-            'error' => $e->getMessage()
-        ], 500);
+            'driver' => config('database.default'),
+            'connected' => false,
+            'error' => $e->getMessage(),
+            'host' => config('database.connections.' . config('database.default') . '.host'),
+            'connection_name' => config('database.default')
+        ];
+        $health['status'] = 'error';
     }
+
+    // Test JWT configuration
+    try {
+        $user = \App\Models\User::first();
+        if ($user) {
+            $token = auth('api')->login($user);
+            $health['services']['jwt'] = [
+                'status' => 'ok',
+                'secret_configured' => !empty(config('jwt.secret')),
+                'token_generated' => !empty($token),
+                'token_length' => strlen($token)
+            ];
+        } else {
+            $health['services']['jwt'] = [
+                'status' => 'warning',
+                'message' => 'No users found in database',
+                'secret_configured' => !empty(config('jwt.secret'))
+            ];
+        }
+    } catch (\Exception $e) {
+        $health['services']['jwt'] = [
+            'status' => 'error',
+            'error' => $e->getMessage(),
+            'secret_configured' => !empty(config('jwt.secret'))
+        ];
+        $health['status'] = 'error';
+    }
+
+    // Test environment configuration
+    $health['services']['environment'] = [
+        'status' => 'ok',
+        'app_env' => config('app.env'),
+        'app_debug' => config('app.debug'),
+        'db_connection' => config('database.default'),
+        'db_host' => env('DB_HOST'),
+        'db_url_set' => !empty(env('DB_URL')),
+        'jwt_secret_set' => !empty(env('JWT_SECRET'))
+    ];
+
+    return response()->json($health, $health['status'] === 'ok' ? 200 : 500);
 });
 
 // Debug endpoint for testing chat
