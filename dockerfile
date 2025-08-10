@@ -44,8 +44,18 @@ RUN echo "=== Debug: Composer files ===" && \
     echo "composer.lock exists: $(test -f composer.lock && echo 'YES' || echo 'NO')" && \
     echo "composer.json content:" && head -20 composer.json || echo "composer.json not found"
 
-# Install dependencies (now artisan file exists)
-RUN composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress || (echo "Composer install failed, trying with verbose output:" && composer install --optimize-autoloader --no-interaction --prefer-dist -vvv)
+# Install dependencies with more debugging and fallback options
+RUN echo "=== Starting composer install ===" && \
+    echo "=== PHP version: $(php -v)" && \
+    echo "=== Composer version: $(composer --version)" && \
+    echo "=== Available memory: $(free -h || echo 'free command not available')" && \
+    composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress --no-dev || \
+    (echo "=== First attempt failed, trying without --no-dev ===" && \
+     composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress) || \
+    (echo "=== Second attempt failed, trying with verbose output ===" && \
+     composer install --optimize-autoloader --no-interaction --prefer-dist -vvv) || \
+    (echo "=== All attempts failed, trying with memory limit ===" && \
+     COMPOSER_MEMORY_LIMIT=-1 composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress)
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www \
