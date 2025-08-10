@@ -79,6 +79,6 @@ if [ ! -f "public/index.php" ]; then
     exit 1
 fi
 
-# Start PHP built-in server with index.php (standard Laravel entry point)
-echo "Starting server with index.php..."
-php -S 0.0.0.0:8000 -t public public/index.php 
+# Start PHP built-in server with router.php
+echo "Starting server with router.php..."
+php -S 0.0.0.0:8000 -t public public/router.php 
