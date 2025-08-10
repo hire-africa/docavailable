@@ -28,7 +28,7 @@ WORKDIR /var/www
 COPY . .
 
 # Install dependencies (now artisan file exists)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --optimize-autoloader --no-interaction
 
 # Debug: Check what files were copied
 RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www

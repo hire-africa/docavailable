@@ -39,7 +39,7 @@ RUN echo "=== Debug: Checking for key Laravel files ===" && \
     echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
 
 # Install dependencies (now artisan file exists)
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+RUN composer install --optimize-autoloader --no-interaction
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www \
