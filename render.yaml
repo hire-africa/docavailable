@@ -4,7 +4,7 @@ services:
     env: php
     buildCommand: |
       # Force fresh build by updating timestamp
-      echo "=== Build timestamp: $(date) - Auto-deploy test ==="
+      echo "=== Build timestamp: $(date) - PHP environment test ==="
       echo "=== CACHE BUSTER: $(date +%s) ==="
       cd backend
       echo "=== Debug: Current directory ===" && pwd
