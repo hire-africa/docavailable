@@ -2,6 +2,9 @@ services:
   - type: web
     name: docavailable-backend
     env: php
+    buildFilter:
+      paths:
+        - backend/**
     buildCommand: |
       # Force fresh build by updating timestamp
       echo "=== Build timestamp: $(date) - PHP environment test ==="
