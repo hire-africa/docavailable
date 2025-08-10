@@ -177,6 +177,7 @@ class PaymentController extends Controller
             
             // Create transaction record
             $transaction = \App\Models\PaymentTransaction::create([
+                'transaction_id' => 'TXN_' . time() . '_' . $user->id,
                 'user_id' => $user->id,
                 'amount' => $amount,
                 'currency' => $currency,
