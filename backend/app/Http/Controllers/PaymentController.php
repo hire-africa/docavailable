@@ -203,11 +203,11 @@ class PaymentController extends Controller
                 'tx_ref' => $transaction->reference,
                 'callback_url' => config('services.paychangu.callback_url'),
                 'return_url' => config('services.paychangu.return_url'),
-                'meta' => json_encode([
+                'meta' => [
                     'user_id' => $user->id,
                     'plan_id' => $plan->id,
                     'transaction_id' => $transaction->id
-                ])
+                ]
             ];
             
             // Initialize PayChangu service
