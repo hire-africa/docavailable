@@ -38,8 +38,14 @@ RUN echo "=== Debug: Checking for key Laravel files ===" && \
     echo "index.php exists: $(test -f public/index.php && echo 'YES' || echo 'NO')" && \
     echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
 
+# Debug: Check composer files
+RUN echo "=== Debug: Composer files ===" && \
+    echo "composer.json exists: $(test -f composer.json && echo 'YES' || echo 'NO')" && \
+    echo "composer.lock exists: $(test -f composer.lock && echo 'YES' || echo 'NO')" && \
+    echo "composer.json content:" && head -20 composer.json || echo "composer.json not found"
+
 # Install dependencies (now artisan file exists)
-RUN composer install --optimize-autoloader --no-interaction
+RUN composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress || (echo "Composer install failed, trying with verbose output:" && composer install --optimize-autoloader --no-interaction --prefer-dist -vvv)
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www \
