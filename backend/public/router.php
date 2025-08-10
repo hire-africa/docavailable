@@ -15,11 +15,14 @@ if (!file_exists($indexPath)) {
     exit;
 }
 
-// Serve static files directly (but not PHP files)
-if ($uri !== '/' && file_exists(__DIR__ . $uri) && !preg_match('/\.php$/', $uri)) {
+// Only serve specific static file types directly
+$allowedStaticExtensions = ['css', 'js', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'eot'];
+$extension = pathinfo($uri, PATHINFO_EXTENSION);
+
+if ($uri !== '/' && file_exists(__DIR__ . $uri) && in_array(strtolower($extension), $allowedStaticExtensions)) {
     return false;
 }
 
-// Route everything else to index.php
+// Route everything else to index.php (including all PHP files and API routes)
 error_log("Routing to index.php");
 require_once $indexPath;
