@@ -13,9 +13,13 @@ services:
       rm -f database/seeders/Plan.php
       rm -f app/Http/Controllers/Auth/AuthenticationController_fixed.php
       
+      # Clear composer cache and install dependencies
+      echo "=== Clearing composer cache ==="
+      composer clear-cache
+      
       # Install dependencies with optimized autoloader
       echo "=== Installing dependencies ==="
-      composer install --optimize-autoloader --no-interaction
+      composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress
       
       # Regenerate autoloader to ensure all classes are properly mapped
       echo "=== Regenerating autoloader ==="
