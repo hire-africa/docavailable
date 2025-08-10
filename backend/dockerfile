@@ -56,7 +56,7 @@ RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 RUN php artisan storage:link || echo "Storage link already exists"
 
 # Copy startup script
-COPY backend/start.sh /usr/local/bin/start.sh
+COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000
