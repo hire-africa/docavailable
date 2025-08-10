@@ -1,16 +1,23 @@
 services:
   - type: web
     name: docavailable-backend
-    env: docker
+    env: php
     buildCommand: |
-      # Clear any cached config
+      cd backend
+      composer install --no-dev --optimize-autoloader --no-interaction
+      php artisan key:generate --force
+      php artisan jwt:secret --force
+      php artisan storage:link
+    startCommand: |
+      cd backend
       php artisan config:clear
       php artisan cache:clear
       php artisan route:clear
       php artisan view:clear
-    startCommand: /usr/local/bin/start.sh
+      php artisan migrate --force
+      php artisan db:seed --force
+      php -S 0.0.0.0:$PORT -t public public/index.php
     rootDir: backend
-    dockerfilePath: ../dockerfile
     envVars:
       - key: APP_NAME
         value: DocAvailable
