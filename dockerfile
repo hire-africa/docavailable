@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for DocAvailable
 # Stage 1: Backend (Laravel) - Main service
-FROM php:8.2-fpm as backend
+FROM php:8.2-apache as backend
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     supervisor \
-    nginx \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -77,6 +76,11 @@ RUN php artisan storage:link || echo "Storage link already exists"
 RUN mkdir -p public \
     && chmod -R 755 public \
     && chown -R www-data:www-data public
+
+# Configure Apache
+RUN a2enmod rewrite
+RUN a2enmod headers
+COPY backend/apache.conf /etc/apache2/sites-available/000-default.conf
 
 # Copy startup script
 COPY backend/start.sh /usr/local/bin/start.sh
