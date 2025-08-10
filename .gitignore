@@ -136,7 +136,8 @@ dist
 
 # Gatsby files
 .cache/
-public
+# Don't exclude backend public directory - it contains Laravel index.php
+# public
 
 # Storybook build outputs
 .out

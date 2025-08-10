@@ -1,7 +1,6 @@
 <?php
 
-// Debug script to check production server configuration
-echo "🔍 Debugging Production Server Configuration...\n\n";
+echo "🔍 Debugging Production Webhook...\n\n";
 
 $webhookData = [
     'event_type' => 'checkout.payment',
@@ -30,21 +29,10 @@ $webhookData = [
     'created_at' => date('Y-m-d\TH:i:s.000000\Z')
 ];
 
-// First, let's test a simple endpoint to see if the server is responding
-echo "Testing server response...\n";
-$ch = curl_init('https://docavailable-1.onrender.com/api/payments/status');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+echo "Sending webhook data:\n";
+print_r($webhookData);
+echo "\n";
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-echo "Status endpoint HTTP Code: $httpCode\n";
-echo "Status Response: " . $response . "\n\n";
-
-// Now test the webhook with more detailed error logging
-echo "Testing webhook with detailed logging...\n";
 $ch = curl_init('https://docavailable-1.onrender.com/api/payments/webhook');
 curl_setopt($ch, CURLOPT_POST, 1);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($webhookData));
@@ -60,10 +48,13 @@ $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
 curl_close($ch);
 
-echo "Webhook HTTP Code: $httpCode\n";
+echo "HTTP Status Code: $httpCode\n";
 if ($curlError) {
     echo "Curl Error: $curlError\n";
 }
-echo "Webhook Response:\n";
+echo "Raw Response:\n";
+echo $response . "\n\n";
+
 $responseData = json_decode($response, true);
+echo "Parsed Response:\n";
 print_r($responseData);

@@ -7,21 +7,49 @@ services:
       echo "=== Debug: Current directory ===" && pwd
       echo "=== Debug: Files in current directory ===" && ls -la
       echo "=== Debug: Files in public directory ===" && ls -la public/
-      composer install --no-dev --optimize-autoloader --no-interaction
+      
+      # Remove problematic files that cause autoloader issues
+      echo "=== Cleaning up autoloader issues ==="
+      rm -f database/seeders/Plan.php
+      rm -f app/Http/Controllers/Auth/AuthenticationController_fixed.php
+      
+      # Install dependencies with optimized autoloader
+      echo "=== Installing dependencies ==="
+      composer install --optimize-autoloader --no-interaction
+      
+      # Regenerate autoloader to ensure all classes are properly mapped
+      echo "=== Regenerating autoloader ==="
+      composer dump-autoload --optimize
+      
+      # Generate application keys
       php artisan key:generate --force
       php artisan jwt:secret --force
       php artisan storage:link
+      
+      # Clear all caches to ensure clean state
+      echo "=== Clearing caches ==="
+      php artisan config:clear
+      php artisan cache:clear
+      php artisan route:clear
+      php artisan view:clear
+      
+      echo "=== Build completed successfully ==="
     startCommand: |
       cd backend
       echo "=== Debug: Starting application ==="
       echo "=== Debug: Current directory ===" && pwd
       echo "=== Debug: Files in public directory ===" && ls -la public/
+      
+      # Final cache clear before starting
       php artisan config:clear
       php artisan cache:clear
       php artisan route:clear
       php artisan view:clear
+      
+      # Run migrations and seeders
       php artisan migrate --force
       php artisan db:seed --force
+      
       echo "=== Debug: Starting PHP server with router.php ==="
       php -S 0.0.0.0:$PORT -t public public/router.php
     rootDir: backend
