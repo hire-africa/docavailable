@@ -148,36 +148,44 @@ class PaymentController extends Controller
         try {
             Log::info('Payment initiation request received', ['data' => $request->all()]);
             
+            // Get authenticated user
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
             // Validate required fields
             $request->validate([
-                'amount' => 'required|numeric|min:0',
-                'currency' => 'required|string|size:3',
-                'email' => 'required|email',
-                'first_name' => 'required|string',
-                'last_name' => 'required|string',
-                'phone' => 'required|string',
-                'user_id' => 'required|integer|exists:users,id',
-                'plan_id' => 'nullable|integer|exists:plans,id'
+                'plan_id' => 'required|integer|exists:plans,id'
             ]);
             
-            // Get user and plan
-            $user = \App\Models\User::findOrFail($request->user_id);
-            $plan = null;
-            if ($request->plan_id) {
-                $plan = \App\Models\Plan::findOrFail($request->plan_id);
-            }
+            // Get plan
+            $plan = \App\Models\Plan::findOrFail($request->plan_id);
+            
+            // Use plan data for payment
+            $amount = $plan->price;
+            $currency = $plan->currency ?? 'MWK';
+            
+            // Get user data from authenticated user
+            $email = $user->email;
+            $firstName = $user->first_name ?? explode(' ', $user->display_name ?? $user->name ?? 'User')[0];
+            $lastName = $user->last_name ?? (count(explode(' ', $user->display_name ?? $user->name ?? 'User')) > 1 ? explode(' ', $user->display_name ?? $user->name ?? 'User')[1] : 'User');
+            $phone = $user->phone ?? '+265000000000'; // Default phone if not set
             
             // Create transaction record
             $transaction = \App\Models\PaymentTransaction::create([
                 'user_id' => $user->id,
-                'amount' => $request->amount,
-                'currency' => $request->currency,
+                'amount' => $amount,
+                'currency' => $currency,
                 'gateway' => 'paychangu',
                 'status' => 'pending',
                 'reference' => 'TXN_' . time() . '_' . $user->id,
                 'metadata' => [
-                    'plan_id' => $request->plan_id,
-                    'plan_name' => $plan ? $plan->name : null,
+                    'plan_id' => $plan->id,
+                    'plan_name' => $plan->name,
                     'user_email' => $user->email,
                     'user_name' => $user->display_name
                 ]
@@ -185,18 +193,18 @@ class PaymentController extends Controller
             
             // Prepare PayChangu payload
             $payload = [
-                'amount' => $request->amount,
-                'currency' => $request->currency,
-                'email' => $request->email,
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
-                'phone' => $request->phone,
+                'amount' => $amount,
+                'currency' => $currency,
+                'email' => $email,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'phone' => $phone,
                 'tx_ref' => $transaction->reference,
                 'callback_url' => config('services.paychangu.callback_url'),
                 'return_url' => config('services.paychangu.return_url'),
                 'meta' => json_encode([
                     'user_id' => $user->id,
-                    'plan_id' => $request->plan_id,
+                    'plan_id' => $plan->id,
                     'transaction_id' => $transaction->id
                 ])
             ];
