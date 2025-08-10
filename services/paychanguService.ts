@@ -4,10 +4,15 @@ import Constants from 'expo-constants';
 export interface PaychanguPaymentRequest {
   amount: number;
   currency: string;
-  phoneNumber: string;
+  email: string;
+  firstName: string;
+  lastName: string;
   description: string;
   reference: string;
-  callbackUrl?: string;
+  callbackUrl: string;
+  returnUrl: string;
+  title?: string;
+  meta?: Record<string, any>;
 }
 
 export interface PaychanguPaymentResponse {
@@ -37,14 +42,11 @@ class PaychanguService {
   private baseUrl: string;
 
   constructor() {
-    this.apiKey = Constants.expoConfig?.extra?.paychanguApiKey || '';
     this.secretKey = Constants.expoConfig?.extra?.paychanguSecretKey || '';
-    this.merchantId = Constants.expoConfig?.extra?.paychanguMerchantId || '';
     this.environment = Constants.expoConfig?.extra?.paychanguEnvironment || 'sandbox';
     
-    this.baseUrl = this.environment === 'production' 
-      ? 'https://api.paychangu.com/v1'
-      : 'https://sandbox-api.paychangu.com/v1';
+    // PayChangu standard checkout endpoint
+    this.baseUrl = 'https://api.paychangu.com/payment';
   }
 
   /**
@@ -55,28 +57,35 @@ class PaychanguService {
       console.log('PaychanguService: Initiating payment:', request);
 
       const payload = {
-        amount: request.amount,
+        amount: request.amount.toString(),
         currency: request.currency,
-        phone_number: request.phoneNumber,
-        description: request.description,
-        reference: request.reference,
+        email: request.email,
+        first_name: request.firstName,
+        last_name: request.lastName,
         callback_url: request.callbackUrl,
-        merchant_id: this.merchantId
+        return_url: request.returnUrl,
+        tx_ref: request.reference,
+        customization: {
+          title: request.title || "DocAvailable Payment",
+          description: request.description
+        },
+        meta: request.meta || {}
       };
 
-      const response = await axios.post(`${this.baseUrl}/payments/initiate`, payload, {
+      const response = await axios.post(this.baseUrl, payload, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${this.secretKey}`,
+          'Accept': 'application/json',
           'Content-Type': 'application/json'
         }
       });
 
-      if (response.data.success) {
+      if (response.data.status === 'success') {
         return {
           success: true,
-          transactionId: response.data.transaction_id,
-          paymentUrl: response.data.payment_url,
-          status: response.data.status
+          transactionId: response.data.data.data.tx_ref,
+          paymentUrl: response.data.data.checkout_url,
+          status: response.data.data.data.status
         };
       } else {
         return {

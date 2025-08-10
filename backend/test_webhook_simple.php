@@ -1,67 +1,55 @@
 <?php
 
-// Simple webhook test to debug the 500 error
-$url = 'https://docavailable-1.onrender.com/api/payments/webhook';
+require __DIR__.'/vendor/autoload.php';
 
-// Use the exact data from your successful transaction
-$webhookData = [
-    'transaction_id' => '6749243344',
-    'reference' => 'PLAN_7fe13f9b-7e01-442e-a55b-0534e7faec51',
-    'amount' => 97.00,
-    'currency' => 'MWK',
-    'status' => 'success',
-    'phone_number' => '+265123456789',
-    'payment_method' => 'mobile_money',
-    'payment_channel' => 'Mobile Money',
-    'name' => 'Jsjdjd djdjd',
-    'email' => 'josa@gmail.com',
-    'paid_at' => '2025-08-08 06:27:00',
-    'meta' => [
-        'user_id' => 1,
-        'plan_id' => 1,
-    ]
-];
+$app = require_once __DIR__.'/bootstrap/app.php';
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
-echo "Testing webhook with exact transaction data:\n";
-print_r($webhookData);
-echo "\n";
+use Illuminate\Support\Facades\DB;
+use App\Models\Subscription;
+use App\Models\Plan;
 
-// Make the request
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($webhookData));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Content-Type: application/json',
-    'Accept: application/json'
-]);
+echo "🧪 Testing Webhook Database Connection...\n\n";
 
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-echo "HTTP Status Code: $httpCode\n";
-echo "Response:\n";
-$responseData = json_decode($response, true);
-print_r($responseData);
-
-// Also test if the transaction exists by checking the status endpoint
-echo "\n\nTesting transaction status:\n";
-$statusUrl = 'https://docavailable-1.onrender.com/api/payments/status?transaction_id=6749243344';
-
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $statusUrl);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'Accept: application/json'
-]);
-
-$statusResponse = curl_exec($ch);
-$statusHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-echo "Status HTTP Code: $statusHttpCode\n";
-echo "Status Response:\n";
-$statusData = json_decode($statusResponse, true);
-print_r($statusData); 
+try {
+    // Test with standard Laravel database connection
+    $connection = DB::connection('pgsql'); // Use standard pgsql connection
+    $pdo = $connection->getPdo();
+    echo "✅ Database connection successful!\n\n";
+    
+    // Test subscription creation
+    $testData = [
+        'user_id' => 11,
+        'status' => 1,
+        'start_date' => now(),
+        'end_date' => now()->addDays(30),
+        'payment_metadata' => [
+            'transaction_id' => 'TEST_TX_' . time(),
+            'reference' => 'TEST_REF_' . time(),
+            'amount' => 100,
+            'currency' => 'MWK',
+            'payment_method' => 'Mobile Money',
+            'payment_channel' => 'Airtel Money',
+            'paid_at' => now(),
+            'customer' => [
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+                'phone' => '+265123456789'
+            ]
+        ]
+    ];
+    
+    echo "Testing subscription creation...\n";
+    $subscription = Subscription::updateOrCreate(
+        ['user_id' => 11, 'status' => 1],
+        $testData
+    );
+    
+    echo "✅ Subscription created/updated successfully!\n";
+    echo "Subscription ID: " . $subscription->id . "\n";
+    
+} catch (Exception $e) {
+    echo "❌ Database test failed!\n";
+    echo "Error: " . $e->getMessage() . "\n";
+    exit(1);
+} 

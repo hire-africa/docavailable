@@ -3,7 +3,13 @@
 // Test with actual PayChangu webhook structure
 echo "🧪 Testing with Actual PayChangu Webhook Structure...\n\n";
 
-$webhookUrl = 'https://docavailable-1.onrender.com/api/payments/webhook';
+// Load environment variables
+require __DIR__.'/vendor/autoload.php';
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+// Set webhook URL
+$webhookUrl = $_ENV['APP_URL'] . '/api/payments/webhook';
 
 $webhookData = [
     'event_type' => 'checkout.payment',
