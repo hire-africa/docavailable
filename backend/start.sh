@@ -14,6 +14,27 @@ php artisan view:clear
 # DO NOT cache configurations - let Laravel read environment variables at runtime
 echo "Skipping config caching to allow runtime environment variable reading..."
 
+# Test database connection before proceeding
+echo "Testing database connection..."
+php artisan tinker --execute="
+try {
+    echo 'Testing DB connection...';
+    echo 'DB_CONNECTION: ' . config('database.default');
+    echo 'DB_HOST: ' . config('database.connections.pgsql_simple.host');
+    echo 'DB_URL: ' . (env('DB_URL') ? 'SET' : 'NOT SET');
+    
+    // Test the actual connection
+    DB::connection()->getPdo();
+    echo 'Database connection successful!';
+} catch (Exception \$e) {
+    echo 'Database connection failed: ' . \$e->getMessage();
+    exit(1);
+}
+" || {
+    echo "Database connection test failed!"
+    exit 1
+}
+
 # Refresh database connection and schema
 echo "Refreshing database connection..."
 php artisan db:show --force || echo "Database show failed"

@@ -17,6 +17,9 @@ class CustomDatabaseServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Ensure the pgsql_simple connection is available in the config first
+        $this->ensurePgsqlSimpleConnection();
+        
         // Override the entire database manager to use our custom connection
         $this->app->singleton('db', function ($app) {
             $manager = new DatabaseManager($app, $app['db.factory']);
@@ -36,6 +39,34 @@ class CustomDatabaseServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Additional boot logic if needed
+    }
+
+    /**
+     * Ensure the pgsql_simple connection is available in the database config
+     */
+    protected function ensurePgsqlSimpleConnection()
+    {
+        $config = config('database.connections');
+        
+        if (!isset($config['pgsql_simple'])) {
+            // Add the pgsql_simple connection to the config
+            config([
+                'database.connections.pgsql_simple' => [
+                    'driver' => 'pgsql',
+                    'host' => env('DB_HOST', '127.0.0.1'),
+                    'port' => env('DB_PORT', '5432'),
+                    'database' => env('DB_DATABASE', 'laravel'),
+                    'username' => env('DB_USERNAME', 'root'),
+                    'password' => env('DB_PASSWORD', ''),
+                    'charset' => env('DB_CHARSET', 'utf8'),
+                    'prefix' => '',
+                    'prefix_indexes' => true,
+                    'search_path' => 'public',
+                    'sslmode' => env('DB_SSLMODE', 'require'),
+                    'options' => [],
+                ]
+            ]);
+        }
     }
 
     /**
@@ -94,8 +125,8 @@ class CustomDatabaseServiceProvider extends ServiceProvider
 
             // Create a custom connection instance
             return new PostgresConnection($pdo, $database ?? '', '', [
-            'name' => 'pgsql_simple',
-            'driver' => 'pgsql',
+                'name' => 'pgsql_simple',
+                'driver' => 'pgsql',
                 'database' => $database ?? ''
             ]);
 

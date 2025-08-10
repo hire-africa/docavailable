@@ -60,6 +60,10 @@ services:
         value: ${DB_PASSWORD}
       - key: DB_URL
         value: postgresql://neondb_owner:${DB_PASSWORD}@ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-hidden-brook-aemmopjb
+      - key: DB_SSLMODE
+        value: require
+      - key: DB_CHARSET
+        value: utf8
       - key: DB_CONNECT_TIMEOUT
         value: 10
       - key: DB_SOCKET_TIMEOUT
