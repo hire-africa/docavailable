@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Subscription;
 use App\Models\Plan;
+use App\Models\PaymentTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
@@ -94,6 +95,42 @@ class PaymentController extends Controller
             $amount = $data['amount'];
             $currency = $data['currency'];
             
+            // ✅ STEP 1: CREATE/VERIFY PAYMENT TRANSACTION RECORD
+            $paymentTransaction = PaymentTransaction::updateOrCreate(
+                ['transaction_id' => $data['tx_ref']],
+                [
+                    'reference' => $data['reference'],
+                    'amount' => $amount,
+                    'currency' => $currency,
+                    'status' => 'completed', // Map PayChangu 'success' to our 'completed'
+                    'phone_number' => $data['customer']['phone'] ?? null,
+                    'payment_method' => strtolower(str_replace(' ', '_', $data['authorization']['channel'] ?? 'mobile_money')),
+                    'gateway' => 'paychangu',
+                    'webhook_data' => $data,
+                    'processed_at' => now()
+                ]
+            );
+            
+            Log::info('Payment transaction created/updated', [
+                'transaction_id' => $paymentTransaction->transaction_id,
+                'status' => $paymentTransaction->status
+            ]);
+            
+            // ✅ STEP 2: VERIFY PAYMENT TRANSACTION IS SUCCESSFUL
+            if ($paymentTransaction->status !== 'completed') {
+                Log::warning('Payment transaction not completed', [
+                    'transaction_id' => $paymentTransaction->transaction_id,
+                    'status' => $paymentTransaction->status
+                ]);
+                return response()->json([
+                    'error' => 'Payment transaction not completed',
+                    'transaction_status' => $paymentTransaction->status
+                ], 400);
+            }
+            
+            // ✅ STEP 3: CREATE SUBSCRIPTION ONLY IF PAYMENT IS CONFIRMED
+            Log::info('Payment confirmed, creating subscription');
+            
             // Find plan either by ID or by amount/currency
             $plan = null;
             if ($planId) {
@@ -116,6 +153,7 @@ class PaymentController extends Controller
                 'status' => 1, // Active
                 'start_date' => now(),
                 'end_date' => now()->addDays($plan ? $plan->duration : 30),
+                'payment_transaction_id' => $paymentTransaction->transaction_id, // ✅ LINK TO PAYMENT TRANSACTION
                 'payment_metadata' => [
                     'transaction_id' => $data['tx_ref'],
                     'reference' => $data['reference'],
@@ -150,10 +188,17 @@ class PaymentController extends Controller
                 $subscriptionData
             );
             
+            Log::info('Subscription created successfully', [
+                'subscription_id' => $subscription->id,
+                'user_id' => $subscription->user_id,
+                'payment_transaction_id' => $subscription->payment_transaction_id
+            ]);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Payment processed successfully',
-                'subscription' => $subscription
+                'subscription' => $subscription,
+                'payment_transaction' => $paymentTransaction
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
