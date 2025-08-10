@@ -36,39 +36,65 @@ class PayChanguService
             }
         }
 
-        // Ensure amount is string
-        $payload['amount'] = (string) $payload['amount'];
-
-        // Add default customization if not provided
-        if (!isset($payload['customization'])) {
-            $payload['customization'] = [
+        // Prepare payload according to PayChangu API specification
+        $apiPayload = [
+            'amount' => (string) $payload['amount'], // Must be string
+            'currency' => $payload['currency'],
+            'callback_url' => $payload['callback_url'],
+            'return_url' => $payload['return_url'],
+            'tx_ref' => $payload['tx_ref'] ?? null,
+            'first_name' => $payload['first_name'] ?? null,
+            'last_name' => $payload['last_name'] ?? null,
+            'email' => $payload['email'] ?? null,
+            'customization' => [
                 'title' => 'DocAvailable Payment',
-                'description' => $payload['description'] ?? 'Payment for services'
-            ];
-        }
+                'description' => 'Payment for medical consultation services'
+            ],
+            'meta' => $payload['meta'] ?? null
+        ];
 
         $headers = [
             'Accept' => 'application/json',
             'Authorization' => 'Bearer ' . $this->secretKey,
         ];
 
-        $response = Http::withHeaders($headers)->post($this->paymentUrl, $payload);
+        Log::info('PayChangu API request', [
+            'url' => $this->paymentUrl,
+            'payload' => $apiPayload
+        ]);
+
+        $response = Http::withHeaders($headers)->post($this->paymentUrl, $apiPayload);
 
         $responseData = $response->json();
+        
+        Log::info('PayChangu API response', [
+            'status' => $response->status(),
+            'body' => $responseData
+        ]);
         
         if (!$response->successful() || ($responseData['status'] ?? '') !== 'success') {
             Log::error('PayChangu initiate failed', [
                 'status' => $response->status(),
                 'body' => $responseData,
             ]);
+            return [
+                'ok' => false,
+                'status' => $response->status(),
+                'body' => $responseData,
+                'error' => $responseData['message'] ?? 'Payment initiation failed'
+            ];
         }
 
+        // Extract checkout URL from response according to PayChangu documentation
+        $checkoutUrl = $responseData['data']['checkout_url'] ?? null;
+        $txRef = $responseData['data']['data']['tx_ref'] ?? null;
+
         return [
-            'ok' => $response->successful() && ($responseData['status'] ?? '') === 'success',
-            'status' => $response->status(),
-            'body' => $responseData,
-            'checkout_url' => $responseData['data']['checkout_url'] ?? null,
-            'tx_ref' => $responseData['data']['data']['tx_ref'] ?? null
+            'ok' => true,
+            'status' => 'success',
+            'checkout_url' => $checkoutUrl,
+            'tx_ref' => $txRef,
+            'response' => $responseData
         ];
     }
 

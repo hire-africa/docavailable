@@ -214,14 +214,32 @@ class PaymentController extends Controller
             $payChanguService = new \App\Services\PayChanguService();
             $result = $payChanguService->initiate($payload);
             
+            if (!$result['ok']) {
+                Log::error('PayChangu initiation failed', ['result' => $result]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment initiation failed',
+                    'error' => $result['error'] ?? 'Unknown error'
+                ], 500);
+            }
+            
             // Update transaction with checkout URL
             $transaction->update([
                 'gateway_reference' => $result['tx_ref'] ?? $transaction->reference,
                 'metadata' => array_merge($transaction->metadata ?? [], [
                     'checkout_url' => $result['checkout_url'] ?? null,
-                    'gateway_response' => $result
+                    'gateway_response' => $result['response'] ?? $result
                 ])
             ]);
+            
+            if (!$result['checkout_url']) {
+                Log::error('No checkout URL in PayChangu response', ['result' => $result]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment initiation failed - no checkout URL received',
+                    'error' => 'No checkout URL in response'
+                ], 500);
+            }
             
             return response()->json([
                 'success' => true,
