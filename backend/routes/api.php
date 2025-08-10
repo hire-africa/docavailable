@@ -560,7 +560,6 @@ Route::post('/test-notification', function(Request $request) {
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum']);
 Route::get('/payments/status', [PaymentController::class, 'checkStatus'])->withoutMiddleware(['auth:sanctum']);
 Route::post('/payments/test-webhook', [PaymentController::class, 'testWebhook'])->withoutMiddleware(['auth:sanctum']);
-Route::get('/payments/debug-config', [PaymentController::class, 'debugConfig'])->withoutMiddleware(['auth:sanctum']);
 // PayChangu Standard Checkout
 Route::middleware(['auth:api'])->group(function () {
     Route::post('/payments/paychangu/initiate', [PaymentController::class, 'initiate']);

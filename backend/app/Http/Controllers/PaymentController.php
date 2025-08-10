@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Subscription;
 use App\Models\Plan;
-use App\Models\PaymentTransaction;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
@@ -16,23 +15,6 @@ class PaymentController extends Controller
     {
         try {
             Log::info('Payment webhook received', ['data' => $request->all()]);
-            
-            // Verify webhook signature for security
-            $signature = $request->header('signature');
-            $webhookSecret = config('services.paychangu.webhook_secret');
-            
-            if ($signature && $webhookSecret) {
-                $payload = $request->getContent();
-                $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
-                
-                if (!hash_equals($expectedSignature, $signature)) {
-                    Log::error('Invalid webhook signature', [
-                        'received' => $signature,
-                        'expected' => $expectedSignature
-                    ]);
-                    return response()->json(['error' => 'Invalid signature'], 401);
-                }
-            }
             
             // Log database configuration (without sensitive info)
             Log::info('Database configuration:', [
@@ -48,26 +30,9 @@ class PaymentController extends Controller
             // Parse meta data which comes as a JSON string
             $meta = json_decode($data['meta'] ?? '{}', true);
             
-            // Enhanced validation with detailed error reporting
-            $requiredFields = ['user_id'];
-            $missingFields = [];
-            
-            foreach ($requiredFields as $field) {
-                if (empty($meta[$field])) {
-                    $missingFields[] = "meta.{$field}";
-                }
-            }
-            
-            if (!empty($missingFields)) {
-                Log::error('Payment webhook missing required fields', [
-                    'missing_fields' => $missingFields,
-                    'meta_data' => $meta,
-                    'full_data' => $data
-                ]);
-                return response()->json([
-                    'error' => 'Missing required fields',
-                    'missing_fields' => $missingFields
-                ], 400);
+            if (empty($meta['user_id'])) {
+                Log::error('Payment webhook missing user_id in meta', ['data' => $data]);
+                return response()->json(['error' => 'Missing user_id in meta data'], 400);
             }
             
             if ($data['status'] === 'success') {
@@ -87,49 +52,15 @@ class PaymentController extends Controller
     protected function processSuccessfulPayment($data, $meta)
     {
         try {
-            // Try to use direct database connection
+            // Skip database connection test and proceed directly
             Log::info('Starting payment processing');
+            
+            DB::beginTransaction();
             
             $userId = $meta['user_id'];
             $planId = $meta['plan_id'] ?? null;
             $amount = $data['amount'];
             $currency = $data['currency'];
-            
-            // ✅ STEP 1: CREATE/VERIFY PAYMENT TRANSACTION RECORD
-            $paymentTransaction = PaymentTransaction::updateOrCreate(
-                ['transaction_id' => $data['tx_ref']],
-                [
-                    'reference' => $data['reference'],
-                    'amount' => $amount,
-                    'currency' => $currency,
-                    'status' => 'completed', // Map PayChangu 'success' to our 'completed'
-                    'phone_number' => $data['customer']['phone'] ?? null,
-                    'payment_method' => strtolower(str_replace(' ', '_', $data['authorization']['channel'] ?? 'mobile_money')),
-                    'gateway' => 'paychangu',
-                    'webhook_data' => $data,
-                    'processed_at' => now()
-                ]
-            );
-            
-            Log::info('Payment transaction created/updated', [
-                'transaction_id' => $paymentTransaction->transaction_id,
-                'status' => $paymentTransaction->status
-            ]);
-            
-            // ✅ STEP 2: VERIFY PAYMENT TRANSACTION IS SUCCESSFUL
-            if ($paymentTransaction->status !== 'completed') {
-                Log::warning('Payment transaction not completed', [
-                    'transaction_id' => $paymentTransaction->transaction_id,
-                    'status' => $paymentTransaction->status
-                ]);
-                return response()->json([
-                    'error' => 'Payment transaction not completed',
-                    'transaction_status' => $paymentTransaction->status
-                ], 400);
-            }
-            
-            // ✅ STEP 3: CREATE SUBSCRIPTION ONLY IF PAYMENT IS CONFIRMED
-            Log::info('Payment confirmed, creating subscription');
             
             // Find plan either by ID or by amount/currency
             $plan = null;
@@ -153,7 +84,6 @@ class PaymentController extends Controller
                 'status' => 1, // Active
                 'start_date' => now(),
                 'end_date' => now()->addDays($plan ? $plan->duration : 30),
-                'payment_transaction_id' => $paymentTransaction->transaction_id, // ✅ LINK TO PAYMENT TRANSACTION
                 'payment_metadata' => [
                     'transaction_id' => $data['tx_ref'],
                     'reference' => $data['reference'],
@@ -182,23 +112,17 @@ class PaymentController extends Controller
             
             Log::info('Creating subscription with data:', ['data' => $subscriptionData]);
             
-            // Use the same pattern as UserController - no transaction management
             $subscription = Subscription::updateOrCreate(
                 ['user_id' => $userId, 'status' => 1],
                 $subscriptionData
             );
             
-            Log::info('Subscription created successfully', [
-                'subscription_id' => $subscription->id,
-                'user_id' => $subscription->user_id,
-                'payment_transaction_id' => $subscription->payment_transaction_id
-            ]);
+            DB::commit();
             
             return response()->json([
                 'success' => true,
                 'message' => 'Payment processed successfully',
-                'subscription' => $subscription,
-                'payment_transaction' => $paymentTransaction
+                'subscription' => $subscription
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -263,34 +187,6 @@ class PaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Test webhook failed',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function debugConfig()
-    {
-        try {
-            return response()->json([
-                'success' => true,
-                'debug_info' => [
-                    'db_connection' => env('DB_CONNECTION'),
-                    'db_host' => env('DB_HOST'),
-                    'db_port' => env('DB_PORT'),
-                    'db_database' => env('DB_DATABASE'),
-                    'db_username' => env('DB_USERNAME'),
-                    'db_url_set' => !empty(env('DB_URL')),
-                    'app_env' => env('APP_ENV'),
-                    'app_debug' => env('APP_DEBUG'),
-                    'default_connection' => config('database.default'),
-                    'available_connections' => array_keys(config('database.connections')),
-                    'pgsql_simple_host' => config('database.connections.pgsql_simple.host'),
-                    'pgsql_host' => config('database.connections.pgsql.host'),
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
                 'error' => $e->getMessage()
             ], 500);
         }
