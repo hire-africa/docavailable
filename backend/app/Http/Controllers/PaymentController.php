@@ -143,6 +143,213 @@ class PaymentController extends Controller
         }
     }
 
+    public function initiate(Request $request)
+    {
+        try {
+            Log::info('Payment initiation request received', ['data' => $request->all()]);
+            
+            // Validate required fields
+            $request->validate([
+                'amount' => 'required|numeric|min:0',
+                'currency' => 'required|string|size:3',
+                'email' => 'required|email',
+                'first_name' => 'required|string',
+                'last_name' => 'required|string',
+                'phone' => 'required|string',
+                'user_id' => 'required|integer|exists:users,id',
+                'plan_id' => 'nullable|integer|exists:plans,id'
+            ]);
+            
+            // Get user and plan
+            $user = \App\Models\User::findOrFail($request->user_id);
+            $plan = null;
+            if ($request->plan_id) {
+                $plan = \App\Models\Plan::findOrFail($request->plan_id);
+            }
+            
+            // Create transaction record
+            $transaction = \App\Models\PaymentTransaction::create([
+                'user_id' => $user->id,
+                'amount' => $request->amount,
+                'currency' => $request->currency,
+                'gateway' => 'paychangu',
+                'status' => 'pending',
+                'reference' => 'TXN_' . time() . '_' . $user->id,
+                'metadata' => [
+                    'plan_id' => $request->plan_id,
+                    'plan_name' => $plan ? $plan->name : null,
+                    'user_email' => $user->email,
+                    'user_name' => $user->display_name
+                ]
+            ]);
+            
+            // Prepare PayChangu payload
+            $payload = [
+                'amount' => $request->amount,
+                'currency' => $request->currency,
+                'email' => $request->email,
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                'phone' => $request->phone,
+                'tx_ref' => $transaction->reference,
+                'callback_url' => config('services.paychangu.callback_url'),
+                'return_url' => config('services.paychangu.return_url'),
+                'meta' => json_encode([
+                    'user_id' => $user->id,
+                    'plan_id' => $request->plan_id,
+                    'transaction_id' => $transaction->id
+                ])
+            ];
+            
+            // Initialize PayChangu service
+            $payChanguService = new \App\Services\PayChanguService();
+            $result = $payChanguService->initiate($payload);
+            
+            // Update transaction with checkout URL
+            $transaction->update([
+                'gateway_reference' => $result['tx_ref'] ?? $transaction->reference,
+                'metadata' => array_merge($transaction->metadata ?? [], [
+                    'checkout_url' => $result['checkout_url'] ?? null,
+                    'gateway_response' => $result
+                ])
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Payment initiated successfully',
+                'data' => [
+                    'checkout_url' => $result['checkout_url'],
+                    'transaction_id' => $transaction->id,
+                    'reference' => $transaction->reference
+                ]
+            ]);
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Payment initiation validation error', ['errors' => $e->errors()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Payment initiation error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment initiation failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function callback(Request $request)
+    {
+        try {
+            Log::info('PayChangu callback received', ['data' => $request->all()]);
+            
+            $txRef = $request->query('tx_ref');
+            if (!$txRef) {
+                return response()->json(['error' => 'Missing tx_ref parameter'], 400);
+            }
+            
+            // Find transaction
+            $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
+                ->orWhere('gateway_reference', $txRef)
+                ->first();
+                
+            if (!$transaction) {
+                Log::error('Transaction not found for callback', ['tx_ref' => $txRef]);
+                return response()->json(['error' => 'Transaction not found'], 404);
+            }
+            
+            // Verify payment with PayChangu
+            $payChanguService = new \App\Services\PayChanguService();
+            $verification = $payChanguService->verify($txRef);
+            
+            if ($verification['status'] === 'success') {
+                $transaction->update([
+                    'status' => 'completed',
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'verification_response' => $verification,
+                        'completed_at' => now()->toISOString()
+                    ])
+                ]);
+                
+                // Process the successful payment
+                $meta = json_decode($verification['meta'] ?? '{}', true);
+                return $this->processSuccessfulPayment($verification, $meta);
+            } else {
+                $transaction->update([
+                    'status' => 'failed',
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'verification_response' => $verification,
+                        'failed_at' => now()->toISOString()
+                    ])
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment verification failed',
+                    'status' => $verification['status']
+                ], 400);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('PayChangu callback error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function returnHandler(Request $request)
+    {
+        try {
+            Log::info('PayChangu return handler received', ['data' => $request->all()]);
+            
+            $txRef = $request->query('tx_ref');
+            $status = $request->query('status');
+            
+            if (!$txRef) {
+                return response()->json(['error' => 'Missing tx_ref parameter'], 400);
+            }
+            
+            // Find transaction
+            $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
+                ->orWhere('gateway_reference', $txRef)
+                ->first();
+                
+            if (!$transaction) {
+                Log::error('Transaction not found for return handler', ['tx_ref' => $txRef]);
+                return response()->json(['error' => 'Transaction not found'], 404);
+            }
+            
+            // Update transaction status based on return status
+            if ($status === 'success') {
+                $transaction->update(['status' => 'completed']);
+            } else {
+                $transaction->update(['status' => 'failed']);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Return handler processed',
+                'transaction_id' => $transaction->id,
+                'status' => $transaction->status
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('PayChangu return handler error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
     public function testWebhook(Request $request)
     {
         try {

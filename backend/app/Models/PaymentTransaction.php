@@ -19,12 +19,16 @@ class PaymentTransaction extends Model
         'payment_method',
         'gateway',
         'webhook_data',
-        'processed_at'
+        'processed_at',
+        'user_id',
+        'gateway_reference',
+        'metadata'
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'webhook_data' => 'array',
+        'metadata' => 'array',
         'processed_at' => 'datetime'
     ];
 
