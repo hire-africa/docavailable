@@ -24,8 +24,19 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
+# Debug: Check what's in the build context
+RUN echo "=== Debug: Build context ===" && ls -la /var/www || echo "Build context is empty"
+
 # Copy the entire Laravel application first
 COPY backend/ .
+
+# Debug: Check what files were copied
+RUN echo "=== Debug: Files in /var/www after copy ===" && ls -la /var/www
+RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public || echo "public directory not found"
+RUN echo "=== Debug: Checking for key Laravel files ===" && \
+    echo "artisan exists: $(test -f artisan && echo 'YES' || echo 'NO')" && \
+    echo "index.php exists: $(test -f public/index.php && echo 'YES' || echo 'NO')" && \
+    echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
 
 # Install dependencies (now artisan file exists)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
@@ -55,14 +66,6 @@ RUN php artisan storage:link || echo "Storage link already exists"
 # Copy startup script
 COPY backend/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
-
-# Debug: Check what files were copied
-RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
-RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public
-RUN echo "=== Debug: Checking for key Laravel files ===" && \
-    echo "artisan exists: $(test -f artisan && echo 'YES' || echo 'NO')" && \
-    echo "index.php exists: $(test -f public/index.php && echo 'YES' || echo 'NO')" && \
-    echo "router.php exists: $(test -f public/router.php && echo 'YES' || echo 'NO')"
 
 # Expose port 8000
 EXPOSE 8000
