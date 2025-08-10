@@ -27,8 +27,21 @@ WORKDIR /var/www
 # Copy the entire Laravel application first
 COPY . .
 
-# Install dependencies (now artisan file exists)
-RUN composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress || (echo "Composer install failed, trying with verbose output:" && composer install --optimize-autoloader --no-interaction --prefer-dist -vvv)
+# Force cache bust with timestamp
+RUN echo "BUILD_TIMESTAMP_$(date +%s)" > .build_timestamp
+
+# Install dependencies with more debugging and fallback options
+RUN echo "=== Starting composer install ===" && \
+    echo "=== PHP version: $(php -v)" && \
+    echo "=== Composer version: $(composer --version)" && \
+    echo "=== Available memory: $(free -h || echo 'free command not available')" && \
+    composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress --no-dev || \
+    (echo "=== First attempt failed, trying without --no-dev ===" && \
+     composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress) || \
+    (echo "=== Second attempt failed, trying with verbose output ===" && \
+     composer install --optimize-autoloader --no-interaction --prefer-dist -vvv) || \
+    (echo "=== All attempts failed, trying with memory limit ===" && \
+     COMPOSER_MEMORY_LIMIT=-1 composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress)
 
 # Debug: Check what files were copied
 RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
