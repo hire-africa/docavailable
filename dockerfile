@@ -13,7 +13,9 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     supervisor \
-    nginx
+    nginx \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Clear cache
 RUN apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -76,9 +78,8 @@ RUN mkdir -p public \
     && chmod -R 755 public \
     && chown -R www-data:www-data public
 
-# Copy startup script and nginx config
+# Copy startup script
 COPY backend/start.sh /usr/local/bin/start.sh
-COPY backend/nginx.conf /usr/local/bin/nginx.conf
 RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000
