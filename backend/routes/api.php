@@ -91,6 +91,16 @@ Route::get('/debug/chat-endpoints', function () {
     ]);
 });
 
+// Health check endpoint
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'API is running',
+        'timestamp' => now()->toISOString(),
+        'environment' => app()->environment()
+    ]);
+});
+
 // Create first admin endpoint (no auth required, explicitly excluded from middleware)
 Route::post('/create-first-admin', [AuthenticationController::class, 'createFirstAdmin'])->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class]);
 
