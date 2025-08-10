@@ -682,9 +682,9 @@ export default function BookAppointmentFlow() {
     try {
       // For plan purchase (deposit): show sample Basic plan id = 1
       const res = await paymentsService.initiatePlanPurchase(1);
-      if (res?.success && res.checkout_url) {
-        setCheckoutUrl(res.checkout_url);
-        setTxRef(res.tx_ref);
+              if (res?.success && res.data?.checkout_url) {
+          setCheckoutUrl(res.data.checkout_url);
+                  setTxRef(res.data.reference);
       }
     } catch (error) {
       console.error('❌ [BookAppointmentFlow] Appointment creation failed:', error);

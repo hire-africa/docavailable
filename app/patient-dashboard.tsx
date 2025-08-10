@@ -905,12 +905,12 @@ export default function PatientDashboard() {
       // Initiate hosted checkout via backend
       const res = await paymentsService.initiatePlanPurchase(parseInt(plan.id));
       console.log('Payment API response:', res);
-      if (res?.success && res.checkout_url) {
-        console.log('Navigating to checkout with URL:', res.checkout_url);
+      if (res?.success && res.data?.checkout_url) {
+        console.log('Navigating to checkout with URL:', res.data.checkout_url);
         // Navigate to a dedicated WebView screen for checkout
         router.push({
           pathname: '/payments/checkout',
-          params: { url: res.checkout_url, tx_ref: res.tx_ref }
+          params: { url: res.data.checkout_url, tx_ref: res.data.reference }
         });
         return;
       }
