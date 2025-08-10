@@ -24,14 +24,11 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # Set working directory
 WORKDIR /var/www
 
-# Copy composer files first for better caching
-COPY composer.json composer.lock ./
-
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction
-
-# Copy the entire Laravel application
+# Copy the entire Laravel application first
 COPY . .
+
+# Install dependencies (now artisan file exists)
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
 # Debug: Check what files were copied
 RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
