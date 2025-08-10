@@ -5,6 +5,7 @@ services:
     buildCommand: |
       # Force fresh build by updating timestamp
       echo "=== Build timestamp: $(date) - Auto-deploy test ==="
+      echo "=== CACHE BUSTER: $(date +%s) ==="
       cd backend
       echo "=== Debug: Current directory ===" && pwd
       echo "=== Debug: Files in current directory ===" && ls -la
@@ -23,6 +24,9 @@ services:
       echo "=== Removing vendor directory for fresh install ==="
       rm -rf vendor/
       rm -f composer.lock
+      
+      # Create unique build identifier to bust cache
+      echo "BUILD_ID_$(date +%s)" > .build_id
       
       # Install dependencies with optimized autoloader
       echo "=== Installing dependencies ==="
