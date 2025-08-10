@@ -248,9 +248,36 @@ class AuthService {
 
   async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
     try {
+      console.log('AuthService: Attempting login with credentials:', { email: credentials.email, password: '***' });
+      
       const response = await this.api.post('/login', credentials);
+      
+      console.log('AuthService: Login response received:', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : 'no data',
+        success: response.data?.success,
+        hasUserData: !!response.data?.data?.user
+      });
+
+      // Check if response has the expected structure
+      if (!response.data) {
+        throw new Error('No response data received from server');
+      }
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Login failed');
+      }
+
+      if (!response.data.data || !response.data.data.user) {
+        console.error('AuthService: Unexpected response structure:', response.data);
+        throw new Error('Invalid response structure from server');
+      }
 
       const { user, token } = response.data.data;
+      
+      console.log('AuthService: Login successful for user:', user.email);
+      
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
@@ -262,7 +289,12 @@ class AuthService {
 
       return response.data;
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('AuthService: Login error:', error);
+      console.error('AuthService: Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw error;
     }
   }
