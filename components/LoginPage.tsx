@@ -34,10 +34,12 @@ export default function LoginPage() {
 
         setLoading(true);
         try {
+            console.log('LoginPage: Attempting login with:', { email, password: '***' });
             const authState = await authService.signIn(email, password);
-            // console.log('Login successful');
+            console.log('LoginPage: Login response:', authState);
             
             if (authState.data && authState.data.user) {
+                console.log('LoginPage: User data found:', authState.data.user);
                 if (authState.data.user.user_type === 'admin') {
                     router.replace('/admin-dashboard');
                 } else if (authState.data.user.user_type === 'doctor') {
@@ -53,11 +55,12 @@ export default function LoginPage() {
                     router.replace('/'); // fallback
                 }
             } else {
+                console.error('LoginPage: No user data in response:', authState);
                 Alert.alert('Login Failed', 'User data not found.');
                 await authService.signOut();
             }
         } catch (error: any) {
-            console.error('Login error:', error);
+            console.error('LoginPage: Login error:', error);
             
             // Enhanced error handling with detailed messages and suggestions
             let errorMessage = 'Login failed. Please try again.';

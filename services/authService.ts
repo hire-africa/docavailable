@@ -53,6 +53,7 @@ class AuthService {
   private api: AxiosInstance;
   private baseURL: string;
   private subscribers: Array<(authState: any) => void> = [];
+  private currentUser: any = null; // Add this to store current user state
 
   constructor() {
     // Get base URL without /api suffix
@@ -99,26 +100,20 @@ class AuthService {
 
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
-
+          
           try {
-            const refreshToken = await AsyncStorage.getItem('refresh_token');
-            if (refreshToken) {
-              const response = await this.api.post('/auth/refresh', {
-                refresh_token: refreshToken,
-              });
-
-              const { token } = response.data.data;
-              await AsyncStorage.setItem('auth_token', token);
-
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              return this.api(originalRequest);
-            }
+            // Clear stored token and user data
+            await AsyncStorage.removeItem('auth_token');
+            await AsyncStorage.removeItem('user_data');
+            this.currentUser = null;
+            
+            // Notify subscribers of logout
+            this.notifySubscribers({ user: null, token: null });
           } catch (refreshError) {
-            console.error('Token refresh failed:', refreshError);
-            await this.logout();
+            console.error('Token refresh error:', refreshError);
           }
         }
-
+        
         return Promise.reject(error);
       }
     );
@@ -139,6 +134,9 @@ class AuthService {
 
   // Notify all subscribers of auth state changes
   private notifySubscribers(authState: any): void {
+    // Update current user state
+    this.currentUser = authState.user;
+    
     this.subscribers.forEach(callback => {
       try {
         callback(authState);
@@ -156,12 +154,16 @@ class AuthService {
       
       const user = userData ? JSON.parse(userData) : null;
       
+      // Update current user state
+      this.currentUser = user;
+      
       // Notify subscribers of initial state
       this.notifySubscribers({ user, token });
       
       return { user, token };
     } catch (error) {
       console.error('AuthService initialization error:', error);
+      this.currentUser = null;
       return { user: null, token: null };
     }
   }
@@ -183,6 +185,10 @@ class AuthService {
     try {
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
+      
+      // Clear current user state
+      this.currentUser = null;
+      
       this.notifySubscribers({ user: null, token: null });
     } catch (error) {
       console.error('Clear stored token error:', error);
@@ -212,6 +218,9 @@ class AuthService {
       const { user, token } = response.data.data;
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
+
+      // Update current user state
+      this.currentUser = user;
 
       // Notify subscribers of new auth state
       this.notifySubscribers({ user, token });
@@ -245,6 +254,9 @@ class AuthService {
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
 
+      // Update current user state
+      this.currentUser = user;
+
       // Notify subscribers of new auth state
       this.notifySubscribers({ user, token });
 
@@ -267,6 +279,9 @@ class AuthService {
       const { user, token } = response.data.data;
       await AsyncStorage.setItem('auth_token', token);
       await AsyncStorage.setItem('user_data', JSON.stringify(user));
+
+      // Update current user state
+      this.currentUser = user;
 
       // Notify subscribers of new auth state
       this.notifySubscribers({ user, token });
@@ -291,6 +306,9 @@ class AuthService {
     } finally {
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
+      
+      // Clear current user state
+      this.currentUser = null;
       
       // Notify subscribers of logout
       this.notifySubscribers({ user: null, token: null });
@@ -326,11 +344,8 @@ class AuthService {
   // Synchronous version for immediate access
   getCurrentUserSync(): any {
     try {
-      // This is a synchronous method that returns the last known user
-      // For immediate access during initialization
-      // Note: This will return null on first call, but will be populated
-      // after initialize() is called and subscribers are notified
-      return null; // Will be set by initialize() method
+      // Return the current user state that's stored in memory
+      return this.currentUser;
     } catch (error) {
       console.error('Get current user sync error:', error);
       return null;

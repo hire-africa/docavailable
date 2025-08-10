@@ -70,5 +70,5 @@ php artisan db:seed --force
 # Start the application with PHP built-in server
 echo "Starting Laravel application with PHP built-in server..."
 
-# Start PHP built-in server
-php -S 0.0.0.0:8000 -t public public/index.php 
+# Start PHP built-in server with router
+php -S 0.0.0.0:8000 -t public public/router.php 

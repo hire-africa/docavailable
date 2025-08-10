@@ -154,11 +154,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Initialize authentication state
   useEffect(() => {
     const initializeAuth = async () => {
-      // console.log('AuthContext: Starting initialization...');
-      
       // Add a timeout to prevent infinite loading
       const timeoutId = setTimeout(() => {
-        // console.log('AuthContext: Initialization timeout, setting loading to false');
         setLoading(false);
         setUser(null);
         setUserData(null);
@@ -166,11 +163,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       try {
         // Test API connection first
-        // console.log('AuthContext: Testing API connection...');
         try {
           const healthResponse = await authService.healthCheck();
           if (healthResponse.success) {
-            // console.log('AuthContext: API health check successful');
+            console.log('AuthContext: API health check successful');
           } else {
             console.error('AuthContext: API health check failed');
           }
@@ -186,17 +182,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Initialize authService first
         const authState = await authService.initialize();
-        // console.log('AuthContext: AuthService initialized:', authState);
+        console.log('AuthContext: AuthService initialized:', authState);
         
         if (authState.user) {
-          // console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
+          console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
           setUser(authState.user);
           setUserData(authState.user);
           // Get token from authService
           const storedToken = await authService.getStoredToken();
           setToken(storedToken);
         } else {
-          // console.log('AuthContext: No authenticated user found');
+          console.log('AuthContext: No authenticated user found');
           setUser(null);
           setUserData(null);
           setToken(null);
@@ -207,7 +203,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUserData(null);
       } finally {
         clearTimeout(timeoutId);
-        // console.log('AuthContext: Setting loading to false');
         setLoading(false);
       }
     };
@@ -216,9 +211,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen to authService state changes
     const handleAuthStateChange = (authState: any) => {
-      // console.log('AuthContext: Auth state changed:', authState);
+      console.log('AuthContext: Auth state changed:', authState);
       if (authState.user) {
-        // console.log('AuthContext: Setting user data:', authState.user);
+        console.log('AuthContext: Setting user data:', authState.user);
         setUser(authState.user);
         setUserData(authState.user);
         // Get token from authService (synchronous)
@@ -228,7 +223,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.error('AuthContext: Error getting stored token:', error);
         });
       } else {
-        // console.log('AuthContext: Clearing user data');
+        console.log('AuthContext: Clearing user data');
         setUser(null);
         setUserData(null);
         setToken(null);
@@ -238,20 +233,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Subscribe to auth state changes
     authService.subscribe(handleAuthStateChange);
     
-    // Get current state immediately if available
-    const currentUser = authService.getCurrentUserSync();
-    if (currentUser) {
-      // console.log('AuthContext: Found current user on initialization:', currentUser);
-      setUser(currentUser);
-      setUserData(currentUser);
-      // Get token from authService (synchronous)
-      authService.getStoredToken().then(storedToken => {
-        setToken(storedToken);
-      }).catch(error => {
-        console.error('AuthContext: Error getting stored token:', error);
-      });
-      setLoading(false);
-    }
+    // Don't try to get current user sync here - let the async initialization handle it
+    // The getCurrentUserSync() method will now properly return the current user state
 
     return () => {
       // Unsubscribe when component unmounts

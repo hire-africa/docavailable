@@ -1,3 +1,4 @@
+# Simple Laravel Dockerfile for Render
 FROM php:8.2-cli
 
 # Install system dependencies
@@ -11,113 +12,55 @@ RUN apt-get update && apt-get install -y \
     zip \
     unzip \
     libpq-dev \
-    postgresql \
-    postgresql-client
-
-# Clear cache
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
-RUN docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
-    && docker-php-ext-install pdo pdo_pgsql pgsql mbstring exif pcntl bcmath gd zip
+RUN docker-php-ext-install pdo_pgsql pdo_mysql mbstring exif pcntl bcmath gd zip
 
-# Verify PostgreSQL extension is installed
-RUN php -m | grep pdo_pgsql || echo "WARNING: pdo_pgsql extension not found"
-RUN php -m | grep pgsql || echo "WARNING: pgsql extension not found"
-
-# Test PDO PostgreSQL driver
-RUN php -r "var_dump(PDO::getAvailableDrivers());" || echo "WARNING: PDO drivers test failed"
-
-# Get latest Composer
+# Get Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
 WORKDIR /var/www
 
-# Copy the entire application
-COPY . .
-
-# Debug: List what was copied
-RUN echo "=== Files copied to /var/www ===" && ls -la /var/www
-RUN echo "=== Checking for public directory ===" && ls -la public/ 2>/dev/null || echo "Public directory not found"
-
-# Create public directory if it doesn't exist (fallback)
-RUN if [ ! -d "public" ]; then \
-        echo "Public directory not found, creating it..."; \
-        mkdir -p public; \
-        echo "Created public directory"; \
-    else \
-        echo "Public directory found"; \
-    fi
-
-# Create basic index.php if it doesn't exist
-RUN if [ ! -f "public/index.php" ]; then \
-        echo "Creating basic index.php..."; \
-        echo '<?php' > public/index.php; \
-        echo '' >> public/index.php; \
-        echo 'use Illuminate\Foundation\Application;' >> public/index.php; \
-        echo 'use Illuminate\Http\Request;' >> public/index.php; \
-        echo '' >> public/index.php; \
-        echo 'define("LARAVEL_START", microtime(true));' >> public/index.php; \
-        echo '' >> public/index.php; \
-        echo '// Determine if the application is in maintenance mode...' >> public/index.php; \
-        echo 'if (file_exists($maintenance = __DIR__."/../storage/framework/maintenance.php")) {' >> public/index.php; \
-        echo '    require $maintenance;' >> public/index.php; \
-        echo '}' >> public/index.php; \
-        echo '' >> public/index.php; \
-        echo '// Register the Composer autoloader...' >> public/index.php; \
-        echo 'require __DIR__."/../vendor/autoload.php";' >> public/index.php; \
-        echo '' >> public/index.php; \
-        echo '// Bootstrap Laravel and handle the request...' >> public/index.php; \
-        echo '/** @var Application $app */' >> public/index.php; \
-        echo '$app = require_once __DIR__."/../bootstrap/app.php";' >> public/index.php; \
-        echo '' >> public/index.php; \
-        echo '$app->handleRequest(Request::capture());' >> public/index.php; \
-        echo "Created index.php"; \
-    else \
-        echo "index.php already exists"; \
-    fi
+# Copy composer files
+COPY backend/composer.json backend/composer.lock ./
 
 # Install dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Set proper permissions
+# Copy application
+COPY backend/ .
+
+# Set permissions
 RUN chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www \
     && chmod -R 775 storage \
     && chmod -R 775 bootstrap/cache
 
-# Create storage directories if they don't exist
+# Create storage directories
 RUN mkdir -p storage/framework/{sessions,views,cache} \
     && mkdir -p storage/logs \
     && chmod -R 775 storage \
     && chmod -R 775 bootstrap/cache
 
-# Copy environment file if it doesn't exist
+# Copy environment file
 RUN if [ ! -f .env ]; then cp .env.example .env; fi
 
-# Generate application key and JWT secret
+# Generate keys
 RUN php artisan key:generate --force || echo "Key already exists"
 RUN php artisan jwt:secret --force || echo "JWT secret already exists"
 
 # Create storage link
 RUN php artisan storage:link || echo "Storage link already exists"
 
-# Final verification
-RUN echo "=== Final verification ===" && \
-    echo "artisan: $([ -f artisan ] && echo 'EXISTS' || echo 'MISSING')" && \
-    echo "public: $([ -d public ] && echo 'EXISTS' || echo 'MISSING')" && \
-    echo "public/index.php: $([ -f public/index.php ] && echo 'EXISTS' || echo 'MISSING')" && \
-    echo "=== PHP Modules ===" && \
-    php -m && \
-    echo "=== PDO Drivers ===" && \
-    php -r "var_dump(PDO::getAvailableDrivers());"
-
-# Make startup script executable
-RUN chmod +x start.sh
+# Copy startup script
+COPY backend/start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port 8000
 EXPOSE 8000
 
-# Start server using the startup script
-CMD ["./start.sh"]
+# Start the application
+CMD ["/usr/local/bin/start.sh"]
