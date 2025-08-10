@@ -44,22 +44,37 @@ class CustomDatabaseServiceProvider extends ServiceProvider
     public function createCustomConnection()
     {
         try {
-            // Get database configuration
+            // Get database configuration - try DB_URL first, then individual variables
             $dbUrl = env('DB_URL');
 
             if (!$dbUrl) {
-                throw new \Exception('DB_URL environment variable is required for Neon PostgreSQL connection');
+                // Fallback to individual environment variables for Render deployment
+                $host = env('DB_HOST');
+                $port = env('DB_PORT', 5432);
+                $database = env('DB_DATABASE');
+                $username = env('DB_USERNAME');
+                $password = env('DB_PASSWORD');
+                $sslmode = env('DB_SSLMODE', 'require');
+                
+                if (!$host || !$database || !$username || !$password) {
+                    throw new \Exception('Database configuration incomplete. Need DB_URL or individual DB_* variables.');
+                }
+                
+                // Build DSN from individual variables
+                $dsn = "pgsql:host={$host};port={$port};dbname={$database};sslmode={$sslmode}";
+                
+                \Log::info('Using individual database variables connection');
+            } else {
+                // Convert postgres:// to pgsql:// for PDO
+                $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
+                
+                // Parse URL for username/password
+                $parsed = parse_url($dbUrl);
+                $username = $parsed['user'] ?? env('DB_USERNAME');
+                $password = $parsed['pass'] ?? env('DB_PASSWORD');
+                
+                \Log::info('Using database URL connection');
             }
-
-            // Convert postgres:// to pgsql:// for PDO
-            $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
-            
-            // Parse URL for username/password
-            $parsed = parse_url($dbUrl);
-            $username = $parsed['user'] ?? env('DB_USERNAME');
-            $password = $parsed['pass'] ?? env('DB_PASSWORD');
-            
-            \Log::info('Using database URL connection');
 
             \Log::info('Attempting database connection', [
                 'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
