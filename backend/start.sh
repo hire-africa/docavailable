@@ -11,10 +11,8 @@ php artisan cache:clear
 php artisan route:clear
 php artisan view:clear
 
-# Cache configurations with proper environment variables
-echo "Caching configurations with runtime environment variables..."
-php artisan config:cache
-php artisan route:cache
+# DO NOT cache configurations - let Laravel read environment variables at runtime
+echo "Skipping config caching to allow runtime environment variable reading..."
 
 # Refresh database connection and schema
 echo "Refreshing database connection..."
