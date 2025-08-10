@@ -16,14 +16,37 @@ class PayChanguService
     public function __construct()
     {
         $this->secretKey = (string) config('services.paychangu.secret_key');
-        $this->paymentUrl = (string) config('services.paychangu.payment_url');
-        $this->verifyUrl = (string) config('services.paychangu.verify_url');
+        $this->paymentUrl = 'https://api.paychangu.com/payment';
+        $this->verifyUrl = 'https://api.paychangu.com/payment/verify';
         $this->callbackUrl = config('services.paychangu.callback_url');
         $this->returnUrl = config('services.paychangu.return_url');
     }
 
     public function initiate(array $payload): array
     {
+        // Validate required fields according to PayChangu documentation
+        $requiredFields = ['amount', 'currency', 'callback_url', 'return_url'];
+        foreach ($requiredFields as $field) {
+            if (empty($payload[$field])) {
+                Log::error('PayChangu initiate missing required field', ['field' => $field]);
+                return [
+                    'ok' => false,
+                    'error' => "Missing required field: {$field}"
+                ];
+            }
+        }
+
+        // Ensure amount is string
+        $payload['amount'] = (string) $payload['amount'];
+
+        // Add default customization if not provided
+        if (!isset($payload['customization'])) {
+            $payload['customization'] = [
+                'title' => 'DocAvailable Payment',
+                'description' => $payload['description'] ?? 'Payment for services'
+            ];
+        }
+
         $headers = [
             'Accept' => 'application/json',
             'Authorization' => 'Bearer ' . $this->secretKey,
@@ -31,17 +54,21 @@ class PayChanguService
 
         $response = Http::withHeaders($headers)->post($this->paymentUrl, $payload);
 
-        if (!$response->successful()) {
+        $responseData = $response->json();
+        
+        if (!$response->successful() || ($responseData['status'] ?? '') !== 'success') {
             Log::error('PayChangu initiate failed', [
                 'status' => $response->status(),
-                'body' => $response->json(),
+                'body' => $responseData,
             ]);
         }
 
         return [
-            'ok' => $response->successful(),
+            'ok' => $response->successful() && ($responseData['status'] ?? '') === 'success',
             'status' => $response->status(),
-            'body' => $response->json(),
+            'body' => $responseData,
+            'checkout_url' => $responseData['data']['checkout_url'] ?? null,
+            'tx_ref' => $responseData['data']['data']['tx_ref'] ?? null
         ];
     }
 

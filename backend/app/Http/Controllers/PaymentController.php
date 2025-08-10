@@ -16,6 +16,23 @@ class PaymentController extends Controller
         try {
             Log::info('Payment webhook received', ['data' => $request->all()]);
             
+            // Verify webhook signature for security
+            $signature = $request->header('signature');
+            $webhookSecret = config('services.paychangu.webhook_secret');
+            
+            if ($signature && $webhookSecret) {
+                $payload = $request->getContent();
+                $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+                
+                if (!hash_equals($expectedSignature, $signature)) {
+                    Log::error('Invalid webhook signature', [
+                        'received' => $signature,
+                        'expected' => $expectedSignature
+                    ]);
+                    return response()->json(['error' => 'Invalid signature'], 401);
+                }
+            }
+            
             // Log database configuration (without sensitive info)
             Log::info('Database configuration:', [
                 'driver' => Config::get('database.default'),
@@ -30,9 +47,26 @@ class PaymentController extends Controller
             // Parse meta data which comes as a JSON string
             $meta = json_decode($data['meta'] ?? '{}', true);
             
-            if (empty($meta['user_id'])) {
-                Log::error('Payment webhook missing user_id in meta', ['data' => $data]);
-                return response()->json(['error' => 'Missing user_id in meta data'], 400);
+            // Enhanced validation with detailed error reporting
+            $requiredFields = ['user_id'];
+            $missingFields = [];
+            
+            foreach ($requiredFields as $field) {
+                if (empty($meta[$field])) {
+                    $missingFields[] = "meta.{$field}";
+                }
+            }
+            
+            if (!empty($missingFields)) {
+                Log::error('Payment webhook missing required fields', [
+                    'missing_fields' => $missingFields,
+                    'meta_data' => $meta,
+                    'full_data' => $data
+                ]);
+                return response()->json([
+                    'error' => 'Missing required fields',
+                    'missing_fields' => $missingFields
+                ], 400);
             }
             
             if ($data['status'] === 'success') {
@@ -52,20 +86,8 @@ class PaymentController extends Controller
     protected function processSuccessfulPayment($data, $meta)
     {
         try {
-            // Test database connection before transaction
-            try {
-                DB::connection()->getPdo();
-                Log::info('Database connection successful');
-            } catch (\Exception $e) {
-                Log::error('Database connection failed', [
-                    'error' => $e->getMessage(),
-                    'connection' => Config::get('database.default'),
-                    'host' => Config::get('database.connections.pgsql_simple.host')
-                ]);
-                throw $e;
-            }
-            
-            DB::beginTransaction();
+            // Try to use direct database connection
+            Log::info('Starting payment processing');
             
             $userId = $meta['user_id'];
             $planId = $meta['plan_id'] ?? null;
@@ -122,12 +144,11 @@ class PaymentController extends Controller
             
             Log::info('Creating subscription with data:', ['data' => $subscriptionData]);
             
+            // Use the same pattern as UserController - no transaction management
             $subscription = Subscription::updateOrCreate(
                 ['user_id' => $userId, 'status' => 1],
                 $subscriptionData
             );
-            
-            DB::commit();
             
             return response()->json([
                 'success' => true,
@@ -197,6 +218,34 @@ class PaymentController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Test webhook failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function debugConfig()
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'debug_info' => [
+                    'db_connection' => env('DB_CONNECTION'),
+                    'db_host' => env('DB_HOST'),
+                    'db_port' => env('DB_PORT'),
+                    'db_database' => env('DB_DATABASE'),
+                    'db_username' => env('DB_USERNAME'),
+                    'db_url_set' => !empty(env('DB_URL')),
+                    'app_env' => env('APP_ENV'),
+                    'app_debug' => env('APP_DEBUG'),
+                    'default_connection' => config('database.default'),
+                    'available_connections' => array_keys(config('database.connections')),
+                    'pgsql_simple_host' => config('database.connections.pgsql_simple.host'),
+                    'pgsql_host' => config('database.connections.pgsql.host'),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
                 'error' => $e->getMessage()
             ], 500);
         }

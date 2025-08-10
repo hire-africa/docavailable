@@ -45,33 +45,21 @@ class CustomDatabaseServiceProvider extends ServiceProvider
     {
         try {
             // Get database configuration
-        $dbUrl = env('DB_URL');
+            $dbUrl = env('DB_URL');
 
-        if ($dbUrl) {
-                // If DB_URL is provided, use it directly
-                $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
-                
-                // Parse URL for username/password
-                $parsed = parse_url($dbUrl);
-                $username = $parsed['user'] ?? env('DB_USERNAME');
-                $password = $parsed['pass'] ?? env('DB_PASSWORD');
-                
-                \Log::info('Using database URL connection');
-            } else {
-                // Otherwise build connection string from individual parts
-                $host = env('DB_HOST', '127.0.0.1');
-                $port = env('DB_PORT', '5432');
-                $database = env('DB_DATABASE', 'laravel');
-                $username = env('DB_USERNAME', 'root');
-                $password = env('DB_PASSWORD', '');
-                
-                $dsn = "pgsql:host={$host};port={$port};dbname={$database}";
-                if (env('DB_SSLMODE')) {
-                    $dsn .= ";sslmode=" . env('DB_SSLMODE');
-                }
-                
-                \Log::info('Using individual connection parameters');
+            if (!$dbUrl) {
+                throw new \Exception('DB_URL environment variable is required for Neon PostgreSQL connection');
             }
+
+            // Convert postgres:// to pgsql:// for PDO
+            $dsn = preg_replace('/^postgres:/', 'pgsql:', $dbUrl);
+            
+            // Parse URL for username/password
+            $parsed = parse_url($dbUrl);
+            $username = $parsed['user'] ?? env('DB_USERNAME');
+            $password = $parsed['pass'] ?? env('DB_PASSWORD');
+            
+            \Log::info('Using database URL connection');
 
             \Log::info('Attempting database connection', [
                 'dsn' => preg_replace('/password=[^;]+/', 'password=***', $dsn)
