@@ -27,6 +27,10 @@ WORKDIR /var/www
 # Copy application first
 COPY . .
 
+# Debug: Check what files were copied
+RUN echo "=== Debug: Files in /var/www ===" && ls -la /var/www
+RUN echo "=== Debug: Files in /var/www/public ===" && ls -la /var/www/public || echo "public directory not found"
+
 # Install dependencies (now artisan file exists)
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
