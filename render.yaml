@@ -3,6 +3,8 @@ services:
     name: docavailable-backend
     env: php
     buildCommand: |
+      # Force fresh build by updating timestamp
+      echo "=== Build timestamp: $(date) ==="
       cd backend
       echo "=== Debug: Current directory ===" && pwd
       echo "=== Debug: Files in current directory ===" && ls -la
@@ -16,6 +18,11 @@ services:
       # Clear composer cache and install dependencies
       echo "=== Clearing composer cache ==="
       composer clear-cache
+      
+      # Force remove vendor directory to ensure fresh install
+      echo "=== Removing vendor directory for fresh install ==="
+      rm -rf vendor/
+      rm -f composer.lock
       
       # Install dependencies with optimized autoloader
       echo "=== Installing dependencies ==="
