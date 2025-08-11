@@ -514,7 +514,7 @@ class ApiService {
   // Enhanced connectivity check with retry logic
   async checkConnectivity(): Promise<boolean> {
     const maxRetries = 2;
-    const baseTimeout = 8000; // Increased from 5s to 8s
+    const baseTimeout = 12000; // Increased to 12s for better reliability
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -522,7 +522,7 @@ class ApiService {
         
         // Use the configured axios instance for consistency
         const response = await this.api.get('/health', {
-          timeout: baseTimeout + (attempt - 1) * 2000, // Progressive timeout: 8s, 10s
+          timeout: baseTimeout + (attempt - 1) * 3000, // Progressive timeout: 12s, 15s
         });
         
         // Check if response is actually JSON

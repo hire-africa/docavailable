@@ -294,7 +294,7 @@ export default function DoctorProfilePage() {
               {renderStars(doctor.rating, 16)}
             </View>
             <Text style={styles.ratingText}>
-              {doctor.rating.toFixed(1)} ({doctor.total_ratings} reviews)
+              {doctor.rating ? doctor.rating.toFixed(1) : '0.0'} ({doctor.total_ratings || 0} reviews)
             </Text>
           </View>
 

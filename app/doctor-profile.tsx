@@ -174,7 +174,7 @@ export default function DoctorProfile() {
                     <Text style={styles.statLabel}>Total Appointments</Text>
                 </View>
                 <View style={styles.statCard}>
-                    <Text style={styles.statValue}>{averageAppointments.toFixed(1)}</Text>
+                    <Text style={styles.statValue}>{averageAppointments ? averageAppointments.toFixed(1) : '0.0'}</Text>
                     <Text style={styles.statLabel}>Average per Period</Text>
                 </View>
             </View>

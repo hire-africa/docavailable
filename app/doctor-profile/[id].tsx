@@ -201,7 +201,7 @@ export default function DoctorProfileScreen() {
                 <View style={styles.ratingContainer}>
                   <Ionicons name="star" size={16} color={Colors.warning} />
                   <Text style={styles.rating}>
-                    {doctor.rating.toFixed(1)} ({doctor.review_count} reviews)
+                    {doctor.rating ? doctor.rating.toFixed(1) : '0.0'} ({doctor.review_count || 0} reviews)
                   </Text>
                 </View>
               )}
