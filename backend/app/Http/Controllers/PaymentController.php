@@ -101,8 +101,6 @@ class PaymentController extends Controller
         try {
             Log::info('Starting payment processing with Paychangu data', ['data' => $data, 'meta' => $meta]);
             
-            DB::beginTransaction();
-            
             $userId = $meta['user_id'];
             $planId = $meta['plan_id'] ?? null;
             $amount = $data['amount'];
@@ -164,35 +162,73 @@ class PaymentController extends Controller
                 $paymentMetadata['card_details'] = $data['authorization']['card_details'];
             }
             
-            $subscriptionData = [
-                'user_id' => $userId,
-                'status' => 1, // Active
-                'start_date' => now(),
-                'end_date' => now()->addDays($plan ? $plan->duration : 30),
-                'payment_metadata' => $paymentMetadata
-            ];
+            // Check if user already has an active subscription
+            $existingSubscription = Subscription::where('user_id', $userId)
+                ->where('status', 1)
+                ->first();
             
-            if ($plan) {
-                $subscriptionData['plan_id'] = $plan->id;
-                $subscriptionData['plan_name'] = $plan->name;
-                $subscriptionData['plan_price'] = $plan->price;
-                $subscriptionData['plan_currency'] = $plan->currency;
-                $subscriptionData['text_sessions_remaining'] = $plan->text_sessions;
-                $subscriptionData['voice_calls_remaining'] = $plan->voice_calls;
-                $subscriptionData['video_calls_remaining'] = $plan->video_calls;
-                $subscriptionData['total_text_sessions'] = $plan->text_sessions;
-                $subscriptionData['total_voice_calls'] = $plan->voice_calls;
-                $subscriptionData['total_video_calls'] = $plan->video_calls;
+            if ($existingSubscription) {
+                // Update existing subscription with new sessions
+                $subscriptionData = [
+                    'text_sessions_remaining' => $existingSubscription->text_sessions_remaining + ($plan ? $plan->text_sessions : 0),
+                    'voice_calls_remaining' => $existingSubscription->voice_calls_remaining + ($plan ? $plan->voice_calls : 0),
+                    'video_calls_remaining' => $existingSubscription->video_calls_remaining + ($plan ? $plan->video_calls : 0),
+                    'total_text_sessions' => $existingSubscription->total_text_sessions + ($plan ? $plan->text_sessions : 0),
+                    'total_voice_calls' => $existingSubscription->total_voice_calls + ($plan ? $plan->voice_calls : 0),
+                    'total_video_calls' => $existingSubscription->total_video_calls + ($plan ? $plan->video_calls : 0),
+                    'end_date' => now()->addDays($plan ? $plan->duration : 30),
+                    'payment_metadata' => $paymentMetadata,
+                    'is_active' => true
+                ];
+                
+                if ($plan) {
+                    $subscriptionData['plan_id'] = $plan->id;
+                    $subscriptionData['plan_name'] = $plan->name;
+                    $subscriptionData['plan_price'] = $plan->price;
+                    $subscriptionData['plan_currency'] = $plan->currency;
+                }
+                
+                $existingSubscription->update($subscriptionData);
+                $subscription = $existingSubscription;
+                
+                Log::info('Updated existing subscription', [
+                    'subscription_id' => $subscription->id,
+                    'transaction_id' => $transactionId
+                ]);
+            } else {
+                // Create new subscription
+                $subscriptionData = [
+                    'user_id' => $userId,
+                    'status' => 1, // Active
+                    'start_date' => now(),
+                    'end_date' => now()->addDays($plan ? $plan->duration : 30),
+                    'payment_metadata' => $paymentMetadata,
+                    'is_active' => true,
+                    'activated_at' => now()
+                ];
+                
+                if ($plan) {
+                    $subscriptionData['plan_id'] = $plan->id;
+                    $subscriptionData['plan_name'] = $plan->name;
+                    $subscriptionData['plan_price'] = $plan->price;
+                    $subscriptionData['plan_currency'] = $plan->currency;
+                    $subscriptionData['text_sessions_remaining'] = $plan->text_sessions;
+                    $subscriptionData['voice_calls_remaining'] = $plan->voice_calls;
+                    $subscriptionData['video_calls_remaining'] = $plan->video_calls;
+                    $subscriptionData['total_text_sessions'] = $plan->text_sessions;
+                    $subscriptionData['total_voice_calls'] = $plan->voice_calls;
+                    $subscriptionData['total_video_calls'] = $plan->video_calls;
+                }
+                
+                Log::info('Creating new subscription with data:', ['data' => $subscriptionData]);
+                
+                $subscription = Subscription::create($subscriptionData);
+                
+                Log::info('Created new subscription', [
+                    'subscription_id' => $subscription->id,
+                    'transaction_id' => $transactionId
+                ]);
             }
-            
-            Log::info('Creating subscription with data:', ['data' => $subscriptionData]);
-            
-            $subscription = Subscription::updateOrCreate(
-                ['user_id' => $userId, 'status' => 1],
-                $subscriptionData
-            );
-            
-            DB::commit();
             
             Log::info('Payment processed successfully', [
                 'subscription_id' => $subscription->id,
@@ -205,7 +241,6 @@ class PaymentController extends Controller
                 'subscription' => $subscription
             ]);
         } catch (\Exception $e) {
-            DB::rollBack();
             Log::error('Error processing payment', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
