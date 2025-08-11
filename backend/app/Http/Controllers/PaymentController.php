@@ -517,12 +517,12 @@ class PaymentController extends Controller
     public function checkStatus(Request $request)
     {
         try {
-            $txRef = $request->query('tx_ref');
+            $txRef = $request->query('tx_ref') ?? $request->query('transaction_id');
             
             if (!$txRef) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Missing tx_ref parameter'
+                    'message' => 'Missing tx_ref or transaction_id parameter'
                 ], 400);
             }
             
