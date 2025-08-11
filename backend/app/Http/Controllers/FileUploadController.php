@@ -26,15 +26,15 @@ class FileUploadController extends Controller
         $user = $request->user();
         $path = $request->file('profile_picture')->store('profile_pictures', 'public');
         
-        // Store the full URL in database
-        $user->profile_picture = Storage::disk('public')->url($path);
+        // Store PATH only, not a full storage URL
+        $user->profile_picture = $path;
         $user->save();
         
         // Dispatch job to process image asynchronously
         \App\Jobs\ProcessFileUpload::dispatch($path, 'profile_picture', $user->id);
         
-        // Return temporary URL immediately
-        $tempUrl = Storage::disk('public')->url($path);
+        // Return normalized URL via the public image route
+        $tempUrl = url("/api/images/{$path}");
         
         \Log::info('Profile picture uploaded successfully:', [
             'user_id' => $user->id,
