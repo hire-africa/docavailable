@@ -39,7 +39,7 @@ return [
         'environment' => env('PAYCHANGU_ENVIRONMENT', 'production'),
         // Explicit endpoints so we can change without code edits if docs update
         'payment_url' => env('PAYCHANGU_PAYMENT_URL', 'https://api.paychangu.com/payment'),
-        'verify_url' => env('PAYCHANGU_VERIFY_URL', 'https://api.paychangu.com/payment/verify'),
+        'verify_url' => env('PAYCHANGU_VERIFY_URL', 'https://api.paychangu.com/verify-payment'),
         'callback_url' => env('PAYCHANGU_CALLBACK_URL'),
         'return_url' => env('PAYCHANGU_RETURN_URL'),
     ],

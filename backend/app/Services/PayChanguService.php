@@ -17,7 +17,7 @@ class PayChanguService
     {
         $this->secretKey = (string) config('services.paychangu.secret_key');
         $this->paymentUrl = 'https://api.paychangu.com/payment';
-        $this->verifyUrl = 'https://api.paychangu.com/payment/verify';
+        $this->verifyUrl = 'https://api.paychangu.com/verify-payment';
         $this->callbackUrl = config('services.paychangu.callback_url');
         $this->returnUrl = config('services.paychangu.return_url');
     }
@@ -105,23 +105,44 @@ class PayChanguService
             'Authorization' => 'Bearer ' . $this->secretKey,
         ];
 
-        // Some gateways use GET /payment/verify?tx_ref=...; keeping flexible
-        $response = Http::withHeaders($headers)->get($this->verifyUrl, [
+        // Use the correct PayChangu verification endpoint as per documentation
+        $verifyUrl = $this->verifyUrl . '/' . $txRef;
+        
+        Log::info('PayChangu verification request', [
+            'url' => $verifyUrl,
+            'tx_ref' => $txRef
+        ]);
+
+        $response = Http::withHeaders($headers)->get($verifyUrl);
+
+        $responseData = $response->json();
+        
+        Log::info('PayChangu verification response', [
             'tx_ref' => $txRef,
+            'status' => $response->status(),
+            'body' => $responseData
         ]);
 
         if (!$response->successful()) {
             Log::error('PayChangu verify failed', [
                 'tx_ref' => $txRef,
                 'status' => $response->status(),
-                'body' => $response->json(),
+                'body' => $responseData,
             ]);
+            
+            return [
+                'ok' => false,
+                'status' => $response->status(),
+                'body' => $responseData,
+                'error' => 'Verification failed'
+            ];
         }
 
         return [
-            'ok' => $response->successful(),
+            'ok' => true,
             'status' => $response->status(),
-            'body' => $response->json(),
+            'body' => $responseData,
+            'data' => $responseData['data'] ?? null
         ];
     }
 }

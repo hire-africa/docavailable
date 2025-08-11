@@ -32,7 +32,7 @@ class PaymentController extends Controller
                     'signature' => !empty($signature),
                     'webhook_secret' => !empty($webhookSecret)
                 ]);
-                return response()->json(['error' => 'Unauthorized - missing signature or secret'], 401);
+                return response()->json(['error' => 'Unauthorized - missing signature or secret'], 200);
             }
             
             $computedSignature = hash_hmac('sha256', $payload, $webhookSecret);
@@ -42,7 +42,7 @@ class PaymentController extends Controller
                     'computed' => $computedSignature,
                     'received' => $signature
                 ]);
-                return response()->json(['error' => 'Invalid signature'], 401);
+                return response()->json(['error' => 'Invalid signature'], 200);
             }
             
             Log::info('Webhook signature verified successfully');
@@ -54,7 +54,7 @@ class PaymentController extends Controller
             // Step 3: Check event type (Paychangu specific)
             if (!isset($data['event_type'])) {
                 Log::error('Missing event_type in webhook payload', ['data' => $data]);
-                return response()->json(['error' => 'Missing event_type'], 400);
+                return response()->json(['error' => 'Missing event_type'], 200);
             }
             
             if ($data['event_type'] !== 'api.charge.payment') {
@@ -76,11 +76,33 @@ class PaymentController extends Controller
             
             if (empty($meta['user_id'])) {
                 Log::error('Payment webhook missing user_id in meta', ['data' => $data, 'meta' => $meta]);
-                return response()->json(['error' => 'Missing user_id in meta data'], 400);
+                return response()->json(['error' => 'Missing user_id in meta data'], 200);
             }
             
             // Step 5: Check payment status
             if ($data['status'] === 'success') {
+                // Step 6: ALWAYS RE-QUERY - Verify with PayChangu API before processing
+                $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
+                if ($transactionId) {
+                    Log::info('Verifying payment with PayChangu API', ['transaction_id' => $transactionId]);
+                    
+                    $payChanguService = new \App\Services\PayChanguService();
+                    $verification = $payChanguService->verify($transactionId);
+                    
+                    if (!$verification['ok'] || ($verification['data']['status'] ?? '') !== 'success') {
+                        Log::error('Payment verification failed', [
+                            'transaction_id' => $transactionId,
+                            'verification' => $verification
+                        ]);
+                        return response()->json(['message' => 'Payment verification failed'], 200);
+                    }
+                    
+                    Log::info('Payment verified successfully with PayChangu API', [
+                        'transaction_id' => $transactionId,
+                        'verification_data' => $verification['data']
+                    ]);
+                }
+                
                 return $this->processSuccessfulPayment($data, $meta);
             }
             
@@ -92,7 +114,7 @@ class PaymentController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return response()->json(['error' => $e->getMessage()], 500);
+            return response()->json(['error' => $e->getMessage()], 200);
         }
     }
 
@@ -489,6 +511,95 @@ class PaymentController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
             return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function checkStatus(Request $request)
+    {
+        try {
+            $txRef = $request->query('tx_ref');
+            
+            if (!$txRef) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing tx_ref parameter'
+                ], 400);
+            }
+            
+            Log::info('Payment status check requested', ['tx_ref' => $txRef]);
+            
+            // Verify payment with PayChangu
+            $payChanguService = new \App\Services\PayChanguService();
+            $verification = $payChanguService->verify($txRef);
+            
+            if (!$verification['ok']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment verification failed',
+                    'error' => $verification['error'] ?? 'Unknown error'
+                ], 400);
+            }
+            
+            $data = $verification['data'];
+            
+            // Verify critical fields as per PayChangu documentation
+            if (!$data || !isset($data['status'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid verification response'
+                ], 400);
+            }
+            
+            // Check if payment is successful
+            if ($data['status'] === 'success') {
+                // Find our transaction record
+                $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
+                    ->orWhere('gateway_reference', $txRef)
+                    ->first();
+                
+                if ($transaction) {
+                    $transaction->update([
+                        'status' => 'completed',
+                        'metadata' => array_merge($transaction->metadata ?? [], [
+                            'verification_response' => $verification['body'],
+                            'verified_at' => now()->toISOString()
+                        ])
+                    ]);
+                }
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payment verified successfully',
+                    'data' => [
+                        'status' => $data['status'],
+                        'amount' => $data['amount'],
+                        'currency' => $data['currency'],
+                        'tx_ref' => $data['tx_ref'],
+                        'reference' => $data['reference'],
+                        'transaction_id' => $transaction->id ?? null
+                    ]
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment not successful',
+                    'data' => [
+                        'status' => $data['status'],
+                        'tx_ref' => $data['tx_ref'] ?? $txRef
+                    ]
+                ], 400);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Payment status check error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment status check failed',
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 
