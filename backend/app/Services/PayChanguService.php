@@ -15,11 +15,11 @@ class PayChanguService
 
     public function __construct()
     {
-        $this->secretKey = (string) config('services.paychangu.secret_key');
-        $this->paymentUrl = 'https://api.paychangu.com/payment';
-        $this->verifyUrl = 'https://api.paychangu.com/verify-payment';
+        $this->secretKey  = (string) config('services.paychangu.secret_key');
+        $this->paymentUrl = (string) config('services.paychangu.payment_url', 'https://api.paychangu.com/payment');
+        $this->verifyUrl  = (string) config('services.paychangu.verify_url',  'https://api.paychangu.com/payment/verify');
         $this->callbackUrl = config('services.paychangu.callback_url');
-        $this->returnUrl = config('services.paychangu.return_url');
+        $this->returnUrl   = config('services.paychangu.return_url');
     }
 
     public function initiate(array $payload): array
@@ -106,7 +106,7 @@ class PayChanguService
         ];
 
         // Use the correct PayChangu verification endpoint as per documentation
-        $verifyUrl = $this->verifyUrl . '/' . $txRef;
+        $verifyUrl = rtrim($this->verifyUrl, '/') . '/' . $txRef;
         
         Log::info('PayChangu verification request', [
             'url' => $verifyUrl,

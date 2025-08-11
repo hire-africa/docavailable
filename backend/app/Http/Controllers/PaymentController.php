@@ -18,8 +18,15 @@ class PaymentController extends Controller
             
             // Step 1: Verify webhook signature (CRITICAL SECURITY REQUIREMENT)
             $payload = $request->getContent();
-            $signature = $request->header('Signature');
+            // Accept common header variants just in case the provider changes casing/name
+            $signature = $request->header('Signature')
+                ?? $request->header('signature')
+                ?? $request->header('X-Signature')
+                ?? $request->header('x-signature')
+                ?? $request->header('Paychangu-Signature')
+                ?? $request->header('paychangu-signature');
             $webhookSecret = config('services.paychangu.webhook_secret');
+            $apiSecret = config('services.paychangu.secret_key');
             
             Log::info('Webhook verification details', [
                 'has_signature' => !empty($signature),
@@ -27,20 +34,33 @@ class PaymentController extends Controller
                 'payload_length' => strlen($payload)
             ]);
             
-            if (!$signature || !$webhookSecret) {
+            if (!$signature || (!$webhookSecret && !$apiSecret)) {
                 Log::error('Missing signature or webhook secret', [
                     'signature' => !empty($signature),
-                    'webhook_secret' => !empty($webhookSecret)
+                    'webhook_secret' => !empty($webhookSecret),
+                    'api_secret_present' => !empty($apiSecret)
                 ]);
                 return response()->json(['error' => 'Unauthorized - missing signature or secret'], 200);
             }
             
-            $computedSignature = hash_hmac('sha256', $payload, $webhookSecret);
-            
-            if (!hash_equals($computedSignature, $signature)) {
+            // Compute HMAC using webhook secret first
+            $computedSignature = $webhookSecret ? hash_hmac('sha256', $payload, $webhookSecret) : null;
+            $verified = $computedSignature && hash_equals($computedSignature, $signature);
+
+            // If it doesn't match and we have API secret, try that as some providers sign with API secret
+            if (!$verified && $apiSecret) {
+                $computedWithApiSecret = hash_hmac('sha256', $payload, $apiSecret);
+                if (hash_equals($computedWithApiSecret, $signature)) {
+                    $verified = true;
+                    Log::warning('Webhook signature matched using API secret instead of webhook secret');
+                }
+            }
+
+            if (!$verified) {
                 Log::error('Invalid webhook signature', [
-                    'computed' => $computedSignature,
-                    'received' => $signature
+                    'computed_with_webhook' => $computedSignature,
+                    'received' => $signature,
+                    'used_api_fallback' => !empty($apiSecret)
                 ]);
                 return response()->json(['error' => 'Invalid signature'], 200);
             }
@@ -56,11 +76,14 @@ class PaymentController extends Controller
                 Log::error('Missing event_type in webhook payload', ['data' => $data]);
                 return response()->json(['error' => 'Missing event_type'], 200);
             }
-            
-            if ($data['event_type'] !== 'api.charge.payment') {
+            // Normalize event type to avoid casing/spacing issues
+            $event = strtolower(trim($data['event_type']));
+            $allowedEventTypes = ['api.charge.payment', 'checkout.payment'];
+            if (!in_array($event, $allowedEventTypes, true)) {
                 Log::info('Unsupported event type', ['event_type' => $data['event_type']]);
                 return response()->json(['message' => 'Event type not supported'], 200);
             }
+            $data['event_type'] = $event;
             
             // Step 4: Parse meta data (Paychangu sends this as JSON string)
             $meta = [];
@@ -82,7 +105,8 @@ class PaymentController extends Controller
             // Step 5: Check payment status
             if ($data['status'] === 'success') {
                 // Step 6: ALWAYS RE-QUERY - Verify with PayChangu API before processing
-                $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
+                // Prefer tx_ref when available per PayChangu docs
+                $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
                 if ($transactionId) {
                     Log::info('Verifying payment with PayChangu API', ['transaction_id' => $transactionId]);
                     
