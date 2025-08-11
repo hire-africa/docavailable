@@ -193,18 +193,9 @@ class DoctorController extends Controller
                 'total_ratings' => $user->total_ratings,
                 'created_at' => $user->created_at,
                 'profile_picture' => $user->profile_picture,
-                'profile_picture_url' => null,
+                'profile_picture_url' => $user->profile_picture_url,
                 'is_online' => false
             ];
-
-            // Safely handle profile picture URL
-            try {
-                if ($user->profile_picture) {
-                    $doctorData['profile_picture_url'] = $user->profile_picture_url;
-                }
-            } catch (\Exception $e) {
-                \Log::warning('Error getting profile picture URL: ' . $e->getMessage());
-            }
 
             // Safely handle availability
             try {
