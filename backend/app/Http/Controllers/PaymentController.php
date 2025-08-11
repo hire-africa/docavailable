@@ -14,32 +14,79 @@ class PaymentController extends Controller
     public function webhook(Request $request)
     {
         try {
-            Log::info('Payment webhook received', ['data' => $request->all()]);
+            Log::info('Payment webhook received', ['headers' => $request->headers->all()]);
             
-            // Log database configuration (without sensitive info)
-            Log::info('Database configuration:', [
-                'driver' => Config::get('database.default'),
-                'host' => Config::get('database.connections.pgsql_simple.host'),
-                'database' => Config::get('database.connections.pgsql_simple.database'),
-                'port' => Config::get('database.connections.pgsql_simple.port'),
-                'sslmode' => Config::get('database.connections.pgsql_simple.sslmode'),
+            // Step 1: Verify webhook signature (CRITICAL SECURITY REQUIREMENT)
+            $payload = $request->getContent();
+            $signature = $request->header('Signature');
+            $webhookSecret = config('services.paychangu.webhook_secret');
+            
+            Log::info('Webhook verification details', [
+                'has_signature' => !empty($signature),
+                'has_webhook_secret' => !empty($webhookSecret),
+                'payload_length' => strlen($payload)
             ]);
             
-            $data = $request->all();
+            if (!$signature || !$webhookSecret) {
+                Log::error('Missing signature or webhook secret', [
+                    'signature' => !empty($signature),
+                    'webhook_secret' => !empty($webhookSecret)
+                ]);
+                return response()->json(['error' => 'Unauthorized - missing signature or secret'], 401);
+            }
             
-            // Parse meta data which comes as a JSON string
-            $meta = json_decode($data['meta'] ?? '{}', true);
+            $computedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+            
+            if (!hash_equals($computedSignature, $signature)) {
+                Log::error('Invalid webhook signature', [
+                    'computed' => $computedSignature,
+                    'received' => $signature
+                ]);
+                return response()->json(['error' => 'Invalid signature'], 401);
+            }
+            
+            Log::info('Webhook signature verified successfully');
+            
+            // Step 2: Parse webhook data
+            $data = $request->all();
+            Log::info('Webhook payload parsed', ['data' => $data]);
+            
+            // Step 3: Check event type (Paychangu specific)
+            if (!isset($data['event_type'])) {
+                Log::error('Missing event_type in webhook payload', ['data' => $data]);
+                return response()->json(['error' => 'Missing event_type'], 400);
+            }
+            
+            if ($data['event_type'] !== 'api.charge.payment') {
+                Log::info('Unsupported event type', ['event_type' => $data['event_type']]);
+                return response()->json(['message' => 'Event type not supported'], 200);
+            }
+            
+            // Step 4: Parse meta data (Paychangu sends this as JSON string)
+            $meta = [];
+            if (isset($data['meta'])) {
+                if (is_string($data['meta'])) {
+                    $meta = json_decode($data['meta'], true) ?: [];
+                } elseif (is_array($data['meta'])) {
+                    $meta = $data['meta'];
+                }
+            }
+            
+            Log::info('Parsed meta data', ['meta' => $meta]);
             
             if (empty($meta['user_id'])) {
-                Log::error('Payment webhook missing user_id in meta', ['data' => $data]);
+                Log::error('Payment webhook missing user_id in meta', ['data' => $data, 'meta' => $meta]);
                 return response()->json(['error' => 'Missing user_id in meta data'], 400);
             }
             
+            // Step 5: Check payment status
             if ($data['status'] === 'success') {
                 return $this->processSuccessfulPayment($data, $meta);
             }
             
+            Log::info('Payment status not success', ['status' => $data['status']]);
             return response()->json(['message' => 'Payment status not success'], 200);
+            
         } catch (\Exception $e) {
             Log::error('Payment webhook error', [
                 'error' => $e->getMessage(),
@@ -52,8 +99,7 @@ class PaymentController extends Controller
     protected function processSuccessfulPayment($data, $meta)
     {
         try {
-            // Skip database connection test and proceed directly
-            Log::info('Starting payment processing');
+            Log::info('Starting payment processing with Paychangu data', ['data' => $data, 'meta' => $meta]);
             
             DB::beginTransaction();
             
@@ -61,6 +107,14 @@ class PaymentController extends Controller
             $planId = $meta['plan_id'] ?? null;
             $amount = $data['amount'];
             $currency = $data['currency'];
+            
+            // Use correct Paychangu transaction ID fields
+            $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
+            
+            if (!$transactionId) {
+                Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
+                throw new \Exception('Missing transaction ID');
+            }
             
             // Find plan either by ID or by amount/currency
             $plan = null;
@@ -79,25 +133,43 @@ class PaymentController extends Controller
                 ]);
             }
             
+            // Build payment metadata using correct Paychangu fields
+            $paymentMetadata = [
+                'transaction_id' => $transactionId,
+                'reference' => $data['reference'] ?? null,
+                'charge_id' => $data['charge_id'] ?? null,
+                'amount' => $amount,
+                'currency' => $currency,
+                'event_type' => $data['event_type'],
+                'payment_method' => $data['authorization']['channel'] ?? 'Unknown',
+                'completed_at' => $data['authorization']['completed_at'] ?? null,
+                'created_at' => $data['created_at'] ?? null,
+                'updated_at' => $data['updated_at'] ?? null,
+                'mode' => $data['mode'] ?? null,
+                'type' => $data['type'] ?? null
+            ];
+            
+            // Add bank payment details if present
+            if (isset($data['authorization']['bank_payment_details'])) {
+                $paymentMetadata['bank_details'] = $data['authorization']['bank_payment_details'];
+            }
+            
+            // Add mobile money details if present
+            if (isset($data['authorization']['mobile_money'])) {
+                $paymentMetadata['mobile_money'] = $data['authorization']['mobile_money'];
+            }
+            
+            // Add card details if present
+            if (isset($data['authorization']['card_details'])) {
+                $paymentMetadata['card_details'] = $data['authorization']['card_details'];
+            }
+            
             $subscriptionData = [
                 'user_id' => $userId,
                 'status' => 1, // Active
                 'start_date' => now(),
                 'end_date' => now()->addDays($plan ? $plan->duration : 30),
-                'payment_metadata' => [
-                    'transaction_id' => $data['tx_ref'],
-                    'reference' => $data['reference'],
-                    'amount' => $amount,
-                    'currency' => $currency,
-                    'payment_method' => $data['authorization']['channel'] ?? 'Mobile Money',
-                    'payment_channel' => $data['authorization']['mobile_money']['operator'] ?? 'Unknown',
-                    'paid_at' => $data['created_at'],
-                    'customer' => [
-                        'name' => $data['first_name'] . ' ' . $data['last_name'],
-                        'email' => $data['email'],
-                        'phone' => $data['customer']['phone'] ?? null
-                    ]
-                ]
+                'payment_metadata' => $paymentMetadata
             ];
             
             if ($plan) {
@@ -105,9 +177,12 @@ class PaymentController extends Controller
                 $subscriptionData['plan_name'] = $plan->name;
                 $subscriptionData['plan_price'] = $plan->price;
                 $subscriptionData['plan_currency'] = $plan->currency;
-                $subscriptionData['text_sessions'] = $plan->text_sessions;
-                $subscriptionData['voice_calls'] = $plan->voice_calls;
-                $subscriptionData['video_calls'] = $plan->video_calls;
+                $subscriptionData['text_sessions_remaining'] = $plan->text_sessions;
+                $subscriptionData['voice_calls_remaining'] = $plan->voice_calls;
+                $subscriptionData['video_calls_remaining'] = $plan->video_calls;
+                $subscriptionData['total_text_sessions'] = $plan->text_sessions;
+                $subscriptionData['total_voice_calls'] = $plan->voice_calls;
+                $subscriptionData['total_video_calls'] = $plan->video_calls;
             }
             
             Log::info('Creating subscription with data:', ['data' => $subscriptionData]);
@@ -118,6 +193,11 @@ class PaymentController extends Controller
             );
             
             DB::commit();
+            
+            Log::info('Payment processed successfully', [
+                'subscription_id' => $subscription->id,
+                'transaction_id' => $transactionId
+            ]);
             
             return response()->json([
                 'success' => true,
@@ -380,39 +460,43 @@ class PaymentController extends Controller
     public function testWebhook(Request $request)
     {
         try {
-            // Create test payment data in PayChangu format
+            // Create test payment data in PayChangu format according to their documentation
             $testData = [
-                'event_type' => 'checkout.payment',
-                'first_name' => 'Test',
-                'last_name' => 'User',
-                'email' => 'test@example.com',
+                'event_type' => 'api.charge.payment',
                 'currency' => $request->input('currency', 'MWK'),
-                'amount' => $request->input('amount', 100.00),
+                'amount' => $request->input('amount', 1000),
+                'charge' => '20',
+                'mode' => 'test',
+                'type' => 'Direct API Payment',
                 'status' => 'success',
+                'charge_id' => 'test_' . time(),
                 'reference' => 'TEST_' . time(),
-                'tx_ref' => 'TEST_TX_' . time(),
-                'meta' => json_encode([
-                    'user_id' => $request->input('user_id', 11),
-                    'plan_id' => $request->input('plan_id')
-                ]),
-                'customer' => [
-                    'phone' => '+265123456789',
-                    'email' => 'test@example.com',
-                    'first_name' => 'Test',
-                    'last_name' => 'User'
-                ],
                 'authorization' => [
                     'channel' => 'Mobile Money',
+                    'card_details' => null,
+                    'bank_payment_details' => null,
                     'mobile_money' => [
                         'operator' => 'Airtel Money',
                         'mobile_number' => '+265123xxxx89'
-                    ]
+                    ],
+                    'completed_at' => now()->toISOString()
                 ],
                 'created_at' => now()->toISOString(),
-                'updated_at' => now()->toISOString()
+                'updated_at' => now()->toISOString(),
+                'meta' => json_encode([
+                    'user_id' => $request->input('user_id', 11),
+                    'plan_id' => $request->input('plan_id')
+                ])
             ];
             
-            return $this->webhook(new Request($testData));
+            Log::info('Test webhook data created', ['test_data' => $testData]);
+            
+            // Create a new request with the test data
+            $testRequest = new Request($testData);
+            
+            // Call the webhook method directly
+            return $this->webhook($testRequest);
+            
         } catch (\Exception $e) {
             Log::error('Test webhook error', [
                 'error' => $e->getMessage(),

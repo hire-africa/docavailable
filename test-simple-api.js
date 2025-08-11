@@ -61,3 +61,4 @@ async function testSimpleEndpoints() {
 }
 
 testSimpleEndpoints().catch(console.error);
+

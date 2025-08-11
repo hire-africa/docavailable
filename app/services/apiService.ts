@@ -80,11 +80,14 @@ class ApiService {
     // Main API instance
     this.api = axios.create({
       baseURL: `${this.baseURL}/api`, // Always append /api to the clean base URL
-      timeout: 15000, // Reduced to 15 seconds for better UX
+      timeout: 15000, // 15 seconds for better UX
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
+      // Network optimization settings
+      maxRedirects: 3,
+      validateStatus: (status) => status < 500, // Don't throw on 4xx errors
     });
 
     // Separate instance for token refresh (no interceptors to avoid loops)
@@ -508,47 +511,57 @@ class ApiService {
     }
   }
 
-  // Simple connectivity check
+  // Enhanced connectivity check with retry logic
   async checkConnectivity(): Promise<boolean> {
-    try {
-      console.log('ApiService: Checking connectivity to:', this.baseURL);
-      const response = await axios.get(`${this.baseURL}/api/health`, {
-        timeout: 5000,
-        headers: {
-          'Accept': 'application/json',
+    const maxRetries = 2;
+    const baseTimeout = 8000; // Increased from 5s to 8s
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`ApiService: Checking connectivity to: ${this.baseURL} (attempt ${attempt}/${maxRetries})`);
+        
+        // Use the configured axios instance for consistency
+        const response = await this.api.get('/health', {
+          timeout: baseTimeout + (attempt - 1) * 2000, // Progressive timeout: 8s, 10s
+        });
+        
+        // Check if response is actually JSON
+        const contentType = response.headers['content-type'] || '';
+        if (!contentType.includes('application/json')) {
+          console.error('ApiService: Backend returned non-JSON response:', contentType);
+          console.error('ApiService: Response content:', response.data.substring(0, 200));
+          return false;
         }
-      });
-      
-      // Check if response is actually JSON
-      const contentType = response.headers['content-type'] || '';
-      if (!contentType.includes('application/json')) {
-        console.error('ApiService: Backend returned non-JSON response:', contentType);
-        console.error('ApiService: Response content:', response.data.substring(0, 200));
-        return false;
+        
+        console.log('ApiService: Connectivity check successful');
+        return true;
+        
+      } catch (error: any) {
+        console.error(`ApiService: Connectivity check failed (attempt ${attempt}/${maxRetries}):`, {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          contentType: error.response?.headers?.['content-type']
+        });
+        
+        // Check if error response is HTML (deployment issue)
+        if (error.response?.data && typeof error.response.data === 'string' && error.response.data.includes('<br />')) {
+          console.error('ApiService: Backend appears to have deployment issues - returning HTML instead of JSON');
+        }
+        
+        // If this is the last attempt, return false
+        if (attempt === maxRetries) {
+          return false;
+        }
+        
+        // Wait before retrying (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 3000);
+        console.log(`ApiService: Retrying connectivity check in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-      
-      console.log('ApiService: Connectivity check successful');
-      
-      // Circuit breaker disabled - no reset needed
-      // this.circuitBreaker.failureCount = 0;
-      // this.circuitBreaker.isOpen = false;
-      
-      return true;
-    } catch (error: any) {
-      console.error('ApiService: Connectivity check failed:', {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status,
-        contentType: error.response?.headers?.['content-type']
-      });
-      
-      // Check if error response is HTML (deployment issue)
-      if (error.response?.data && typeof error.response.data === 'string' && error.response.data.includes('<br />')) {
-        console.error('ApiService: Backend appears to have deployment issues - returning HTML instead of JSON');
-      }
-      
-      return false;
     }
+    
+    return false;
   }
 
   // Circuit breaker methods disabled

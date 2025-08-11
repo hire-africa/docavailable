@@ -1,8 +1,8 @@
 <?php
 
 /**
- * Test webhook processing logic directly
- * This bypasses signature verification to test the core webhook functionality
+ * Test webhook endpoint using the test webhook route
+ * This tests the actual webhook processing without signature verification
  */
 
 require_once 'vendor/autoload.php';
@@ -11,51 +11,44 @@ require_once 'vendor/autoload.php';
 $app = require_once 'bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-use App\Http\Controllers\PaymentController;
+use Illuminate\Http\Request;
 
-echo "=== Paychangu Webhook Logic Test ===\n\n";
+echo "=== Paychangu Webhook Endpoint Test ===\n\n";
 
 // Test data matching Paychangu's webhook format
-$webhookData = [
-    'event_type' => 'api.charge.payment',
-    'currency' => 'MWK',
-    'amount' => 1000,
-    'charge' => '20',
-    'mode' => 'test',
-    'type' => 'Direct API Payment',
-    'status' => 'success',
-    'charge_id' => 'test_' . time(),
-    'reference' => 'TEST_' . time(),
-    'authorization' => [
-        'channel' => 'Mobile Money',
-        'card_details' => null,
-        'bank_payment_details' => null,
-        'mobile_money' => [
-            'operator' => 'Airtel Money',
-            'mobile_number' => '+265123xxxx89'
-        ],
-        'completed_at' => date('c')
-    ],
-    'created_at' => date('c'),
-    'updated_at' => date('c')
-];
-
-$meta = [
+$testData = [
     'user_id' => 11,
-    'plan_id' => 1
+    'plan_id' => 1,
+    'currency' => 'MWK',
+    'amount' => 1000
 ];
 
-echo "Testing with webhook data:\n";
-echo json_encode($webhookData, JSON_PRETTY_PRINT) . "\n\n";
+echo "Testing with data:\n";
+echo json_encode($testData, JSON_PRETTY_PRINT) . "\n\n";
 
-echo "Meta data:\n";
-echo json_encode($meta, JSON_PRETTY_PRINT) . "\n\n";
+// Create a test request
+$request = new Request($testData);
 
 try {
-    $controller = new PaymentController();
+    // Get the test webhook route
+    $router = app('router');
     
-    // Call processSuccessfulPayment directly
-    $response = $controller->processSuccessfulPayment($webhookData, $meta);
+    // Find the test webhook route
+    $testWebhookRoute = null;
+    foreach ($router->getRoutes() as $route) {
+        if ($route->uri() === 'api/payments/test-webhook') {
+            $testWebhookRoute = $route;
+            break;
+        }
+    }
+    
+    if (!$testWebhookRoute) {
+        echo "❌ Test webhook route not found\n";
+        exit(1);
+    }
+    
+    // Dispatch the request to the test webhook route
+    $response = $router->dispatch($request);
     
     $responseData = json_decode($response->getContent(), true);
     $statusCode = $response->getStatusCode();
@@ -64,7 +57,7 @@ try {
     echo "Response: " . json_encode($responseData, JSON_PRETTY_PRINT) . "\n\n";
     
     if ($statusCode === 200 && isset($responseData['success']) && $responseData['success']) {
-        echo "✅ Webhook processing test passed - subscription created successfully\n";
+        echo "✅ Webhook endpoint test passed - subscription created successfully\n";
         
         // Check if subscription was actually created
         $subscription = \App\Models\Subscription::where('user_id', 11)
@@ -80,16 +73,21 @@ try {
             echo "   Status: " . $subscription->status . "\n";
             echo "   Start Date: " . $subscription->start_date . "\n";
             echo "   End Date: " . $subscription->end_date . "\n";
+            
+            // Show payment metadata
+            if ($subscription->payment_metadata) {
+                echo "   Payment Metadata: " . json_encode($subscription->payment_metadata, JSON_PRETTY_PRINT) . "\n";
+            }
         } else {
             echo "❌ Subscription not found in database\n";
         }
     } else {
-        echo "❌ Webhook processing test failed\n";
+        echo "❌ Webhook endpoint test failed\n";
     }
     
 } catch (Exception $e) {
-    echo "❌ Webhook processing error: " . $e->getMessage() . "\n";
+    echo "❌ Webhook endpoint test error: " . $e->getMessage() . "\n";
     echo "Stack trace: " . $e->getTraceAsString() . "\n";
 }
 
-echo "\n=== Test Complete ===\n"; 
+echo "\n=== Test Complete ===\n";

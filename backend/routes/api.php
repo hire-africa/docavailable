@@ -111,6 +111,33 @@ Route::get('/debug/chat-test', function () {
     ]);
 });
 
+// Debug endpoint for testing doctor profile
+Route::get('/debug/doctor-test', function () {
+    try {
+        $user = \App\Models\User::where('user_type', 'doctor')->first();
+        if ($user) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'Doctor found',
+                'doctor_id' => $user->id,
+                'doctor_name' => $user->first_name . ' ' . $user->last_name,
+                'doctor_status' => $user->status,
+                'profile_picture' => $user->profile_picture
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No doctors found in database'
+            ]);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Error: ' . $e->getMessage()
+        ]);
+    }
+});
+
 // Test chat endpoints
 Route::get('/debug/chat-endpoints', function () {
     return response()->json([

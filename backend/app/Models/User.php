@@ -338,7 +338,18 @@ class User extends Authenticatable implements JWTSubject
     public function getProfilePictureUrlAttribute()
     {
         if ($this->profile_picture) {
-            return $this->profile_picture;
+            // If it's already a full URL, return as is
+            if (filter_var($this->profile_picture, FILTER_VALIDATE_URL)) {
+                return $this->profile_picture;
+            }
+            
+            // If it's a relative path, generate the full URL
+            if (str_starts_with($this->profile_picture, '/')) {
+                return url($this->profile_picture);
+            }
+            
+            // If it's a filename, assume it's in storage
+            return \Illuminate\Support\Facades\Storage::disk('public')->url($this->profile_picture);
         }
         return null;
     }

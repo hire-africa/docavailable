@@ -153,44 +153,83 @@ class DoctorController extends Controller
      */
     public function getDoctorDetails($id)
     {
-        $doctor = User::where('user_type', 'doctor')
-            ->where('status', 'approved')
-            ->where('id', $id)
-            ->select([
-                'id',
-                'first_name',
-                'last_name',
-                'display_name',
-                'specialization',
-                'sub_specialization',
-                'specializations',
-                'sub_specializations',
-                'years_of_experience',
-                'bio',
-                'country',
-                'city',
-                'rating',
-                'total_ratings',
-                'created_at',
-                'profile_picture'
-            ])
-            ->firstOrFail();
+        try {
+            \Log::info('Fetching doctor details for ID: ' . $id);
+            
+            // First, let's check if the user exists at all
+            $user = User::find($id);
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+            
+            // Check if it's a doctor
+            if ($user->user_type !== 'doctor') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User is not a doctor'
+                ], 404);
+            }
+            
+            \Log::info('Doctor found: ' . $user->first_name . ' ' . $user->last_name);
 
-        // Get doctor availability to check online status
-        $availability = \App\Models\DoctorAvailability::where('doctor_id', $id)->first();
-        $isOnline = $availability ? $availability->is_online : false;
+            // Build basic doctor data
+            $doctorData = [
+                'id' => $user->id,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'display_name' => $user->display_name,
+                'specialization' => $user->specialization,
+                'sub_specialization' => $user->sub_specialization,
+                'specializations' => $user->specializations,
+                'sub_specializations' => $user->sub_specializations,
+                'years_of_experience' => $user->years_of_experience,
+                'bio' => $user->bio,
+                'country' => $user->country,
+                'city' => $user->city,
+                'rating' => $user->rating,
+                'total_ratings' => $user->total_ratings,
+                'created_at' => $user->created_at,
+                'profile_picture' => $user->profile_picture,
+                'profile_picture_url' => null,
+                'is_online' => false
+            ];
 
-        // Add profile picture URL and online status
-        $doctorData = $doctor->toArray();
-        if ($doctor->profile_picture) {
-            $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
+            // Safely handle profile picture URL
+            try {
+                if ($user->profile_picture) {
+                    $doctorData['profile_picture_url'] = $user->profile_picture_url;
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Error getting profile picture URL: ' . $e->getMessage());
+            }
+
+            // Safely handle availability
+            try {
+                $availability = \App\Models\DoctorAvailability::where('doctor_id', $id)->first();
+                $doctorData['is_online'] = $availability ? $availability->is_online : false;
+            } catch (\Exception $e) {
+                \Log::warning('Error getting doctor availability: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $doctorData
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error fetching doctor details: ' . $e->getMessage(), [
+                'doctor_id' => $id,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching doctor details: ' . $e->getMessage()
+            ], 500);
         }
-        $doctorData['is_online'] = $isOnline;
-
-        return response()->json([
-            'success' => true,
-            'data' => $doctorData
-        ]);
     }
 
     /**

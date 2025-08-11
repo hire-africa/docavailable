@@ -1,55 +1,77 @@
 <?php
 
-require __DIR__.'/vendor/autoload.php';
+/**
+ * Simple webhook test using the testWebhook method
+ */
 
-$app = require_once __DIR__.'/bootstrap/app.php';
-$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+require_once 'vendor/autoload.php';
 
-use Illuminate\Support\Facades\DB;
-use App\Models\Subscription;
-use App\Models\Plan;
+// Bootstrap Laravel
+$app = require_once 'bootstrap/app.php';
+$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-echo "🧪 Testing Webhook Database Connection...\n\n";
+use App\Http\Controllers\PaymentController;
+use Illuminate\Http\Request;
+
+echo "=== Simple Paychangu Webhook Test ===\n\n";
+
+// Test data
+$testData = [
+    'user_id' => 11,
+    'plan_id' => 1,
+    'currency' => 'MWK',
+    'amount' => 1000
+];
+
+echo "Testing with data:\n";
+echo json_encode($testData, JSON_PRETTY_PRINT) . "\n\n";
 
 try {
-    // Test with standard Laravel database connection
-    $connection = DB::connection('pgsql'); // Use standard pgsql connection
-    $pdo = $connection->getPdo();
-    echo "✅ Database connection successful!\n\n";
+    // Create request
+    $request = new Request($testData);
     
-    // Test subscription creation
-    $testData = [
-        'user_id' => 11,
-        'status' => 1,
-        'start_date' => now(),
-        'end_date' => now()->addDays(30),
-        'payment_metadata' => [
-            'transaction_id' => 'TEST_TX_' . time(),
-            'reference' => 'TEST_REF_' . time(),
-            'amount' => 100,
-            'currency' => 'MWK',
-            'payment_method' => 'Mobile Money',
-            'payment_channel' => 'Airtel Money',
-            'paid_at' => now(),
-            'customer' => [
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-                'phone' => '+265123456789'
-            ]
-        ]
-    ];
+    // Create controller and call testWebhook method
+    $controller = new PaymentController();
+    $response = $controller->testWebhook($request);
     
-    echo "Testing subscription creation...\n";
-    $subscription = Subscription::updateOrCreate(
-        ['user_id' => 11, 'status' => 1],
-        $testData
-    );
+    $responseData = json_decode($response->getContent(), true);
+    $statusCode = $response->getStatusCode();
     
-    echo "✅ Subscription created/updated successfully!\n";
-    echo "Subscription ID: " . $subscription->id . "\n";
+    echo "Response Status: $statusCode\n";
+    echo "Response: " . json_encode($responseData, JSON_PRETTY_PRINT) . "\n\n";
+    
+    if ($statusCode === 200 && isset($responseData['success']) && $responseData['success']) {
+        echo "✅ Webhook test passed - subscription created successfully\n";
+        
+        // Check if subscription was actually created
+        $subscription = \App\Models\Subscription::where('user_id', 11)
+            ->where('status', 1)
+            ->latest()
+            ->first();
+            
+        if ($subscription) {
+            echo "✅ Subscription found in database:\n";
+            echo "   ID: " . $subscription->id . "\n";
+            echo "   User ID: " . $subscription->user_id . "\n";
+            echo "   Plan ID: " . $subscription->plan_id . "\n";
+            echo "   Status: " . $subscription->status . "\n";
+            echo "   Start Date: " . $subscription->start_date . "\n";
+            echo "   End Date: " . $subscription->end_date . "\n";
+            
+            // Show payment metadata
+            if ($subscription->payment_metadata) {
+                echo "   Payment Metadata: " . json_encode($subscription->payment_metadata, JSON_PRETTY_PRINT) . "\n";
+            }
+        } else {
+            echo "❌ Subscription not found in database\n";
+        }
+    } else {
+        echo "❌ Webhook test failed\n";
+    }
     
 } catch (Exception $e) {
-    echo "❌ Database test failed!\n";
-    echo "Error: " . $e->getMessage() . "\n";
-    exit(1);
-} 
+    echo "❌ Webhook test error: " . $e->getMessage() . "\n";
+    echo "Stack trace: " . $e->getTraceAsString() . "\n";
+}
+
+echo "\n=== Test Complete ===\n"; 
