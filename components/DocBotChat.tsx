@@ -2,6 +2,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Dimensions,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -23,15 +24,7 @@ interface Message {
 }
 
 export default function DocBotChat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: "Hello! I'm DocBot, your AI health assistant. I can help you with symptoms, health advice, and booking appointments. What would you like to know?",
-      isUser: false,
-      timestamp: new Date(),
-      type: 'general'
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -162,25 +155,16 @@ export default function DocBotChat() {
       {/* Modern Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <View style={styles.headerLeft}>
-            <View style={styles.botAvatarContainer}>
-              <View style={styles.botAvatar}>
-                <FontAwesome name="robot" size={24} color="#FFFFFF" />
-              </View>
-              <View style={styles.onlineIndicator} />
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.botName}>DocBot</Text>
-              <Text style={styles.botSubtitle}>AI Health Assistant</Text>
-            </View>
+          <View style={styles.botAvatarContainer}>
+            <Image 
+              source={require('../assets/images/DA.png')} 
+              style={styles.botAvatar}
+              resizeMode="cover"
+            />
           </View>
-          <View style={styles.headerRight}>
-            <View style={styles.statusContainer}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>
-                {isTyping ? 'Thinking...' : 'Online'}
-              </Text>
-            </View>
+          <View style={styles.headerText}>
+            <Text style={styles.botName}>DocBot Free</Text>
+            <Text style={styles.botSubtitle}>AI Health Assistant</Text>
           </View>
         </View>
       </View>
@@ -197,7 +181,6 @@ export default function DocBotChat() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.messagesContent}
         >
-
 
           {messages.map((message, index) => (
             <View
@@ -294,49 +277,25 @@ const styles = StyleSheet.create({
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   botAvatarContainer: {
-    position: 'relative',
     marginRight: 12,
   },
   botAvatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#4CAF50',
-    alignItems: 'center',
-    justifyContent: 'center',
     shadowColor: '#4CAF50',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#4CAF50',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
   headerText: {
-    flex: 1,
+    alignItems: 'center',
   },
   botName: {
     fontSize: 20,
@@ -346,22 +305,6 @@ const styles = StyleSheet.create({
   },
   botSubtitle: {
     fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  statusContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4CAF50',
-    marginRight: 6,
-  },
-  statusText: {
-    fontSize: 12,
     color: '#666',
     fontWeight: '500',
   },
@@ -377,55 +320,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 20,
     backgroundColor: '#F8F9FA',
-  },
-  welcomeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  welcomeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  welcomeTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#222',
-    marginLeft: 8,
-  },
-  welcomeText: {
-    fontSize: 15,
-    color: '#666',
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  quickAction: {
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#F0F8F0',
-    borderWidth: 1,
-    borderColor: '#E0F2E9',
-  },
-  quickActionText: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: '600',
-    marginTop: 4,
   },
   messageContainer: {
     flexDirection: 'row',
