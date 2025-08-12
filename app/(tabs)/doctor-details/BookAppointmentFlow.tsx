@@ -16,8 +16,8 @@ import {
     View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { apiService } from '../../../app/services/apiService';
 import { useAuth } from '../../../contexts/AuthContext';
-import { apiService } from '../../../services/apiService';
 import { paymentsService } from '../../../services/paymentsService';
 
 const availableTimes = [

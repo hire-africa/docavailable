@@ -767,8 +767,6 @@ export default function ChatPage() {
           >
             <Icon name="voice" size={24} color="#4CAF50" />
           </TouchableOpacity>
-          
-
         </View>
         
 
@@ -811,6 +809,7 @@ export default function ChatPage() {
               Messages are end-to-end encrypted, only people in this chat can read, listen or share them.
             </Text>
           </View>
+          
           {messages.map((message, index) => {
             // Create a unique key that combines multiple identifiers to prevent duplicates
             const uniqueKey = `${message.id}_${message.temp_id || 'no_temp'}_${message.created_at}_${message.sender_id}_${index}`;

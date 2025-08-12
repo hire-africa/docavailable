@@ -3,7 +3,7 @@ import React, { useCallback, useEffect } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { apiService } from '../../services/apiService';
+import { apiService } from '../../app/services/apiService';
 
 export default function PayChanguCheckout() {
   const params = useLocalSearchParams();

@@ -11,7 +11,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../services/apiService';
+import { apiService } from '../app/services/apiService';
 
 interface TestResult {
   name: string;

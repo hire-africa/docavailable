@@ -17,7 +17,7 @@ import { Icon } from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
+import { apiService } from '../app/services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -151,6 +151,10 @@ export default function EditPatientProfile() {
             // console.log('EditPatientProfile: Starting image upload...');
             // console.log('EditPatientProfile: Image URI:', imageUri);
             
+            // Debug: Check authentication token
+            const token = await apiService.getAuthToken();
+            console.log('EditPatientProfile: Auth token available:', !!token);
+            
             // Create form data for image upload
             const formData = new FormData();
             formData.append('profile_picture', {
@@ -186,7 +190,7 @@ export default function EditPatientProfile() {
                 
                 Alert.alert('Success', 'Profile picture updated successfully!');
             } else {
-                console.error('EditPatientProfile: Upload failed:', response.message);
+                console.error('EditPatientProfile: Upload failed:', response.message || 'Unknown error');
                 Alert.alert('Error', response.message || 'Failed to upload profile picture');
             }
         } catch (error: any) {
@@ -205,6 +209,8 @@ export default function EditPatientProfile() {
                 errorMessage = 'Image file is too large. Please select a smaller image (under 2MB).';
             } else if (error.response?.data?.message) {
                 errorMessage = error.response.data.message;
+            } else if (error.message) {
+                errorMessage = error.message;
             }
             
             Alert.alert('Error', errorMessage);

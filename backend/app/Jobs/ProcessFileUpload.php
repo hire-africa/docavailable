@@ -82,9 +82,7 @@ class ProcessFileUpload implements ShouldQueue
         // Create different sizes
         $sizes = [
             'thumb' => [150, 150],
-            'small' => [300, 300],
             'medium' => [600, 600],
-            'large' => [1200, 1200]
         ];
 
         foreach ($sizes as $size => $dimensions) {
@@ -117,7 +115,6 @@ class ProcessFileUpload implements ShouldQueue
         $sizes = [
             'thumb' => [100, 100],
             'preview' => [400, 400],
-            'full' => [800, 800]
         ];
 
         foreach ($sizes as $size => $dimensions) {
@@ -168,7 +165,7 @@ class ProcessFileUpload implements ShouldQueue
     /**
      * Resize and optimize image
      */
-    protected function resizeImage(string $originalPath, string $newPath, int $width, int $height, int $quality = 80): void
+    protected function resizeImage(string $originalPath, string $newPath, int $width, int $height, int $quality = 90): void
     {
         try {
             $fullOriginalPath = Storage::disk('public')->path($originalPath);

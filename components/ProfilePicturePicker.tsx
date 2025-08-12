@@ -54,7 +54,7 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
-                quality: 0.7, // Compress to 70% quality to reduce file size
+                quality: 0.9, // Increase from 0.7 to 0.9 (90% quality)
                 base64: false,
             });
 
@@ -66,33 +66,10 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
                 //   fileSize: result.assets[0].fileSize
                 // });
                 
-                // Check if we need additional compression
+                // Remove the aggressive re-compression for large files
                 if (result.assets[0].fileSize && result.assets[0].fileSize > 1500000) { // 1.5MB
-                    // console.log('ProfilePicturePicker: Image too large, using higher compression');
-                    
-                    // Show user feedback
-                    if (Platform.OS !== 'web') {
-                        alert('Image is being compressed to meet size requirements...');
-                    }
-                    
-                    // Re-pick with higher compression
-                    const compressedResult = await ImagePicker.launchImageLibraryAsync({
-                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                        allowsEditing: true,
-                        aspect: [1, 1],
-                        quality: 0.5, // Higher compression for large files
-                        base64: false,
-                    });
-                    
-                    if (!compressedResult.canceled && compressedResult.assets[0]) {
-                        // console.log('ProfilePicturePicker: Compressed image selected:', {
-                        //   uri: compressedResult.assets[0].uri,
-                        //   width: compressedResult.assets[0].width,
-                        //   height: compressedResult.assets[0].height,
-                        //   fileSize: compressedResult.assets[0].fileSize
-                        // });
-                        onImageSelected(compressedResult.assets[0].uri);
-                    }
+                    // Don't re-compress, just use the image as is
+                    onImageSelected(result.assets[0].uri);
                 } else {
                     onImageSelected(result.assets[0].uri);
                 }

@@ -63,7 +63,7 @@ class ImageService {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.9, // Increase from 0.8 to 0.9 (90% quality)
         base64: false,
       });
 
@@ -97,7 +97,7 @@ class ImageService {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 0.9, // Increase from 0.8 to 0.9 (90% quality)
         base64: false,
       });
 

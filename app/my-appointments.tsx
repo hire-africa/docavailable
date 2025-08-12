@@ -3,10 +3,10 @@ import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { apiService } from '../app/services/apiService';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
 
 const MyAppointments = () => {
   const { user } = useAuth();

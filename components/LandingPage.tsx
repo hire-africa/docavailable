@@ -1,13 +1,13 @@
 import { Link } from 'expo-router';
 import React from 'react';
 import {
-  Dimensions,
-  Image,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Dimensions,
+    Image,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -77,8 +77,8 @@ const styles = StyleSheet.create({
     marginTop: 180,
   },
   doctorImage: {
-    width: 240,
-    height: 180,
+    width: 180,
+    height: 135,
     resizeMode: 'contain',
     marginTop: -110,
   },

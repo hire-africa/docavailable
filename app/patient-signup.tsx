@@ -1,4 +1,5 @@
 import authService from '@/services/authService';
+import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -71,7 +72,7 @@ const Step1: React.FC<Step1Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <Text style={{ fontSize: 32, color: "#4CAF50" }}>👤</Text>
+                <FontAwesome name="user" size={32} color="#4CAF50" />
                 <Text style={styles.stepTitle}>Personal Information</Text>
                 <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
             </View>
@@ -131,7 +132,7 @@ const Step1: React.FC<Step1Props> = ({
                             style={[styles.genderButton, gender === option && styles.genderButtonActive]}
                             onPress={() => setGender(option)}
                         >
-                            <Text style={{ fontSize: 24, color: gender === option ? "#4CAF50" : "#666" }}>👤</Text>
+                            <FontAwesome name="user" size={24} color={gender === option ? "#4CAF50" : "#666"} />
                             <Text style={[styles.genderButtonText, gender === option && styles.genderButtonTextActive]}>
                                 {option}
                             </Text>
@@ -197,7 +198,7 @@ const Step2 = () => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <Text style={{ fontSize: 32, color: "#4CAF50" }}>🛡️</Text>
+                <FontAwesome name="shield" size={32} color="#4CAF50" />
                 <Text style={styles.stepTitle}>Identity Verification</Text>
                 <Text style={styles.stepSubtitle}>Secure and confidential verification</Text>
             </View>
@@ -210,7 +211,7 @@ const Step2 = () => {
                         onPress={() => setIdType('drivers')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'drivers' && styles.idOptionIconActive]}>
-                            <Text style={{ fontSize: 24, color: idType === 'drivers' ? "#4CAF50" : "#666" }}>🚗</Text>
+                            <FontAwesome name="car" size={24} color={idType === 'drivers' ? "#4CAF50" : "#666"} />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'drivers' && styles.idOptionTextActive]}>
                             Driver&apos;s License
@@ -222,7 +223,7 @@ const Step2 = () => {
                         onPress={() => setIdType('passport')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'passport' && styles.idOptionIconActive]}>
-                            <Text style={{ fontSize: 24, color: idType === 'passport' ? "#4CAF50" : "#666" }}>📄</Text>
+                            <FontAwesome name="id-card" size={24} color={idType === 'passport' ? "#4CAF50" : "#666"} />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'passport' && styles.idOptionTextActive]}>
                             Passport
@@ -234,7 +235,7 @@ const Step2 = () => {
                         onPress={() => setIdType('national')}
                     >
                         <View style={[styles.idOptionIcon, idType === 'national' && styles.idOptionIconActive]}>
-                            <Text style={{ fontSize: 24, color: idType === 'national' ? "#4CAF50" : "#666" }}>🆔</Text>
+                            <FontAwesome name="flag" size={24} color={idType === 'national' ? "#4CAF50" : "#666"} />
                         </View>
                         <Text style={[styles.idOptionText, idType === 'national' && styles.idOptionTextActive]}>
                             National ID
@@ -259,14 +260,14 @@ const Step2 = () => {
                         <ActivityIndicator size="large" color="#4CAF50" />
                     ) : (
                         <>
-                            <Text style={{ fontSize: 48, color: "#4CAF50" }}>📷</Text>
+                            <FontAwesome name="camera" size={48} color="#4CAF50" />
                             <Text style={styles.photoUploadText}>Tap to Upload</Text>
                         </>
                     )}
                 </TouchableOpacity>
 
                 <View style={styles.securityNote}>
-                    <Text style={{ fontSize: 20, color: "#4CAF50" }}>🛡️</Text>
+                    <FontAwesome name="lock" size={20} color="#4CAF50" />
                     <Text style={styles.securityNoteText}>
                         Your information is encrypted and secure. We follow strict privacy guidelines.
                     </Text>

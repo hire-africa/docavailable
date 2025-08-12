@@ -1,6 +1,8 @@
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+    Animated,
     Dimensions,
     Image,
     KeyboardAvoidingView,
@@ -23,11 +25,131 @@ interface Message {
   type?: 'symptom' | 'advice' | 'booking' | 'emergency' | 'general';
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  timestamp: Date;
+}
+
 export default function DocBotChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Animation value for history panel
+  const slideAnim = useRef(new Animated.Value(-width)).current;
+
+  // Generate chat title based on first user message
+  const generateChatTitle = (userMessage: string): string => {
+    const lowerMessage = userMessage.toLowerCase();
+    
+    if (lowerMessage.includes('headache') || lowerMessage.includes('head pain')) {
+      return 'Headache Consultation';
+    } else if (lowerMessage.includes('fever') || lowerMessage.includes('temperature')) {
+      return 'Fever & Temperature';
+    } else if (lowerMessage.includes('cold') || lowerMessage.includes('flu')) {
+      return 'Cold & Flu Symptoms';
+    } else if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) {
+      return 'Appointment Booking';
+    } else if (lowerMessage.includes('emergency') || lowerMessage.includes('urgent')) {
+      return 'Emergency Guidance';
+    } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+      return 'General Health Chat';
+    } else if (lowerMessage.includes('thank')) {
+      return 'Health Consultation';
+    } else if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
+      return 'Health Chat';
+    } else {
+      return 'Health Consultation';
+    }
+  };
+
+  // Save current chat to history
+  const saveCurrentChat = () => {
+    if (messages.length > 0) {
+      const firstUserMessage = messages.find(msg => msg.isUser)?.text || 'Health Consultation';
+      const chatTitle = generateChatTitle(firstUserMessage);
+      
+      const newChatSession: ChatSession = {
+        id: Date.now().toString(),
+        title: chatTitle,
+        messages: [...messages],
+        timestamp: new Date(),
+      };
+      
+      const updatedHistory = [newChatSession, ...chatHistory];
+      setChatHistory(updatedHistory);
+      saveChatHistoryToStorage(updatedHistory);
+    }
+  };
+
+  // Load chat from history
+  const loadChatFromHistory = (chatSession: ChatSession) => {
+    setMessages(chatSession.messages);
+    setShowHistory(false);
+  };
+
+  // Delete chat from history
+  const deleteChatFromHistory = (chatId: string) => {
+    const updatedHistory = chatHistory.filter(chat => chat.id !== chatId);
+    setChatHistory(updatedHistory);
+    saveChatHistoryToStorage(updatedHistory);
+  };
+
+  // Clear all chat history
+  const clearAllChatHistory = () => {
+    setChatHistory([]);
+    saveChatHistoryToStorage([]);
+  };
+
+  // Load chat history from AsyncStorage
+  const loadChatHistory = async () => {
+    try {
+      const savedHistory = await AsyncStorage.getItem('docbot_chat_history');
+      if (savedHistory) {
+        const parsedHistory = JSON.parse(savedHistory);
+        // Convert timestamp strings back to Date objects
+        const historyWithDates = parsedHistory.map((chat: any) => ({
+          ...chat,
+          timestamp: new Date(chat.timestamp),
+          messages: chat.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        }));
+        setChatHistory(historyWithDates);
+      }
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+    }
+  };
+
+  // Save chat history to AsyncStorage
+  const saveChatHistoryToStorage = async (history: ChatSession[]) => {
+    try {
+      await AsyncStorage.setItem('docbot_chat_history', JSON.stringify(history));
+    } catch (error) {
+      console.error('Error saving chat history:', error);
+    }
+  };
+
+  // Animate history panel
+  const animateHistoryPanel = (show: boolean) => {
+    Animated.timing(slideAnim, {
+      toValue: show ? 0 : -width,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  // Load chat history on component mount
+  useEffect(() => {
+    loadChatHistory();
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -35,6 +157,11 @@ export default function DocBotChat() {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  // Animate history panel when showHistory changes
+  useEffect(() => {
+    animateHistoryPanel(showHistory);
+  }, [showHistory]);
 
   const generateBotResponse = (userMessage: string): { text: string; type: Message['type'] } => {
     const lowerMessage = userMessage.toLowerCase();
@@ -98,6 +225,13 @@ export default function DocBotChat() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Save chat to history if this is the first message
+    if (messages.length === 0) {
+      setTimeout(() => {
+        saveCurrentChat();
+      }, 1000); // Save after bot responds
+    }
     setInputText('');
     setIsTyping(true);
 
@@ -155,6 +289,20 @@ export default function DocBotChat() {
       {/* Modern Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
+          {/* History Menu Button - Left Side */}
+          <TouchableOpacity 
+            style={{
+              position: 'absolute',
+              left: 20,
+              padding: 8,
+            }}
+            onPress={() => {
+              setShowHistory(!showHistory);
+            }}
+          >
+            <FontAwesome name="ellipsis-v" size={24} color="#4CAF50" />
+          </TouchableOpacity>
+          
           <View style={styles.botAvatarContainer}>
             <Image 
               source={require('../assets/images/DA.png')} 
@@ -166,6 +314,26 @@ export default function DocBotChat() {
             <Text style={styles.botName}>DocBot Free</Text>
             <Text style={styles.botSubtitle}>AI Health Assistant</Text>
           </View>
+          
+          {/* New Chat Button - Right Side */}
+          <TouchableOpacity 
+            style={{
+              position: 'absolute',
+              right: 20,
+              padding: 8,
+            }}
+            onPress={() => {
+              // Save current chat before clearing
+              if (messages.length > 0) {
+                saveCurrentChat();
+              }
+              // Clear all messages to start a new chat
+              setMessages([]);
+              setInputText('');
+            }}
+          >
+            <FontAwesome name="plus-circle" size={24} color="#4CAF50" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -179,8 +347,63 @@ export default function DocBotChat() {
           ref={scrollViewRef}
           style={styles.messagesList}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={{
+            ...styles.messagesContent,
+            flexGrow: messages.length === 0 ? 1 : undefined,
+            justifyContent: messages.length === 0 ? 'center' : undefined,
+          }}
         >
+          
+          {/* Welcome Message Placeholder - Only show when no messages exist */}
+          {messages.length === 0 && (
+            <View style={{
+              alignItems: 'center',
+              paddingVertical: 60,
+              paddingHorizontal: 20,
+            }}>
+              <View style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 20,
+                padding: 24,
+                alignItems: 'center',
+                maxWidth: 280,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 8,
+                elevation: 3,
+              }}>
+                <View style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  backgroundColor: '#4CAF50',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 16,
+                }}>
+                  <FontAwesome name="stethoscope" size={28} color="#fff" />
+                </View>
+                <Text style={{
+                  fontSize: 20,
+                  fontWeight: '600',
+                  color: '#333',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                }}>
+                  Hi, I'm DocBot! 👋
+                </Text>
+                <Text style={{
+                  fontSize: 16,
+                  color: '#666',
+                  textAlign: 'center',
+                  lineHeight: 22,
+                }}>
+                  How can I help you today? I'm here to assist with your health questions and provide medical guidance.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {messages.map((message, index) => (
             <View
@@ -255,6 +478,86 @@ export default function DocBotChat() {
           </View>
         </View>
       </KeyboardAvoidingView>
+      
+      {/* Chat History Side Panel */}
+      {showHistory && (
+        <Animated.View 
+          style={[
+            styles.historyOverlay,
+            { opacity: slideAnim.interpolate({
+              inputRange: [-width, 0],
+              outputRange: [0, 1],
+              extrapolate: 'clamp',
+            })}
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.historyBackdrop}
+            onPress={() => setShowHistory(false)}
+          />
+          <Animated.View 
+            style={[
+              styles.historyPanel,
+              {
+                transform: [{
+                  translateX: slideAnim
+                }]
+              }
+            ]}
+          >
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyTitle}>Chat History</Text>
+              <View style={styles.historyHeaderButtons}>
+                {chatHistory.length > 0 && (
+                  <TouchableOpacity 
+                    onPress={clearAllChatHistory}
+                    style={styles.clearButton}
+                  >
+                    <FontAwesome name="trash" size={16} color="#FF4444" />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity 
+                  onPress={() => setShowHistory(false)}
+                  style={styles.closeButton}
+                >
+                  <FontAwesome name="times" size={20} color="#666" />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
+            <ScrollView style={styles.historyList}>
+              {chatHistory.length === 0 ? (
+                <View style={styles.emptyHistory}>
+                  <FontAwesome name="history" size={48} color="#CCC" />
+                  <Text style={styles.emptyHistoryText}>No chat history yet</Text>
+                  <Text style={styles.emptyHistorySubtext}>Your conversations will appear here</Text>
+                </View>
+              ) : (
+                chatHistory.map((chat) => (
+                  <TouchableOpacity
+                    key={chat.id}
+                    style={styles.historyItem}
+                    onPress={() => loadChatFromHistory(chat)}
+                  >
+                    <View style={styles.historyItemContent}>
+                      <Text style={styles.historyItemTitle} numberOfLines={1}>
+                        {chat.title}
+                      </Text>
+                      <Text style={styles.historyItemTime}>
+                        {chat.timestamp.toLocaleDateString()} • {chat.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      <Text style={styles.historyItemPreview} numberOfLines={2}>
+                        {chat.messages.find(msg => msg.isUser)?.text || 'Health consultation'}
+                      </Text>
+                    </View>
+                    <FontAwesome name="chevron-right" size={16} color="#CCC" />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </Animated.View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -488,5 +791,109 @@ const styles = StyleSheet.create({
     backgroundColor: '#E0E0E0',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  // Chat History Styles
+  historyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  historyBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  historyPanel: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: width * 0.85,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    backgroundColor: '#F8F9FA',
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#222',
+  },
+  historyHeaderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  clearButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  closeButton: {
+    padding: 8,
+  },
+  historyList: {
+    flex: 1,
+  },
+  emptyHistory: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyHistoryText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#666',
+    marginTop: 16,
+  },
+  emptyHistorySubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  historyItemContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  historyItemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+    marginBottom: 4,
+  },
+  historyItemTime: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+  },
+  historyItemPreview: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 18,
   },
 }); 

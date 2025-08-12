@@ -104,6 +104,12 @@ class ApiService {
   this.api.interceptors.request.use(
     async (config) => {
       const token = await this.getAuthToken();
+      console.log('🔐 [ApiService] Request interceptor:', { 
+        url: config.url, 
+        hasToken: !!token,
+        method: config.method 
+      });
+      
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       } else {
@@ -114,7 +120,12 @@ class ApiService {
           '/plans',
           '/text-sessions/active-sessions',
           '/available-doctors',
-          '/user'
+          '/user',
+          '/upload/profile-picture',
+          '/upload/id-document',
+          '/upload/chat-image',
+          '/upload/chat-attachment',
+          '/upload/voice-message'
         ];
         
         const isProtectedEndpoint = protectedEndpoints.some(endpoint => 
@@ -761,6 +772,10 @@ class ApiService {
   // File upload method
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
     console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({ key, type: typeof value })) });
+    
+    // Debug: Check token before making request
+    const token = await this.getAuthToken();
+    console.log('📤 [ApiService] UploadFile token check:', { hasToken: !!token, url });
     
     return this.retryRequest(async () => {
       try {
