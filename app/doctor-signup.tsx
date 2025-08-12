@@ -453,6 +453,8 @@ export default function DoctorSignUp() {
 
     const handleSignUp = async () => {
         setLoading(true);
+        let registrationSuccessful = false;
+        
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
@@ -536,6 +538,7 @@ export default function DoctorSignUp() {
             // For doctors, we expect a successful registration but no token
             if (response.user?.user_type === 'doctor') {
                 // console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
+                registrationSuccessful = true;
                 // Redirect to pending approval page
                 router.replace('/pending-approval' as any);
                 return;
@@ -546,8 +549,8 @@ export default function DoctorSignUp() {
         } catch (error: any) {
             console.error('DoctorSignup: Registration error:', error);
             
-            // Only show errors if we haven't already redirected to approval page
-            if (true) {
+            // Only show errors if registration was not successful
+            if (!registrationSuccessful) {
                 // Parse validation errors
                 const errorMessage = error.message;
                 if (errorMessage.includes('Validation failed:')) {

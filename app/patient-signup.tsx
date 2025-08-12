@@ -343,6 +343,8 @@ export default function PatientSignUp() {
 
     const handleSignUp = async () => {
         setLoading(true);
+        let registrationSuccessful = false;
+        
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
@@ -389,6 +391,7 @@ export default function PatientSignUp() {
             
             if (authState.data && authState.data.user) {
                 // console.log('PatientSignup: Signup successful, user:', authState.data.user);
+                registrationSuccessful = true;
                 
                 // Store user type immediately after successful signup for routing
                 if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -409,44 +412,48 @@ export default function PatientSignUp() {
             router.replace('/patient-dashboard');
         } catch (error: any) {
             console.error('Sign up error:', error);
-            let errorMessage = 'Sign up failed. Please try again.';
             
-            // Handle Laravel backend validation errors
-            if (error.response?.status === 422) {
-                console.log('PatientSignup: 422 Validation error details:', error.response.data);
-                if (error.response.data && error.response.data.errors) {
-                    const validationErrors = error.response.data.errors;
-                    console.log('PatientSignup: Validation errors:', validationErrors);
-                    const errorFields = Object.keys(validationErrors);
-                    if (errorFields.length > 0) {
-                        const firstError = validationErrors[errorFields[0]][0];
-                        errorMessage = firstError;
+            // Only show errors if registration was not successful
+            if (!registrationSuccessful) {
+                let errorMessage = 'Sign up failed. Please try again.';
+                
+                // Handle Laravel backend validation errors
+                if (error.response?.status === 422) {
+                    console.log('PatientSignup: 422 Validation error details:', error.response.data);
+                    if (error.response.data && error.response.data.errors) {
+                        const validationErrors = error.response.data.errors;
+                        console.log('PatientSignup: Validation errors:', validationErrors);
+                        const errorFields = Object.keys(validationErrors);
+                        if (errorFields.length > 0) {
+                            const firstError = validationErrors[errorFields[0]][0];
+                            errorMessage = firstError;
+                        }
+                    } else {
+                        errorMessage = 'Please check your input and try again.';
                     }
-                } else {
-                    errorMessage = 'Please check your input and try again.';
-                }
-            } else if (error.message && error.message.includes('Validation failed')) {
-                if (error.data && error.data.errors) {
-                    const validationErrors = error.data.errors;
-                    const errorFields = Object.keys(validationErrors);
-                    if (errorFields.length > 0) {
-                        const firstError = validationErrors[errorFields[0]][0];
-                        errorMessage = firstError;
+                } else if (error.message && error.message.includes('Validation failed')) {
+                    if (error.data && error.data.errors) {
+                        const validationErrors = error.data.errors;
+                        const errorFields = Object.keys(validationErrors);
+                        if (errorFields.length > 0) {
+                            const firstError = validationErrors[errorFields[0]][0];
+                            errorMessage = firstError;
+                        }
+                    } else {
+                        errorMessage = 'Please check your input and try again.';
                     }
-                } else {
-                    errorMessage = 'Please check your input and try again.';
+                } else if (error.message && error.message.includes('email already exists')) {
+                    errorMessage = 'An account with this email already exists.';
+                } else if (error.message && error.message.includes('password')) {
+                    errorMessage = 'Password is too weak. Please choose a stronger password.';
+                } else if (error.message && error.message.includes('email')) {
+                    errorMessage = 'Please enter a valid email address.';
+                } else if (error.message) {
+                    errorMessage = error.message;
                 }
-            } else if (error.message && error.message.includes('email already exists')) {
-                errorMessage = 'An account with this email already exists.';
-            } else if (error.message && error.message.includes('password')) {
-                errorMessage = 'Password is too weak. Please choose a stronger password.';
-            } else if (error.message && error.message.includes('email')) {
-                errorMessage = 'Please enter a valid email address.';
-            } else if (error.message) {
-                errorMessage = error.message;
+                
+                Alert.alert('Error', errorMessage);
             }
-            
-            Alert.alert('Error', errorMessage);
         } finally {
             setLoading(false);
         }
