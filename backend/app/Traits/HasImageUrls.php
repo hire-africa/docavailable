@@ -21,7 +21,7 @@ trait HasImageUrls
             $path = ltrim(parse_url($value, PHP_URL_PATH) ?? '', '/');
             if (str_starts_with($path, 'storage/')) {
                 $relative = substr($path, strlen('storage/'));
-                return url("/api/images/{$relative}");
+                return "https://docavailable-1.onrender.com/api/images/{$relative}";
             }
             // Otherwise assume it's already a public URL (e.g., external CDN)
             return $value;
@@ -32,7 +32,8 @@ trait HasImageUrls
         if (str_starts_with($path, 'storage/')) {
             $path = substr($path, strlen('storage/'));
         }
-        return url("/api/images/{$path}");
+        // Force HTTPS for image URLs
+        return "https://docavailable-1.onrender.com/api/images/{$path}";
     }
 
     /**

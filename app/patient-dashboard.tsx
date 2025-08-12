@@ -255,26 +255,36 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     if (user && user.id) { // Add user.id check to ensure user is fully loaded
+      console.log('PatientDashboard: Loading subscription for user:', user.id);
+      
       // Load user's current subscription from Laravel API
       apiService.get('/subscription')
         .then((response: any) => {
+          console.log('PatientDashboard: Subscription API response:', response);
+          
           if (response.success && response.data) {
-            // // console.log('PatientDashboard: Loaded subscription:', response.data);
+            console.log('PatientDashboard: Setting subscription data:', response.data);
             setCurrentSubscription(response.data);
           } else {
+            console.log('PatientDashboard: No subscription data in response, setting to null');
             setCurrentSubscription(null);
           }
         })
         .catch(error => {
-          console.error('Error loading subscription:', error);
+          console.error('PatientDashboard: Error loading subscription:', error);
+          console.error('PatientDashboard: Error response:', error.response?.data);
+          console.error('PatientDashboard: Error status:', error.response?.status);
+          
           // Don't show error to user for subscription, just set null
           setCurrentSubscription(null);
           
           // If it's an authentication error, don't retry
           if (error.response?.status === 401) {
-            // // console.log('PatientDashboard: Authentication error loading subscription, not retrying');
+            console.log('PatientDashboard: Authentication error loading subscription, not retrying');
           }
         });
+    } else {
+      console.log('PatientDashboard: No user or user.id, skipping subscription load');
     }
   }, [user]);
 
@@ -1025,23 +1035,33 @@ export default function PatientDashboard() {
   };
 
   const refreshSubscription = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('PatientDashboard: No user, skipping subscription refresh');
+      return;
+    }
     
     // Check circuit breaker status before making request
     const circuitStatus = apiService.getCircuitBreakerStatus();
     if (circuitStatus.isOpen) {
-      // console.log('PatientDashboard: Circuit breaker is open, skipping subscription refresh');
+      console.log('PatientDashboard: Circuit breaker is open, skipping subscription refresh');
       return;
     }
     
     try {
+      console.log('PatientDashboard: Refreshing subscription for user:', user.id);
+      
       // Get subscription from Laravel API instead of Firestore
       const response = await apiService.get('/subscription');
+      console.log('PatientDashboard: Refresh subscription response:', response);
+      
       const subscription = response.success ? response.data as UserSubscription : null;
+      console.log('PatientDashboard: Setting refreshed subscription:', subscription);
       setCurrentSubscription(subscription);
-      // console.log('PatientDashboard: Subscription refreshed successfully');
+      console.log('PatientDashboard: Subscription refreshed successfully');
     } catch (error: any) {
       console.error('PatientDashboard: Failed to refresh subscription:', error);
+      console.error('PatientDashboard: Refresh error response:', error.response?.data);
+      console.error('PatientDashboard: Refresh error status:', error.response?.status);
       // Don't show error to user for background refresh
       // Only show error if it's a user-initiated action
     }

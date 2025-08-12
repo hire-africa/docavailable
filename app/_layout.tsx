@@ -15,6 +15,7 @@ export default function RootLayout() {
         <Stack.Screen name="doctor-signup" options={{ headerShown: false }} />
         <Stack.Screen name="patient-signup" options={{ headerShown: false }} />
         <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+        <Stack.Screen name="password-reset/[token]" options={{ headerShown: false }} />
         <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />

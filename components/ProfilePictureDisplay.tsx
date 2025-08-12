@@ -1,12 +1,12 @@
-import { FontAwesome } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { FontAwesome } from '@expo/vector-icons';
 
 interface ProfilePictureDisplayProps {
-    imageUri: string | null;
+    imageUri?: string | null;
     size?: number;
     borderColor?: string;
-    profilePictureUrl?: string | null; // Add support for the new URL field
+    profilePictureUrl?: string | null;
 }
 
 const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
@@ -15,6 +15,8 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
     borderColor = '#4CAF50',
     profilePictureUrl,
 }) => {
+    const [imageError, setImageError] = useState(false);
+
     const styles = StyleSheet.create({
         container: {
             width: size,
@@ -50,32 +52,30 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
     // Use profilePictureUrl if available, otherwise fall back to imageUri
     const finalImageUri = profilePictureUrl || imageUri;
     
+    // Show placeholder if no image URI or if image failed to load
+    const shouldShowPlaceholder = !finalImageUri || imageError;
+
     // console.log('ProfilePictureDisplay - Props:', {
     //   profilePictureUrl,
-    //   profilePicture,
+    //   imageUri,
     //   size,
-    //   style
+    //   finalImageUri,
+    //   shouldShowPlaceholder
     // });
-
-    // Add more detailed debugging for troubleshooting
-    if (finalImageUri) {
-        // console.log('ProfilePictureDisplay - Final image URI:', finalImageUri);
-        // console.log('ProfilePictureDisplay - Is full URL:', finalImageUri.startsWith('http'));
-    } else {
-        // console.log('ProfilePictureDisplay - No image URI available');
-    }
 
     return (
         <View style={styles.container}>
-            {finalImageUri ? (
+            {!shouldShowPlaceholder ? (
                 <Image
                     source={{ uri: getImageUrl(finalImageUri) }}
                     style={styles.image}
                     onError={(error) => {
                         console.error('ProfilePictureDisplay - Image load error:', error);
+                        setImageError(true);
                     }}
                     onLoad={() => {
                         // console.log('ProfilePictureDisplay - Image loaded successfully:', finalImageUri);
+                        setImageError(false);
                     }}
                 />
             ) : (

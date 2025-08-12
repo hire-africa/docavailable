@@ -458,7 +458,7 @@ export default function DoctorSignUp() {
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
-            formData.append('last_name', surname);
+            formData.append('surname', surname);
             formData.append('email', email);
             formData.append('password', password);
             formData.append('password_confirmation', password);
@@ -472,71 +472,111 @@ export default function DoctorSignUp() {
             formData.append('bio', professionalBio);
 
             if (profilePicture) {
-                // Convert profile picture to base64 like documents
-                const response = await fetch(profilePicture);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        resolve(base64String);
-                    };
-                    reader.readAsDataURL(blob);
-                });
-                formData.append('profile_picture', base64);
+                // Convert profile picture to base64 with timeout
+                try {
+                    const response = await fetch(profilePicture);
+                    const blob = await response.blob();
+                    const base64 = await Promise.race([
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64String = reader.result as string;
+                                resolve(base64String);
+                            };
+                            reader.readAsDataURL(blob);
+                        }),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
+                        )
+                    ]);
+                    formData.append('profile_picture', base64);
+                } catch (conversionError) {
+                    console.warn('Profile picture conversion failed, proceeding without it:', conversionError);
+                    // Continue without profile picture if conversion fails
+                }
             }
             if (nationalId) {
-                const response = await fetch(nationalId);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        resolve(base64String);
-                    };
-                    reader.readAsDataURL(blob);
-                });
-                formData.append('national_id', base64);
+                try {
+                    const response = await fetch(nationalId);
+                    const blob = await response.blob();
+                    const base64 = await Promise.race([
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64String = reader.result as string;
+                                resolve(base64String);
+                            };
+                            reader.readAsDataURL(blob);
+                        }),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
+                        )
+                    ]);
+                    formData.append('national_id', base64);
+                } catch (conversionError) {
+                    console.warn('National ID conversion failed:', conversionError);
+                    throw new Error('Failed to process National ID. Please try again.');
+                }
             }
             if (medicalDegree) {
-                const response = await fetch(medicalDegree);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        resolve(base64String);
-                    };
-                    reader.readAsDataURL(blob);
-                });
-                formData.append('medical_degree', base64);
+                try {
+                    const response = await fetch(medicalDegree);
+                    const blob = await response.blob();
+                    const base64 = await Promise.race([
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64String = reader.result as string;
+                                resolve(base64String);
+                            };
+                            reader.readAsDataURL(blob);
+                        }),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
+                        )
+                    ]);
+                    formData.append('medical_degree', base64);
+                } catch (conversionError) {
+                    console.warn('Medical degree conversion failed:', conversionError);
+                    throw new Error('Failed to process Medical Degree. Please try again.');
+                }
             }
             if (medicalLicence) {
-                const response = await fetch(medicalLicence);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        resolve(base64String);
-                    };
-                    reader.readAsDataURL(blob);
-                });
-                formData.append('medical_licence', base64);
+                try {
+                    const response = await fetch(medicalLicence);
+                    const blob = await response.blob();
+                    const base64 = await Promise.race([
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64String = reader.result as string;
+                                resolve(base64String);
+                            };
+                            reader.readAsDataURL(blob);
+                        }),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
+                        )
+                    ]);
+                    formData.append('medical_licence', base64);
+                } catch (conversionError) {
+                    console.warn('Medical licence conversion failed:', conversionError);
+                    // Medical licence is optional, so we can continue without it
+                }
             }
 
             // console.log('DoctorSignup: Starting registration with form data');
             const response = await authService.signUp(formData);
             
             // console.log('DoctorSignup: Registration response:', {
-            //   success: response.user ? 'yes' : 'no',
-            //   userType: response.user?.user_type,
-            //   userId: response.user?.id,
-            //   status: response.user?.status
+            //   success: response.data?.user ? 'yes' : 'no',
+            //   userType: response.data?.user?.user_type,
+            //   userId: response.data?.user?.id,
+            //   status: response.data?.user?.status
             // });
             
             // For doctors, we expect a successful registration but no token
-            if (response.user?.user_type === 'doctor') {
+            if (response.data?.user?.user_type === 'doctor') {
                 // console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
                 registrationSuccessful = true;
                 // Redirect to pending approval page
@@ -551,10 +591,27 @@ export default function DoctorSignUp() {
             
             // Only show errors if registration was not successful
             if (!registrationSuccessful) {
+                let errorMessage = 'Registration failed. Please try again.';
+                
+                // Handle timeout errors
+                if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+                    errorMessage = 'Registration timed out. Your account may have been created successfully. Please try logging in.';
+                    Alert.alert('Timeout', errorMessage, [
+                        {
+                            text: 'Try Login',
+                            onPress: () => router.replace('/login')
+                        },
+                        {
+                            text: 'OK',
+                            style: 'cancel'
+                        }
+                    ]);
+                    return;
+                }
+                
                 // Parse validation errors
-                const errorMessage = error.message;
-                if (errorMessage.includes('Validation failed:')) {
-                    const validationErrors = errorMessage
+                if (error.message && error.message.includes('Validation failed:')) {
+                    const validationErrors = error.message
                         .replace('Validation failed:\n', '')
                         .split('\n')
                         .reduce((acc: any, curr: string) => {

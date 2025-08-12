@@ -82,7 +82,7 @@ export default function AdminSignUp() {
     try {
       const formData = new FormData();
       formData.append('first_name', firstName);
-      formData.append('last_name', lastName);
+      formData.append('surname', lastName);
       formData.append('email', email);
       formData.append('password', password);
       formData.append('password_confirmation', password);

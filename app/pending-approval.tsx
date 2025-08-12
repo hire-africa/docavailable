@@ -5,11 +5,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback } from 'react';
 import {
-    BackHandler,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  BackHandler,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -49,20 +50,24 @@ const PendingApproval: React.FC = () => {
 
   return (
     <View style={styles.outerContainer}>
-      {/* Logo in top left */}
+      {/* Logo in top center */}
       <View style={styles.logoContainer}>
-        <Text style={styles.logoText}>DocAvailable</Text>
+        <Image 
+          source={require('../assets/images/DA logo green.png')} 
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
       <ThemedView style={styles.container}>
         <ThemedText type="title" style={styles.title}>Account Pending Approval</ThemedText>
         <ThemedText style={styles.message}>
           Your doctor account has been created and is awaiting admin approval.
-          You will be automatically redirected once your account is approved.
+          You will receive an email once your account is approved.
         </ThemedText>
         {/* Debug output */}
         <View style={{ marginBottom: 16, alignItems: 'center' }}>
           <ThemedText>Status: {userData?.status?.toString() ?? 'undefined'}</ThemedText>
-          <ThemedText>UserType: {userData?.userType ?? 'undefined'}</ThemedText>
+          <ThemedText>UserType: Doctor</ThemedText>
           <ThemedText>Email: {userData?.email ?? 'undefined'}</ThemedText>
         </View>
         <View style={styles.buttonContainer}>
@@ -86,14 +91,14 @@ const styles = StyleSheet.create({
   logoContainer: {
     position: 'absolute',
     top: 32,
-    left: 24,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     zIndex: 2,
   },
-  logoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    letterSpacing: 1,
+  logo: {
+    width: 140,
+    height: 60,
     marginTop: 40,
   },
   container: {

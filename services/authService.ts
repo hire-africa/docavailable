@@ -71,7 +71,7 @@ class AuthService {
     
     this.api = axios.create({
       baseURL: `${this.baseURL}/api`,
-      timeout: 15000,
+      timeout: 30000, // Increased timeout to 30 seconds for file uploads
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -198,16 +198,16 @@ class AuthService {
   async register(formData: FormData): Promise<AuthResponse> {
     try {
       console.log('AuthService: Making registration request to:', `${this.baseURL}/api/register`);
-      console.log('AuthService: FormData contents:');
+      
+      // Convert FormData to JSON object (profile pictures are already converted to base64)
+      const jsonData: any = {};
       for (let [key, value] of formData.entries()) {
-        console.log(`  ${key}: ${typeof value === 'string' ? value : '[File/Blob]'}`);
+        jsonData[key] = value;
       }
       
-      const response = await this.api.post('/register', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      console.log('AuthService: JSON data being sent:', jsonData);
+      
+      const response = await this.api.post('/register', jsonData);
 
       console.log('AuthService: Registration response:', {
         success: response.data.success,
@@ -302,6 +302,75 @@ class AuthService {
   // Alias for login method to maintain compatibility
   async signIn(email: string, password: string): Promise<AuthResponse> {
     return this.login({ email, password });
+  }
+
+  // Request password reset link
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('AuthService: Requesting password reset for:', email);
+      
+      const response = await this.api.post('/forgot-password', { email });
+      
+      console.log('AuthService: Password reset request response:', {
+        success: response.data?.success,
+        message: response.data?.message,
+        status: response.status
+      });
+
+      return {
+        success: true,
+        message: response.data?.message || 'Password reset link sent successfully'
+      };
+    } catch (error: any) {
+      console.error('AuthService: Password reset request error:', error);
+      
+      let errorMessage = 'Failed to send password reset link. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    }
+  }
+
+  // Reset password with token
+  async resetPassword(token: string, email: string, password: string, passwordConfirmation: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('AuthService: Resetting password for:', email);
+      
+      const response = await this.api.post('/reset-password', {
+        token,
+        email,
+        password,
+        password_confirmation: passwordConfirmation
+      });
+      
+      console.log('AuthService: Password reset response:', {
+        success: response.data?.success,
+        message: response.data?.message,
+        status: response.status
+      });
+
+      return {
+        success: true,
+        message: response.data?.message || 'Password reset successfully'
+      };
+    } catch (error: any) {
+      console.error('AuthService: Password reset error:', error);
+      
+      let errorMessage = 'Failed to reset password. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    }
   }
 
   async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
@@ -413,7 +482,7 @@ class AuthService {
   // Doctor availability methods
   async getDoctorAvailability(doctorId: string): Promise<any> {
     try {
-      const response = await this.api.get(`/doctor/${doctorId}/availability`);
+      const response = await this.api.get(`/doctors/${doctorId}/availability`);
       return response.data;
     } catch (error) {
       console.error('Get doctor availability error:', error);
@@ -423,7 +492,7 @@ class AuthService {
 
   async updateDoctorAvailability(doctorId: string, availabilityData: any): Promise<any> {
     try {
-      const response = await this.api.put(`/doctor/${doctorId}/availability`, availabilityData);
+      const response = await this.api.put(`/doctors/${doctorId}/availability`, availabilityData);
       return response.data;
     } catch (error) {
       console.error('Update doctor availability error:', error);

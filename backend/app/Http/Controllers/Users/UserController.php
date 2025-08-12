@@ -13,20 +13,93 @@ class UserController extends Controller
 
     public function subscription(Request $request)
     {
-        $user = User::find(auth()->user()->id);
-        $subscription = $user->subscription;
-        
-        if (!$subscription) {
-            return response()->json([
-                'success' => true,
-                'data' => null,
-                'message' => 'No subscription found'
+        try {
+            $user = User::find(auth()->user()->id);
+            
+            if (!$user) {
+                \Log::warning('Subscription request: User not found', [
+                    'auth_user_id' => auth()->user()->id ?? 'null'
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'data' => null,
+                    'message' => 'User not found'
+                ], 404);
+            }
+            
+            \Log::info('Subscription request for user', [
+                'user_id' => $user->id,
+                'email' => $user->email
             ]);
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => [
+            
+            // Try different ways to load the subscription
+            $subscription = null;
+            
+            // Method 1: Direct relationship
+            $subscription = $user->subscription;
+            \Log::info('Subscription loaded via relationship', [
+                'user_id' => $user->id,
+                'subscription_found' => $subscription ? 'yes' : 'no',
+                'subscription_id' => $subscription->id ?? 'null',
+                'is_active' => $subscription->is_active ?? 'null'
+            ]);
+            
+            // Method 2: Direct query if relationship failed
+            if (!$subscription) {
+                $subscription = Subscription::where('user_id', $user->id)
+                    ->orderBy('is_active', 'desc')
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                    
+                \Log::info('Subscription loaded via direct query', [
+                    'user_id' => $user->id,
+                    'subscription_found' => $subscription ? 'yes' : 'no',
+                    'subscription_id' => $subscription->id ?? 'null',
+                    'is_active' => $subscription->is_active ?? 'null'
+                ]);
+            }
+            
+            // Method 3: Check for any subscription (including inactive)
+            if (!$subscription) {
+                $anySubscription = Subscription::where('user_id', $user->id)->first();
+                \Log::info('Any subscription found for user', [
+                    'user_id' => $user->id,
+                    'any_subscription_found' => $anySubscription ? 'yes' : 'no',
+                    'subscription_id' => $anySubscription->id ?? 'null',
+                    'is_active' => $anySubscription->is_active ?? 'null',
+                    'status' => $anySubscription->status ?? 'null'
+                ]);
+            }
+            
+            if (!$subscription) {
+                \Log::info('No subscription found for user', [
+                    'user_id' => $user->id,
+                    'email' => $user->email
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'data' => null,
+                    'message' => 'No subscription found'
+                ]);
+            }
+            
+            // Log subscription details
+            \Log::info('Subscription details', [
+                'subscription_id' => $subscription->id,
+                'user_id' => $subscription->user_id,
+                'plan_id' => $subscription->plan_id,
+                'plan_name' => $subscription->plan_name,
+                'is_active' => $subscription->is_active,
+                'status' => $subscription->status,
+                'start_date' => $subscription->start_date,
+                'end_date' => $subscription->end_date,
+                'text_sessions_remaining' => $subscription->text_sessions_remaining,
+                'voice_calls_remaining' => $subscription->voice_calls_remaining,
+                'video_calls_remaining' => $subscription->video_calls_remaining
+            ]);
+            
+            $responseData = [
                 'id' => $subscription->id,
                 'plan_id' => $subscription->plan_id,
                 'planName' => $subscription->plan_name,
@@ -44,8 +117,31 @@ class UserController extends Controller
                 'status' => $subscription->status,
                 'start_date' => $subscription->start_date,
                 'end_date' => $subscription->end_date
-            ]
-        ]);
+            ];
+            
+            \Log::info('Returning subscription data', [
+                'subscription_id' => $subscription->id,
+                'response_keys' => array_keys($responseData)
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'data' => $responseData
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error in subscription endpoint', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->user()->id ?? 'null'
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'data' => null,
+                'message' => 'Error loading subscription: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function create_subscription(Request $request)

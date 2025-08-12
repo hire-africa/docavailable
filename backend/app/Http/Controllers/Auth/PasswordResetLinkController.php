@@ -52,6 +52,10 @@ class PasswordResetLinkController extends Controller
             Log::info('Password reset link requested for: ' . $email);
         }
 
-        return response()->json(['status' => __($status)]);
+        return response()->json([
+            'success' => true,
+            'message' => __($status),
+            'status' => __($status)
+        ]);
     }
 }

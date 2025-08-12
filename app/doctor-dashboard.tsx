@@ -23,6 +23,7 @@ import {
     View
 } from 'react-native';
 
+import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -1021,9 +1022,11 @@ export default function DoctorDashboard() {
         <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 12 }}>
           {user?.profile_picture_url ? (
             <Image source={{ uri: user.profile_picture_url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+          ) : user?.profile_picture ? (
+            <Image source={{ uri: user.profile_picture }} style={{ width: 56, height: 56, borderRadius: 28 }} />
           ) : (
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="user" size={20} color="#666" />
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
+              <FontAwesome name="user-md" size={20} color="#4CAF50" />
             </View>
           )}
         </View>
@@ -1103,7 +1106,7 @@ export default function DoctorDashboard() {
 
           <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
             <View style={styles.actionIcon}>
-              <Icon name="dollar-sign" size={20} color="#666" />
+              <FontAwesome name="money" size={20} color="#666" />
             </View>
             <Text style={styles.actionTitle}>Earnings</Text>
             <Text style={styles.actionSubtitle}>Withdraw funds</Text>
@@ -1173,7 +1176,7 @@ export default function DoctorDashboard() {
           }}
           onPress={() => setAppointmentsTab('accepted')}
         >
-          <Text style={{ color: appointmentsTab === 'accepted' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Accepted & Completed</Text>
+          <Text style={{ color: appointmentsTab === 'accepted' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Accepted Requests</Text>
         </TouchableOpacity>
       </View>
       {/* Booking Requests Tab */}
@@ -1301,15 +1304,15 @@ export default function DoctorDashboard() {
         loadingConfirmed ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4CAF50" />
-            <Text style={styles.loadingText}>Loading accepted and completed sessions...</Text>
+            <Text style={styles.loadingText}>Loading accepted requests...</Text>
           </View>
         ) : bookingRequests.filter(request => request.status === 'confirmed' || request.status === 'completed').length === 0 ? (
           <View style={{alignItems: 'center', marginTop: 60}}>
             <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18}}>
               <Icon name="calendar" size={20} color="#666" />
             </View>
-            <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Accepted Sessions</Text>
-            <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>Accepted and completed sessions will appear here for your records</Text>
+            <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Accepted Requests</Text>
+            <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>Accepted requests will appear here for your records</Text>
           </View>
         ) : (
           <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 4}}>
@@ -1515,7 +1518,9 @@ export default function DoctorDashboard() {
         ) : user?.profile_picture ? (
           <Image source={{ uri: user.profile_picture }} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
         ) : (
-          <Image source={profileImage} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+          <View style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#4CAF50'}}>
+            <FontAwesome name="user-md" size={32} color="#4CAF50" />
+          </View>
         )}
         <Text style={{fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center'}}>{user?.display_name || user?.email?.split('@')[0] || 'Doctor'}</Text>
         {userData?.status === 'approved' && <Text style={{color: '#4CAF50', fontWeight: 'bold', fontSize: 15, textAlign: 'center', marginBottom: 2}}>Verified</Text>}
@@ -1531,7 +1536,7 @@ export default function DoctorDashboard() {
           <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2}}>{user?.email || 'Not provided'}</Text>
         </View>
         <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/doctor-withdrawals')}>
-          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><Icon name="dollar-sign" size={20} color="#666" /></View>
+          <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}><FontAwesome name="money" size={20} color="#666" /></View>
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Earnings</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
@@ -1706,7 +1711,9 @@ export default function DoctorDashboard() {
               ) : user?.profile_picture ? (
                 <Image source={{ uri: user.profile_picture }} style={styles.sidebarProfileImage} />
               ) : (
-                <Image source={profileImage} style={styles.sidebarProfileImage} />
+                <View style={[styles.sidebarProfileImage, { backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }]}>
+                  <FontAwesome name="user-md" size={24} color="#4CAF50" />
+                </View>
               )}
               <Text style={styles.sidebarUserName}>{userData?.display_name || user?.display_name || 'Doctor'}</Text>
               <Text style={styles.sidebarUserEmail}>{userData?.email || user?.email || 'doctor@example.com'}</Text>

@@ -348,7 +348,7 @@ export default function PatientSignUp() {
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
-            formData.append('last_name', surname);
+            formData.append('surname', surname);
             formData.append('email', email);
             formData.append('password', password);
             formData.append('password_confirmation', password);
@@ -361,18 +361,28 @@ export default function PatientSignUp() {
             formData.append('user_type', 'patient');
 
             if (profilePicture) {
-                // Convert profile picture to base64
-                const response = await fetch(profilePicture);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        resolve(base64String);
-                    };
-                    reader.readAsDataURL(blob);
-                });
-                formData.append('profile_picture', base64);
+                // Convert profile picture to base64 with timeout
+                try {
+                    const response = await fetch(profilePicture);
+                    const blob = await response.blob();
+                    const base64 = await Promise.race([
+                        new Promise<string>((resolve) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64String = reader.result as string;
+                                resolve(base64String);
+                            };
+                            reader.readAsDataURL(blob);
+                        }),
+                        new Promise<string>((_, reject) => 
+                            setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
+                        )
+                    ]);
+                    formData.append('profile_picture', base64);
+                } catch (conversionError) {
+                    console.warn('Profile picture conversion failed, proceeding without it:', conversionError);
+                    // Continue without profile picture if conversion fails
+                }
             }
 
             // Debug logging to see what's being sent
@@ -403,19 +413,35 @@ export default function PatientSignUp() {
                     console.warn('PatientSignup: Could not store user type:', error);
                   }
                 }
+                
+                // Redirect directly to patient dashboard without alert
+                // console.log('PatientSignup: Signup successful, redirecting to patient dashboard');
+                router.replace('/patient-dashboard');
             } else {
                 throw new Error('User data not received after signup');
             }
-            
-            // Redirect directly to patient dashboard without alert
-            // console.log('PatientSignup: Signup successful, redirecting to patient dashboard');
-            router.replace('/patient-dashboard');
         } catch (error: any) {
             console.error('Sign up error:', error);
             
             // Only show errors if registration was not successful
             if (!registrationSuccessful) {
                 let errorMessage = 'Sign up failed. Please try again.';
+                
+                // Handle timeout errors
+                if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+                    errorMessage = 'Registration timed out. Your account may have been created successfully. Please try logging in.';
+                    Alert.alert('Timeout', errorMessage, [
+                        {
+                            text: 'Try Login',
+                            onPress: () => router.replace('/login')
+                        },
+                        {
+                            text: 'OK',
+                            style: 'cancel'
+                        }
+                    ]);
+                    return;
+                }
                 
                 // Handle Laravel backend validation errors
                 if (error.response?.status === 422) {
@@ -565,7 +591,12 @@ export default function PatientSignUp() {
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color="#FFFFFF" />
+                            <>
+                                <ActivityIndicator color="#FFFFFF" size="small" />
+                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                    {step === 2 ? 'Creating Account...' : 'Processing...'}
+                                </Text>
+                            </>
                         ) : (
                             <>
                                 <Text style={styles.continueButtonText}>

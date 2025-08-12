@@ -232,11 +232,11 @@ class ProcessFileUpload implements ShouldQueue
             $user = \App\Models\User::find($this->userId);
             if ($user) {
                 $user->update([
-                    // Store the full URL in database
-                    'profile_picture' => Storage::disk('public')->url($imagePath)
+                    // Store only the relative path, not the full URL
+                    'profile_picture' => $imagePath
                 ]);
                 
-                Log::info("User profile picture updated: {$this->userId}");
+                Log::info("User profile picture updated: {$this->userId} with path: {$imagePath}");
             }
         } catch (\Exception $e) {
             Log::error("Failed to update user profile picture: " . $e->getMessage(), [
