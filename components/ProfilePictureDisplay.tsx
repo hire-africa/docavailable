@@ -72,9 +72,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
 
     return (
         <View style={styles.container}>
-            {name ? (
-                <InitialsAvatar name={name} size={size} />
-            ) : !shouldShowPlaceholder ? (
+            {!shouldShowPlaceholder ? (
                 <Image
                     source={{ uri: displayUrl }}
                     style={styles.image}
@@ -83,10 +81,11 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
                         setImageError(true);
                     }}
                     onLoad={() => {
-                        // console.log('ProfilePictureDisplay - Image loaded successfully:', displayUrl);
                         setImageError(false);
                     }}
                 />
+            ) : name ? (
+                <InitialsAvatar name={name} size={size} />
             ) : (
                 <FontAwesome name="user" size={size / 2.5} color={borderColor} />
             )}
