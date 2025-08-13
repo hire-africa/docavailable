@@ -27,6 +27,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import Icon from '../components/Icon';
 import { RescheduleModal } from '../components/RescheduleModal';
 import WorkingHours from '../components/WorkingHours';
@@ -50,6 +51,13 @@ interface BookingRequest {
   patientId: string;
   doctorId: string;
   patientName: string;
+  patientProfilePictureUrl?: string;
+  patientProfilePicture?: string;
+  patientEmail?: string;
+  patientGender?: string;
+  patientCountry?: string;
+  patientCity?: string;
+  patientDateOfBirth?: string;
   doctorName: string;
   date: string;
   time: string;
@@ -104,6 +112,8 @@ export default function DoctorDashboard() {
   const [activeCall, setActiveCall] = useState<any>(null);
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -327,6 +337,13 @@ export default function DoctorDashboard() {
           patientId: request.patient_id,
           doctorId: request.doctor_id,
           patientName: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+          patientProfilePictureUrl: request.patient?.profile_picture_url,
+          patientProfilePicture: request.patient?.profile_picture,
+          patientEmail: request.patient?.email,
+          patientGender: request.patient?.gender || request.patient?.sex,
+          patientCountry: request.patient?.country,
+          patientCity: request.patient?.city,
+          patientDateOfBirth: request.patient?.date_of_birth,
           doctorName: request.doctorName || `${request.doctor?.first_name || ''} ${request.doctor?.last_name || ''}`.trim(),
           date: request.appointment_date, // Map from appointment_date to date
           time: request.appointment_time, // Map from appointment_time to time
@@ -384,6 +401,13 @@ export default function DoctorDashboard() {
             patientId: request.patient_id,
             doctorId: request.doctor_id,
             patientName: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+            patientProfilePictureUrl: request.patient?.profile_picture_url,
+            patientProfilePicture: request.patient?.profile_picture,
+            patientEmail: request.patient?.email,
+            patientGender: request.patient?.gender || request.patient?.sex,
+            patientCountry: request.patient?.country,
+            patientCity: request.patient?.city,
+            patientDateOfBirth: request.patient?.date_of_birth,
             doctorName: request.doctorName || `${request.doctor?.first_name || ''} ${request.doctor?.last_name || ''}`.trim(),
             date: request.appointment_date, // Map from appointment_date to date
             time: request.appointment_time, // Map from appointment_time to time
@@ -1208,93 +1232,31 @@ export default function DoctorDashboard() {
               // });
               
               return (
-              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
-              <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
-                <Icon name="user" size={20} color="#666" />
-              </View>
-              <View style={{flex: 1}}>
-                <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}}>{request.patientName}</Text>
-                <Text style={{color: '#7CB18F', fontSize: 14, marginBottom: 2}}>{formatDate(request.date)} at {formatTime(request.time)}</Text>
-                <Text style={{color: '#7CB18F', fontSize: 14}}>{getConsultationTypeLabel(request.consultationType)}</Text>
-              </View>
-              <View style={{alignItems: 'flex-end', gap: 8}}>
-                {isAppointmentExpired(request.date, request.time) ? (
-                  // Show expired status and delete button
-                  <>
-                    <View style={{backgroundColor: '#F8D7DA', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
-                      <Text style={{color: '#721C24', fontSize: 12, fontWeight: 'bold'}}>Expired</Text>
-                    </View>
-                    <View style={{flexDirection: 'column', gap: 4}}>
-                      <TouchableOpacity 
-                        style={{backgroundColor: '#DC3545', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12}}
-                        onPress={() => handleDeleteExpiredAppointment(request)}
-                      >
-                        <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Delete</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={{backgroundColor: '#6C757D', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}
-                        onPress={() => {
-                          // // console.log('🔍 [DoctorDashboard] Debug appointment details:', {
-                          //   id: request.id,
-                          //   status: request.status,
-                          //   date: request.date,
-                          //   time: request.time,
-                          //   isExpired: isAppointmentExpired(request.date, request.time),
-                          //   canDelete: request.status === 'pending' || request.status === 'cancelled'
-                          // });
-                          Alert.alert('Debug Info', `ID: ${request.id}\nStatus: ${request.status}\nDate: ${request.date}\nTime: ${request.time}\nExpired: ${isAppointmentExpired(request.date, request.time)}\nCan Delete: ${request.status === 'pending' || request.status === 'cancelled'}`);
-                        }}
-                      >
-                        <Text style={{color: '#FFFFFF', fontSize: 10, fontWeight: 'bold'}}>Debug</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  // Show pending status and action buttons
-                  <>
-                    <View style={{backgroundColor: '#FFF3CD', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
-                      <Text style={{color: '#856404', fontSize: 12, fontWeight: 'bold'}}>Pending</Text>
-                    </View>
-                    <View style={{flexDirection: 'row', gap: 8, justifyContent: 'flex-end'}}>
-                      <TouchableOpacity 
-                        style={[
-                          {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
-                          {backgroundColor: '#ADB5BD'}
-                        ]}
-                        onPress={() => handleRejectBooking(request)}
-                      >
-                        <Text style={{color: '#FFFFFF', fontSize: 12, fontWeight: 'bold'}}>Reject</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[
-                          {borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12},
-                          isAppointmentExpired(request.date, request.time) 
-                            ? {backgroundColor: '#E0E0E0'} 
-                            : {backgroundColor: '#4CAF50'}
-                        ]}
-                        onPress={() => handleAcceptBooking(request)}
-                        disabled={isAppointmentExpired(request.date, request.time)}
-                      >
-                        <Text style={[
-                          {fontSize: 12, fontWeight: 'bold'},
-                          isAppointmentExpired(request.date, request.time)
-                            ? {color: '#999999'}
-                            : {color: '#FFFFFF'}
-                        ]}>
-                          {isAppointmentExpired(request.date, request.time) ? 'Expired' : 'Accept'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    {isAppointmentExpired(request.date, request.time) && (
-                      <View style={{marginTop: 4, alignItems: 'center'}}>
-                        <Text style={{color: '#FF6B6B', fontSize: 10, fontStyle: 'italic'}}>Appointment time has passed</Text>
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            </View>
-            );
+              <TouchableOpacity
+                key={request.id}
+                style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}
+                onPress={() => { setSelectedRequest(request); setShowRequestModal(true); }}
+                activeOpacity={0.8}
+              >
+                <View style={{width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+                  <DoctorProfilePicture
+                    profilePictureUrl={request.patientProfilePictureUrl}
+                    profilePicture={request.patientProfilePicture}
+                    size={48}
+                    name={request.patientName}
+                  />
+                </View>
+                <View style={{flex: 1}}>
+                  <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{request.patientName}</Text>
+                  <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>{formatDate(request.date)} • {formatTime(request.time)}</Text>
+                </View>
+                <View style={{alignItems: 'flex-end'}}>
+                  <View style={{backgroundColor: isExpired ? '#F8D7DA' : '#FFF3CD', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+                    <Text style={{color: isExpired ? '#721C24' : '#856404', fontSize: 12, fontWeight: 'bold'}}>{isExpired ? 'Expired' : 'Pending'}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+              );
           })}
         </View>
         )
@@ -1357,6 +1319,81 @@ export default function DoctorDashboard() {
           </View>
         )
       )}
+
+      {/* Booking Request Details Modal */}
+      <Modal visible={showRequestModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+            <TouchableOpacity onPress={() => setShowRequestModal(false)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
+              <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
+            </TouchableOpacity>
+            {selectedRequest && (
+              <>
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <DoctorProfilePicture
+                    profilePictureUrl={selectedRequest.patientProfilePictureUrl}
+                    profilePicture={selectedRequest.patientProfilePicture}
+                    size={72}
+                    name={selectedRequest.patientName}
+                  />
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedRequest.patientName}</Text>
+                  {selectedRequest.patientEmail ? (
+                    <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{selectedRequest.patientEmail}</Text>
+                  ) : null}
+                  {(selectedRequest.patientCountry || selectedRequest.patientCity || selectedRequest.patientDateOfBirth || selectedRequest.patientGender) ? (
+                    <Text style={{ fontSize: 14, color: '#4CAF50', marginTop: 4 }} numberOfLines={1}>
+                      {selectedRequest.patientCity ? `${selectedRequest.patientCity}, ` : ''}
+                      {selectedRequest.patientCountry || ''}
+                      {(() => {
+                        if (!selectedRequest.patientDateOfBirth) return '';
+                        const dob = new Date(selectedRequest.patientDateOfBirth);
+                        if (isNaN(dob.getTime())) return '';
+                        const diff = Date.now() - dob.getTime();
+                        const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+                        return age ? ` • ${age} yrs` : '';
+                      })()}
+                      {selectedRequest.patientGender ? ` • ${String(selectedRequest.patientGender).charAt(0).toUpperCase()}${String(selectedRequest.patientGender).slice(1)}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatDate(selectedRequest.date)} • {formatTime(selectedRequest.time)}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                      <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{getConsultationTypeLabel(selectedRequest.consultationType)}</Text>
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ color: '#666' }}>{selectedRequest.reason || 'No reason provided'}</Text>
+                  </View>
+                  <View style={{ marginTop: 12, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
+                    <Text style={{ color: '#8D6E63', fontSize: 12 }}>
+                      Note: Please respect the scheduled appointment time. Late responses or missed appointments can lead to poor reviews and account suspension.
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: '#ADB5BD', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                    onPress={() => { if (selectedRequest) handleRejectBooking(selectedRequest); setShowRequestModal(false); }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: isAppointmentExpired(selectedRequest.date, selectedRequest.time) ? '#E0E0E0' : '#4CAF50', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                    disabled={isAppointmentExpired(selectedRequest.date, selectedRequest.time)}
+                    onPress={() => { if (selectedRequest) handleAcceptBooking(selectedRequest); setShowRequestModal(false); }}
+                  >
+                    <Text style={{ color: isAppointmentExpired(selectedRequest.date, selectedRequest.time) ? '#999' : '#fff', fontWeight: 'bold' }}>{isAppointmentExpired(selectedRequest.date, selectedRequest.time) ? 'Expired' : 'Accept'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showCancelConfirm} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>

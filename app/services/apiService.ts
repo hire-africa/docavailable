@@ -34,6 +34,7 @@ export interface User {
   // Doctor specific fields
   specialization?: string;
   sub_specialization?: string;
+  specializations?: string[];
 }
 
 export interface AuthResponse {
@@ -80,7 +81,7 @@ class ApiService {
     // Main API instance
     this.api = axios.create({
       baseURL: `${this.baseURL}/api`, // Always append /api to the clean base URL
-      timeout: 15000, // 15 seconds for better UX
+      timeout: 45000, // Increase to 45s to handle cold starts/slow responses
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -93,7 +94,7 @@ class ApiService {
     // Separate instance for token refresh (no interceptors to avoid loops)
     this.refreshApi = axios.create({
       baseURL: `${this.baseURL}/api`,
-      timeout: 10000, // Shorter timeout for refresh
+      timeout: 20000, // Increase to 20s for token refresh
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -688,16 +689,24 @@ class ApiService {
           throw error;
         }
         
-        // Don't retry on timeout errors after first attempt
+        // Allow a single retry on timeout errors to mitigate cold starts/temporary slowness
         if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-          console.log('ApiService: Timeout error, not retrying');
-          throw error;
+          if (attempt === 0) {
+            console.log('ApiService: Timeout encountered, retrying once...');
+          } else {
+            console.log('ApiService: Timeout error after retry, not retrying further');
+            throw error;
+          }
         }
         
-        // Don't retry on network errors after first attempt
+        // Allow a single retry on transient network errors
         if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
-          console.log('ApiService: Network error, not retrying');
-          throw error;
+          if (attempt === 0) {
+            console.log('ApiService: Network error encountered, retrying once...');
+          } else {
+            console.log('ApiService: Network error after retry, not retrying further');
+            throw error;
+          }
         }
         
         // Don't retry on the last attempt

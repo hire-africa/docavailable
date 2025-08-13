@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -15,6 +14,7 @@ import {
     View
 } from 'react-native';
 import { apiService } from '../../../app/services/apiService';
+import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SubscriptionModal from '../../../components/SubscriptionModal';
 import { Colors } from '../../../constants/Colors';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -29,6 +29,7 @@ interface DoctorProfile {
   last_name: string;
   display_name: string;
   specialization: string;
+  specializations?: string[];
   sub_specialization?: string;
   years_of_experience: number;
   bio?: string;
@@ -183,7 +184,9 @@ export default function DoctorProfilePage() {
       params: { 
         doctorId: doctor.id.toString(),
         doctorName: doctor.display_name || `${doctor.first_name} ${doctor.last_name}`,
-        specialization: doctor.specialization || 'General Medicine'
+        specialization: (doctor.specializations && doctor.specializations.length > 0)
+          ? doctor.specializations.join(', ')
+          : (doctor.specialization || 'General Medicine')
       } 
     });
   };
@@ -244,16 +247,19 @@ export default function DoctorProfilePage() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Image */}
         <View style={styles.profileImageContainer}>
-          <Image
-            source={
-              doctor.profile_picture_url 
-                ? { uri: doctor.profile_picture_url }
-                : doctor.profile_picture 
-                ? { uri: doctor.profile_picture }
-                : defaultProfileImage
-            }
-            style={styles.profileImage}
-          />
+          {doctor.profile_picture_url || doctor.profile_picture ? (
+            <DoctorProfilePicture
+              profilePictureUrl={doctor.profile_picture_url}
+              profilePicture={doctor.profile_picture}
+              size={120}
+              name={`${doctor.first_name} ${doctor.last_name}`}
+            />
+          ) : (
+            <Image
+              source={defaultProfileImage}
+              style={styles.profileImage}
+            />
+          )}
         </View>
 
         {/* Doctor Name */}
@@ -263,7 +269,17 @@ export default function DoctorProfilePage() {
 
         {/* Specialization and Status */}
         <View style={styles.specializationContainer}>
-          <Text style={styles.specialization}>{doctor.specialization}</Text>
+          {Array.isArray(doctor.specializations) && doctor.specializations.length > 0 ? (
+            <View style={styles.specializationChipsContainer}>
+              {doctor.specializations.map((spec, idx) => (
+                <View key={`${spec}-${idx}`} style={styles.specializationChip}>
+                  <Text style={styles.specializationChipText}>{spec}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.specialization}>{doctor.specialization}</Text>
+          )}
           {doctor.sub_specialization && (
             <Text style={styles.subSpecialization}>{doctor.sub_specialization}</Text>
           )}
@@ -423,6 +439,28 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
     fontWeight: '600',
     marginBottom: 4,
+  },
+  specializationChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  specializationChip: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#C8E6C9',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginHorizontal: 4,
+    marginVertical: 4,
+  },
+  specializationChipText: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '600',
   },
   subSpecialization: {
     fontSize: 14,

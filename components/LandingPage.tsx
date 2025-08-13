@@ -52,13 +52,7 @@ export default function LandingPage() {
           </TouchableOpacity>
         </Link>
 
-        {/* Log In Button */}
-        <View style={styles.loginPromptContainer}>
-          <Text style={styles.loginPromptText}>Already have an account? </Text>
-          <Link href="/login" asChild>
-            <Text style={styles.loginLink}>Log in</Text>
-          </Link>
-        </View>
+        
       </View>
 
       {/* Footer */}

@@ -29,7 +29,7 @@ class UserSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'doctor@example.com'],
             [
-                'first_name' => 'Dr. John',
+                'first_name' => 'John',
                 'last_name' => 'Smith',
                 'password' => Hash::make('password123'),
                 'user_type' => 'doctor',
@@ -40,7 +40,7 @@ class UserSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'sarah.johnson@example.com'],
             [
-                'first_name' => 'Dr. Sarah',
+                'first_name' => 'Sarah',
                 'last_name' => 'Johnson',
                 'password' => Hash::make('password123'),
                 'user_type' => 'doctor',
@@ -51,7 +51,7 @@ class UserSeeder extends Seeder
         User::firstOrCreate(
             ['email' => 'michael.brown@example.com'],
             [
-                'first_name' => 'Dr. Michael',
+                'first_name' => 'Michael',
                 'last_name' => 'Brown',
                 'password' => Hash::make('password123'),
                 'user_type' => 'doctor',

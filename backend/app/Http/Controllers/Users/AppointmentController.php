@@ -28,10 +28,10 @@ class AppointmentController extends Controller
         // Use caching for better performance with shorter cache duration
         $cacheKey = "user_appointments_{$user->id}_{$user->user_type}_{$perPage}_{$status}_{$date}";
         
-        $appointments = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($user, $perPage, $status, $date) {
+            $appointments = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($user, $perPage, $status, $date) {
             $query = $user->user_type === 'doctor' 
-                ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,profile_picture'])
-                : $user->appointments()->with(['doctor:id,first_name,last_name,profile_picture']);
+                ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture'])
+                : $user->appointments()->with(['doctor:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture']);
             
             // Apply filters
             if ($status !== null) {

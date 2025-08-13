@@ -212,9 +212,19 @@ export default function DoctorProfile() {
                         />
                         <View style={styles.profileInfo}>
                             <Text style={styles.name}>{getFullName()}</Text>
-                            <Text style={styles.specialization}>
-                                {user.specialization || 'General Practitioner'}
-                            </Text>
+                            {Array.isArray((user as any).specializations) && (user as any).specializations.length > 0 ? (
+                                <View style={styles.specializationChipsContainer}>
+                                    {(user as any).specializations.map((spec: string, idx: number) => (
+                                        <View key={`${spec}-${idx}`} style={styles.specializationChip}>
+                                            <Text style={styles.specializationChipText}>{spec}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            ) : (
+                                <Text style={styles.specialization}>
+                                    {user.specialization || 'General Practitioner'}
+                                </Text>
+                            )}
                             <View style={[styles.statusBadge, { backgroundColor: getStatusColor() }]}>
                                 <Text style={styles.statusText}>{getStatusText()}</Text>
                             </View>
@@ -429,6 +439,28 @@ const styles = StyleSheet.create({
         color: '#666',
         marginBottom: 10,
         textAlign: 'center',
+    },
+    specializationChipsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 10,
+    },
+    specializationChip: {
+        backgroundColor: '#E8F5E9',
+        borderColor: '#C8E6C9',
+        borderWidth: 1,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginHorizontal: 4,
+        marginVertical: 4,
+    },
+    specializationChipText: {
+        color: '#2E7D32',
+        fontSize: 14,
+        fontWeight: '600',
     },
     statusBadge: {
         paddingHorizontal: 12,

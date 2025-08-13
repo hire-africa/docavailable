@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import CachedImage from './CachedImage';
 import InitialsAvatar from './InitialsAvatar';
 
 interface ProfilePictureDisplayProps {
@@ -73,16 +74,14 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
     return (
         <View style={styles.container}>
             {!shouldShowPlaceholder ? (
-                <Image
-                    source={{ uri: displayUrl }}
+                <CachedImage
+                    uri={displayUrl as string}
                     style={styles.image}
                     onError={(error) => {
                         console.error('ProfilePictureDisplay - Image load error:', error);
                         setImageError(true);
                     }}
-                    onLoad={() => {
-                        setImageError(false);
-                    }}
+                    showLoadingIndicator={false}
                 />
             ) : name ? (
                 <InitialsAvatar name={name} size={size} />

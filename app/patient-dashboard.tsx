@@ -33,6 +33,7 @@ import ChatbotModal from '../components/ChatbotModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
+import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
 import { apiService } from '../app/services/apiService';
 import { APPOINTMENT_STATUS, appointmentService, type Appointment } from '../services/appointmentService';
@@ -45,6 +46,7 @@ import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
+import { imageCacheService } from '../services/imageCacheService';
 import { paymentsService } from '../services/paymentsService';
 import Blog from './blog';
 const profileImage = require('../assets/images/profile.jpg');
@@ -377,6 +379,17 @@ export default function PatientDashboard() {
     showSuccess('Location Info', 'Pricing is based on your registered location.');
   };
 
+  // Normalize backend image URI to a full URL for caching
+  const getImageUrlForCache = (uri?: string | null): string | null => {
+    if (!uri || typeof uri !== 'string') return null;
+    if (uri.startsWith('http')) return uri;
+    let clean = uri.trim();
+    if (clean.startsWith('/storage/')) clean = clean.substring('/storage/'.length);
+    if (clean.startsWith('storage/')) clean = clean.substring('storage/'.length);
+    clean = clean.replace(/^\/+/, '');
+    return `https://docavailable-1.onrender.com/api/images/${clean}`;
+  };
+
   useEffect(() => {
     if (activeTab === 'discover') {
       setLoadingDoctors(true);
@@ -427,6 +440,15 @@ export default function PatientDashboard() {
                   return mappedDoctor;
                 });
               setDoctors(approvedDoctors);
+              // Preload/cached profile pictures to avoid reloading on other pages
+              try {
+                const urlsToPreload = approvedDoctors
+                  .map((d: any) => getImageUrlForCache(d.profile_picture_url || d.profile_picture))
+                  .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
+                if (urlsToPreload.length > 0) {
+                  imageCacheService.preloadImages(urlsToPreload).catch(() => {});
+                }
+              } catch {}
             } else {
               setDoctors([]);
             }
@@ -1009,7 +1031,15 @@ export default function PatientDashboard() {
         return filteredDoctors.sort((a, b) => (b.rating || 0) - (a.rating || 0));
 
       case 'specialization':
-        return filteredDoctors.sort((a, b) => (a.specialization || '').localeCompare(b.specialization || ''));
+        return filteredDoctors.sort((a, b) => {
+          const aSpec = Array.isArray(a.specializations) && a.specializations.length > 0
+            ? a.specializations.join(', ')
+            : (a.specialization || '');
+          const bSpec = Array.isArray(b.specializations) && b.specializations.length > 0
+            ? b.specializations.join(', ')
+            : (b.specialization || '');
+          return aSpec.localeCompare(bSpec);
+        });
       case 'location':
         return filteredDoctors.sort((a, b) => (a.city || a.country || '').localeCompare(b.city || b.country || ''));
       default:
@@ -1671,10 +1701,11 @@ export default function PatientDashboard() {
                       profilePictureUrl={item.doctor_profile_picture}
                       size={56}
                       style={{ marginRight: 18 }}
+                      name={stripDoctorPrefix(item.doctor_name || 'Doctor')}
                     />
                     <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
                       <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
-                        {item.doctor_name || 'Unknown Doctor'}
+                        {withDoctorPrefix(item.doctor_name || 'Unknown')}
                       </Text>
                       <Text style={{ fontSize: 16, color: '#222' }} numberOfLines={1}>
                         Ended Session
@@ -2077,6 +2108,7 @@ export default function PatientDashboard() {
                   profilePicture={doctor.profile_picture}
                   size={90}
                   style={styles.doctorImageNew}
+                  name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
                 />
                 {/* Green dot for online doctors */}
                 {doctor.is_online && (

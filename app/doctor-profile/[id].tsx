@@ -12,10 +12,10 @@ import {
     View,
 } from 'react-native';
 import { apiService } from '../../app/services/apiService';
+import DoctorProfilePicture from '../../components/DoctorProfilePicture';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
-import InitialsAvatar from '../../components/InitialsAvatar';
-import DoctorProfilePicture from '../../components/DoctorProfilePicture';
+import { stripDoctorPrefix, withDoctorPrefix } from '../../utils/name';
 
 const { width } = Dimensions.get('window');
 
@@ -24,6 +24,7 @@ interface Doctor {
   first_name: string;
   last_name: string;
   specialization: string;
+  specializations?: string[];
   years_of_experience: number;
   professional_bio: string;
   profile_picture?: string;
@@ -184,14 +185,24 @@ export default function DoctorProfileScreen() {
                 profilePictureUrl={doctor.profile_picture_url}
                 profilePicture={doctor.profile_picture}
                 size={120}
-                name={`Dr. ${doctor.first_name} ${doctor.last_name}`}
+                name={stripDoctorPrefix(`${doctor.first_name} ${doctor.last_name}`)}
                 style={styles.profileImage}
               />
             <View style={styles.profileInfo}>
               <Text style={styles.doctorName}>
-                Dr. {doctor.first_name} {doctor.last_name}
+                {withDoctorPrefix(`${doctor.first_name} ${doctor.last_name}`)}
               </Text>
-              <Text style={styles.specialization}>{doctor.specialization}</Text>
+              {Array.isArray(doctor.specializations) && doctor.specializations.length > 0 ? (
+                <View style={styles.specializationChipsContainer}>
+                  {doctor.specializations.map((spec, idx) => (
+                    <View key={`${spec}-${idx}`} style={styles.specializationChip}>
+                      <Text style={styles.specializationChipText}>{spec}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.specialization}>{doctor.specialization}</Text>
+              )}
               <Text style={styles.experience}>
                 {doctor.years_of_experience} years of experience
               </Text>
@@ -379,6 +390,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 4,
+  },
+  specializationChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  specializationChip: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  specializationChipText: {
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 14,
+    fontWeight: '600',
   },
   experience: {
     fontSize: 14,

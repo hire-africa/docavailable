@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import CachedImage from './CachedImage';
 import InitialsAvatar from './InitialsAvatar';
 
 interface DoctorProfilePictureProps {
@@ -83,16 +84,11 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
   return (
     <View style={[styles.container, { width: size, height: size }, style]}>
       {!shouldShowPlaceholder ? (
-        <Image 
-          source={{ uri: displayUrl }} 
-          style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]} 
-          onError={(error) => {
-            // Silently handle image load errors and show placeholder
-            setImageError(true);
-          }}
-          onLoad={() => {
-            setImageError(false);
-          }}
+        <CachedImage
+          uri={displayUrl as string}
+          style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
+          onError={() => setImageError(true)}
+          showLoadingIndicator={false}
         />
       ) : name ? (
         <InitialsAvatar name={name} size={size} style={style} />

@@ -1,11 +1,18 @@
 import { Stack } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
 
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import '../services/cryptoPolyfill';
+import apiService from './services/apiService';
 
 export default function RootLayout() {
+  useEffect(() => {
+    // Warm the backend on app start to reduce initial timeouts due to cold starts
+    apiService.healthCheck().catch(() => {
+      // Ignore errors here; this is a best-effort warm-up
+    });
+  }, []);
   return (
     <AuthProvider>
       <Stack>

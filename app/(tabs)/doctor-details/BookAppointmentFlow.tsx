@@ -17,7 +17,9 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { apiService } from '../../../app/services/apiService';
+import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import { useAuth } from '../../../contexts/AuthContext';
+import { imageCacheService } from '../../../services/imageCacheService';
 import { paymentsService } from '../../../services/paymentsService';
 
 const availableTimes = [
@@ -48,6 +50,9 @@ export default function BookAppointmentFlow() {
   const [loadingHours, setLoadingHours] = useState(true);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [txRef, setTxRef] = useState<string | null>(null);
+  const [doctorPicUrl, setDoctorPicUrl] = useState<string | null>(null);
+  const [doctorPic, setDoctorPic] = useState<string | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
 
   // Doctor info from params
   const doctorId = params.doctorId as string;
@@ -82,12 +87,65 @@ export default function BookAppointmentFlow() {
     fetchWorkingHours();
   }, [doctorId]);
 
+  // Fetch doctor profile picture and preload/cache it
+  useEffect(() => {
+    const fetchDoctorInfo = async () => {
+      if (!doctorId) return;
+      try {
+        const response = await apiService.get(`/doctors/${doctorId}`);
+        if (response.success && response.data) {
+          const data: any = response.data;
+          const url = data.profile_picture_url || null;
+          const pic = data.profile_picture || null;
+          setDoctorPicUrl(url);
+          setDoctorPic(pic);
+          // Preload/cache the image
+          const toCache = getImageUrlForCache(url || pic);
+          if (toCache) {
+            imageCacheService.downloadAndCache(toCache).catch(() => {});
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchDoctorInfo();
+  }, [doctorId]);
+
+  // Normalize backend image URI to a full URL for caching
+  const getImageUrlForCache = (uri?: string | null): string | null => {
+    if (!uri || typeof uri !== 'string') return null;
+    if (uri.startsWith('http')) return uri;
+    let clean = uri.trim();
+    if (clean.startsWith('/storage/')) clean = clean.substring('/storage/'.length);
+    if (clean.startsWith('storage/')) clean = clean.substring('storage/'.length);
+    clean = clean.replace(/^\/+/, '');
+    return `https://docavailable-1.onrender.com/api/images/${clean}`;
+  };
+
+  // Load subscription: prefer param; fallback to API
+  useEffect(() => {
+    if (subscription || !user) return;
+    // set from params first
+    if (userSubscription) {
+      setSubscription(userSubscription);
+      return;
+    }
+    (async () => {
+      try {
+        const resp = await apiService.get('/subscription');
+        if (resp.success && resp.data) setSubscription(resp.data);
+      } catch {}
+    })();
+  }, [user, userSubscription, subscription]);
+
   // Helper to check if a consultation type is available
   const isTypeAvailable = (type: string) => {
-    if (!userSubscription) return true;
-    if (type === 'text') return userSubscription.textSessionsRemaining > 0;
-    if (type === 'voice') return userSubscription.voiceCallsRemaining > 0;
-    if (type === 'video') return userSubscription.videoCallsRemaining > 0;
+    const sub = subscription || userSubscription;
+    if (!sub) return true;
+    if (type === 'text') return (sub.textSessionsRemaining || 0) > 0;
+    if (type === 'voice') return (sub.voiceCallsRemaining || 0) > 0;
+    if (type === 'video') return (sub.videoCallsRemaining || 0) > 0;
     return true;
   };
 
@@ -231,12 +289,22 @@ export default function BookAppointmentFlow() {
     });
   };
 
+  // Allow any time for future dates; for today, disallow past times
+  const isTimeNotPastForSelectedDay = (time: Date): boolean => {
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const isToday = selectedDateOnly.getTime() === today.getTime();
+    if (!isToday) return true;
+    const now = new Date();
+    const candidate = new Date();
+    candidate.setHours(time.getHours(), time.getMinutes(), 0, 0);
+    return candidate > now;
+  };
+
   // Native time picker for Android
   const showAndroidTimePicker = () => {
-    const now = new Date();
-    const minTime = new Date(now);
-    minTime.setMinutes(Math.ceil(now.getMinutes() / 30) * 30);
-    
     DateTimePickerAndroid.open({
       value: tempTime,
       onChange: (event, selectedTime) => {
@@ -245,14 +313,14 @@ export default function BookAppointmentFlow() {
           const timeStr = formatTime12Hour(selectedTime);
           const time24Hour = to24HourFormat(timeStr);
           
-          // Check if time is within available slots
-          if (isTimeInAvailableSlots(selectedTime)) {
+          // Check if time is within available slots and not in the past for today
+          if (isTimeInAvailableSlots(selectedTime) && isTimeNotPastForSelectedDay(selectedTime)) {
             setCustomTime(timeStr);
             setSelectedTime(time24Hour);
           } else {
             Alert.alert(
               'Invalid Time',
-              'The selected time is outside of the doctor\'s working hours. Please select a time within the available schedule.',
+              'Please select a time within the doctor\'s working hours. For today, the time must be in the future.',
               [{ text: 'OK' }]
             );
           }
@@ -261,7 +329,6 @@ export default function BookAppointmentFlow() {
       mode: 'time',
       is24Hour: false,
       minuteInterval: 1,
-      minimumDate: now,
     });
   };
 
@@ -283,14 +350,14 @@ export default function BookAppointmentFlow() {
     const time24Hour = to24HourFormat(timeStr);
     
     // Check if time is within available slots
-    if (isTimeInAvailableSlots(tempTime)) {
+    if (isTimeInAvailableSlots(tempTime) && isTimeNotPastForSelectedDay(tempTime)) {
       setCustomTime(timeStr);
       setSelectedTime(time24Hour);
       setShowNativeTimePicker(false);
     } else {
       Alert.alert(
         'Invalid Time',
-        'The selected time is outside of the doctor\'s working hours. Please select a time within the available schedule.',
+        'Please select a time within the doctor\'s working hours. For today, the time must be in the future.',
         [{ text: 'OK' }]
       );
     }
@@ -307,7 +374,7 @@ export default function BookAppointmentFlow() {
 
   // Check if current temp time is valid
   const isCurrentTimeValid = () => {
-    return isTimeInAvailableSlots(tempTime);
+    return isTimeInAvailableSlots(tempTime) && isTimeNotPastForSelectedDay(tempTime);
   };
 
   // Calendar logic for current month
@@ -447,7 +514,6 @@ export default function BookAppointmentFlow() {
                       display="spinner"
                       onChange={handleTimeChange}
                       minuteInterval={1}
-                      minimumDate={new Date()}
                       style={styles.nativeTimePicker}
                       textColor="#000000"
                       themeVariant="light"
@@ -574,7 +640,16 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       <View style={styles.confirmCard}>
-        <View style={styles.avatarCircle} />
+        {doctorPicUrl || doctorPic ? (
+          <DoctorProfilePicture
+            profilePictureUrl={doctorPicUrl || undefined}
+            profilePicture={doctorPic || undefined}
+            size={64}
+            name={doctorName}
+          />
+        ) : (
+          <View style={styles.avatarCircle} />
+        )}
         <Text style={styles.doctorName}>{doctorName}</Text>
         <Text style={styles.doctorSpecialization}>{specialization}</Text>
         <Text style={styles.confirmLabel}>Date & Time</Text>
@@ -585,6 +660,13 @@ export default function BookAppointmentFlow() {
         <Text style={styles.confirmValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
         <Text style={styles.confirmLabel}>Reason</Text>
         <Text style={styles.confirmValue}>{reason}</Text>
+      </View>
+      <View style={{ marginHorizontal: 24, marginTop: -8 }}>
+        <View style={{ backgroundColor: '#FFF8E1', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
+          <Text style={{ color: '#8D6E63', fontSize: 12 }}>
+            Note: Please respect the scheduled appointment time. Missing your appointment may forfeit your text sessions or audio/video calls.
+          </Text>
+        </View>
       </View>
       <View style={styles.confirmBtnRow}>
         <TouchableOpacity style={styles.editBtn} onPress={() => setStep(1)}>
@@ -631,7 +713,7 @@ export default function BookAppointmentFlow() {
       </View>
       <TouchableOpacity 
         style={styles.proceedBtn} 
-        onPress={() => router.push('/(tabs)/discover')}
+        onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover' } })}
       >
         <Text style={styles.proceedBtnText}>Proceed</Text>
       </TouchableOpacity>
@@ -662,29 +744,45 @@ export default function BookAppointmentFlow() {
       return;
     }
 
-    // Validate that selected date is in the future
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to start of day
-    const selectedDateOnly = new Date(selectedDate);
-    selectedDateOnly.setHours(0, 0, 0, 0); // Reset time to start of day
-    
-    if (selectedDateOnly <= today) {
-      // console.log('❌ [BookAppointmentFlow] Selected date is not in the future:', { 
-      //   selectedDate: selectedDateOnly, 
-      //   today: today 
-      // });
-      Alert.alert('Error', 'Please select a future date for your appointment');
+    // Validate that selected date/time is in the future
+    const now = new Date();
+    const [selHour, selMin] = selectedTime.split(':').map((v) => parseInt(v, 10));
+    const apptDateTime = new Date(selectedDate);
+    apptDateTime.setHours(selHour || 0, selMin || 0, 0, 0);
+    if (!(apptDateTime.getTime() > now.getTime())) {
+      Alert.alert('Error', 'Please select a future time for your appointment');
       return;
     }
     
     setSubmitting(true);
     
     try {
-      // For plan purchase (deposit): show sample Basic plan id = 1
-      const res = await paymentsService.initiatePlanPurchase(1);
-              if (res?.success && res.data?.checkout_url) {
+      // Determine if user has remaining sessions for selected type
+      const hasQuota = isTypeAvailable(consultationType);
+      if (hasQuota) {
+        // Create appointment directly
+        const payload: any = {
+          doctor_id: Number(doctorId),
+          appointment_date: `${apptDateTime.getFullYear()}-${(apptDateTime.getMonth()+1).toString().padStart(2,'0')}-${apptDateTime.getDate().toString().padStart(2,'0')}`,
+          appointment_time: selectedTime,
+          appointment_type: consultationType,
+          reason: reason,
+        };
+        const createRes = await apiService.post('/appointments', payload);
+        if (createRes.success) {
+          setStep(3);
+          return;
+        }
+        throw new Error(createRes.message || 'Failed to create appointment');
+      } else {
+        // No quota: initiate purchase flow
+        const res = await paymentsService.initiatePlanPurchase(1);
+        if (res?.success && res.data?.checkout_url) {
           setCheckoutUrl(res.data.checkout_url);
-                  setTxRef(res.data.reference);
+          setTxRef(res.data.reference);
+        } else {
+          Alert.alert('No Sessions Available', 'Please purchase a plan to continue.');
+        }
       }
     } catch (error) {
       console.error('❌ [BookAppointmentFlow] Appointment creation failed:', error);

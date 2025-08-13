@@ -44,10 +44,7 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
                 }
             }
 
-            // Show file size info to user
-            if (Platform.OS !== 'web') {
-                alert('Please select an image under 2MB. Large images will be automatically compressed.');
-            }
+            
 
             // Launch image picker with compression to keep file size under 2MB
             const result = await ImagePicker.launchImageLibraryAsync({
