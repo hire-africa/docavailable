@@ -77,12 +77,14 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
     return 'DR';
   };
 
-  // Show placeholder if no image URL or if image failed to load
-  const shouldShowPlaceholder = !displayUrl || imageError || !displayUrl.startsWith('http');
+  // Show placeholder if no image URL, if image failed to load, or if we have a name (prefer initials avatar)
+  const shouldShowPlaceholder = !displayUrl || imageError || !displayUrl.startsWith('http') || (name && !displayUrl);
 
   return (
     <View style={[styles.container, { width: size, height: size }, style]}>
-      {!shouldShowPlaceholder ? (
+      {name ? (
+        <InitialsAvatar name={name} size={size} style={style} />
+      ) : displayUrl && !imageError ? (
         <Image 
           source={{ uri: displayUrl }} 
           style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]} 
@@ -95,13 +97,9 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
           }}
         />
       ) : (
-        name ? (
-          <InitialsAvatar name={name} size={size} style={style} />
-        ) : (
-          <View style={[styles.placeholder, { width: size, height: size, borderRadius: size / 2 }]}>
-            <FontAwesome name="user-md" size={size * 0.4} color="#4CAF50" />
-          </View>
-        )
+        <View style={[styles.placeholder, { width: size, height: size, borderRadius: size / 2 }]}>
+          <FontAwesome name="user-md" size={size * 0.4} color="#4CAF50" />
+        </View>
       )}
     </View>
   );
