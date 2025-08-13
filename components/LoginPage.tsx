@@ -1,6 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import * as AuthSession from 'expo-auth-session';
-import { Link, router } from 'expo-router';
+import { Link, router, useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
@@ -25,6 +25,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const { userType } = useLocalSearchParams<{ userType?: string }>();
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -328,6 +329,19 @@ export default function LoginPage() {
             <View style={styles.content}>
                 <Text style={styles.title}>Welcome Back</Text>
                 <Text style={styles.subtitle}>Sign in to your account</Text>
+                
+                {userType && (
+                    <View style={styles.userTypeIndicator}>
+                        <FontAwesome 
+                            name={userType === 'doctor' ? 'user-md' : 'user'} 
+                            size={16} 
+                            color="#4CAF50" 
+                        />
+                        <Text style={styles.userTypeText}>
+                            {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
+                        </Text>
+                    </View>
+                )}
 
                 <View style={styles.form}>
                     <View style={styles.inputContainer}>
@@ -401,7 +415,7 @@ export default function LoginPage() {
 
                     <View style={styles.signupContainer}>
                         <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-                        <Link href="/signup" asChild>
+                        <Link href={userType ? `/${userType}-signup` : '/signup'} asChild>
                             <TouchableOpacity>
                                 <Text style={styles.signupLink}>Sign Up</Text>
                             </TouchableOpacity>
@@ -434,6 +448,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#666',
         marginBottom: 40,
+    },
+    userTypeIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E0F2F7',
+        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 15,
+        marginBottom: 20,
+        alignSelf: 'center',
+    },
+    userTypeText: {
+        marginLeft: 8,
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#4CAF50',
     },
     form: {
         width: '100%',

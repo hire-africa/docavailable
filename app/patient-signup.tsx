@@ -556,9 +556,9 @@ export default function PatientSignUp() {
                 <View style={styles.header}>
                     <TouchableOpacity 
                         style={styles.backToSignupButton}
-                        onPress={() => router.push('/signup')}
+                        onPress={() => router.push('/login?userType=patient')}
                     >
-                        <Text style={styles.backToSignupText}>← Back to Sign Up</Text>
+                        <Text style={styles.backToSignupText}>← Back to Login</Text>
                     </TouchableOpacity>
                     <Text style={styles.headerText}>Create Patient Account</Text>
                     <Text style={styles.headerSubtext}>Join our healthcare platform</Text>

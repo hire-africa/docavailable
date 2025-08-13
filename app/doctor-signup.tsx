@@ -686,6 +686,12 @@ export default function DoctorSignUp() {
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
                 <View style={styles.header}>
+                    <TouchableOpacity
+                        style={styles.backToSignupButton}
+                        onPress={() => router.push('/login?userType=doctor')}
+                    >
+                        <Text style={styles.backToSignupText}>← Back to Login</Text>
+                    </TouchableOpacity>
                     <Text style={styles.headerText}>Create Doctor Account</Text>
                     <Text style={styles.headerSubtext}>Join our healthcare platform as a medical professional</Text>
                 </View>
@@ -996,5 +1002,18 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         marginRight: 8,
+    },
+    backToSignupButton: {
+        alignSelf: 'flex-start',
+        marginBottom: 16,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
+    },
+    backToSignupText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
     },
 }); 

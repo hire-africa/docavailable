@@ -1,13 +1,13 @@
 import { Link } from 'expo-router';
 import React from 'react';
 import {
-  Dimensions,
-  Image,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Dimensions,
+    Image,
+    Platform,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
@@ -38,10 +38,17 @@ export default function LandingPage() {
 
       {/* Buttons Container */}
       <View style={styles.buttonContainer}>
-        {/* Sign Up Button */}
-        <Link href="/signup" asChild>
-          <TouchableOpacity style={styles.signUpButton}>
-            <Text style={styles.signUpButtonText}>Sign up to get started</Text>
+        {/* Doctor Button */}
+        <Link href="/login?userType=doctor" asChild>
+          <TouchableOpacity style={styles.doctorButton}>
+            <Text style={styles.doctorButtonText}>I'm a Doctor</Text>
+          </TouchableOpacity>
+        </Link>
+
+        {/* Patient Button */}
+        <Link href="/login?userType=patient" asChild>
+          <TouchableOpacity style={styles.patientButton}>
+            <Text style={styles.patientButtonText}>I'm a Patient</Text>
           </TouchableOpacity>
         </Link>
 
@@ -105,7 +112,7 @@ const styles = StyleSheet.create({
     marginBottom: 120,
     marginTop: 80,
   },
-  signUpButton: {
+  doctorButton: {
     backgroundColor: '#4CAF50',
     paddingVertical: 16,
     borderRadius: 25,
@@ -126,8 +133,36 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  signUpButtonText: {
+  doctorButtonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  patientButton: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 16,
+    borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.10)',
+        width: 320,
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.10,
+        shadowRadius: 8,
+        elevation: 5,
+        width: width * 0.8,
+      },
+    }),
+  },
+  patientButtonText: {
+    color: '#333',
     fontSize: 16,
     fontWeight: 'bold',
   },

@@ -13,8 +13,10 @@ class PlanSeeder extends Seeder
      */
     public function run(): void
     {
-        // Clear existing plans
-        Plan::truncate();
+        // Only create plans if they don't exist (don't truncate in production)
+        if (Plan::count() > 0) {
+            return; // Skip seeding if plans already exist
+        }
 
         // MWK Plans (for Malawi)
         Plan::create([

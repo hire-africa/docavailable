@@ -65,9 +65,8 @@ services:
       php artisan route:clear
       php artisan view:clear
       
-      # Run migrations and seeders
+      # Run migrations only (no seeders to preserve data)
       php artisan migrate --force
-      php artisan db:seed --force
       
       echo "=== Debug: Starting PHP server with router.php ==="
       php -S 0.0.0.0:$PORT -t public public/router.php
