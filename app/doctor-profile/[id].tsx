@@ -5,7 +5,6 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
-    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -16,6 +15,7 @@ import { apiService } from '../../app/services/apiService';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import InitialsAvatar from '../../components/InitialsAvatar';
+import DoctorProfilePicture from '../../components/DoctorProfilePicture';
 
 const { width } = Dimensions.get('window');
 
@@ -178,20 +178,15 @@ export default function DoctorProfileScreen() {
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
         {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.profileSection}>
-            {doctor.profile_picture_url ? (
-              <Image
-                source={{ uri: doctor.profile_picture_url }}
-                style={styles.profileImage}
-              />
-            ) : (
-              <InitialsAvatar
-                name={`Dr. ${doctor.first_name} ${doctor.last_name}`}
+          <View style={styles.header}>
+            <View style={styles.profileSection}>
+              <DoctorProfilePicture
+                profilePictureUrl={doctor.profile_picture_url}
+                profilePicture={doctor.profile_picture}
                 size={120}
+                name={`Dr. ${doctor.first_name} ${doctor.last_name}`}
                 style={styles.profileImage}
               />
-            )}
             <View style={styles.profileInfo}>
               <Text style={styles.doctorName}>
                 Dr. {doctor.first_name} {doctor.last_name}
