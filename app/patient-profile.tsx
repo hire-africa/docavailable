@@ -182,6 +182,7 @@ export default function PatientProfile() {
                             imageUri={user.profile_picture || null}
                             profilePictureUrl={user.profile_picture_url || null}
                             size={120}
+                            name={getFullName()}
                         />
                         <View style={styles.profileInfo}>
                             <Text style={styles.name}>{getFullName()}</Text>

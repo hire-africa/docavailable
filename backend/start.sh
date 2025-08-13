@@ -67,6 +67,10 @@ if (!Schema::hasColumn('users', 'status')) {
 echo "Seeding database..."
 php artisan db:seed --force
 
+# Create storage link for public file access
+echo "Creating storage link..."
+php artisan storage:link || echo "Storage link creation failed or already exists"
+
 # Start the application with PHP built-in server
 echo "Starting Laravel application with PHP built-in server..."
 

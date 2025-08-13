@@ -15,6 +15,7 @@ import {
 import { apiService } from '../../app/services/apiService';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
+import InitialsAvatar from '../../components/InitialsAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -179,16 +180,18 @@ export default function DoctorProfileScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.profileSection}>
-            <Image
-              source={
-                doctor.profile_picture_url
-                  ? { uri: doctor.profile_picture_url }
-                  : doctor.profile_picture
-                  ? { uri: doctor.profile_picture }
-                  : require('../../assets/images/doctor-illustration.png')
-              }
-              style={styles.profileImage}
-            />
+            {doctor.profile_picture_url ? (
+              <Image
+                source={{ uri: doctor.profile_picture_url }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <InitialsAvatar
+                name={`Dr. ${doctor.first_name} ${doctor.last_name}`}
+                size={120}
+                style={styles.profileImage}
+              />
+            )}
             <View style={styles.profileInfo}>
               <Text style={styles.doctorName}>
                 Dr. {doctor.first_name} {doctor.last_name}

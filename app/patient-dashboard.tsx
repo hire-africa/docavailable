@@ -28,6 +28,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon, { IconName } from '../components/Icon';
 
 import AlertDialog from '../components/AlertDialog';
+import CacheManagementModal from '../components/CacheManagementModal';
 import ChatbotModal from '../components/ChatbotModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
@@ -113,6 +114,7 @@ export default function PatientDashboard() {
   const [messageSearchQuery, setMessageSearchQuery] = useState('');
   const [pendingLogout, setPendingLogout] = useState(false);
   const [showSubscriptions, setShowSubscriptions] = useState(false);
+  const [showCacheManagement, setShowCacheManagement] = useState(false);
 
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
   const [planToPurchase, setPlanToPurchase] = useState<SubscriptionPlan | null>(null);
@@ -391,27 +393,39 @@ export default function PatientDashboard() {
               // Filter for approved doctors and add default values for missing fields
               const approvedDoctors = doctorsData
                 .filter((doctor: any) => doctor.status === 'approved')
-                .map((doctor: any) => ({
-                  id: doctor.id,
-                  first_name: doctor.first_name,
-                  last_name: doctor.last_name,
-                  name: doctor.display_name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown',
-                  specialization: doctor.specialization || doctor.occupation || 'General Medicine',
-                  rating: doctor.rating || 4.5,
-                  years_of_experience: doctor.years_of_experience || 5,
-                  experience: doctor.years_of_experience || 5,
-                  city: doctor.city,
-                  country: doctor.country,
-                  location: doctor.city || doctor.country || 'Malawi',
-                  email: doctor.email,
-                  status: doctor.status,
-                  profile_picture: doctor.profile_picture,
-                  profile_picture_url: doctor.profile_picture_url,
-                  // Add availability data
-                  is_online: doctor.is_online || false,
-                  working_hours: doctor.working_hours,
-                  max_patients_per_day: doctor.max_patients_per_day
-                }));
+                .map((doctor: any) => {
+                  const mappedDoctor = {
+                    id: doctor.id,
+                    first_name: doctor.first_name,
+                    last_name: doctor.last_name,
+                    name: doctor.display_name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown',
+                    specialization: doctor.specialization || doctor.occupation || 'General Medicine',
+                    rating: doctor.rating || 4.5,
+                    years_of_experience: doctor.years_of_experience || 5,
+                    experience: doctor.years_of_experience || 5,
+                    city: doctor.city,
+                    country: doctor.country,
+                    location: doctor.city || doctor.country || 'Malawi',
+                    email: doctor.email,
+                    status: doctor.status,
+                    profile_picture: doctor.profile_picture,
+                    profile_picture_url: doctor.profile_picture_url,
+                    // Add availability data
+                    is_online: doctor.is_online || false,
+                    working_hours: doctor.working_hours,
+                    max_patients_per_day: doctor.max_patients_per_day
+                  };
+                  
+                  // Debug logging for doctors with profile pictures (storage issue identified)
+                  if (doctor.profile_picture_url) {
+                    console.log('PatientDashboard - Doctor with profile picture (storage not accessible):', {
+                      name: mappedDoctor.name,
+                      profile_picture_url: doctor.profile_picture_url
+                    });
+                  }
+                  
+                  return mappedDoctor;
+                });
               setDoctors(approvedDoctors);
             } else {
               setDoctors([]);
@@ -1853,6 +1867,11 @@ export default function PatientDashboard() {
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Network Test</Text>
           <Icon name="chevronRight" size={20} color="#666" />
           </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => setShowCacheManagement(true)}>
+          <Icon name="image" size={20} color="#666" />
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Image Cache</Text>
+          <Icon name="chevronRight" size={20} color="#666" />
+          </TouchableOpacity>
         </View>
 
       {/* Logout */}
@@ -2839,6 +2858,12 @@ export default function PatientDashboard() {
       <ChatbotModal
         visible={showChatbot}
         onClose={() => setShowChatbot(false)}
+      />
+
+      {/* Cache Management Modal */}
+      <CacheManagementModal
+        visible={showCacheManagement}
+        onClose={() => setShowCacheManagement(false)}
       />
 
 

@@ -27,7 +27,10 @@ php artisan cache:clear
 php artisan route:clear
 php artisan view:clear
 
-echo "5. Testing autoloader..."
+echo "5. Creating storage link..."
+php artisan storage:link || echo "Storage link creation failed or already exists"
+
+echo "6. Testing autoloader..."
 php artisan list > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅ Autoloader test passed!"

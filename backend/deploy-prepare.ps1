@@ -31,7 +31,15 @@ php artisan cache:clear
 php artisan route:clear
 php artisan view:clear
 
-Write-Host "5. Testing autoloader..." -ForegroundColor Cyan
+Write-Host "5. Creating storage link..." -ForegroundColor Cyan
+try {
+    php artisan storage:link
+    Write-Host "   ✅ Storage link created successfully!" -ForegroundColor Green
+} catch {
+    Write-Host "   ⚠️ Storage link creation failed or already exists" -ForegroundColor Yellow
+}
+
+Write-Host "6. Testing autoloader..." -ForegroundColor Cyan
 try {
     php artisan list | Out-Null
     Write-Host "   ✅ Autoloader test passed!" -ForegroundColor Green

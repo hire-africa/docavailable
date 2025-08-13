@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
+import InitialsAvatar from './InitialsAvatar';
 
 interface DoctorProfilePictureProps {
   imageUrl?: string;
@@ -41,24 +42,28 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
     }
     cleanUri = cleanUri.replace(/^\/+/, ''); // Remove leading slashes
     
-    // Use the new image serving route instead of direct storage access
-    return `https://docavailable-1.onrender.com/api/images/${cleanUri}`;
+      // Use the image serving route - will show placeholder if not accessible
+  return `https://docavailable-1.onrender.com/api/images/${cleanUri}`;
   };
 
   // Determine which image to use (priority: profilePictureUrl > profilePicture > imageUrl)
+  // If profilePictureUrl is provided, use it directly (it's already a full URL from backend)
+  // Otherwise, try to generate URL from profilePicture or imageUrl
   const finalImageUrl = profilePictureUrl || profilePicture || imageUrl;
-  const displayUrl = finalImageUrl ? getImageUrl(finalImageUrl) : null;
+  const displayUrl = profilePictureUrl ? profilePictureUrl : (finalImageUrl ? getImageUrl(finalImageUrl) : null);
 
-  // Debug logging (commented out to reduce console clutter)
-  // if (finalImageUrl) {
-  //   console.log('DoctorProfilePicture - Props:', {
-  //     profilePictureUrl,
-  //     profilePicture,
-  //     imageUrl,
-  //     finalImageUrl,
-  //     displayUrl
-  //   });
-  // }
+  // Debug logging for storage issue
+  if (profilePictureUrl && !displayUrl) {
+    console.log('DoctorProfilePicture - Storage not accessible:', {
+      profilePictureUrl,
+      displayUrl
+    });
+  }
+
+  // Handle image loading errors
+  const handleImageError = () => {
+    console.log('DoctorProfilePicture - Image failed to load, showing placeholder');
+  };
 
   // Get initials from name for placeholder
   const getInitials = (name: string) => {
@@ -90,14 +95,13 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
           }}
         />
       ) : (
-        <View style={[styles.placeholder, { width: size, height: size, borderRadius: size / 2 }]}>
-          <FontAwesome name="user-md" size={size * 0.4} color="#4CAF50" />
-          {name && (
-            <Text style={[styles.initials, { fontSize: size * 0.25 }]}>
-              {getInitials(name)}
-            </Text>
-          )}
-        </View>
+        name ? (
+          <InitialsAvatar name={name} size={size} style={style} />
+        ) : (
+          <View style={[styles.placeholder, { width: size, height: size, borderRadius: size / 2 }]}>
+            <FontAwesome name="user-md" size={size * 0.4} color="#4CAF50" />
+          </View>
+        )
       )}
     </View>
   );

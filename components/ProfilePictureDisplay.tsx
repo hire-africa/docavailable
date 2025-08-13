@@ -1,12 +1,14 @@
+import { FontAwesome } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+import InitialsAvatar from './InitialsAvatar';
 
 interface ProfilePictureDisplayProps {
     imageUri?: string | null;
     size?: number;
     borderColor?: string;
     profilePictureUrl?: string | null;
+    name?: string;
 }
 
 const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
@@ -14,6 +16,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
     size = 120,
     borderColor = '#4CAF50',
     profilePictureUrl,
+    name,
 }) => {
     const [imageError, setImageError] = useState(false);
 
@@ -45,41 +48,49 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
         if (uri.startsWith('http')) {
             return uri;
         }
-        // Use the new image serving route instead of direct storage access
+        // Use the image serving route - will show placeholder if not accessible
         return `https://docavailable-1.onrender.com/api/images/${uri}`;
     };
 
-    // Use profilePictureUrl if available, otherwise fall back to imageUri
+    // Use profilePictureUrl if available (it's already a full URL from backend)
+    // Otherwise fall back to imageUri and generate URL
     const finalImageUri = profilePictureUrl || imageUri;
     
-    // Show placeholder if no image URI or if image failed to load
-    const shouldShowPlaceholder = !finalImageUri || imageError;
+    // If profilePictureUrl is provided, use it directly, otherwise generate URL
+    const displayUrl = profilePictureUrl ? profilePictureUrl : (finalImageUri ? getImageUrl(finalImageUri) : null);
 
-    // console.log('ProfilePictureDisplay - Props:', {
-    //   profilePictureUrl,
-    //   imageUri,
-    //   size,
-    //   finalImageUri,
-    //   shouldShowPlaceholder
-    // });
+    // Show placeholder if no image URI or if image failed to load
+    const shouldShowPlaceholder = !displayUrl || imageError;
+
+    // Debug logging for storage issue
+    if (profilePictureUrl && !displayUrl) {
+      console.log('ProfilePictureDisplay - Storage not accessible:', {
+        profilePictureUrl,
+        displayUrl
+      });
+    }
 
     return (
         <View style={styles.container}>
             {!shouldShowPlaceholder ? (
                 <Image
-                    source={{ uri: getImageUrl(finalImageUri) }}
+                    source={{ uri: displayUrl }}
                     style={styles.image}
                     onError={(error) => {
                         console.error('ProfilePictureDisplay - Image load error:', error);
                         setImageError(true);
                     }}
                     onLoad={() => {
-                        // console.log('ProfilePictureDisplay - Image loaded successfully:', finalImageUri);
+                        // console.log('ProfilePictureDisplay - Image loaded successfully:', displayUrl);
                         setImageError(false);
                     }}
                 />
             ) : (
-                <FontAwesome name="user" size={size / 2.5} color={borderColor} />
+                name ? (
+                    <InitialsAvatar name={name} size={size} />
+                ) : (
+                    <FontAwesome name="user" size={size / 2.5} color={borderColor} />
+                )
             )}
         </View>
     );

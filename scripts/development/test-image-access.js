@@ -1,93 +1,43 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
-const BASE_URL = 'http://172.20.10.11:8000';
+const BASE_URL = 'https://docavailable-1.onrender.com';
 
 async function testImageAccess() {
-    try {
-        console.log('🔍 Testing Image Access...\n');
+    console.log('🔍 Testing Image Access with Extended Timeout\n');
 
-        // Check if we can access a profile picture
-        const storagePath = path.join(__dirname, '../backend/storage/app/public/profile-pictures');
+    const testUrls = [
+        `${BASE_URL}/api/images/profile-pictures/doctor3.jpg`,
+        `${BASE_URL}/api/images/profile-pictures/doctor2.jpg`,
+        `${BASE_URL}/api/images/profile_pictures/kBznaFXCGfKH7Kb322zeCkH9Cyp4MWs8hos1hrsb.png`
+    ];
+
+    for (let i = 0; i < testUrls.length; i++) {
+        const url = testUrls[i];
+        console.log(`${i + 1}️⃣ Testing: ${url}`);
         
-        if (fs.existsSync(storagePath)) {
-            const files = fs.readdirSync(storagePath);
-            if (files.length > 0) {
-                const testFile = files[0];
-                const testUrl = `${BASE_URL}/storage/profile-pictures/${testFile}`;
-                
-                console.log(`Testing URL: ${testUrl}`);
-                
-                try {
-                    const response = await axios.get(testUrl, { 
-                        timeout: 5000,
-                        responseType: 'arraybuffer',
-                        validateStatus: () => true
-                    });
-                    
-                    console.log(`Status: ${response.status}`);
-                    console.log(`Size: ${response.data.length} bytes`);
-                    
-                    if (response.status === 200) {
-                        console.log('✅ Image is accessible!');
-                        
-                        // Check if it's a valid image
-                        const buffer = Buffer.from(response.data);
-                        const header = buffer.slice(0, 4).toString('hex');
-                        console.log(`File header: ${header}`);
-                        
-                        if (header.startsWith('ffd8ff')) {
-                            console.log('✅ Valid JPEG file');
-                        } else if (header.startsWith('89504e47')) {
-                            console.log('✅ Valid PNG file');
-                        } else {
-                            console.log('⚠️  Unknown file format');
-                        }
-                    } else {
-                        console.log('❌ Image not accessible');
-                        console.log('Response headers:', response.headers);
-                    }
-                } catch (error) {
-                    console.log(`❌ Error: ${error.message}`);
-                }
+        try {
+            const response = await axios.get(url, {
+                timeout: 30000, // 30 seconds timeout
+                validateStatus: () => true // Don't throw on any status
+            });
+            
+            console.log(`   Status: ${response.status}`);
+            console.log(`   Content-Type: ${response.headers['content-type']}`);
+            console.log(`   Content-Length: ${response.headers['content-length']}`);
+            
+            if (response.status === 200) {
+                console.log(`   ✅ Image accessible`);
+            } else {
+                console.log(`   ❌ Image not accessible (${response.status})`);
+            }
+        } catch (error) {
+            if (error.code === 'ECONNABORTED') {
+                console.log(`   ❌ Error: timeout of 30000ms exceeded`);
+            } else {
+                console.log(`   ❌ Error: ${error.message}`);
             }
         }
-
-        // Also test documents
-        const documentsPath = path.join(__dirname, '../backend/storage/app/public/documents');
-        
-        if (fs.existsSync(documentsPath)) {
-            const files = fs.readdirSync(documentsPath);
-            if (files.length > 0) {
-                const testFile = files[0];
-                const testUrl = `${BASE_URL}/storage/documents/${testFile}`;
-                
-                console.log(`\nTesting document URL: ${testUrl}`);
-                
-                try {
-                    const response = await axios.get(testUrl, { 
-                        timeout: 5000,
-                        responseType: 'arraybuffer',
-                        validateStatus: () => true
-                    });
-                    
-                    console.log(`Status: ${response.status}`);
-                    console.log(`Size: ${response.data.length} bytes`);
-                    
-                    if (response.status === 200) {
-                        console.log('✅ Document is accessible!');
-                    } else {
-                        console.log('❌ Document not accessible');
-                    }
-                } catch (error) {
-                    console.log(`❌ Error: ${error.message}`);
-                }
-            }
-        }
-
-    } catch (error) {
-        console.error('Test failed:', error.message);
+        console.log('');
     }
 }
 
