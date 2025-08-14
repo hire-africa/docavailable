@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface VoiceMessagePlayerProps {
   audioUri: string;
@@ -18,6 +18,9 @@ export default function VoiceMessagePlayer({
   deliveryStatus = 'sent',
   profilePictureUrl
 }: VoiceMessagePlayerProps) {
+  // Debug: Log the audio URI we receive
+  console.log('🎵 VoiceMessagePlayer received audioUri:', audioUri);
+  
   // Debug profile picture URL
       // console.log('VoiceMessagePlayer Debug:', {
     //   profilePictureUrl,
@@ -51,8 +54,23 @@ export default function VoiceMessagePlayer({
   const loadAudio = async () => {
     try {
       setIsLoading(true);
+      
+      // The audioUri is already a full URL from the server
+      // No need to construct URLs - just use the URI as-is
+      let audioUrl = audioUri;
+      
+      // Only handle local file:// URLs if they exist
+      if (audioUrl.startsWith('file://')) {
+        audioUrl = audioUrl;
+      } else if (audioUrl.startsWith('/')) {
+        audioUrl = `file://${audioUrl}`;
+      }
+      // For all other cases (http/https URLs), use as-is
+      
+      console.log('🎵 Loading audio URL:', audioUrl);
+      
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
+        { uri: audioUrl },
         { shouldPlay: false }
       );
       
@@ -74,6 +92,35 @@ export default function VoiceMessagePlayer({
       
     } catch (error) {
       console.error('Error loading audio:', error);
+      // For iOS, try alternative URL format if first attempt fails
+      if (Platform.OS === 'ios' && !audioUri.startsWith('file://')) {
+        try {
+          console.log('🔄 Retrying audio with alternative URL format...');
+          // Try with different encoding
+          const alternativeUrl = encodeURI(audioUri);
+          
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: alternativeUrl },
+            { shouldPlay: false }
+          );
+          
+          setSound(newSound);
+          
+          const status = await newSound.getStatusAsync();
+          if (status.isLoaded) {
+            setDuration(status.durationMillis || 0);
+          }
+          
+          newSound.setOnPlaybackStatusUpdate((status) => {
+            if (status.isLoaded) {
+              setIsPlaying(status.isPlaying);
+              setPosition(status.positionMillis || 0);
+            }
+          });
+        } catch (retryError) {
+          console.error('Error on audio retry:', retryError);
+        }
+      }
     } finally {
       setIsLoading(false);
     }

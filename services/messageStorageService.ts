@@ -58,9 +58,15 @@ export interface LocalStorageData {
 
 class MessageStorageService {
   private readonly STORAGE_PREFIX = 'chat_messages_';
-  private readonly SYNC_INTERVAL = 5000; // 30 seconds - much longer interval to prevent interference with image uploads
+  private readonly SYNC_INTERVAL = 15000; // 15 seconds base interval (increased from 5s)
+  private readonly ACTIVE_SYNC_INTERVAL = 5000; // 5 seconds when active (increased from 3s)
+  private readonly IDLE_SYNC_INTERVAL = 30000; // 30 seconds when idle (increased from 15s)
+  private readonly MAX_ERRORS = 3;
+  private readonly ERROR_BACKOFF_MULTIPLIER = 2;
   private syncTimers: Map<number, ReturnType<typeof setInterval>> = new Map();
   private updateCallbacks: Map<number, (messages: Message[]) => void> = new Map();
+  private syncInProgress: Map<number, boolean> = new Map();
+  private consecutiveErrors: Map<number, number> = new Map();
   
   private errorLogTimestamps: Map<string, number> = new Map();
   private readonly ERROR_LOG_COOLDOWN = 10000;
@@ -333,7 +339,10 @@ class MessageStorageService {
         console.log(`📤 Message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
         await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
         await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
-        
+        // Nudge an immediate sync so recipients see it faster
+        setTimeout(() => {
+          this.forceSync(appointmentId).catch(() => undefined);
+        }, 300);
         return serverMessage;
       } else {
         // If server request failed, keep as 'sent' status
@@ -393,6 +402,10 @@ class MessageStorageService {
         console.log(`📤 Voice message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
         await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
         await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
+        // Immediate sync for faster propagation
+        setTimeout(() => {
+          this.forceSync(appointmentId).catch(() => undefined);
+        }, 300);
         
         return serverMessage;
       } else {
@@ -472,6 +485,10 @@ class MessageStorageService {
         console.log(`📤 Image message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
         await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
         await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
+        // Immediate sync for faster propagation
+        setTimeout(() => {
+          this.forceSync(appointmentId).catch(() => undefined);
+        }, 300);
         
         return serverMessage;
       } else {
@@ -580,18 +597,92 @@ class MessageStorageService {
 
   startAutoSync(appointmentId: number): void {
     this.stopAutoSync(appointmentId);
-    
-    // TEMPORARILY DISABLE AUTO-SYNC TO FIX IMAGE MESSAGE DISAPPEARING ISSUE
-    console.log(`🚫 Auto-sync DISABLED for appointment ${appointmentId} to prevent image message loss`);
-    return;
-    
+
+    // Initialize tracking
+    this.syncInProgress.set(appointmentId, false);
+    this.consecutiveErrors.set(appointmentId, 0);
+
+    // Helper to schedule the next sync with optional backoff
+    const scheduleNextSync = (delayMs: number) => {
+      // Clear any existing timer before scheduling a new one
+      const existing = this.syncTimers.get(appointmentId);
+      if (existing) {
+        clearTimeout(existing as unknown as number);
+      }
+      const timer = setTimeout(async () => {
+        await performSync();
+      }, delayMs) as unknown as ReturnType<typeof setInterval>;
+      this.syncTimers.set(appointmentId, timer);
+    };
+
+    const performSync = async () => {
+      // Prevent overlapping syncs
+      if (this.syncInProgress.get(appointmentId)) {
+        return;
+      }
+      this.syncInProgress.set(appointmentId, true);
+
+      try {
+        // Ensure user is authenticated before polling
+        const isAuth = await this.isAuthenticated();
+        if (!isAuth) {
+          // Try again later without counting as an error
+          scheduleNextSync(this.SYNC_INTERVAL);
+          return;
+        }
+
+        await this.loadFromServer(appointmentId);
+
+        // Reset error counter on success and schedule next run at base interval
+        this.consecutiveErrors.set(appointmentId, 0);
+        scheduleNextSync(this.SYNC_INTERVAL);
+      } catch (error) {
+        // Backoff on errors
+        const prev = this.consecutiveErrors.get(appointmentId) || 0;
+        const currentErrors = prev + 1;
+        this.consecutiveErrors.set(appointmentId, currentErrors);
+
+        // Exponential backoff up to 60s
+        const backoff = Math.min(this.SYNC_INTERVAL * Math.pow(2, currentErrors), 60000);
+        scheduleNextSync(backoff);
+      } finally {
+        this.syncInProgress.set(appointmentId, false);
+      }
+    };
+
+    // Kick off first sync shortly after start to avoid blocking UI thread
+    scheduleNextSync(250);
   }
 
   stopAutoSync(appointmentId: number): void {
     const timer = this.syncTimers.get(appointmentId);
     if (timer) {
-      clearInterval(timer);
+      clearTimeout(timer as unknown as number);
       this.syncTimers.delete(appointmentId);
+    }
+    // Clean up tracking maps
+    this.syncInProgress.delete(appointmentId);
+    this.consecutiveErrors.delete(appointmentId);
+  }
+
+  // Allow manual immediate sync (e.g., after sending a message)
+  async forceSync(appointmentId: number): Promise<void> {
+    try {
+      // Perform an immediate sync and then resume normal schedule
+      await this.loadFromServer(appointmentId);
+      // After force sync, reset error counter and reschedule base interval
+      this.consecutiveErrors.set(appointmentId, 0);
+      const existing = this.syncTimers.get(appointmentId);
+      if (existing) {
+        clearTimeout(existing as unknown as number);
+      }
+      const timer = setTimeout(async () => {
+        // Chain back into the normal loop
+        this.startAutoSync(appointmentId);
+      }, this.SYNC_INTERVAL) as unknown as ReturnType<typeof setInterval>;
+      this.syncTimers.set(appointmentId, timer);
+    } catch (error) {
+      this.logErrorOnce('Error during forceSync:', error, `appointment-${appointmentId}`);
     }
   }
 
@@ -700,13 +791,19 @@ class MessageStorageService {
       } else {
         // CRITICAL FIX: Preserve local messages that don't exist on server yet
         // This prevents newly sent messages (especially images) from disappearing
-        console.log(`🔒 PRESERVING local message not on server: ${localMessage.id} (${localMessage.message_type})`);
+        // Only log occasionally to reduce spam (10% chance)
+        if (Math.random() < 0.1) {
+          console.log(`🔒 PRESERVING local message not on server: ${localMessage.id} (${localMessage.message_type})`);
+        }
         mergedMap.set(localMessage.id, localMessage);
         preservedLocalMessages++;
       }
     });
     
-    console.log(`📊 Merge stats: ${mergedReadReceipts} read receipts, ${mergedDeliveryStatus} delivery status, ${protectedDeliveryStatus} protected, ${preservedLocalMessages} local messages preserved`);
+    // Only log merge stats occasionally to reduce spam (5% chance)
+    if (Math.random() < 0.05) {
+      console.log(`📊 Merge stats: ${mergedReadReceipts} read receipts, ${mergedDeliveryStatus} delivery status, ${protectedDeliveryStatus} protected, ${preservedLocalMessages} local messages preserved`);
+    }
     
     return Array.from(mergedMap.values()).sort((a, b) => 
       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()

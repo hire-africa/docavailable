@@ -1599,28 +1599,37 @@ export default function DoctorDashboard() {
   
     return (
       <ScrollView showsVerticalScrollIndicator={false}>
-        {confirmedAppointments.map((appointment) => (
-          <TouchableOpacity
-            key={appointment.id}
-            style={styles.requestCard}
-            onPress={() => setSelectedAcceptedRequest(appointment)}
-          >
-            <View style={styles.requestCardHeader}>
-              <DoctorProfilePicture
-                profilePictureUrl={appointment.patientProfilePictureUrl}
-                profilePicture={appointment.patientProfilePicture}
-                size={50}
-              />
-              <View style={styles.requestCardInfo}>
-                <Text style={styles.patientName}>{appointment.patient_name}</Text>
-                <Text style={styles.appointmentDateTime}>
+        <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
+          {confirmedAppointments.map((appointment) => (
+            <TouchableOpacity
+              key={appointment.id}
+              style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}
+              onPress={() => setSelectedAcceptedRequest(appointment)}
+              activeOpacity={0.8}
+            >
+              <View style={{width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+                <DoctorProfilePicture
+                  profilePictureUrl={appointment.patientProfilePictureUrl}
+                  profilePicture={appointment.patientProfilePicture}
+                  size={48}
+                  name={appointment.patient_name}
+                />
+              </View>
+              <View style={{flex: 1}}>
+                <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{appointment.patient_name}</Text>
+                <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>
                   {formatDate(appointment.appointment_date)} • {formatTime(appointment.appointment_time)}
                 </Text>
-                <Text style={styles.appointmentType}>{appointment.appointment_type}</Text>
+                <Text style={{color: '#666', fontSize: 13, marginTop: 2}} numberOfLines={1}>{appointment.appointment_type}</Text>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+              <View style={{alignItems: 'flex-end'}}>
+                <View style={{backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+                  <Text style={{color: '#2E7D32', fontSize: 12, fontWeight: 'bold'}}>Accepted</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
       </ScrollView>
     );
   };

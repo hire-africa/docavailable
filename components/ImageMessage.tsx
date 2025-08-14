@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { ActivityIndicator, Dimensions, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Dimensions, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -26,6 +26,9 @@ export default function ImageMessage({
   otherParticipantId,
   messageTime
 }: ImageMessageProps) {
+  // Debug: Log the image URL we receive
+  console.log('🖼️ ImageMessage received imageUrl:', imageUrl);
+  
   // Debug profile picture URL
       // console.log('ImageMessage Debug:', {
     //   profilePictureUrl,
@@ -34,11 +37,20 @@ export default function ImageMessage({
     // });
 
   const getImageUrl = (uri: string) => {
+    // The imageUrl is already a full URL from the server
+    // No need to construct URLs - just use the URI as-is
     if (uri.startsWith('http')) {
       return uri;
     }
-    // Use the new image serving route instead of direct storage access
-    return `https://docavailable-1.onrender.com/api/images/${uri}`;
+    // Only handle local file:// URLs if they exist
+    if (uri.startsWith('file://')) {
+      return uri;
+    }
+    if (uri.startsWith('/')) {
+      return `file://${uri}`;
+    }
+    // For any other case, return as-is (shouldn't happen with current setup)
+    return uri;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
@@ -58,6 +70,21 @@ export default function ImageMessage({
   const handleImageError = () => {
     setImageLoading(false);
     setImageError(true);
+    
+    // For iOS, try alternative URL format if first attempt fails
+    if (Platform.OS === 'ios' && !imageError) {
+      console.log('🔄 Retrying image with alternative URL format...');
+      setImageError(false);
+      setImageLoading(true);
+      
+      // Try with URL encoding
+      const alternativeUrl = encodeURI(imageUrl);
+      
+      // Force re-render with alternative URL
+      setTimeout(() => {
+        setImageLoading(false);
+      }, 1000);
+    }
   };
 
   return (

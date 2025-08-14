@@ -23,6 +23,7 @@ import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
@@ -77,6 +78,9 @@ export default function ChatPage() {
   const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
   const [markReadAttempts, setMarkReadAttempts] = useState(0);
   const MAX_MARK_READ_ATTEMPTS = 3;
+  
+  // Add state to track if session has ended (for doctors)
+  const [sessionEnded, setSessionEnded] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
@@ -165,27 +169,43 @@ export default function ChatPage() {
           const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
           if (infoResponse.success && infoResponse.data) {
             // console.log('🔍 Chat Info Response:', infoResponse.data);
-            setChatInfo(infoResponse.data as ChatInfo);
+            const chatInfoData = infoResponse.data as ChatInfo;
+            setChatInfo(chatInfoData);
+            
+            // Check if session has ended (for doctors)
+            if (!isPatient && chatInfoData.status === 'completed') {
+              console.log('🏁 Session ended detected for doctor');
+              setSessionEnded(true);
+            }
           }
-        } catch (error: any) {
+        } catch (error) {
           console.error('Error loading chat info:', error);
-          // Don't show alert for auth errors, just log them
-          if (error?.response?.status !== 401) {
-            Alert.alert('Error', 'Failed to load chat information');
-          }
         }
       }
-
-      // Load initial messages
-      const localMessages = await messageStorageService.getMessagesOptimized(getAppointmentIdForStorage());
-      setMessages(localMessages);
       
-    } catch (error: any) {
-      console.error('Error loading chat:', error);
-      // Don't show alert for auth errors
-      if (error?.response?.status !== 401) {
-        Alert.alert('Error', 'Failed to load chat messages');
+      // Load messages from storage
+      const loadedMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
+      
+      // Debug: Log all messages with media URLs
+      const mediaMessages = loadedMessages.filter(msg => msg.media_url);
+      if (mediaMessages.length > 0) {
+        console.log('📱 Found messages with media URLs:', mediaMessages.map(msg => ({
+          id: msg.id,
+          type: msg.message_type,
+          mediaUrl: msg.media_url,
+          message: msg.message?.substring(0, 50) + '...'
+        })));
       }
+      
+      setMessages(loadedMessages);
+      
+      // Mark messages as read if user is authenticated
+      if (isAuthenticated && !messagesMarkedAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS) {
+        markMessagesAsRead();
+      }
+      
+    } catch (error) {
+      console.error('Error loading chat:', error);
     } finally {
       setLoading(false);
     }
@@ -451,10 +471,50 @@ export default function ChatPage() {
         sessionId = appointmentId;
       }
       
+      console.log('🔍 Ending session:', {
+        originalAppointmentId: appointmentId,
+        isTextSession,
+        extractedSessionId: sessionId,
+        sessionType: isTextSession ? 'text' : 'appointment'
+      });
+      
       const sessionType = isTextSession ? 'text' : 'appointment';
+      // Before ending on server, capture current messages for local archive
+      const archiveMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
+      // Strip temp_id and ensure minimal consistency
+      const cleanedMessages = archiveMessages.map(m => {
+        const { temp_id, ...rest } = m as any;
+        return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+      });
+
       const result = await sessionService.endSession(sessionId, sessionType);
       
       if (result.status === 'success') {
+        // Build ended session payload for local storage
+        const endedSession: EndedSession = {
+          appointment_id: getAppointmentIdForStorage(),
+          doctor_id: chatInfo?.doctor_id,
+          doctor_name: chatInfo?.other_participant_name,
+          doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+          doctor_profile_picture: chatInfo?.other_participant_profile_picture,
+          patient_id: user?.id || 0,
+          patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+          appointment_date: chatInfo?.appointment_date,
+          appointment_time: chatInfo?.appointment_time,
+          ended_at: new Date().toISOString(),
+          session_duration: undefined,
+          session_summary: undefined,
+          messages: cleanedMessages,
+          message_count: cleanedMessages.length,
+        };
+
+        try {
+          // Store for both patient and doctor
+          await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+        } catch (e) {
+          console.error('Failed to store ended session locally:', e);
+        }
+
         // Show rating modal instead of success alert
         setShowEndSessionModal(false);
         setShowRatingModal(true);
@@ -463,9 +523,62 @@ export default function ChatPage() {
       }
     } catch (error: any) {
       console.error('Error ending session:', error);
-      Alert.alert('Error', 'Failed to end session. Please try again.');
+      
+      // Handle specific error cases
+      if (error?.response?.status === 404) {
+        Alert.alert(
+          'Session Not Found', 
+          'This session may have already been ended or no longer exists. You can safely close this chat.',
+          [
+            { text: 'OK', onPress: () => {
+              // Store messages locally anyway and close
+              handleStoreAndClose();
+            }}
+          ]
+        );
+      } else if (error?.response?.status === 403) {
+        Alert.alert('Unauthorized', 'You are not authorized to end this session.');
+      } else {
+        Alert.alert('Error', 'Failed to end session. Please try again.');
+      }
     } finally {
       setEndingSession(false);
+    }
+  };
+
+  // Helper function to store messages and close chat
+  const handleStoreAndClose = async () => {
+    try {
+      const archiveMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
+      const cleanedMessages = archiveMessages.map(m => {
+        const { temp_id, ...rest } = m as any;
+        return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+      });
+
+      const endedSession: EndedSession = {
+        appointment_id: getAppointmentIdForStorage(),
+        doctor_id: chatInfo?.doctor_id,
+        doctor_name: chatInfo?.other_participant_name,
+        doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+        doctor_profile_picture: chatInfo?.other_participant_profile_picture,
+        patient_id: user?.id || 0,
+        patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+        appointment_date: chatInfo?.appointment_date,
+        appointment_time: chatInfo?.appointment_time,
+        ended_at: new Date().toISOString(),
+        session_duration: undefined,
+        session_summary: undefined,
+        messages: cleanedMessages,
+        message_count: cleanedMessages.length,
+      };
+
+      await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+      setShowEndSessionModal(false);
+      setShowRatingModal(true);
+    } catch (e) {
+      console.error('Failed to store session locally:', e);
+      setShowEndSessionModal(false);
+      router.back();
     }
   };
 
@@ -833,39 +946,57 @@ export default function ChatPage() {
                 }}
               >
                 {message.message_type === 'voice' && message.media_url ? (
-                  // Voice messages render without outer bubble
-                  <VoiceMessagePlayer
-                    audioUri={message.media_url}
-                    isOwnMessage={message.sender_id === currentUserId}
-                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                    profilePictureUrl={
-                      message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                    }
-                  />
+                  // Debug: Log voice message details
+                  (() => {
+                    console.log('🎵 Rendering voice message:', {
+                      messageId: message.id,
+                      mediaUrl: message.media_url,
+                      messageType: message.message_type
+                    });
+                    return (
+                      <VoiceMessagePlayer
+                        audioUri={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                      />
+                    );
+                  })()
                 ) : message.message_type === 'image' && message.media_url ? (
-                  // Image messages render without outer bubble
-                  <ImageMessage
-                    imageUrl={message.media_url}
-                    isOwnMessage={message.sender_id === currentUserId}
-                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                    profilePictureUrl={
-                      message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                    }
-                    readBy={message.read_by}
-                    otherParticipantId={
-                      chatInfo?.doctor_id === currentUserId 
-                        ? chatInfo?.patient_id 
-                        : chatInfo?.doctor_id || 
-                          (message.sender_id !== currentUserId ? message.sender_id : undefined)
-                    }
-                    messageTime={message.created_at}
-                  />
+                  // Debug: Log image message details
+                  (() => {
+                    console.log('🖼️ Rendering image message:', {
+                      messageId: message.id,
+                      mediaUrl: message.media_url,
+                      messageType: message.message_type
+                    });
+                    return (
+                      <ImageMessage
+                        imageUrl={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                        readBy={message.read_by}
+                        otherParticipantId={
+                          chatInfo?.doctor_id === currentUserId 
+                            ? chatInfo?.patient_id 
+                            : chatInfo?.doctor_id || 
+                              (message.sender_id !== currentUserId ? message.sender_id : undefined)
+                        }
+                        messageTime={message.created_at}
+                      />
+                    );
+                  })()
                 ) : (
                   // Regular text messages with bubble
                   <View
@@ -915,14 +1046,39 @@ export default function ChatPage() {
           borderTopColor: '#E5E5E5',
           backgroundColor: '#fff',
         }}>
+          {/* Session Ended Message for Doctors */}
+          {sessionEnded && !isPatient && (
+            <View style={{
+              position: 'absolute',
+              top: -60,
+              left: 0,
+              right: 0,
+              backgroundColor: '#FFF3CD',
+              borderTopWidth: 1,
+              borderTopColor: '#FFEAA7',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              alignItems: 'center',
+            }}>
+              <Text style={{
+                fontSize: 14,
+                color: '#856404',
+                fontWeight: '500',
+                textAlign: 'center',
+              }}>
+                Session ended by patient • You can no longer send messages
+              </Text>
+            </View>
+          )}
+
           {/* Image Button */}
           <TouchableOpacity
             onPress={handlePickImage}
-            disabled={sendingGalleryImage || sendingCameraImage}
+            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingGalleryImage || sendingCameraImage) ? 0.5 : 1,
+              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded) ? 0.5 : 1,
             }}
           >
             {sendingGalleryImage ? (
@@ -935,11 +1091,11 @@ export default function ChatPage() {
           {/* Camera Button */}
           <TouchableOpacity
             onPress={handleTakePhoto}
-            disabled={sendingCameraImage || sendingGalleryImage}
+            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingCameraImage || sendingGalleryImage) ? 0.5 : 1,
+              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded) ? 0.5 : 1,
             }}
           >
             {sendingCameraImage ? (
@@ -952,7 +1108,7 @@ export default function ChatPage() {
           <TextInput
             value={newMessage}
             onChangeText={setNewMessage}
-            placeholder="Type a message..."
+            placeholder={sessionEnded && !isPatient ? "Session ended" : "Type a message..."}
             style={{
               flex: 1,
               borderWidth: 1,
@@ -962,20 +1118,23 @@ export default function ChatPage() {
               paddingVertical: 12,
               fontSize: 16,
               marginRight: 8,
+              opacity: sessionEnded && !isPatient ? 0.5 : 1,
             }}
             multiline
             maxLength={1000}
+            editable={!(sessionEnded && !isPatient)}
           />
           
           <TouchableOpacity
             onPress={newMessage.trim() ? sendMessage : startRecording}
-            disabled={sending || isRecording}
+            disabled={sending || isRecording || sessionEnded}
             style={{
               backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',
               borderRadius: 20,
               padding: 12,
               minWidth: 44,
               alignItems: 'center',
+              opacity: sessionEnded && !isPatient ? 0.5 : 1,
             }}
           >
             {sending ? (

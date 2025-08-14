@@ -189,7 +189,27 @@ class TextSessionController extends Controller
             $userId = auth()->id();
             $userType = auth()->user()->user_type;
 
-            $session = TextSession::findOrFail($sessionId);
+            // First check if the session exists
+            $session = TextSession::find($sessionId);
+            
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Text session not found. It may have already been ended or deleted.'
+                ], 404);
+            }
+
+            // Check if session is already ended
+            if ($session->status === TextSession::STATUS_ENDED) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Session was already ended',
+                    'data' => [
+                        'session' => $session,
+                        'already_ended' => true
+                    ]
+                ]);
+            }
 
             // Check if user is authorized to end this session
             if ($userType === 'doctor' && $session->doctor_id !== $userId) {
@@ -238,6 +258,13 @@ class TextSessionController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Error ending text session:', [
+                'session_id' => $sessionId,
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to end session: ' . $e->getMessage()

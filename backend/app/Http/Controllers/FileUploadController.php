@@ -109,8 +109,8 @@ class FileUploadController extends Controller
             $filename = time() . '_' . Str::random(10) . '.' . $extension;
             $path = $file->storeAs($folder, $filename, 'public');
             
-            // Get the URL
-            $url = Storage::disk('public')->url($path);
+            // Get the URL - use API endpoint instead of direct storage URL
+            $url = url("/api/images/{$path}");
             
             // Dispatch job to process image asynchronously
             \App\Jobs\ProcessFileUpload::dispatch($path, 'chat_image', $user->id, ['appointment_id' => $appointmentId]);
@@ -183,8 +183,8 @@ class FileUploadController extends Controller
         $filename = time() . '_' . Str::random(10) . '.' . $extension;
         $path = $file->storeAs($folder, $filename, 'public');
         
-        // Get the URL
-        $url = Storage::disk('public')->url($path);
+        // Get the URL - use API endpoint instead of direct storage URL
+        $url = url("/api/images/{$path}");
         
         // If it's an image, process it asynchronously
         if ($isImage) {
