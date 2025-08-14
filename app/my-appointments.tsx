@@ -22,17 +22,35 @@ const MyAppointments = () => {
       setLoading(true);
       const response = await apiService.get('/appointments');
       if (response.success) {
-        // Sort appointments by most recent first
-        const sortedAppointments = response.data.sort((a: any, b: any) => {
-          const dateA = new Date(`${a.appointment_date || a.date} ${a.appointment_time || a.time}`);
-          const dateB = new Date(`${b.appointment_date || b.date} ${b.appointment_time || b.time}`);
-          return dateB.getTime() - dateA.getTime();
-        });
-        setAppointments(sortedAppointments);
+        // Handle different response structures
+        let appointmentsData = response.data;
+        
+        // Check if data is nested (Laravel pagination structure)
+        if (response.data && response.data.data) {
+          appointmentsData = response.data.data;
+        }
+        
+        // Ensure we have an array
+        if (Array.isArray(appointmentsData)) {
+          // Sort appointments by most recent first
+          const sortedAppointments = appointmentsData.sort((a: any, b: any) => {
+            const dateA = new Date(`${a.appointment_date || a.date} ${a.appointment_time || a.time}`);
+            const dateB = new Date(`${b.appointment_date || b.date} ${b.appointment_time || b.time}`);
+            return dateB.getTime() - dateA.getTime();
+          });
+          setAppointments(sortedAppointments);
+        } else {
+          console.warn('Appointments data is not an array:', appointmentsData);
+          setAppointments([]);
+        }
+      } else {
+        console.warn('API response not successful:', response);
+        setAppointments([]);
       }
     } catch (error) {
       console.error('Error fetching appointments:', error);
       Alert.alert('Error', 'Failed to load appointments');
+      setAppointments([]);
     } finally {
       setLoading(false);
     }
