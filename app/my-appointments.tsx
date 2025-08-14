@@ -390,6 +390,21 @@ const MyAppointments = () => {
           <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320, borderWidth: 3, borderColor: '#FF0000' }}>
             <Text style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 12, color: '#FF0000' }}>🔴 CONFIRM CANCELLATION 🔴</Text>
             <Text style={{ marginBottom: 8, fontSize: 16 }}>Are you sure you want to cancel this appointment?</Text>
+            
+            {/* Test Button */}
+            <TouchableOpacity 
+              onPress={() => Alert.alert('Test', 'Test button in modal works! 🎉')}
+              style={{ 
+                backgroundColor: '#FF00FF', 
+                padding: 10, 
+                borderRadius: 8, 
+                marginBottom: 16,
+                alignItems: 'center'
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>🧪 TEST BUTTON 🧪</Text>
+            </TouchableOpacity>
+            
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
               <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
@@ -398,8 +413,17 @@ const MyAppointments = () => {
                 console.log('🔍 Confirm button pressed directly!');
                 Alert.alert('Debug', 'Confirm button was pressed! 🎯');
                 handleCancelConfirm();
-              }} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              }} style={{ 
+                backgroundColor: '#00FF00', 
+                borderRadius: 8, 
+                paddingVertical: 12, 
+                paddingHorizontal: 24,
+                minWidth: 100,
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: '#000000'
+              }}>
+                <Text style={{ color: '#000000', fontWeight: 'bold', fontSize: 16 }}>✅ CONFIRM ✅</Text>
               </TouchableOpacity>
             </View>
           </View>
