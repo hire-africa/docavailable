@@ -116,11 +116,13 @@ const MyAppointments = () => {
     return canCancel;
   };
 
+  // Step 1: Show confirmation modal
   const handleCancelAppointment = (appt: any) => {
     console.log('🔍 Cancel button tapped for appointment:', appt.id);
     setCancellingAppointment(appt);
     setShowCancelConfirmModal(true);
     console.log('🔍 showCancelConfirmModal set to true');
+    Alert.alert('Debug', 'Confirmation modal should be visible now! 🔴');
   };
 
   const handleCancelConfirm = () => {
@@ -383,10 +385,10 @@ const MyAppointments = () => {
 
       {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirmModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
-            <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(255,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320, borderWidth: 3, borderColor: '#FF0000' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 12, color: '#FF0000' }}>🔴 CONFIRM CANCELLATION 🔴</Text>
+            <Text style={{ marginBottom: 8, fontSize: 16 }}>Are you sure you want to cancel this appointment?</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
               <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
