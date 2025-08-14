@@ -111,6 +111,7 @@ export default function DoctorDashboard() {
   const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null);
   const [selectedAcceptedRequest, setSelectedAcceptedRequest] = useState<BookingRequest | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [appointmentsTab, setAppointmentsTab] = useState<'requests' | 'accepted'>('requests');
@@ -981,8 +982,13 @@ export default function DoctorDashboard() {
 
   const handleCancelAppointment = (appt: any) => {
     setAppointmentToCancel(appt);
-    setCancelReason('');
     setShowCancelConfirm(true);
+  };
+
+  const handleCancelConfirm = () => {
+    setShowCancelConfirm(false);
+    setCancelReason('');
+    setShowCancelReasonModal(true);
   };
 
   const confirmCancelAppointment = async () => {
@@ -1005,6 +1011,8 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Appointment cancelled successfully.');
+        setShowCancelReasonModal(false);
+        setShowCancelConfirm(false);
         await fetchBookingRequests();
       } else {
         showError('Error', 'Failed to cancel appointment. Please try again.');
@@ -1350,7 +1358,26 @@ export default function DoctorDashboard() {
         </View>
       </Modal>
 
+      {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirm} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
+            <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={() => setShowCancelConfirm(false)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCancelConfirm} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cancel Reason Input Modal */}
+      <Modal visible={showCancelReasonModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
             <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
@@ -1363,7 +1390,7 @@ export default function DoctorDashboard() {
               multiline
             />
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-              <TouchableOpacity onPress={() => setShowCancelConfirm(false)} style={{ marginRight: 16 }}>
+              <TouchableOpacity onPress={() => setShowCancelReasonModal(false)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={confirmCancelAppointment} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>

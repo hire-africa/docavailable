@@ -13,6 +13,7 @@ const MyAppointments = () => {
   const [loading, setLoading] = useState(true);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showCancelConfirmModal, setShowCancelConfirmModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancellingAppointment, setCancellingAppointment] = useState<any>(null);
 
@@ -90,6 +91,11 @@ const MyAppointments = () => {
 
   const handleCancelAppointment = (appt: any) => {
     setCancellingAppointment(appt);
+    setShowCancelConfirmModal(true);
+  };
+
+  const handleCancelConfirm = () => {
+    setShowCancelConfirmModal(false);
     setCancelReason('');
     setShowCancelModal(true);
   };
@@ -112,6 +118,7 @@ const MyAppointments = () => {
       if (response.success) {
         Alert.alert('Success', 'Appointment cancelled successfully.');
         setShowCancelModal(false);
+        setShowCancelConfirmModal(false);
         setCancellingAppointment(null);
         setCancelReason('');
         fetchAppointments(); // Refresh the list
@@ -317,6 +324,24 @@ const MyAppointments = () => {
       </Modal>
 
       {/* Cancel Confirmation Modal */}
+      <Modal visible={showCancelConfirmModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
+            <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCancelConfirm} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cancel Reason Input Modal */}
       <Modal visible={showCancelModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
