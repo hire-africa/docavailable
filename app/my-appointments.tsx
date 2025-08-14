@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 import { FontAwesome } from '@expo/vector-icons';
@@ -12,6 +12,9 @@ const MyAppointments = () => {
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancellingAppointment, setCancellingAppointment] = useState<any>(null);
 
   useEffect(() => {
     fetchAppointments();
@@ -56,23 +59,112 @@ const MyAppointments = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  // Convert numeric status to string
+  const getStatusString = (status: any): string => {
+    if (typeof status === 'string') {
+      return status.toLowerCase();
+    }
+    
+    // Convert numeric status to string
+    switch (Number(status)) {
+      case 0: return 'pending';
+      case 1: return 'confirmed';
+      case 2: return 'cancelled';
+      case 3: return 'completed';
+      case 4: return 'reschedule_proposed';
+      case 5: return 'reschedule_accepted';
+      case 6: return 'reschedule_rejected';
+      default: return 'unknown';
+    }
+  };
+
+  // Check if appointment can be cancelled
+  const canCancelAppointment = (appt: any): boolean => {
+    const status = getStatusString(appt.status);
+    const appointmentDateTime = new Date(`${appt.appointment_date || appt.date} ${appt.appointment_time || appt.time}`);
+    const now = new Date();
+    
+    // Can cancel if status is pending or confirmed AND appointment hasn't started yet
+    return (status === 'pending' || status === 'confirmed') && appointmentDateTime > now;
+  };
+
+  const handleCancelAppointment = (appt: any) => {
+    setCancellingAppointment(appt);
+    setCancelReason('');
+    setShowCancelModal(true);
+  };
+
+  const confirmCancelAppointment = async () => {
+    if (!cancelReason.trim()) {
+      Alert.alert('Reason Required', 'Please provide a reason for cancellation.');
+      return;
+    }
+
+    if (!cancellingAppointment) return;
+
+    try {
+      setLoading(true);
+      const response = await apiService.patch(`/appointments/${cancellingAppointment.id}`, {
+        status: 'cancelled',
+        cancellation_reason: cancelReason
+      });
+
+      if (response.success) {
+        Alert.alert('Success', 'Appointment cancelled successfully.');
+        setShowCancelModal(false);
+        setCancellingAppointment(null);
+        setCancelReason('');
+        fetchAppointments(); // Refresh the list
+      } else {
+        Alert.alert('Error', response.message || 'Failed to cancel appointment');
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      Alert.alert('Error', 'Failed to cancel appointment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusColor = (status: any) => {
+    const statusStr = getStatusString(status);
+    switch (statusStr) {
       case 'pending': return '#FF9500';
       case 'confirmed': return '#4CAF50';
       case 'cancelled': return '#FF3B30';
       case 'completed': return '#007AFF';
+      case 'reschedule_proposed': return '#FF9500';
+      case 'reschedule_accepted': return '#4CAF50';
+      case 'reschedule_rejected': return '#FF3B30';
       default: return '#666';
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
+  const getStatusIcon = (status: any) => {
+    const statusStr = getStatusString(status);
+    switch (statusStr) {
       case 'pending': return 'clock-o';
       case 'confirmed': return 'check-circle';
       case 'cancelled': return 'times-circle';
       case 'completed': return 'check-square';
+      case 'reschedule_proposed': return 'clock-o';
+      case 'reschedule_accepted': return 'check-circle';
+      case 'reschedule_rejected': return 'times-circle';
       default: return 'question-circle';
+    }
+  };
+
+  const getStatusLabel = (status: any): string => {
+    const statusStr = getStatusString(status);
+    switch (statusStr) {
+      case 'pending': return 'Pending';
+      case 'confirmed': return 'Confirmed';
+      case 'cancelled': return 'Cancelled';
+      case 'completed': return 'Completed';
+      case 'reschedule_proposed': return 'Reschedule Proposed';
+      case 'reschedule_accepted': return 'Reschedule Accepted';
+      case 'reschedule_rejected': return 'Reschedule Rejected';
+      default: return 'Unknown';
     }
   };
 
@@ -92,8 +184,10 @@ const MyAppointments = () => {
   };
 
   const renderAppointment = (appt: any, keyPrefix: string) => {
-    const statusStr = String(appt?.status ?? '').toLowerCase();
-    const statusLabel = statusStr ? statusStr.charAt(0).toUpperCase() + statusStr.slice(1) : 'Unknown';
+    const statusStr = getStatusString(appt.status);
+    const statusLabel = getStatusLabel(appt.status);
+    const canCancel = canCancelAppointment(appt);
+    
     return (
       <TouchableOpacity
         key={`${keyPrefix}${appt.id}`}
@@ -116,7 +210,7 @@ const MyAppointments = () => {
           </Text>
         </View>
         <View style={{alignItems: 'flex-end'}}>
-          <View style={{backgroundColor: getStatusColor(statusStr), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+          <View style={{backgroundColor: getStatusColor(appt.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
             <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>{statusLabel}</Text>
           </View>
         </View>
@@ -178,8 +272,8 @@ const MyAppointments = () => {
                     {formatDate(selectedAppointment.appointment_date || selectedAppointment.date)} • {formatTime(selectedAppointment.appointment_time || selectedAppointment.time)}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                    <View style={{ backgroundColor: getStatusColor(String(selectedAppointment.status || '').toLowerCase()), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-                      <Text style={{ color: '#fff', fontWeight: '600' }}>{String(selectedAppointment.status || '').toUpperCase() || 'UNKNOWN'}</Text>
+                    <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>{getStatusLabel(selectedAppointment.status)}</Text>
                     </View>
                   </View>
                   {selectedAppointment.appointment_type && (
@@ -195,8 +289,50 @@ const MyAppointments = () => {
                     </View>
                   )}
                 </View>
+                
+                {/* Cancel Button - Only show for cancellable appointments */}
+                {canCancelAppointment(selectedAppointment) && (
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                    onPress={() => handleCancelAppointment(selectedAppointment)}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+                  </TouchableOpacity>
+                )}
+                
+                {/* Cancellation Note */}
+                <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
+                  <Text style={{ color: '#8D6E63', fontSize: 12 }}>
+                    Note: Cancelling appointments at short notice may affect your account standing. Please provide a valid reason for cancellation.
+                  </Text>
+                </View>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cancel Confirmation Modal */}
+      <Modal visible={showCancelModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
+            <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
+            <TextInput
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              placeholder="Reason..."
+              style={{ borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8, marginBottom: 16 }}
+              multiline
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+              <TouchableOpacity onPress={() => setShowCancelModal(false)} style={{ marginRight: 16 }}>
+                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmCancelAppointment} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -213,6 +349,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#F8F9FA',
     alignItems: 'center',
+    marginTop: 20, // Added margin to move title down
   },
   title: {
     fontSize: 28,
