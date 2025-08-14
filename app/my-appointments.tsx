@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, TextInput } from 'react-native';
+import { FontAwesome } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import DoctorProfilePicture from '../components/DoctorProfilePicture';
+import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 import { apiService } from '../services/apiService';
-import { FontAwesome } from '@expo/vector-icons';
-import { Colors } from '../constants/Colors';
-import { ThemedText } from '../components/ThemedText';
-import DoctorProfilePicture from '../components/DoctorProfilePicture';
-import { router } from 'expo-router';
 
 const MyAppointments = () => {
   const { user } = useAuth();
@@ -231,10 +230,13 @@ const MyAppointments = () => {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <FontAwesome name="arrow-left" size={24} color="#222" />
-        </TouchableOpacity>
-        <Text style={styles.title}>My Appointments</Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <FontAwesome name="arrow-left" size={24} color="#222" />
+          </TouchableOpacity>
+          <Text style={styles.title}>My Appointments</Text>
+          <View style={styles.headerSpacer} />
+        </View>
         <Text style={styles.subtitle}>Recent appointments with your doctors</Text>
       </View>
 
@@ -353,6 +355,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 70, // Added margin to move title down
   },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  headerSpacer: {
+    width: 48, // Adjust as needed to balance back button and title
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -398,10 +410,9 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   backButton: {
-    position: 'absolute',
-    left: 10,
-    top: 10,
-    zIndex: 1,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
   },
 });
 
