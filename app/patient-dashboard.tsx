@@ -22,7 +22,8 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon, { IconName } from '../components/Icon';
@@ -103,7 +104,7 @@ export default function PatientDashboard() {
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
@@ -133,6 +134,7 @@ export default function PatientDashboard() {
   const [endedSessions, setEndedSessions] = useState<EndedSessionMetadata[]>([]);
   const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
   const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
+  const [selectedPatientAppointment, setSelectedPatientAppointment] = useState<any | null>(null);
   const [doctorsError, setDoctorsError] = useState<string | null>(null);
   const [plansError, setPlansError] = useState<string | null>(null);
   const [refreshingMessages, setRefreshingMessages] = useState(false);
@@ -2138,6 +2140,17 @@ export default function PatientDashboard() {
     }
   };
 
+  // Helper to parse date/time safely
+  const parseDateTime = (dateStr?: string, timeStr?: string) => {
+    try {
+      if (!dateStr || !timeStr) return null;
+      const d = new Date(`${dateStr}T${timeStr}`);
+      return isNaN(d.getTime()) ? null : d;
+    } catch {
+      return null;
+    }
+  };
+
   // Helper to get status color
   const getStatusColor = (status: string) => {
     return getStatusBadge(status).color;
@@ -2196,12 +2209,22 @@ export default function PatientDashboard() {
       }
     };
 
-    // Separate appointments by status
+    // Single unified list: sort recent-first and show all statuses
     const safeAppointments = getSafeAppointments();
-    const pending = safeAppointments.filter(appt => appt.status === 'pending');
-    const confirmed = safeAppointments.filter(appt => appt.status === 'confirmed');
-    const completed = safeAppointments.filter(appt => appt.status === 'completed');
-    const cancelled = safeAppointments.filter(appt => appt.status === 'cancelled');
+    const recentAppointments = [...safeAppointments]
+      .map((appt: any) => ({
+        ...appt,
+        // build comparable timestamp
+        __ts: (() => {
+          try {
+            const d = parseDateTime(appt.appointment_date || appt.date, appt.appointment_time || appt.time);
+            return d ? d.getTime() : 0;
+          } catch {
+            return 0;
+          }
+        })()
+      }))
+      .sort((a, b) => (b.__ts || 0) - (a.__ts || 0));
 
     return (
       <ScrollView 
@@ -2221,95 +2244,111 @@ export default function PatientDashboard() {
           <Text style={styles.subtitle}>Track your healthcare appointments</Text>
         </View>
 
-        <View style={{marginBottom: 24}}>
-          <Text style={styles.sectionTitle}>Confirmed Appointments</Text>
-          {confirmed.length === 0 ? (
-            <Text style={styles.emptyText}>No confirmed appointments.</Text>
-          ) : (
-            confirmed.map(appt => (
-              <View key={appt.id} style={styles.appointmentCard}>
-                <View style={styles.appointmentHeader}>
-                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
-                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={{marginBottom: 24}}>
-          <Text style={styles.sectionTitle}>Pending Appointments</Text>
-          {pending.length === 0 ? (
-            <Text style={styles.emptyText}>No pending appointments.</Text>
-          ) : (
-            pending.map(appt => (
-              <View key={appt.id} style={styles.appointmentCard}>
-                <View style={styles.appointmentHeader}>
-                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
-                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
-                <Text style={styles.pendingNote}>Waiting for doctor to confirm your appointment</Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        <View style={{marginBottom: 24}}>
-          <Text style={styles.sectionTitle}>Cancelled Appointments</Text>
-          {cancelled.length === 0 ? (
-            <Text style={styles.emptyText}>No cancelled appointments.</Text>
-          ) : (
-            cancelled.map(appt => (
-              <View key={appt.id} style={styles.appointmentCard}>
-                <View style={styles.appointmentHeader}>
-                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
-                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
-              </View>
-            ))
-          )}
-        </View>
-
         <View>
-          <Text style={styles.sectionTitle}>Past Appointments</Text>
-          {completed.length === 0 ? (
-            <Text style={styles.emptyText}>No past appointments.</Text>
+          <Text style={styles.sectionTitle}>Recent Appointments</Text>
+          {recentAppointments.length === 0 ? (
+            <Text style={styles.emptyText}>No appointments yet.</Text>
           ) : (
-            completed.map(appt => (
-              <View key={appt.id} style={styles.appointmentCard}>
+            recentAppointments.map(appt => (
+              <TouchableOpacity key={String(appt.id)} style={styles.appointmentCard} onPress={() => setSelectedPatientAppointment(appt)}>
                 <View style={styles.appointmentHeader}>
-                  <Text style={styles.appointmentDoctor}>{appt.doctorName}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  <DoctorProfilePicture
+                    profilePictureUrl={(appt.doctor && appt.doctor.profile_picture_url) || appt.doctor_profile_picture_url}
+                    profilePicture={(appt.doctor && appt.doctor.profile_picture) || appt.doctor_profile_picture}
+                    size={50}
+                    name={appt.doctorName || appt.doctor_name}
+                  />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={styles.doctorNameNew}>{withDoctorPrefix(appt.doctorName || appt.doctor_name || 'Doctor')}</Text>
+                    <Text style={{ fontSize: 14, color: '#666', marginTop: 2, marginBottom: 4 }}>
+                      {(() => {
+                        const dStr = appt.appointment_date || appt.date;
+                        const tStr = appt.appointment_time || appt.time;
+                        return `${dStr || ''}${dStr && tStr ? ' • ' : ''}${tStr || ''}`.trim();
+                      })()}
+                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                        <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                        <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                      </View>
+                      {appt.appointment_type || appt.type ? (
+                        <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                          <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
-                <Text style={styles.appointmentDate}>{appt.date} at {appt.time}</Text>
-                <Text style={styles.appointmentType}>Type: {appt.appointment_type || 'Text'}</Text>
-                {appt.reason && <Text style={styles.appointmentReason}>Reason: {appt.reason}</Text>}
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </View>
       </ScrollView>
+    );
+  };
+
+  const renderPatientAppointmentModal = () => {
+    if (!selectedPatientAppointment) return null;
+    const appt = selectedPatientAppointment;
+    const dt = (() => {
+      try {
+        const dStr = appt.appointment_date || appt.date;
+        const tStr = appt.appointment_time || appt.time;
+        if (dStr && tStr) {
+          const d = new Date(`${dStr}T${tStr}`);
+          return isNaN(d.getTime()) ? null : d;
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    })();
+    return (
+      <Modal visible={!!selectedPatientAppointment} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+            <TouchableOpacity onPress={() => setSelectedPatientAppointment(null)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
+              <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
+            </TouchableOpacity>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <DoctorProfilePicture
+                profilePictureUrl={(appt.doctor && appt.doctor.profile_picture_url) || appt.doctor_profile_picture_url}
+                profilePicture={(appt.doctor && appt.doctor.profile_picture) || appt.doctor_profile_picture}
+                size={72}
+                name={appt.doctorName || appt.doctor_name}
+              />
+              <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{withDoctorPrefix(appt.doctorName || appt.doctor_name || 'Doctor')}</Text>
+              {appt.doctor && appt.doctor.email ? (
+                <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{appt.doctor.email}</Text>
+              ) : null}
+            </View>
+            <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+              <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+              <Text style={{ color: '#4CAF50', marginBottom: 4 }}>
+                {dt ? `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })} • ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${appt.date} • ${appt.time}`}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                  <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                  <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                </View>
+                {appt.appointment_type || appt.type ? (
+                  <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, marginLeft: 8 }}>
+                    <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {appt.reason ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                  <Text style={{ color: '#666' }}>{String(appt.reason)}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        </View>
+      </Modal>
     );
   };
 
@@ -2817,7 +2856,12 @@ export default function PatientDashboard() {
             case 'discover':
               return renderDiscoverDoctorsContent();
             case 'appointments':
-              return renderAppointmentsContent();
+              return (
+                <>
+                  {renderAppointmentsContent()}
+                  {renderPatientAppointmentModal()}
+                </>
+              );
             case 'blogs':
               return <Blog hideBottomNav />;
             case 'docbot':
@@ -3074,6 +3118,33 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 20,
+  },
+  // Reuse doctor card look
+  requestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  requestCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  requestCardInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  appointmentDateTime: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+    marginBottom: 4,
   },
   quickActions: {
     marginBottom: 30,
