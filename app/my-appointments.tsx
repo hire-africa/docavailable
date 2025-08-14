@@ -265,29 +265,27 @@ const MyAppointments = () => {
                     name={selectedAppointment.doctorName}
                   />
                   <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedAppointment.doctorName}</Text>
+                  <View style={{ marginTop: 8 }}>
+                    <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>{getStatusLabel(selectedAppointment.status)}</Text>
+                    </View>
+                  </View>
                 </View>
                 <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
                   <Text style={{ color: '#4CAF50', marginBottom: 4 }}>
                     {formatDate(selectedAppointment.appointment_date || selectedAppointment.date)} • {formatTime(selectedAppointment.appointment_time || selectedAppointment.time)}
                   </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                    <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-                      <Text style={{ color: '#fff', fontWeight: '600' }}>{getStatusLabel(selectedAppointment.status)}</Text>
-                    </View>
-                  </View>
                   {selectedAppointment.appointment_type && (
                     <View style={{ marginTop: 8 }}>
                       <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Type</Text>
                       <Text style={{ color: '#666' }}>{selectedAppointment.appointment_type}</Text>
                     </View>
                   )}
-                  {selectedAppointment.reason && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                      <Text style={{ color: '#666' }}>{selectedAppointment.reason}</Text>
-                    </View>
-                  )}
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ color: '#666' }}>{selectedAppointment.reason || 'No reason provided'}</Text>
+                  </View>
                 </View>
                 
                 {/* Cancel Button - Only show for cancellable appointments */}
