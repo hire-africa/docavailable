@@ -29,6 +29,15 @@ const MyAppointments = () => {
     });
   }, [showCancelConfirmModal, showCancelModal, cancellingAppointment]);
 
+  useEffect(() => {
+    if (selectedAppointment) {
+      console.log('🔍 Appointment details modal opened:', {
+        selectedAppointment: selectedAppointment?.id,
+        canCancel: canCancelAppointment(selectedAppointment)
+      });
+    }
+  }, [selectedAppointment]);
+
   const fetchAppointments = async () => {
     try {
       setLoading(true);
@@ -326,11 +335,16 @@ const MyAppointments = () => {
                 {canCancelAppointment(selectedAppointment) && (
                   <TouchableOpacity
                     style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
-                    onPress={() => handleCancelAppointment(selectedAppointment)}
+                    onPress={() => {
+                      console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
+                      handleCancelAppointment(selectedAppointment);
+                    }}
                   >
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
                   </TouchableOpacity>
                 )}
+                
+                {console.log('🔍 Rendering cancel button section, canCancel:', canCancelAppointment(selectedAppointment), 'selectedAppointment:', selectedAppointment?.id)}
                 
                 {/* Cancellation Note */}
                 <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>

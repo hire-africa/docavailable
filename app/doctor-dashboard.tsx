@@ -1725,7 +1725,7 @@ export default function DoctorDashboard() {
                 <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
                   <TouchableOpacity
                     style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, alignItems: 'center', minWidth: 120 }}
-                    onPress={() => handleCancelAcceptedAppointment(selectedAcceptedRequest.id)}
+                    onPress={() => handleCancelAppointment(selectedAcceptedRequest)}
                   >
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
                   </TouchableOpacity>
