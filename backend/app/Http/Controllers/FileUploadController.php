@@ -33,20 +33,25 @@ class FileUploadController extends Controller
         // Dispatch job to process image asynchronously
         \App\Jobs\ProcessFileUpload::dispatch($path, 'profile_picture', $user->id);
         
-        // Return normalized URL via the public image route
-        $tempUrl = url("/api/images/{$path}");
-        
+        // Predict processed URL that the job will set (_medium variant)
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
+        $filename = pathinfo($path, PATHINFO_FILENAME);
+        $directory = dirname($path);
+        $expectedProcessedPath = ($directory === '.' ? '' : ($directory . '/')) . $filename . '_medium.' . $extension;
+        $expectedUrl = url("/api/images/{$expectedProcessedPath}");
+
         \Log::info('Profile picture uploaded successfully:', [
             'user_id' => $user->id,
             'path' => $path,
-            'url' => $tempUrl
+            'expected_processed_path' => $expectedProcessedPath,
+            'url' => $expectedUrl
         ]);
         
         return response()->json([
             'success' => true,
             'message' => 'Profile picture uploaded successfully. Processing in background.',
             'data' => [
-                'profile_picture_url' => $tempUrl
+                'profile_picture_url' => $expectedUrl
             ],
             'processing' => true
         ]);

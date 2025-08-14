@@ -1698,7 +1698,7 @@ export default function PatientDashboard() {
                     }}
                   >
                     <DoctorProfilePicture
-                      profilePictureUrl={item.doctor_profile_picture}
+                      profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture}
                       size={56}
                       style={{ marginRight: 18 }}
                       name={stripDoctorPrefix(item.doctor_name || 'Doctor')}

@@ -28,8 +28,9 @@ class ImageCacheService {
    */
   async getCachedImage(url: string): Promise<string | null> {
     try {
-      console.log('ImageCacheService: Getting cached image for:', url);
-      const cacheKey = this.getCacheKey(url);
+      const normalizedUrl = this.normalizeImageUrl(url);
+      console.log('ImageCacheService: Getting cached image for:', normalizedUrl);
+      const cacheKey = this.getCacheKey(normalizedUrl);
       console.log('ImageCacheService: Cache key:', cacheKey);
       const cachedData = await AsyncStorage.getItem(cacheKey);
       
@@ -43,12 +44,12 @@ class ImageCacheService {
       
       // Check if cache is still valid
       if (this.isCacheValid(cached)) {
-        console.log('ImageCacheService: Cache hit for:', url);
+        console.log('ImageCacheService: Cache hit for:', normalizedUrl);
         return cached.localUri;
       } else {
         // Remove expired cache
-        await this.removeFromCache(url);
-        console.log('ImageCacheService: Cache expired for:', url);
+        await this.removeFromCache(normalizedUrl);
+        console.log('ImageCacheService: Cache expired for:', normalizedUrl);
         return null;
       }
     } catch (error) {
@@ -62,6 +63,7 @@ class ImageCacheService {
    */
   async cacheImage(url: string, localUri: string, contentType: string = 'image/jpeg'): Promise<void> {
     try {
+      const normalizedUrl = this.normalizeImageUrl(url);
       // Get file size if possible using FileSystem
       let size = 0;
       try {
@@ -74,23 +76,23 @@ class ImageCacheService {
       }
 
       const cachedImage: CachedImage = {
-        url,
+        url: normalizedUrl,
         localUri,
         timestamp: Date.now(),
         size,
         contentType
       };
 
-      const cacheKey = this.getCacheKey(url);
+      const cacheKey = this.getCacheKey(normalizedUrl);
       await AsyncStorage.setItem(cacheKey, JSON.stringify(cachedImage));
       
       // Update cache index
-      await this.updateCacheIndex(url, cachedImage);
+      await this.updateCacheIndex(normalizedUrl, cachedImage);
       
       // Clean up old cache entries if needed
       await this.cleanupCache();
       
-      console.log('ImageCacheService: Cached image:', url);
+      console.log('ImageCacheService: Cached image:', normalizedUrl);
     } catch (error) {
       console.error('ImageCacheService: Error caching image:', error);
     }
@@ -101,7 +103,8 @@ class ImageCacheService {
    */
   async removeFromCache(url: string): Promise<void> {
     try {
-      const cacheKey = this.getCacheKey(url);
+      const normalizedUrl = this.normalizeImageUrl(url);
+      const cacheKey = this.getCacheKey(normalizedUrl);
       const cachedData = await AsyncStorage.getItem(cacheKey);
       
       if (cachedData) {
@@ -119,8 +122,8 @@ class ImageCacheService {
       }
       
       await AsyncStorage.removeItem(cacheKey);
-      await this.removeFromCacheIndex(url);
-      console.log('ImageCacheService: Removed from cache:', url);
+      await this.removeFromCacheIndex(normalizedUrl);
+      console.log('ImageCacheService: Removed from cache:', normalizedUrl);
     } catch (error) {
       console.error('ImageCacheService: Error removing from cache:', error);
     }
@@ -195,21 +198,22 @@ class ImageCacheService {
    */
   async downloadAndCache(url: string): Promise<string | null> {
     try {
+      const normalizedUrl = this.normalizeImageUrl(url);
       // Check if already cached
-      const cachedUri = await this.getCachedImage(url);
+      const cachedUri = await this.getCachedImage(normalizedUrl);
       if (cachedUri) {
         return cachedUri;
       }
 
-      console.log('ImageCacheService: Downloading image:', url);
+      console.log('ImageCacheService: Downloading image:', normalizedUrl);
       
       // For React Native, we'll use a simpler approach
       // Download the image directly to a local file
-      const localUri = await this.downloadToLocalFile(url);
+      const localUri = await this.downloadToLocalFile(normalizedUrl);
       
       if (localUri) {
         // Cache the image
-        await this.cacheImage(url, localUri, 'image/jpeg');
+        await this.cacheImage(normalizedUrl, localUri, 'image/jpeg');
         return localUri;
       }
       
@@ -244,6 +248,52 @@ class ImageCacheService {
       hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Normalize image URLs to stable, processed variants and route
+   * - Force /api/images route (converts /storage to /api/images)
+   * - For profile pictures, prefer the processed _medium variant
+   */
+  private normalizeImageUrl(url: string): string {
+    if (!url) return url;
+
+    try {
+      // If it's a relative path like "profile_pictures/abc.jpg", turn into full /api/images URL
+      if (!/^https?:\/\//i.test(url)) {
+        const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
+        return `https://docavailable-1.onrender.com/api/images/${this.appendMediumIfProfilePicture(clean)}`;
+      }
+
+      // Convert any /storage/... to /api/images/...
+      const parsed = new URL(url);
+      let path = parsed.pathname;
+      if (path.startsWith('/storage/')) {
+        path = path.substring('/storage/'.length);
+      } else if (path.startsWith('/api/images/')) {
+        path = path.substring('/api/images/'.length);
+      } else if (path.startsWith('/')) {
+        path = path.substring(1);
+      }
+
+      // If the path refers to profile_pictures, ensure _medium suffix
+      const normalizedPath = this.appendMediumIfProfilePicture(path);
+      return `https://docavailable-1.onrender.com/api/images/${normalizedPath}`;
+    } catch (_e) {
+      // If URL parsing fails, fall back to heuristic
+      const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
+      const normalizedPath = this.appendMediumIfProfilePicture(clean.replace(/^\/+/, ''));
+      return `https://docavailable-1.onrender.com/api/images/${normalizedPath}`;
+    }
+  }
+
+  private appendMediumIfProfilePicture(path: string): string {
+    // Only modify profile_pictures folder files
+    if (!/^profile_pictures\//.test(path)) return path;
+    // Skip if already has a known suffix
+    if (/_thumb\.|_medium\.|_preview\./i.test(path)) return path;
+    // Insert _medium before extension for common image types
+    return path.replace(/\.(jpg|jpeg|png|webp|gif)$/i, '_medium.$1');
   }
 
   private isCacheValid(cached: CachedImage): boolean {
