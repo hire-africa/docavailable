@@ -449,7 +449,24 @@ export default function ChatPage() {
   // Handle back button press
   const handleBackPress = () => {
     if (isPatient) {
-      // Show end session modal for patients in any chat session
+      // Check if this is a scheduled appointment that hasn't started yet
+      const appointmentStatus = String(chatInfo?.status || '');
+      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
+      
+      if (!isTextSession && isConfirmedAppointment) {
+        // For confirmed appointments that haven't started, show a different message
+        Alert.alert(
+          'Scheduled Appointment',
+          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go Back', onPress: () => router.back() }
+          ]
+        );
+        return;
+      }
+      
+      // Show end session modal for active sessions only
       setShowEndSessionModal(true);
     } else {
       // For doctors, just go back
@@ -475,8 +492,24 @@ export default function ChatPage() {
         originalAppointmentId: appointmentId,
         isTextSession,
         extractedSessionId: sessionId,
-        sessionType: isTextSession ? 'text' : 'appointment'
+        sessionType: isTextSession ? 'text' : 'appointment',
+        appointmentStatus: chatInfo?.status
       });
+      
+      // Check if this is a scheduled appointment that hasn't started
+      const appointmentStatus = String(chatInfo?.status || '');
+      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
+      
+      if (!isTextSession && isConfirmedAppointment) {
+        Alert.alert(
+          'Cannot End Session',
+          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
+          [
+            { text: 'OK', onPress: () => setEndingSession(false) }
+          ]
+        );
+        return;
+      }
       
       const sessionType = isTextSession ? 'text' : 'appointment';
       // Before ending on server, capture current messages for local archive
