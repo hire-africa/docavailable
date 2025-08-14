@@ -998,7 +998,7 @@ export default function DoctorDashboard() {
     
     try {
       const response = await apiService.patch(`/appointments/${appointmentToCancel.id}`, {
-        status: 'cancelled',
+        status: 2, // STATUS_CANCELLED = 2
         cancellation_reason: cancelReason,
         cancelled_by: 'doctor'
       });

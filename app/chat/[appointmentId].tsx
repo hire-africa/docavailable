@@ -488,17 +488,21 @@ export default function ChatPage() {
         sessionId = appointmentId;
       }
       
+      // Check if this is a scheduled appointment that hasn't started
+      const appointmentStatus = String(chatInfo?.status || '');
+      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
+      
       console.log('🔍 Ending session:', {
         originalAppointmentId: appointmentId,
         isTextSession,
         extractedSessionId: sessionId,
         sessionType: isTextSession ? 'text' : 'appointment',
-        appointmentStatus: chatInfo?.status
+        appointmentStatus: chatInfo?.status,
+        appointmentStatusType: typeof chatInfo?.status,
+        appointmentStatusString: appointmentStatus,
+        isConfirmedAppointment: isConfirmedAppointment,
+        chatInfoKeys: Object.keys(chatInfo || {})
       });
-      
-      // Check if this is a scheduled appointment that hasn't started
-      const appointmentStatus = String(chatInfo?.status || '');
-      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
       
       if (!isTextSession && isConfirmedAppointment) {
         Alert.alert(

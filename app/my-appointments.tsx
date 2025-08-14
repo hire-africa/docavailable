@@ -105,7 +105,7 @@ const MyAppointments = () => {
     try {
       setLoading(true);
       const response = await apiService.patch(`/appointments/${cancellingAppointment.id}`, {
-        status: 'cancelled',
+        status: 2, // STATUS_CANCELLED = 2
         cancellation_reason: cancelReason
       });
 
