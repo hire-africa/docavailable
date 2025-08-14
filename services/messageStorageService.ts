@@ -176,8 +176,12 @@ class MessageStorageService {
 
   async storeMessage(appointmentId: number, message: Message): Promise<void> {
     try {
-      const key = this.getStorageKey(appointmentId);
       const data = await this.getLocalData(appointmentId);
+      
+      // Migrate old storage URLs to new API endpoint URLs before storing
+      if (message.media_url) {
+        message.media_url = this.migrateStorageUrlToApiUrl(message.media_url);
+      }
       
       // Check for duplicates by id or temp_id
       const exists = data.messages.some(m => 
@@ -213,6 +217,7 @@ class MessageStorageService {
         data.message_count = data.messages.length;
         data.last_sync = new Date().toISOString();
         
+        const key = this.getStorageKey(appointmentId);
         await AsyncStorage.setItem(key, JSON.stringify(data));
         
         // Notify callbacks only once
@@ -242,11 +247,18 @@ class MessageStorageService {
   async getMessages(appointmentId: number): Promise<Message[]> {
     try {
       const data = await this.getLocalData(appointmentId);
-      return data.messages.sort((a, b) => 
+      
+      // Migrate old storage URLs to new API endpoint URLs for all messages
+      const migratedMessages = data.messages.map(message => ({
+        ...message,
+        media_url: message.media_url ? this.migrateStorageUrlToApiUrl(message.media_url) : message.media_url
+      }));
+      
+      return migratedMessages.sort((a, b) => 
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
     } catch (error) {
-      this.logErrorOnce('Error getting messages from local storage:', error, `appointment-${appointmentId}`);
+      this.logErrorOnce('Error getting messages:', error, `appointment-${appointmentId}`);
       return [];
     }
   }
@@ -739,11 +751,35 @@ class MessageStorageService {
     }
   }
 
+  // Helper function to migrate old storage URLs to new API endpoint URLs
+  private migrateStorageUrlToApiUrl(url: string): string {
+    if (!url) return url;
+    
+    // Convert old storage URLs to new API endpoint URLs
+    if (url.includes('/storage/chat_images/')) {
+      const newUrl = url.replace('/storage/chat_images/', '/api/images/chat_images/');
+      console.log(`🔄 Migrating image URL: ${url.substring(0, 100)}... -> ${newUrl.substring(0, 100)}...`);
+      return newUrl;
+    }
+    
+    if (url.includes('/storage/chat_voice_messages/')) {
+      const newUrl = url.replace('/storage/chat_voice_messages/', '/api/audio/chat_voice_messages/');
+      console.log(`🔄 Migrating voice URL: ${url.substring(0, 100)}... -> ${newUrl.substring(0, 100)}...`);
+      return newUrl;
+    }
+    
+    return url;
+  }
+
   private mergeMessagesWithReadReceipts(localMessages: Message[], serverMessages: Message[]): Message[] {
     const mergedMap = new Map<string, Message>();
     
     // Add server messages first (server is authoritative for message content)
     serverMessages.forEach(message => {
+      // Migrate old storage URLs to new API endpoint URLs
+      if (message.media_url) {
+        message.media_url = this.migrateStorageUrlToApiUrl(message.media_url);
+      }
       mergedMap.set(message.id, message);
     });
     
@@ -755,6 +791,11 @@ class MessageStorageService {
     let mediaUrlChanges = 0;
     
     localMessages.forEach(localMessage => {
+      // Migrate old storage URLs to new API endpoint URLs
+      if (localMessage.media_url) {
+        localMessage.media_url = this.migrateStorageUrlToApiUrl(localMessage.media_url);
+      }
+      
       const serverMessage = mergedMap.get(localMessage.id);
       if (serverMessage) {
         // Debug: Track media_url changes during merge
