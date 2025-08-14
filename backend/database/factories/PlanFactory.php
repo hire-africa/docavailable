@@ -29,7 +29,7 @@ class PlanFactory extends Factory
             'currency' => 'USD',
             'price' => $this->faker->numberBetween(10, 100),
             'duration' => $this->faker->randomElement([30, 90, 180, 365]), // days
-            'status' => 'active',
+            'status' => 1, // 1 = active, 0 = inactive
         ];
     }
 
@@ -39,7 +39,7 @@ class PlanFactory extends Factory
     public function active(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'active',
+            'status' => 1, // 1 = active
         ]);
     }
 
@@ -49,7 +49,7 @@ class PlanFactory extends Factory
     public function inactive(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'inactive',
+            'status' => 0, // 0 = inactive
         ]);
     }
 

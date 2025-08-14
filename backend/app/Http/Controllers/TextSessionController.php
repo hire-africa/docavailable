@@ -48,7 +48,7 @@ class TextSessionController extends Controller
 
             // Removed subscription check - allow all patients to start text sessions
             $subscription = Subscription::where('user_id', $patientId)
-                ->where('status', 'active')
+                ->where('status', 1) // 1 = active, 0 = inactive, 2 = expired
                 ->where('is_active', true)
                 ->first();
 

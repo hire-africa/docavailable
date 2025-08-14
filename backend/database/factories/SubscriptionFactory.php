@@ -41,7 +41,7 @@ class SubscriptionFactory extends Factory
     public function active(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'active',
+            'status' => 1, // 1 = active
             'end_date' => Carbon::now()->addDays(30),
         ]);
     }
@@ -52,7 +52,7 @@ class SubscriptionFactory extends Factory
     public function expired(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status' => 'expired',
+            'status' => 2, // 2 = expired
             'end_date' => Carbon::now()->subDays(1),
         ]);
     }
