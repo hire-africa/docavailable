@@ -1,7 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../app/services/apiService';
 import { ThemedText } from '../components/ThemedText';
@@ -15,6 +15,7 @@ const MyAppointments = () => {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelAppt, setCancelAppt] = useState<any>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
 
   // Helper function to ensure appointments is always an array
   const getSafeAppointments = () => {
@@ -69,15 +70,16 @@ const MyAppointments = () => {
     return new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(min));
   };
 
-  const now = new Date();
-  const pending = getSafeAppointments().filter(appt => {
-    const dt = parseDateTime(appt.date, appt.time);
-    return (['pending', 'confirmed'].includes(appt.status) && dt && dt > now);
-  });
-  const past = getSafeAppointments().filter(appt => {
-    const dt = parseDateTime(appt.date, appt.time);
-    return (appt.status === 'completed' || (dt && dt <= now));
-  });
+  // Build a single recent list sorted by most recent first
+  const recentAppointments = getSafeAppointments()
+    .map((appt) => ({
+      ...appt,
+      __ts: (() => {
+        const dt = parseDateTime(appt.date, appt.time);
+        return dt ? dt.getTime() : 0;
+      })()
+    }))
+    .sort((a, b) => (b.__ts || 0) - (a.__ts || 0));
 
   const handleAcceptReschedule = async (appt: any) => {
     if (!user) return;
@@ -181,7 +183,7 @@ const MyAppointments = () => {
   };
 
   const renderAppointment = (appt: any, keyPrefix: string) => (
-    <View style={styles.card} key={`${keyPrefix}${appt.id}`}>
+    <TouchableOpacity style={styles.card} key={`${keyPrefix}${appt.id}`} onPress={() => setSelectedAppointment(appt)}>
       <View style={styles.cardHeader}>
         <View style={styles.doctorInfo}>
           <View style={styles.doctorAvatar}>
@@ -218,29 +220,7 @@ const MyAppointments = () => {
           <ThemedText style={styles.detailText} numberOfLines={2}>{appt.reason}</ThemedText>
         </View>
       </View>
-
-      {/* Show accept/reject if reschedulePending */}
-      {appt.reschedulePending && appt.status === 'pending' && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={styles.acceptButton} onPress={() => handleAcceptReschedule(appt)}>
-            <FontAwesome name="check" size={14} color="#FFFFFF" />
-            <Text style={styles.acceptButtonText}>Accept</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.rejectButton} onPress={() => handleRejectReschedule(appt)}>
-            <FontAwesome name="times" size={14} color="#F44336" />
-            <Text style={styles.rejectButtonText}>Reject</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      
-      {/* Only show Cancel button for pending section */}
-      {keyPrefix === 'pending-' && (['pending', 'confirmed'].includes(appt.status)) && (
-        <TouchableOpacity style={styles.cancelButton} onPress={() => handleCancelAppointment(appt)}>
-          <FontAwesome name="times" size={14} color="#F44336" />
-          <Text style={styles.cancelButtonText}>Cancel Appointment</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -262,83 +242,69 @@ const MyAppointments = () => {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <FontAwesome name="clock-o" size={18} color={Colors.light.tint} />
-              <ThemedText style={styles.sectionTitle}>Pending Appointments</ThemedText>
+              <FontAwesome name="calendar" size={18} color={Colors.light.tint} />
+              <ThemedText style={styles.sectionTitle}>Recent Appointments</ThemedText>
               <View style={styles.badge}>
-                <ThemedText style={styles.badgeText}>{pending.length}</ThemedText>
+                <ThemedText style={styles.badgeText}>{recentAppointments.length}</ThemedText>
               </View>
             </View>
-            {pending.length === 0 ? (
+            {recentAppointments.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <FontAwesome name="calendar-o" size={48} color={Colors.light.icon} />
-                <ThemedText style={styles.emptyTitle}>No Pending Appointments</ThemedText>
-                <ThemedText style={styles.emptyMessage}>You don't have any upcoming appointments scheduled.</ThemedText>
+                <ThemedText style={styles.emptyTitle}>No Appointments</ThemedText>
+                <ThemedText style={styles.emptyMessage}>Your appointments will appear here.</ThemedText>
               </View>
             ) : (
-              pending.map(appt => renderAppointment(appt, 'pending-'))
-            )}
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <FontAwesome name="history" size={18} color={Colors.light.icon} />
-              <ThemedText style={styles.sectionTitle}>Past Appointments</ThemedText>
-              <View style={styles.badge}>
-                <ThemedText style={styles.badgeText}>{past.length}</ThemedText>
-              </View>
-            </View>
-            {past.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <FontAwesome name="calendar-check-o" size={48} color={Colors.light.icon} />
-                <ThemedText style={styles.emptyTitle}>No Past Appointments</ThemedText>
-                <ThemedText style={styles.emptyMessage}>Your appointment history will appear here.</ThemedText>
-              </View>
-            ) : (
-              past.map(appt => renderAppointment(appt, 'past-'))
+              recentAppointments.map(appt => renderAppointment(appt, 'recent-'))
             )}
           </View>
         </ScrollView>
       )}
 
-      {/* Cancel Modal */}
-      {/* Modal component is not imported, so this will cause an error.
-          Assuming it's meant to be a placeholder or will be added later. */}
-      {/* <Modal visible={showCancelModal} transparent animationType="fade">
+      {/* Details Modal */}
+      <Modal visible={!!selectedAppointment} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="exclamation-triangle" size={24} color="#F44336" />
-              <ThemedText style={styles.modalTitle}>Cancel Appointment</ThemedText>
+              <FontAwesome name="calendar" size={24} color={Colors.light.tint} />
+              <ThemedText style={styles.modalTitle}>Appointment Details</ThemedText>
             </View>
-            <ThemedText style={styles.modalMessage}>
-              Please provide a reason for cancellation. This helps us improve our services.
-            </ThemedText>
-            <TextInput
-              value={cancelReason}
-              onChangeText={setCancelReason}
-              placeholder="Enter cancellation reason..."
-              placeholderTextColor={Colors.light.icon}
-              style={styles.modalInput}
-              multiline
-              numberOfLines={3}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={styles.modalSecondaryButton} 
-                onPress={() => setShowCancelModal(false)}
-              >
-                <Text style={styles.modalSecondaryButtonText}>Back</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalPrimaryButton} 
-                onPress={confirmCancelAppointment}
-              >
-                <Text style={styles.modalPrimaryButtonText}>Cancel Appointment</Text>
+            {selectedAppointment && (
+              <>
+                <View style={{ marginBottom: 12 }}>
+                  <ThemedText style={{ fontSize: 16, fontWeight: '700', color: Colors.light.text }}>
+                    {selectedAppointment.doctorName}
+                  </ThemedText>
+                </View>
+                <View style={styles.detailRow}>
+                  <FontAwesome name="calendar" size={14} color={Colors.light.icon} style={styles.detailIcon} />
+                  <ThemedText style={styles.detailText}>{selectedAppointment.date}</ThemedText>
+                </View>
+                <View style={styles.detailRow}>
+                  <FontAwesome name="clock-o" size={14} color={Colors.light.icon} style={styles.detailIcon} />
+                  <ThemedText style={styles.detailText}>{selectedAppointment.time}</ThemedText>
+                </View>
+                {selectedAppointment.reason ? (
+                  <View style={styles.detailRow}>
+                    <FontAwesome name="comment" size={14} color={Colors.light.icon} style={styles.detailIcon} />
+                    <ThemedText style={styles.detailText} numberOfLines={3}>{selectedAppointment.reason}</ThemedText>
+                  </View>
+                ) : null}
+                <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 }}>
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>{selectedAppointment.status.toUpperCase()}</Text>
+                  </View>
+                </View>
+              </>
+            )}
+            <View style={{ marginTop: 20 }}>
+              <TouchableOpacity style={styles.modalSecondaryButton} onPress={() => setSelectedAppointment(null)}>
+                <Text style={styles.modalSecondaryButtonText}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal> */}
+      </Modal>
     </SafeAreaView>
   );
 };
