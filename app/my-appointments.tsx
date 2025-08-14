@@ -33,7 +33,8 @@ const MyAppointments = () => {
     if (selectedAppointment) {
       console.log('🔍 Appointment details modal opened:', {
         selectedAppointment: selectedAppointment?.id,
-        canCancel: canCancelAppointment(selectedAppointment)
+        canCancel: canCancelAppointment(selectedAppointment),
+        fullAppointmentData: selectedAppointment
       });
     }
   }, [selectedAppointment]);
@@ -332,17 +333,39 @@ const MyAppointments = () => {
                 </View>
                 
                 {/* Cancel Button - Only show for cancellable appointments */}
-                {canCancelAppointment(selectedAppointment) && (
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
-                    onPress={() => {
-                      console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
-                      handleCancelAppointment(selectedAppointment);
-                    }}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
-                  </TouchableOpacity>
-                )}
+                {(() => {
+                  const canCancel = canCancelAppointment(selectedAppointment);
+                  console.log('🔍 Cancel button render check:', {
+                    selectedAppointment: selectedAppointment?.id,
+                    status: selectedAppointment?.status,
+                    appointmentDate: selectedAppointment?.appointment_date || selectedAppointment?.date,
+                    appointmentTime: selectedAppointment?.appointment_time || selectedAppointment?.time,
+                    canCancel,
+                    hasSelectedAppointment: !!selectedAppointment
+                  });
+                  return canCancel ? (
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                      onPress={() => {
+                        console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
+                        handleCancelAppointment(selectedAppointment);
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+                    </TouchableOpacity>
+                  ) : null;
+                })()}
+                
+                {/* Test Button - Always visible for debugging */}
+                <TouchableOpacity
+                  style={{ backgroundColor: '#007AFF', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                  onPress={() => {
+                    console.log('🔍 Test button pressed!');
+                    Alert.alert('Test', 'Test button is working!');
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Test Button (Debug)</Text>
+                </TouchableOpacity>
                 
                 {console.log('🔍 Rendering cancel button section, canCancel:', canCancelAppointment(selectedAppointment), 'selectedAppointment:', selectedAppointment?.id)}
                 
