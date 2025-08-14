@@ -22,6 +22,8 @@ class ImageCacheService {
   private readonly MAX_CACHE_SIZE = 50 * 1024 * 1024; // 50MB
   private readonly MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
   private readonly MAX_CACHE_ENTRIES = 100;
+  private readonly NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private failedUrlCache: Record<string, number> = {};
 
   /**
    * Get cached image URI for a given URL
@@ -223,6 +225,10 @@ class ImageCacheService {
 
       const candidates = Array.from(new Set([normalizedUrl, noMediumUrl]));
       for (const candidate of candidates) {
+        if (this.isTemporarilyUnavailable(candidate)) {
+          console.log('ImageCacheService: Skipping download due to recent 404:', candidate);
+          continue;
+        }
         console.log('ImageCacheService: Downloading image:', candidate);
         const localUri = await this.downloadToLocalFile(candidate);
         if (localUri) {
@@ -240,7 +246,7 @@ class ImageCacheService {
       
       return null;
     } catch (error) {
-      console.error('ImageCacheService: Error downloading image:', error);
+      console.warn('ImageCacheService: Error downloading image:', error);
       return null;
     }
   }
@@ -422,13 +428,29 @@ class ImageCacheService {
       if (downloadResult.status === 200) {
         return fileUri;
       } else {
-        console.error('ImageCacheService: Download failed with status:', downloadResult.status);
+        if (downloadResult.status === 404) {
+          this.failedUrlCache[url] = Date.now();
+        }
+        console.warn('ImageCacheService: Download failed with status:', downloadResult.status);
         return null;
       }
     } catch (error) {
-      console.error('ImageCacheService: Error downloading to local file:', error);
+      // Network or other errors shouldn't spam as ERROR since we have fallback UI
+      this.failedUrlCache[url] = Date.now();
+      console.warn('ImageCacheService: Error downloading to local file:', error);
       return null;
     }
+  }
+
+  private isTemporarilyUnavailable(url: string): boolean {
+    const t = this.failedUrlCache[url];
+    if (!t) return false;
+    const age = Date.now() - t;
+    if (age > this.NEGATIVE_CACHE_TTL_MS) {
+      delete this.failedUrlCache[url];
+      return false;
+    }
+    return true;
   }
 }
 
