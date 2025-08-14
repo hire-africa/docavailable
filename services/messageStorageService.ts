@@ -535,7 +535,7 @@ class MessageStorageService {
         }
         
         // Update the message with server data but preserve local delivery status and media_url
-        data.messages[messageIndex] = {
+        const updatedMessageData = {
           ...updatedMessage,
           delivery_status: deliveryStatus,
           temp_id: tempId, // Preserve temp_id for tracking
@@ -544,6 +544,19 @@ class MessageStorageService {
           // Ensure message_type is preserved
           message_type: updatedMessage.message_type || existingMessage.message_type,
         };
+        
+        // Debug: Log media_url changes
+        console.log(`🔍 Media URL Update Debug for message ${tempId}:`, {
+          existing_media_url: existingMessage.media_url?.substring(0, 100) + '...',
+          server_media_url: updatedMessage.media_url?.substring(0, 100) + '...',
+          final_media_url: updatedMessageData.media_url?.substring(0, 100) + '...',
+          existing_has_url: !!existingMessage.media_url,
+          server_has_url: !!updatedMessage.media_url,
+          final_has_url: !!updatedMessageData.media_url,
+          message_type: updatedMessageData.message_type
+        });
+        
+        data.messages[messageIndex] = updatedMessageData;
         
         console.log(`📤 Updated image message in storage:`, {
           id: data.messages[messageIndex].id,
@@ -739,10 +752,21 @@ class MessageStorageService {
     let mergedDeliveryStatus = 0;
     let protectedDeliveryStatus = 0;
     let preservedLocalMessages = 0;
+    let mediaUrlChanges = 0;
     
     localMessages.forEach(localMessage => {
       const serverMessage = mergedMap.get(localMessage.id);
       if (serverMessage) {
+        // Debug: Track media_url changes during merge
+        if (localMessage.media_url && serverMessage.media_url && localMessage.media_url !== serverMessage.media_url) {
+          console.log(`🔍 Media URL Merge Conflict for message ${localMessage.id}:`, {
+            local_media_url: localMessage.media_url?.substring(0, 100) + '...',
+            server_media_url: serverMessage.media_url?.substring(0, 100) + '...',
+            message_type: localMessage.message_type
+          });
+          mediaUrlChanges++;
+        }
+        
         // Merge read receipts
         if (localMessage.read_by && localMessage.read_by.length > 0) {
           // Initialize read_by array if it doesn't exist
@@ -788,6 +812,16 @@ class MessageStorageService {
           serverMessage.delivery_status = localMessage.delivery_status;
           mergedDeliveryStatus++;
         }
+        
+        // CRITICAL: Preserve local media_url if server doesn't have it or if it's different
+        if (localMessage.media_url && (!serverMessage.media_url || localMessage.media_url !== serverMessage.media_url)) {
+          console.log(`🔒 PRESERVING local media_url for message ${localMessage.id}:`, {
+            local_media_url: localMessage.media_url?.substring(0, 100) + '...',
+            server_media_url: serverMessage.media_url?.substring(0, 100) + '...',
+            message_type: localMessage.message_type
+          });
+          serverMessage.media_url = localMessage.media_url;
+        }
       } else {
         // CRITICAL FIX: Preserve local messages that don't exist on server yet
         // This prevents newly sent messages (especially images) from disappearing
@@ -802,7 +836,7 @@ class MessageStorageService {
     
     // Only log merge stats occasionally to reduce spam (5% chance)
     if (Math.random() < 0.05) {
-      console.log(`📊 Merge stats: ${mergedReadReceipts} read receipts, ${mergedDeliveryStatus} delivery status, ${protectedDeliveryStatus} protected, ${preservedLocalMessages} local messages preserved`);
+      console.log(`📊 Merge stats: ${mergedReadReceipts} read receipts, ${mergedDeliveryStatus} delivery status, ${protectedDeliveryStatus} protected, ${preservedLocalMessages} local messages preserved, ${mediaUrlChanges} media URL changes`);
     }
     
     return Array.from(mergedMap.values()).sort((a, b) => 

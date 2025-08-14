@@ -114,7 +114,9 @@ class MessageStorageService
                 'message_id' => $messageId,
                 'temp_id' => $messageData['temp_id'] ?? 'none',
                 'message_type' => $message['message_type'],
-                'media_url' => $message['media_url'] ?? 'none'
+                'media_url' => $message['media_url'] ?? 'none',
+                'media_url_length' => strlen($message['media_url'] ?? ''),
+                'media_url_starts_with' => substr($message['media_url'] ?? '', 0, 50)
             ]);
             
             // Include temp_id in response if provided by client
@@ -160,6 +162,26 @@ class MessageStorageService
         try {
             $cacheKey = $this->getCacheKey($appointmentId);
             $messages = Cache::get($cacheKey, []);
+            
+            // Debug: Log media URLs in retrieved messages
+            $mediaMessages = array_filter($messages, function($msg) {
+                return !empty($msg['media_url']) && $msg['media_url'] !== 'none';
+            });
+            
+            if (!empty($mediaMessages)) {
+                Log::info("Media messages found in cache", [
+                    'appointment_id' => $appointmentId,
+                    'media_message_count' => count($mediaMessages),
+                    'sample_media_urls' => array_map(function($msg) {
+                        return [
+                            'id' => $msg['id'],
+                            'type' => $msg['message_type'],
+                            'media_url' => substr($msg['media_url'], 0, 100) . '...',
+                            'media_url_length' => strlen($msg['media_url'])
+                        ];
+                    }, array_slice($mediaMessages, 0, 3))
+                ]);
+            }
             
             Log::info("Messages retrieved from cache", [
                 'appointment_id' => $appointmentId,
