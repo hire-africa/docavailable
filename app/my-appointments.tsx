@@ -6,6 +6,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import { Colors } from '../constants/Colors';
 import { ThemedText } from '../components/ThemedText';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
+import { router } from 'expo-router';
 
 const MyAppointments = () => {
   const { user } = useAuth();
@@ -230,6 +231,9 @@ const MyAppointments = () => {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <FontAwesome name="arrow-left" size={24} color="#222" />
+        </TouchableOpacity>
         <Text style={styles.title}>My Appointments</Text>
         <Text style={styles.subtitle}>Recent appointments with your doctors</Text>
       </View>
@@ -347,7 +351,7 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: '#F8F9FA',
     alignItems: 'center',
-    marginTop: 20, // Added margin to move title down
+    marginTop: 70, // Added margin to move title down
   },
   title: {
     fontSize: 28,
@@ -392,6 +396,12 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    zIndex: 1,
   },
 });
 
