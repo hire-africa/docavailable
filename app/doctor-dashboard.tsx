@@ -47,10 +47,8 @@ interface TabProps {
 }
 
 interface BookingRequest {
-  id: string;
-  patientId: string;
-  doctorId: string;
-  patientName: string;
+  id: number;
+  patient_name: string;
   patientProfilePictureUrl?: string;
   patientProfilePicture?: string;
   patientEmail?: string;
@@ -58,14 +56,11 @@ interface BookingRequest {
   patientCountry?: string;
   patientCity?: string;
   patientDateOfBirth?: string;
-  doctorName: string;
-  date: string;
-  time: string;
-  consultationType: 'text' | 'voice' | 'video';
-  reason: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  createdAt: string;
-  reschedulePending?: boolean;
+  appointment_date: string;
+  appointment_time: string;
+  appointment_type: string;
+  reason?: string;
+  status: string;
 }
 
 // Add DoctorType interface
@@ -114,6 +109,7 @@ export default function DoctorDashboard() {
   const [selectedAppointment, setSelectedAppointment] = useState<any>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null);
+  const [selectedAcceptedRequest, setSelectedAcceptedRequest] = useState<BookingRequest | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
   const [cancelReason, setCancelReason] = useState('');
@@ -334,9 +330,7 @@ export default function DoctorDashboard() {
         // Transform the data to match the BookingRequest interface
         const requests = rawRequests.map((request: any) => ({
           id: request.id,
-          patientId: request.patient_id,
-          doctorId: request.doctor_id,
-          patientName: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+          patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
           patientProfilePictureUrl: request.patient?.profile_picture_url,
           patientProfilePicture: request.patient?.profile_picture,
           patientEmail: request.patient?.email,
@@ -344,10 +338,9 @@ export default function DoctorDashboard() {
           patientCountry: request.patient?.country,
           patientCity: request.patient?.city,
           patientDateOfBirth: request.patient?.date_of_birth,
-          doctorName: request.doctorName || `${request.doctor?.first_name || ''} ${request.doctor?.last_name || ''}`.trim(),
-          date: request.appointment_date, // Map from appointment_date to date
-          time: request.appointment_time, // Map from appointment_time to time
-          consultationType: request.appointment_type || 'text',
+          appointment_date: request.appointment_date,
+          appointment_time: request.appointment_time,
+          appointment_type: request.appointment_type || 'text',
           reason: request.reason || '',
           status: request.status === 0 ? 'pending' : 
                   request.status === 1 ? 'confirmed' : 
@@ -398,9 +391,7 @@ export default function DoctorDashboard() {
           .filter((request: any) => request.status === 1 || request.status === 3) // Only confirmed (1) and completed (3)
           .map((request: any) => ({
             id: request.id,
-            patientId: request.patient_id,
-            doctorId: request.doctor_id,
-            patientName: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+            patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
             patientProfilePictureUrl: request.patient?.profile_picture_url,
             patientProfilePicture: request.patient?.profile_picture,
             patientEmail: request.patient?.email,
@@ -408,10 +399,9 @@ export default function DoctorDashboard() {
             patientCountry: request.patient?.country,
             patientCity: request.patient?.city,
             patientDateOfBirth: request.patient?.date_of_birth,
-            doctorName: request.doctorName || `${request.doctor?.first_name || ''} ${request.doctor?.last_name || ''}`.trim(),
-            date: request.appointment_date, // Map from appointment_date to date
-            time: request.appointment_time, // Map from appointment_time to time
-            consultationType: request.appointment_type || 'text',
+            appointment_date: request.appointment_date,
+            appointment_time: request.appointment_time,
+            appointment_type: request.appointment_type || 'text',
             reason: request.reason || '',
             status: request.status === 0 ? 'pending' : 
                     request.status === 1 ? 'confirmed' : 
@@ -1027,6 +1017,18 @@ export default function DoctorDashboard() {
     }
   };
 
+  const handleCancelAcceptedAppointment = async (appointmentId: number) => {
+    try {
+      await apiService.delete(`/appointments/${appointmentId}`);
+      Alert.alert('Success', 'Appointment cancelled successfully');
+      setSelectedAcceptedRequest(null);
+      fetchConfirmedAppointments();
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      Alert.alert('Error', 'Failed to cancel appointment');
+    }
+  };
+
   const renderHomeContent = () => (
     <ScrollView 
       style={styles.content} 
@@ -1243,11 +1245,11 @@ export default function DoctorDashboard() {
                     profilePictureUrl={request.patientProfilePictureUrl}
                     profilePicture={request.patientProfilePicture}
                     size={48}
-                    name={request.patientName}
+                    name={request.patient_name}
                   />
                 </View>
                 <View style={{flex: 1}}>
-                  <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{request.patientName}</Text>
+                  <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{request.patient_name}</Text>
                   <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>{formatDate(request.date)} • {formatTime(request.time)}</Text>
                 </View>
                 <View style={{alignItems: 'flex-end'}}>
@@ -1268,55 +1270,8 @@ export default function DoctorDashboard() {
             <ActivityIndicator size="large" color="#4CAF50" />
             <Text style={styles.loadingText}>Loading accepted requests...</Text>
           </View>
-        ) : bookingRequests.filter(request => request.status === 'confirmed' || request.status === 'completed').length === 0 ? (
-          <View style={{alignItems: 'center', marginTop: 60}}>
-            <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18}}>
-              <Icon name="calendar" size={20} color="#666" />
-            </View>
-            <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6}}>No Accepted Requests</Text>
-            <Text style={{fontSize: 15, color: '#7CB18F', textAlign: 'center'}}>Accepted requests will appear here for your records</Text>
-          </View>
         ) : (
-          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 4}}>
-            {(() => {
-              const filteredRequests = bookingRequests.filter(request => request.status === 'confirmed' || request.status === 'completed');
-              // // console.log('📋 [DoctorDashboard] Rendering accepted tab with appointments:', filteredRequests.map((r: any) => ({
-              //   id: r.id,
-              //   status: r.status,
-              //   patientName: r.patientName,
-              //   date: r.date,
-              //   time: r.time
-              // })));
-              return filteredRequests.map((request) => (
-              <View key={request.id} style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
-                <View style={{width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
-                  <Icon name="user" size={20} color="#666" />
-                </View>
-                <View style={{flex: 1}}>
-                  <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}}>{request.patientName}</Text>
-                  <Text style={{color: '#7CB18F', fontSize: 14, marginBottom: 2}}>{formatDate(request.date)} at {formatTime(request.time)}</Text>
-                  <Text style={{color: '#7CB18F', fontSize: 14}}>{getConsultationTypeLabel(request.consultationType)}</Text>
-                </View>
-                <View style={{alignItems: 'flex-end'}}>
-                  <View style={{
-                    backgroundColor: request.status === 'completed' ? '#E8F5E8' : '#D4EDDA', 
-                    borderRadius: 8, 
-                    paddingVertical: 4, 
-                    paddingHorizontal: 8
-                  }}>
-                    <Text style={{
-                      color: request.status === 'completed' ? '#2E7D32' : '#155724', 
-                      fontSize: 12, 
-                      fontWeight: 'bold'
-                    }}>
-                      {request.status === 'completed' ? 'Completed' : 'Confirmed'}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ));
-            })()}
-          </View>
+          renderAcceptedAppointmentsContent()
         )
       )}
 
@@ -1334,9 +1289,9 @@ export default function DoctorDashboard() {
                     profilePictureUrl={selectedRequest.patientProfilePictureUrl}
                     profilePicture={selectedRequest.patientProfilePicture}
                     size={72}
-                    name={selectedRequest.patientName}
+                    name={selectedRequest.patient_name}
                   />
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedRequest.patientName}</Text>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedRequest.patient_name}</Text>
                   {selectedRequest.patientEmail ? (
                     <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{selectedRequest.patientEmail}</Text>
                   ) : null}
@@ -1361,7 +1316,7 @@ export default function DoctorDashboard() {
                   <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatDate(selectedRequest.date)} • {formatTime(selectedRequest.time)}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                     <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-                      <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{getConsultationTypeLabel(selectedRequest.consultationType)}</Text>
+                      <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{getConsultationTypeLabel(selectedRequest.appointment_type)}</Text>
                     </View>
                   </View>
                   <View style={{ marginTop: 8 }}>
@@ -1536,7 +1491,7 @@ export default function DoctorDashboard() {
                   {String(patient.reason || 'Chat')}
                 </Text>
                 <Text style={{ fontSize: 16, color: '#4CAF50' }} numberOfLines={1}>
-                  {String(patient.patientName || 'Unknown Patient')}
+                  {String(patient.patient_name || 'Unknown Patient')}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -1633,6 +1588,132 @@ export default function DoctorDashboard() {
     </ScrollView>
   );
 
+  const renderAcceptedAppointmentsContent = () => {
+    if (confirmedAppointments.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No accepted appointments</Text>
+        </View>
+      );
+    }
+  
+    return (
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {confirmedAppointments.map((appointment) => (
+          <TouchableOpacity
+            key={appointment.id}
+            style={styles.requestCard}
+            onPress={() => setSelectedAcceptedRequest(appointment)}
+          >
+            <View style={styles.requestCardHeader}>
+              <DoctorProfilePicture
+                profilePictureUrl={appointment.patientProfilePictureUrl}
+                profilePicture={appointment.patientProfilePicture}
+                size={50}
+              />
+              <View style={styles.requestCardInfo}>
+                <Text style={styles.patientName}>{appointment.patient_name}</Text>
+                <Text style={styles.appointmentDateTime}>
+                  {formatDate(appointment.appointment_date)} • {formatTime(appointment.appointment_time)}
+                </Text>
+                <Text style={styles.appointmentType}>{appointment.appointment_type}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    );
+  };
+
+  const showAcceptedRequestDetailsModal = () => {
+    if (!selectedAcceptedRequest) return null;
+  
+    const patientAge = selectedAcceptedRequest.patientDateOfBirth 
+      ? new Date().getFullYear() - new Date(selectedAcceptedRequest.patientDateOfBirth).getFullYear()
+      : null;
+  
+    return (
+      <Modal
+        visible={!!selectedAcceptedRequest}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setSelectedAcceptedRequest(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setSelectedAcceptedRequest(null)}
+            >
+              <FontAwesome name="times" size={20} color="#666" />
+            </TouchableOpacity>
+  
+            <View style={styles.modalHeader}>
+              <DoctorProfilePicture
+                profilePictureUrl={selectedAcceptedRequest.patientProfilePictureUrl}
+                profilePicture={selectedAcceptedRequest.patientProfilePicture}
+                size={80}
+              />
+              <Text style={styles.modalPatientName}>{selectedAcceptedRequest.patient_name}</Text>
+              
+              {/* Patient Demographics */}
+              <View style={styles.patientDemographics}>
+                {selectedAcceptedRequest.patientCity && (
+                  <Text style={styles.demographicText}>{selectedAcceptedRequest.patientCity}</Text>
+                )}
+                {selectedAcceptedRequest.patientCountry && (
+                  <Text style={styles.demographicText}> • {selectedAcceptedRequest.patientCountry}</Text>
+                )}
+                {patientAge && (
+                  <Text style={styles.demographicText}> • {patientAge} years</Text>
+                )}
+                {selectedAcceptedRequest.patientGender && (
+                  <Text style={styles.demographicText}> • {selectedAcceptedRequest.patientGender}</Text>
+                )}
+              </View>
+            </View>
+  
+            <View style={styles.modalDetails}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Date:</Text>
+                <Text style={styles.detailValue}>{formatDate(selectedAcceptedRequest.appointment_date)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Time:</Text>
+                <Text style={styles.detailValue}>{formatTime(selectedAcceptedRequest.appointment_time)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Type:</Text>
+                <Text style={styles.detailValue}>{selectedAcceptedRequest.appointment_type}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Reason:</Text>
+                <Text style={styles.detailValue}>
+                  {selectedAcceptedRequest.reason || 'No reason provided'}
+                </Text>
+              </View>
+            </View>
+  
+            <View style={styles.modalNote}>
+              <Text style={styles.noteText}>
+                Note: Cancelling appointments may affect your rating and patient trust. Please only cancel if absolutely necessary.
+              </Text>
+            </View>
+  
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => handleCancelAcceptedAppointment(selectedAcceptedRequest.id)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel Appointment</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
@@ -1645,6 +1726,8 @@ export default function DoctorDashboard() {
         return renderWorkingHoursContent();
       case 'profile':
         return renderProfileContent();
+      case 'accepted':
+        return renderAcceptedAppointmentsContent();
       default:
         return renderHomeContent();
     }
@@ -1717,6 +1800,14 @@ export default function DoctorDashboard() {
             isActive={activeTab === 'working-hours'}
             onPress={() => setActiveTab('working-hours')}
           />
+          {activeTab === 'accepted' && (
+            <Tab
+              icon="calendar"
+              label="Accepted"
+              isActive={activeTab === 'accepted'}
+              onPress={() => setActiveTab('accepted')}
+            />
+          )}
         </View>
       </View>
 
@@ -1834,6 +1925,7 @@ export default function DoctorDashboard() {
         }}
         onSuccess={handleRescheduleSuccess}
       />
+      {showAcceptedRequestDetailsModal()}
     </SafeAreaView>
   );
 }
@@ -2841,5 +2933,119 @@ const styles = StyleSheet.create({
   tabIcon: {
     fontSize: 24,
     marginBottom: 4,
+  },
+  requestCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  requestCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  requestCardInfo: {
+    flex: 1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalPatientName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 8,
+  },
+  patientDemographics: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  demographicText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
+  },
+  modalDetails: {
+    marginBottom: 16,
+  },
+  detailLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#666',
+  },
+  modalNote: {
+    marginBottom: 16,
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  cancelButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    textAlign: 'center',
   },
 }); 
