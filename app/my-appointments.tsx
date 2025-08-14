@@ -162,7 +162,8 @@ const MyAppointments = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status?: string) => {
+    if (!status) return '#888';
     switch (status) {
       case 'pending': return '#FFA500';
       case 'confirmed': return '#4CAF50';
@@ -172,7 +173,8 @@ const MyAppointments = () => {
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status?: string) => {
+    if (!status) return 'question-circle';
     switch (status) {
       case 'pending': return 'clock-o';
       case 'confirmed': return 'check-circle';
@@ -182,7 +184,10 @@ const MyAppointments = () => {
     }
   };
 
-  const renderAppointment = (appt: any, keyPrefix: string) => (
+  const renderAppointment = (appt: any, keyPrefix: string) => {
+    const statusStr = String(appt?.status ?? '').toLowerCase();
+    const statusLabel = statusStr ? statusStr.charAt(0).toUpperCase() + statusStr.slice(1) : 'Unknown';
+    return (
     <TouchableOpacity style={styles.card} key={`${keyPrefix}${appt.id}`} onPress={() => setSelectedAppointment(appt)}>
       <View style={styles.cardHeader}>
         <View style={styles.doctorInfo}>
@@ -193,13 +198,13 @@ const MyAppointments = () => {
             <ThemedText style={styles.doctorName}>{appt.doctorName}</ThemedText>
             <View style={styles.statusContainer}>
               <FontAwesome 
-                name={getStatusIcon(appt.status) as any} 
+                name={getStatusIcon(statusStr) as any} 
                 size={12} 
-                color={getStatusColor(appt.status)} 
+                color={getStatusColor(statusStr)} 
                 style={styles.statusIcon}
               />
-              <ThemedText style={[styles.statusText, { color: getStatusColor(appt.status) }]}>
-                {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+              <ThemedText style={[styles.statusText, { color: getStatusColor(statusStr) }]}>
+                {statusLabel}
               </ThemedText>
             </View>
           </View>
@@ -207,7 +212,7 @@ const MyAppointments = () => {
       </View>
       
       <View style={styles.cardContent}>
-        <View style={styles.detailRow}>
+         <View style={styles.detailRow}>
           <FontAwesome name="calendar" size={14} color={Colors.light.icon} style={styles.detailIcon} />
           <ThemedText style={styles.detailText}>{appt.date}</ThemedText>
         </View>
@@ -221,7 +226,7 @@ const MyAppointments = () => {
         </View>
       </View>
     </TouchableOpacity>
-  );
+  ); };
 
   return (
     <SafeAreaView style={styles.container}>
