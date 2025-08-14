@@ -29,14 +29,29 @@ class ImageCacheService {
   async getCachedImage(url: string): Promise<string | null> {
     try {
       const normalizedUrl = this.normalizeImageUrl(url);
+      const noMediumUrl = this.normalizeImageUrlWithoutMedium(url);
       console.log('ImageCacheService: Getting cached image for:', normalizedUrl);
       const cacheKey = this.getCacheKey(normalizedUrl);
       console.log('ImageCacheService: Cache key:', cacheKey);
       const cachedData = await AsyncStorage.getItem(cacheKey);
       
       if (!cachedData) {
-        console.log('ImageCacheService: No cached data found');
-        return null;
+        // Try fallback key without medium variant
+        const fallbackKey = this.getCacheKey(noMediumUrl);
+        const fallbackData = await AsyncStorage.getItem(fallbackKey);
+        if (!fallbackData) {
+          console.log('ImageCacheService: No cached data found');
+          return null;
+        }
+        const fallbackCached: CachedImage = JSON.parse(fallbackData);
+        if (this.isCacheValid(fallbackCached)) {
+          console.log('ImageCacheService: Cache hit (no-medium) for:', noMediumUrl);
+          return fallbackCached.localUri;
+        } else {
+          await this.removeFromCache(noMediumUrl);
+          console.log('ImageCacheService: Cache expired for (no-medium):', noMediumUrl);
+          return null;
+        }
       }
 
       const cached: CachedImage = JSON.parse(cachedData);
@@ -199,22 +214,28 @@ class ImageCacheService {
   async downloadAndCache(url: string): Promise<string | null> {
     try {
       const normalizedUrl = this.normalizeImageUrl(url);
+      const noMediumUrl = this.normalizeImageUrlWithoutMedium(url);
       // Check if already cached
       const cachedUri = await this.getCachedImage(normalizedUrl);
       if (cachedUri) {
         return cachedUri;
       }
 
-      console.log('ImageCacheService: Downloading image:', normalizedUrl);
-      
-      // For React Native, we'll use a simpler approach
-      // Download the image directly to a local file
-      const localUri = await this.downloadToLocalFile(normalizedUrl);
-      
-      if (localUri) {
-        // Cache the image
-        await this.cacheImage(normalizedUrl, localUri, 'image/jpeg');
-        return localUri;
+      const candidates = Array.from(new Set([normalizedUrl, noMediumUrl]));
+      for (const candidate of candidates) {
+        console.log('ImageCacheService: Downloading image:', candidate);
+        const localUri = await this.downloadToLocalFile(candidate);
+        if (localUri) {
+          // Cache under both keys to ensure future hits regardless of variant
+          await this.cacheImage(candidate, localUri, 'image/jpeg');
+          // Also cache under the other key if different
+          for (const alt of candidates) {
+            if (alt !== candidate) {
+              await this.cacheImage(alt, localUri, 'image/jpeg');
+            }
+          }
+          return localUri;
+        }
       }
       
       return null;
@@ -284,6 +305,29 @@ class ImageCacheService {
       const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
       const normalizedPath = this.appendMediumIfProfilePicture(clean.replace(/^\/+/, ''));
       return `https://docavailable-1.onrender.com/api/images/${normalizedPath}`;
+    }
+  }
+
+  private normalizeImageUrlWithoutMedium(url: string): string {
+    if (!url) return url;
+    try {
+      if (!/^https?:\/\//i.test(url)) {
+        const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
+        return `https://docavailable-1.onrender.com/api/images/${clean}`;
+      }
+      const parsed = new URL(url);
+      let path = parsed.pathname;
+      if (path.startsWith('/storage/')) {
+        path = path.substring('/storage/'.length);
+      } else if (path.startsWith('/api/images/')) {
+        path = path.substring('/api/images/'.length);
+      } else if (path.startsWith('/')) {
+        path = path.substring(1);
+      }
+      return `https://docavailable-1.onrender.com/api/images/${path}`;
+    } catch (_e) {
+      const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
+      return `https://docavailable-1.onrender.com/api/images/${clean.replace(/^\/+/, '')}`;
     }
   }
 
