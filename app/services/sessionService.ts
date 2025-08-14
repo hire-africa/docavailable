@@ -71,6 +71,23 @@ class SessionService {
             status: 'success',
             sessionsUsed: 1
           };
+        } else if (response.data && response.data.message) {
+          // Handle cases where session is not found or already ended
+          console.log('🔍 Text session response:', response.data.message);
+          if (response.data.message.includes('already been ended') || 
+              response.data.message.includes('not found')) {
+            // Treat as success since the session is effectively ended
+            return {
+              status: 'success',
+              sessionsUsed: 1
+            };
+          } else {
+            console.error('🔍 Text session response format error:', response.data);
+            return {
+              status: 'error',
+              sessionsUsed: 0
+            };
+          }
         } else {
           console.error('🔍 Text session response format error:', response.data);
           return {
@@ -93,6 +110,17 @@ class SessionService {
         data: error?.response?.data,
         statusText: error?.response?.statusText
       });
+      
+      // Handle specific error cases
+      if (error?.response?.status === 404) {
+        // Session not found - treat as success since it's effectively ended
+        console.log('🔍 Session not found (404) - treating as success');
+        return {
+          status: 'success',
+          sessionsUsed: 1
+        };
+      }
+      
       throw error;
     }
   }
