@@ -21,6 +21,14 @@ const MyAppointments = () => {
     fetchAppointments();
   }, []);
 
+  useEffect(() => {
+    console.log('🔍 Modal state changed:', {
+      showCancelConfirmModal,
+      showCancelModal,
+      cancellingAppointment: cancellingAppointment?.id
+    });
+  }, [showCancelConfirmModal, showCancelModal, cancellingAppointment]);
+
   const fetchAppointments = async () => {
     try {
       setLoading(true);
@@ -85,19 +93,32 @@ const MyAppointments = () => {
     const appointmentDateTime = new Date(`${appt.appointment_date || appt.date} ${appt.appointment_time || appt.time}`);
     const now = new Date();
     
+    const canCancel = (status === 'pending' || status === 'confirmed') && appointmentDateTime > now;
+    console.log('🔍 canCancelAppointment check:', {
+      appointmentId: appt.id,
+      status,
+      appointmentDateTime: appointmentDateTime.toISOString(),
+      now: now.toISOString(),
+      canCancel
+    });
+    
     // Can cancel if status is pending or confirmed AND appointment hasn't started yet
-    return (status === 'pending' || status === 'confirmed') && appointmentDateTime > now;
+    return canCancel;
   };
 
   const handleCancelAppointment = (appt: any) => {
+    console.log('🔍 Cancel button tapped for appointment:', appt.id);
     setCancellingAppointment(appt);
     setShowCancelConfirmModal(true);
+    console.log('🔍 showCancelConfirmModal set to true');
   };
 
   const handleCancelConfirm = () => {
+    console.log('🔍 Confirm button tapped');
     setShowCancelConfirmModal(false);
     setCancelReason('');
     setShowCancelModal(true);
+    console.log('🔍 showCancelModal set to true');
   };
 
   const confirmCancelAppointment = async () => {
