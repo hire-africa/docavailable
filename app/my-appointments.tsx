@@ -394,7 +394,11 @@ const MyAppointments = () => {
               <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleCancelConfirm} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+              <TouchableOpacity onPress={() => {
+                console.log('🔍 Confirm button pressed directly!');
+                Alert.alert('Debug', 'Confirm button was pressed! 🎯');
+                handleCancelConfirm();
+              }} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
                 <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
               </TouchableOpacity>
             </View>
