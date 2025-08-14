@@ -15,6 +15,7 @@ import {
     Easing,
     Image,
     Linking,
+    Modal,
     Platform,
     RefreshControl,
     ScrollView,
@@ -22,8 +23,7 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    Modal
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon, { IconName } from '../components/Icon';
@@ -37,7 +37,7 @@ import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
 import { apiService } from '../app/services/apiService';
-import { APPOINTMENT_STATUS, appointmentService, type Appointment } from '../services/appointmentService';
+import { APPOINTMENT_STATUS, appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 
 
@@ -2268,18 +2268,18 @@ export default function PatientDashboard() {
                       })()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                        <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                        <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                      </View>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
                       {appt.appointment_type || appt.type ? (
                         <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
                           <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
                 </View>
+                      ) : null}
+              </View>
+        </View>
+                  </View>
               </TouchableOpacity>
             ))
           )}
@@ -2329,25 +2329,25 @@ export default function PatientDashboard() {
                 {dt ? `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })} • ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${appt.date} • ${appt.time}`}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                  <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                  <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                </View>
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                  </View>
                 {appt.appointment_type || appt.type ? (
                   <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, marginLeft: 8 }}>
                     <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
-                  </View>
+                </View>
                 ) : null}
               </View>
               {appt.reason ? (
                 <View style={{ marginTop: 8 }}>
                   <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
                   <Text style={{ color: '#666' }}>{String(appt.reason)}</Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
         </View>
+              ) : null}
+                  </View>
+                </View>
+              </View>
       </Modal>
     );
   };
@@ -2856,12 +2856,7 @@ export default function PatientDashboard() {
             case 'discover':
               return renderDiscoverDoctorsContent();
             case 'appointments':
-              return (
-                <>
-                  {renderAppointmentsContent()}
-                  {renderPatientAppointmentModal()}
-                </>
-              );
+              return renderAppointmentsContent();
             case 'blogs':
               return <Blog hideBottomNav />;
             case 'docbot':

@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, Touchabl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../app/services/apiService';
 import { ThemedText } from '../components/ThemedText';
+import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -188,45 +189,30 @@ const MyAppointments = () => {
     const statusStr = String(appt?.status ?? '').toLowerCase();
     const statusLabel = statusStr ? statusStr.charAt(0).toUpperCase() + statusStr.slice(1) : 'Unknown';
     return (
-    <TouchableOpacity style={styles.card} key={`${keyPrefix}${appt.id}`} onPress={() => setSelectedAppointment(appt)}>
-      <View style={styles.cardHeader}>
-        <View style={styles.doctorInfo}>
-          <View style={styles.doctorAvatar}>
-            <FontAwesome name="user-md" size={16} color={Colors.light.tint} />
-          </View>
-          <View style={styles.doctorDetails}>
-            <ThemedText style={styles.doctorName}>{appt.doctorName}</ThemedText>
-            <View style={styles.statusContainer}>
-              <FontAwesome 
-                name={getStatusIcon(statusStr) as any} 
-                size={12} 
-                color={getStatusColor(statusStr)} 
-                style={styles.statusIcon}
-              />
-              <ThemedText style={[styles.statusText, { color: getStatusColor(statusStr) }]}>
-                {statusLabel}
-              </ThemedText>
+      <TouchableOpacity style={styles.requestCard} key={`${keyPrefix}${appt.id}`} onPress={() => setSelectedAppointment(appt)}>
+        <View style={styles.requestCardHeader}>
+          <DoctorProfilePicture
+            profilePictureUrl={appt.doctor?.profile_picture_url}
+            profilePicture={appt.doctor?.profile_picture}
+            size={50}
+            name={appt.doctorName}
+          />
+          <View style={styles.requestCardInfo}>
+            <Text style={styles.patientName}>{appt.doctorName}</Text>
+            <Text style={styles.appointmentDateTime}>
+              {`${appt.date || ''}${appt.date && appt.time ? ' • ' : ''}${appt.time || ''}`}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusColor(statusStr) }]}>
+                <FontAwesome name={getStatusIcon(statusStr) as any} size={12} color="#fff" />
+                <Text style={styles.statusBadgeText}>{statusLabel}</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
-      
-      <View style={styles.cardContent}>
-         <View style={styles.detailRow}>
-          <FontAwesome name="calendar" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-          <ThemedText style={styles.detailText}>{appt.date}</ThemedText>
-        </View>
-        <View style={styles.detailRow}>
-          <FontAwesome name="clock-o" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-          <ThemedText style={styles.detailText}>{appt.time}</ThemedText>
-        </View>
-        <View style={styles.detailRow}>
-          <FontAwesome name="comment" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-          <ThemedText style={styles.detailText} numberOfLines={2}>{appt.reason}</ThemedText>
-        </View>
-      </View>
-    </TouchableOpacity>
-  ); };
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -268,45 +254,39 @@ const MyAppointments = () => {
 
       {/* Details Modal */}
       <Modal visible={!!selectedAppointment} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <FontAwesome name="calendar" size={24} color={Colors.light.tint} />
-              <ThemedText style={styles.modalTitle}>Appointment Details</ThemedText>
-            </View>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+            <TouchableOpacity onPress={() => setSelectedAppointment(null)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
+              <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
+            </TouchableOpacity>
             {selectedAppointment && (
               <>
-                <View style={{ marginBottom: 12 }}>
-                  <ThemedText style={{ fontSize: 16, fontWeight: '700', color: Colors.light.text }}>
-                    {selectedAppointment.doctorName}
-                  </ThemedText>
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <DoctorProfilePicture
+                    profilePictureUrl={selectedAppointment.doctor?.profile_picture_url}
+                    profilePicture={selectedAppointment.doctor?.profile_picture}
+                    size={72}
+                    name={selectedAppointment.doctorName}
+                  />
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedAppointment.doctorName}</Text>
                 </View>
-                <View style={styles.detailRow}>
-                  <FontAwesome name="calendar" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-                  <ThemedText style={styles.detailText}>{selectedAppointment.date}</ThemedText>
-                </View>
-                <View style={styles.detailRow}>
-                  <FontAwesome name="clock-o" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-                  <ThemedText style={styles.detailText}>{selectedAppointment.time}</ThemedText>
-                </View>
-                {selectedAppointment.reason ? (
-                  <View style={styles.detailRow}>
-                    <FontAwesome name="comment" size={14} color={Colors.light.icon} style={styles.detailIcon} />
-                    <ThemedText style={styles.detailText} numberOfLines={3}>{selectedAppointment.reason}</ThemedText>
+                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{`${selectedAppointment.date || ''}${selectedAppointment.date && selectedAppointment.time ? ' • ' : ''}${selectedAppointment.time || ''}`}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                      <Text style={{ color: '#fff', fontWeight: '600' }}>{String(selectedAppointment.status || '').toUpperCase() || 'UNKNOWN'}</Text>
+                    </View>
                   </View>
-                ) : null}
-                <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center' }}>
-                  <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 }}>
-                    <Text style={{ color: '#fff', fontWeight: '600' }}>{selectedAppointment.status.toUpperCase()}</Text>
-                  </View>
+                  {selectedAppointment.reason ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                      <Text style={{ color: '#666' }}>{String(selectedAppointment.reason)}</Text>
+                    </View>
+                  ) : null}
                 </View>
               </>
             )}
-            <View style={{ marginTop: 20 }}>
-              <TouchableOpacity style={styles.modalSecondaryButton} onPress={() => setSelectedAppointment(null)}>
-                <Text style={styles.modalSecondaryButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </Modal>
