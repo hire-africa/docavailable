@@ -131,6 +131,7 @@ const MyAppointments = () => {
     setCancelReason('');
     setShowCancelModal(true);
     console.log('🔍 showCancelModal set to true');
+    Alert.alert('Debug', 'Reason input modal should be visible now! 📝');
   };
 
   const confirmCancelAppointment = async () => {
@@ -403,10 +404,10 @@ const MyAppointments = () => {
 
       {/* Cancel Reason Input Modal */}
       <Modal visible={showCancelModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
-            <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,255,0.8)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320, borderWidth: 3, borderColor: '#0000FF' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 12, color: '#0000FF' }}>🔵 ENTER REASON 🔵</Text>
+            <Text style={{ marginBottom: 8, fontSize: 16 }}>Please provide a reason for cancellation:</Text>
             <TextInput
               value={cancelReason}
               onChangeText={setCancelReason}
