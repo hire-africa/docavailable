@@ -1633,81 +1633,69 @@ export default function DoctorDashboard() {
       : null;
   
     return (
-      <Modal
-        visible={!!selectedAcceptedRequest}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setSelectedAcceptedRequest(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setSelectedAcceptedRequest(null)}
-            >
-              <FontAwesome name="times" size={20} color="#666" />
+      <Modal visible={!!selectedAcceptedRequest} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+            <TouchableOpacity onPress={() => setSelectedAcceptedRequest(null)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
+              <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
             </TouchableOpacity>
-  
-            <View style={styles.modalHeader}>
-              <DoctorProfilePicture
-                profilePictureUrl={selectedAcceptedRequest.patientProfilePictureUrl}
-                profilePicture={selectedAcceptedRequest.patientProfilePicture}
-                size={80}
-              />
-              <Text style={styles.modalPatientName}>{selectedAcceptedRequest.patient_name}</Text>
-              
-              {/* Patient Demographics */}
-              <View style={styles.patientDemographics}>
-                {selectedAcceptedRequest.patientCity && (
-                  <Text style={styles.demographicText}>{selectedAcceptedRequest.patientCity}</Text>
-                )}
-                {selectedAcceptedRequest.patientCountry && (
-                  <Text style={styles.demographicText}> • {selectedAcceptedRequest.patientCountry}</Text>
-                )}
-                {patientAge && (
-                  <Text style={styles.demographicText}> • {patientAge} years</Text>
-                )}
-                {selectedAcceptedRequest.patientGender && (
-                  <Text style={styles.demographicText}> • {selectedAcceptedRequest.patientGender}</Text>
-                )}
-              </View>
-            </View>
-  
-            <View style={styles.modalDetails}>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Date:</Text>
-                <Text style={styles.detailValue}>{formatDate(selectedAcceptedRequest.appointment_date)}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Time:</Text>
-                <Text style={styles.detailValue}>{formatTime(selectedAcceptedRequest.appointment_time)}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Type:</Text>
-                <Text style={styles.detailValue}>{selectedAcceptedRequest.appointment_type}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Reason:</Text>
-                <Text style={styles.detailValue}>
-                  {selectedAcceptedRequest.reason || 'No reason provided'}
-                </Text>
-              </View>
-            </View>
-  
-            <View style={styles.modalNote}>
-              <Text style={styles.noteText}>
-                Note: Cancelling appointments may affect your rating and patient trust. Please only cancel if absolutely necessary.
-              </Text>
-            </View>
-  
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => handleCancelAcceptedAppointment(selectedAcceptedRequest.id)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel Appointment</Text>
-              </TouchableOpacity>
-            </View>
+            {selectedAcceptedRequest && (
+              <>
+                <View style={{ alignItems: 'center', marginBottom: 16 }}>
+                  <DoctorProfilePicture
+                    profilePictureUrl={selectedAcceptedRequest.patientProfilePictureUrl}
+                    profilePicture={selectedAcceptedRequest.patientProfilePicture}
+                    size={72}
+                    name={selectedAcceptedRequest.patient_name}
+                  />
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedAcceptedRequest.patient_name}</Text>
+                  {selectedAcceptedRequest.patientEmail ? (
+                    <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{selectedAcceptedRequest.patientEmail}</Text>
+                  ) : null}
+                  {(selectedAcceptedRequest.patientCountry || selectedAcceptedRequest.patientCity || selectedAcceptedRequest.patientDateOfBirth || selectedAcceptedRequest.patientGender) ? (
+                    <Text style={{ fontSize: 14, color: '#4CAF50', marginTop: 4 }} numberOfLines={1}>
+                      {selectedAcceptedRequest.patientCity ? `${selectedAcceptedRequest.patientCity}, ` : ''}
+                      {selectedAcceptedRequest.patientCountry || ''}
+                      {(() => {
+                        if (!selectedAcceptedRequest.patientDateOfBirth) return '';
+                        const dob = new Date(selectedAcceptedRequest.patientDateOfBirth);
+                        if (isNaN(dob.getTime())) return '';
+                        const diff = Date.now() - dob.getTime();
+                        const age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+                        return age ? ` • ${age} yrs` : '';
+                      })()}
+                      {selectedAcceptedRequest.patientGender ? ` • ${String(selectedAcceptedRequest.patientGender).charAt(0).toUpperCase()}${String(selectedAcceptedRequest.patientGender).slice(1)}` : ''}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatDate(selectedAcceptedRequest.appointment_date)} • {formatTime(selectedAcceptedRequest.appointment_time)}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                    <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+                      <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{getConsultationTypeLabel(selectedAcceptedRequest.appointment_type)}</Text>
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ color: '#666' }}>{selectedAcceptedRequest.reason || 'No reason provided'}</Text>
+                  </View>
+                  <View style={{ marginTop: 12, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
+                    <Text style={{ color: '#8D6E63', fontSize: 12 }}>
+                      Note: Cancelling appointments may affect your rating and patient trust. Please only cancel if absolutely necessary.
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 24, alignItems: 'center', minWidth: 120 }}
+                    onPress={() => handleCancelAcceptedAppointment(selectedAcceptedRequest.id)}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
