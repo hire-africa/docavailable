@@ -19,6 +19,7 @@ class TextSession extends Model
         'last_activity_at',
         'sessions_used',
         'sessions_remaining_before_start',
+        'reason',
         'chat_id',
         'max_duration_minutes',
         'doctor_response_deadline',

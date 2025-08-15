@@ -21,6 +21,7 @@ class TextSessionController extends Controller
             // Validate request
             $validator = Validator::make($request->all(), [
                 'doctor_id' => 'required|integer|exists:users,id',
+                'reason' => 'nullable|string|max:1000',
             ]);
 
             if ($validator->fails()) {
@@ -33,6 +34,7 @@ class TextSessionController extends Controller
 
             $patientId = auth()->id();
             $doctorId = $request->input('doctor_id');
+            $reason = $request->input('reason');
 
             // Check if doctor exists (removed approval and online status restrictions)
             $doctor = User::where('id', $doctorId)
@@ -82,8 +84,8 @@ class TextSessionController extends Controller
 
             // Create text session using raw SQL to avoid transaction issues
             $textSessionId = DB::select("
-                INSERT INTO text_sessions (patient_id, doctor_id, status, started_at, last_activity_at, sessions_used, sessions_remaining_before_start, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                INSERT INTO text_sessions (patient_id, doctor_id, status, started_at, last_activity_at, sessions_used, sessions_remaining_before_start, reason, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                 RETURNING id
             ", [
                 $patientId, 
@@ -93,6 +95,7 @@ class TextSessionController extends Controller
                 now(), 
                 1, 
                 $sessionsRemaining, 
+                $reason, 
                 now(), 
                 now()
             ])[0]->id;

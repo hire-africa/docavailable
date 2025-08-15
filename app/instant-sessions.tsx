@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
+import DirectBookingModal from '../components/DirectBookingModal';
 
 interface Doctor {
   id: number;
@@ -47,6 +48,8 @@ export default function InstantSessionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeSession, setActiveSession] = useState<SessionInfo | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
 
   const fetchAvailableDoctors = async () => {
     try {
@@ -88,7 +91,14 @@ export default function InstantSessionsScreen() {
     }
   };
 
-  const startSession = async (doctorId: number) => {
+  const handleStartSession = (doctor: Doctor) => {
+    setSelectedDoctor(doctor);
+    setShowDirectBookingModal(true);
+  };
+
+  const startSession = async (reason: string) => {
+    if (!selectedDoctor) return;
+    
     setStartingSession(true);
     try {
       const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/start`, {
@@ -97,13 +107,17 @@ export default function InstantSessionsScreen() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ doctor_id: doctorId }),
+        body: JSON.stringify({ 
+          doctor_id: selectedDoctor.id,
+          reason: reason 
+        }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
         setActiveSession(data.data);
+        setShowDirectBookingModal(false);
         Alert.alert(
           'Session Started!',
           `You can now send one message to Dr. ${data.data.doctor.name}. The doctor will respond within 90 seconds.`,
@@ -256,7 +270,7 @@ export default function InstantSessionsScreen() {
                   styles.startSessionButton,
                   startingSession && styles.startSessionButtonDisabled,
                 ]}
-                onPress={() => startSession(doctor.id)}
+                onPress={() => handleStartSession(doctor)}
                 disabled={startingSession}
               >
                 {startingSession ? (
@@ -289,6 +303,14 @@ export default function InstantSessionsScreen() {
          </View>
       </View>
     </ScrollView>
+
+    <DirectBookingModal
+      visible={showDirectBookingModal}
+      onClose={() => setShowDirectBookingModal(false)}
+      onConfirm={startSession}
+      doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
+      loading={startingSession}
+    />
   );
 }
 
