@@ -73,71 +73,64 @@ class TextSessionController extends Controller
                 ], 400);
             }
 
-            DB::beginTransaction();
-
+            // Reset any aborted transactions first
             try {
-                // Create new text session
-                $textSession = TextSession::create([
-                    'patient_id' => $patientId,
-                    'doctor_id' => $doctorId,
-                    'status' => TextSession::STATUS_ACTIVE,
-                    'started_at' => now(),
-                    'last_activity_at' => now(),
-                    'sessions_used' => 1,
-                    'sessions_remaining_before_start' => $sessionsRemaining,
-                ]);
-
-                // Note: Deduction happens when session ends, not when it starts
-                // This prevents double deduction issues
-
-                // Create a chat room for this session
-                $chatRoom = DB::table('chat_rooms')->insertGetId([
-                    'name' => "text_session_{$textSession->id}",
-                    'type' => 'text_session',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                // Add participants to chat room
-                DB::table('chat_room_participants')->insert([
-                    [
-                        'chat_room_id' => $chatRoom,
-                        'user_id' => $patientId,
-                        'role' => 'member', // Use 'member' instead of 'patient'
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ],
-                    [
-                        'chat_room_id' => $chatRoom,
-                        'user_id' => $doctorId,
-                        'role' => 'member', // Use 'member' instead of 'doctor'
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]
-                ]);
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Text session started successfully',
-                    'data' => [
-                        'session_id' => $textSession->id,
-                        'appointment_id' => $textSession->id, // For compatibility with frontend
-                        'doctor' => [
-                            'id' => $doctor->id,
-                            'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
-                            'response_time' => 2, // 2 minutes response time
-                        ],
-                        'chat_room_id' => $chatRoom,
-                        'sessions_remaining' => $subscription ? $subscription->text_sessions_remaining : $sessionsRemaining,
-                    ]
-                ]);
-
-            } catch (\Exception $e) {
-                DB::rollBack();
-                throw $e;
+                DB::statement('ROLLBACK');
+            } catch (Exception $e) {
+                // Ignore rollback errors
             }
+
+            // Create text session using raw SQL to avoid transaction issues
+            $textSessionId = DB::select("
+                INSERT INTO text_sessions (patient_id, doctor_id, status, started_at, last_activity_at, sessions_used, sessions_remaining_before_start, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                RETURNING id
+            ", [
+                $patientId, 
+                $doctorId, 
+                TextSession::STATUS_ACTIVE, 
+                now(), 
+                now(), 
+                1, 
+                $sessionsRemaining, 
+                now(), 
+                now()
+            ])[0]->id;
+
+            // Create a chat room for this session using raw SQL to avoid quoting issues
+            $chatRoomName = "text_session_{$textSessionId}";
+            $chatRoom = DB::select("
+                INSERT INTO chat_rooms (name, type, created_at, updated_at) 
+                VALUES (?, ?, ?, ?) 
+                RETURNING id
+            ", [$chatRoomName, 'text_session', now(), now()])[0]->id;
+
+            // Add participants to chat room using raw SQL
+            DB::insert("
+                INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?)
+            ", [$chatRoom, $patientId, 'member', now(), now()]);
+
+                        DB::insert("
+                INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?)
+            ", [$chatRoom, $doctorId, 'member', now(), now()]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Text session started successfully',
+                'data' => [
+                    'session_id' => $textSessionId,
+                    'appointment_id' => $textSessionId, // For compatibility with frontend
+                    'doctor' => [
+                        'id' => $doctor->id,
+                        'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
+                        'response_time' => 2, // 2 minutes response time
+                    ],
+                    'chat_room_id' => $chatRoom,
+                    'sessions_remaining' => $subscription ? $subscription->text_sessions_remaining : $sessionsRemaining,
+                ]
+            ]);
 
         } catch (\Exception $e) {
             return response()->json([

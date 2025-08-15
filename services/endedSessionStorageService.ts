@@ -161,7 +161,7 @@ export const endedSessionStorageService = {
       return metas;
     } catch (error) {
       console.error(`Error loading ended sessions for ${userType}:`, error);
-      return [];
+    return [];
     }
   },
 
@@ -180,7 +180,7 @@ export const endedSessionStorageService = {
     // This would require scanning all META_KEY entries; avoid for now
     return [];
   },
-
+  
   async getEndedSession(appointmentId: number): Promise<EndedSession | null> {
     try {
       const raw = await AsyncStorage.getItem(SESSION_KEY(appointmentId));
@@ -223,7 +223,7 @@ export const endedSessionStorageService = {
       return JSON.stringify(session || {}, null, 2);
     } catch (error) {
       console.error('Error exporting ended session:', error);
-      return '';
-    }
+    return '';
+  }
   },
-};
+}; 

@@ -33,8 +33,7 @@ const MyAppointments = () => {
     if (selectedAppointment) {
       console.log('🔍 Appointment details modal opened:', {
         selectedAppointment: selectedAppointment?.id,
-        canCancel: canCancelAppointment(selectedAppointment),
-        fullAppointmentData: selectedAppointment
+        canCancel: canCancelAppointment(selectedAppointment)
       });
     }
   }, [selectedAppointment]);
@@ -116,13 +115,11 @@ const MyAppointments = () => {
     return canCancel;
   };
 
-  // Step 1: Show confirmation modal
   const handleCancelAppointment = (appt: any) => {
     console.log('🔍 Cancel button tapped for appointment:', appt.id);
     setCancellingAppointment(appt);
     setShowCancelConfirmModal(true);
     console.log('🔍 showCancelConfirmModal set to true');
-    Alert.alert('Debug', 'Confirmation modal should be visible now! 🔴');
   };
 
   const handleCancelConfirm = () => {
@@ -131,7 +128,6 @@ const MyAppointments = () => {
     setCancelReason('');
     setShowCancelModal(true);
     console.log('🔍 showCancelModal set to true');
-    Alert.alert('Debug', 'Reason input modal should be visible now! 📝');
   };
 
   const confirmCancelAppointment = async () => {
@@ -336,39 +332,17 @@ const MyAppointments = () => {
                 </View>
                 
                 {/* Cancel Button - Only show for cancellable appointments */}
-                {(() => {
-                  const canCancel = canCancelAppointment(selectedAppointment);
-                  console.log('🔍 Cancel button render check:', {
-                    selectedAppointment: selectedAppointment?.id,
-                    status: selectedAppointment?.status,
-                    appointmentDate: selectedAppointment?.appointment_date || selectedAppointment?.date,
-                    appointmentTime: selectedAppointment?.appointment_time || selectedAppointment?.time,
-                    canCancel,
-                    hasSelectedAppointment: !!selectedAppointment
-                  });
-                  return canCancel ? (
-                    <TouchableOpacity
-                      style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
-                      onPress={() => {
-                        console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
-                        handleCancelAppointment(selectedAppointment);
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
-                    </TouchableOpacity>
-                  ) : null;
-                })()}
-                
-                {/* Test Button - Always visible for debugging */}
-                <TouchableOpacity
-                  style={{ backgroundColor: '#007AFF', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
-                  onPress={() => {
-                    console.log('🔍 Test button pressed!');
-                    Alert.alert('Test', 'Test button is working!');
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Test Button (Debug)</Text>
-                </TouchableOpacity>
+                {canCancelAppointment(selectedAppointment) && (
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                    onPress={() => {
+                      console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
+                      handleCancelAppointment(selectedAppointment);
+                    }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+                  </TouchableOpacity>
+                )}
                 
                 {console.log('🔍 Rendering cancel button section, canCancel:', canCancelAppointment(selectedAppointment), 'selectedAppointment:', selectedAppointment?.id)}
                 
@@ -386,44 +360,16 @@ const MyAppointments = () => {
 
       {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirmModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(255,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320, borderWidth: 3, borderColor: '#FF0000' }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 12, color: '#FF0000' }}>🔴 CONFIRM CANCELLATION 🔴</Text>
-            <Text style={{ marginBottom: 8, fontSize: 16 }}>Are you sure you want to cancel this appointment?</Text>
-            
-            {/* Test Button */}
-            <TouchableOpacity 
-              onPress={() => Alert.alert('Test', 'Test button in modal works! 🎉')}
-              style={{ 
-                backgroundColor: '#FF00FF', 
-                padding: 10, 
-                borderRadius: 8, 
-                marginBottom: 16,
-                alignItems: 'center'
-              }}
-            >
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>🧪 TEST BUTTON 🧪</Text>
-            </TouchableOpacity>
-            
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
+            <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
               <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
                 <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => {
-                console.log('🔍 Confirm button pressed directly!');
-                Alert.alert('Debug', 'Confirm button was pressed! 🎯');
-                handleCancelConfirm();
-              }} style={{ 
-                backgroundColor: '#00FF00', 
-                borderRadius: 8, 
-                paddingVertical: 12, 
-                paddingHorizontal: 24,
-                minWidth: 100,
-                alignItems: 'center',
-                borderWidth: 2,
-                borderColor: '#000000'
-              }}>
-                <Text style={{ color: '#000000', fontWeight: 'bold', fontSize: 16 }}>✅ CONFIRM ✅</Text>
+              <TouchableOpacity onPress={handleCancelConfirm} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -432,10 +378,10 @@ const MyAppointments = () => {
 
       {/* Cancel Reason Input Modal */}
       <Modal visible={showCancelModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,255,0.8)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320, borderWidth: 3, borderColor: '#0000FF' }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 20, marginBottom: 12, color: '#0000FF' }}>🔵 ENTER REASON 🔵</Text>
-            <Text style={{ marginBottom: 8, fontSize: 16 }}>Please provide a reason for cancellation:</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
+            <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
             <TextInput
               value={cancelReason}
               onChangeText={setCancelReason}
