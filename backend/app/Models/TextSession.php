@@ -195,4 +195,32 @@ class TextSession extends Model
         $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
         return max(0, $nextDeductionMinute - $elapsedMinutes);
     }
+
+    /**
+     * Get remaining time in minutes for the session
+     */
+    public function getRemainingTimeMinutes(): int
+    {
+        $totalAllowedMinutes = $this->getTotalAllowedMinutes();
+        $elapsedMinutes = $this->getElapsedMinutes();
+        return max(0, $totalAllowedMinutes - $elapsedMinutes);
+    }
+
+    /**
+     * Get remaining sessions count
+     */
+    public function getRemainingSessions(): int
+    {
+        $elapsedMinutes = $this->getElapsedMinutes();
+        $sessionsUsed = floor($elapsedMinutes / 10);
+        return max(0, $this->sessions_remaining_before_start - $sessionsUsed);
+    }
+
+    /**
+     * Check if session has run out of time
+     */
+    public function hasRunOutOfTime(): bool
+    {
+        return $this->getRemainingTimeMinutes() <= 0;
+    }
 } 

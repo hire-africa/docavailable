@@ -22,7 +22,10 @@ class Appointment extends Model
         'reschedule_proposed_time',
         'reschedule_reason',
         'reschedule_proposed_by',
-        'reschedule_status'
+        'reschedule_status',
+        'patient_joined',
+        'doctor_joined',
+        'cancelled_reason'
     ];
 
     // Appointment status constants

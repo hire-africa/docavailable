@@ -15,6 +15,7 @@ export interface EndedSession {
   ended_at: string;
   session_duration?: number; // minutes
   session_summary?: string;
+  reason?: string; // Reason for the session
   messages: Message[];
   message_count: number;
 }
@@ -29,6 +30,7 @@ export interface EndedSessionMetadata {
   appointment_date?: string;
   ended_at: string;
   session_duration?: number; // minutes
+  reason?: string; // Reason for the session
 }
 
 const SESSION_KEY = (appointmentId: number) => `ended_session:${appointmentId}`;
@@ -72,6 +74,7 @@ export const endedSessionStorageService = {
         appointment_date: session.appointment_date,
         ended_at: session.ended_at,
         session_duration: session.session_duration,
+        reason: session.reason,
       };
 
       await AsyncStorage.setItem(SESSION_KEY(session.appointment_id), JSON.stringify(session));
@@ -99,6 +102,7 @@ export const endedSessionStorageService = {
         appointment_date: session.appointment_date,
         ended_at: session.ended_at,
         session_duration: session.session_duration,
+        reason: session.reason,
       };
 
       await AsyncStorage.setItem(SESSION_KEY(session.appointment_id), JSON.stringify(session));
@@ -132,6 +136,7 @@ export const endedSessionStorageService = {
       ended_at: sessionData?.ended_at || endedAt,
       session_duration: sessionData?.session_duration,
       session_summary: sessionData?.session_summary,
+      reason: sessionData?.reason,
       messages,
       message_count: messages.length,
     };

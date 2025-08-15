@@ -304,10 +304,43 @@ class ChatController extends Controller
         // Update chat room keys for tracking
         $this->messageStorageService->updateChatRoomKeys($appointmentId);
         
-        // Broadcast removed - will use alternative solution
+        // Handle text session doctor reply detection
+        if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
+            $sessionId = str_replace('text_session_', '', $appointmentId);
+            $session = \App\Models\TextSession::find($sessionId);
+            
+            if ($session && $session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR) {
+                // Check if this is the first doctor message
+                $doctorMessages = $this->messageStorageService->getMessages($appointmentId)
+                    ->filter(function($msg) use ($session) {
+                        return $msg['sender_id'] == $session->doctor_id;
+                    });
+                    
+                if ($doctorMessages->count() === 1) { // First doctor message
+                    $session->update([
+                        'status' => \App\Models\TextSession::STATUS_ACTIVE,
+                        'activated_at' => now()
+                    ]);
+                }
+            }
+        }
         
-        // Send push notification to the other participant
+        // Handle appointment join tracking (patient/doctor joins by sending message)
         if ($appointment) {
+            // Check if this is the first message from patient
+            if ($user->id === $appointment->patient_id && !$appointment->patient_joined) {
+                \App\Models\Appointment::where('id', $appointment->id)->update([
+                    'patient_joined' => now()
+                ]);
+            }
+            
+            // Check if this is the first message from doctor
+            if ($user->id === $appointment->doctor_id && !$appointment->doctor_joined) {
+                \App\Models\Appointment::where('id', $appointment->id)->update([
+                    'doctor_joined' => now()
+                ]);
+            }
+            
             $this->sendChatNotification($user, $appointment, $request->message, $message['id']);
         } else {
             // For text sessions, we'll skip notification for now or implement a different approach

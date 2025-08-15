@@ -90,7 +90,7 @@ class TextSessionController extends Controller
             ", [
                 $patientId, 
                 $doctorId, 
-                TextSession::STATUS_ACTIVE, 
+                TextSession::STATUS_WAITING_FOR_DOCTOR, 
                 now(), 
                 now(), 
                 1, 
@@ -126,6 +126,9 @@ class TextSessionController extends Controller
                 VALUES (?, ?, ?, ?, ?)
             ", [$chatRoom, $doctorId, 'member', now(), now()]);
 
+            // Get the created session to calculate remaining time
+            $session = TextSession::find($textSessionId);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Text session started successfully',
@@ -139,6 +142,8 @@ class TextSessionController extends Controller
                     ],
                     'chat_room_id' => $chatRoom,
                     'sessions_remaining' => $subscription ? $subscription->text_sessions_remaining : $sessionsRemaining,
+                    'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
+                    'remaining_sessions' => $session->getRemainingSessions(),
                 ]
             ]);
 
@@ -146,6 +151,77 @@ class TextSessionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to start text session: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+
+    /**
+     * Check if doctor has responded within 90 seconds
+     */
+    public function checkResponse($sessionId): JsonResponse
+    {
+        try {
+            $session = TextSession::find($sessionId);
+            
+            if (!$session) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Session not found'
+                ], 404);
+            }
+            
+            $now = now();
+            $startedAt = $session->started_at;
+            $elapsedSeconds = $startedAt->diffInSeconds($now);
+            $timeRemaining = max(0, 90 - $elapsedSeconds);
+            
+            // Check if session has expired waiting for doctor
+            if ($timeRemaining <= 0 && $session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
+                // Auto-expire the session
+                $session->update([
+                    'status' => TextSession::STATUS_EXPIRED,
+                    'ended_at' => now()
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'status' => 'expired',
+                    'timeRemaining' => 0,
+                    'message' => 'Session expired - no session will be deducted'
+                ]);
+            }
+            
+            // Check if active session has run out of time
+            if ($session->status === TextSession::STATUS_ACTIVE && $session->hasRunOutOfTime()) {
+                // Auto-end the session
+                $session->update([
+                    'status' => TextSession::STATUS_ENDED,
+                    'ended_at' => now()
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'status' => 'ended',
+                    'timeRemaining' => 0,
+                    'message' => 'Session has ended - time limit reached'
+                ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'status' => $timeRemaining > 0 ? 'waiting' : 'active',
+                'timeRemaining' => $timeRemaining,
+                'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
+                'remainingSessions' => $session->getRemainingSessions(),
+                'message' => $timeRemaining > 0 ? 'Waiting for doctor response' : 'Session is active'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check response: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -173,9 +249,27 @@ class TextSessionController extends Controller
 
             $sessions = $query->orderBy('last_activity_at', 'desc')->get();
 
+            // Add remaining time information to each session
+            $sessionsWithTime = $sessions->map(function ($session) {
+                return [
+                    'id' => $session->id,
+                    'status' => $session->status,
+                    'started_at' => $session->started_at,
+                    'ended_at' => $session->ended_at,
+                    'last_activity_at' => $session->last_activity_at,
+                    'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
+                    'remaining_sessions' => $session->getRemainingSessions(),
+                    'elapsed_minutes' => $session->getElapsedMinutes(),
+                    'sessions_used' => $session->sessions_used,
+                    'sessions_remaining_before_start' => $session->sessions_remaining_before_start,
+                    'patient' => $session->patient,
+                    'doctor' => $session->doctor,
+                ];
+            });
+
             return response()->json([
                 'success' => true,
-                'data' => $sessions
+                'data' => $sessionsWithTime
             ]);
 
         } catch (\Exception $e) {
@@ -307,7 +401,20 @@ class TextSessionController extends Controller
             
             return response()->json([
                 'success' => true,
-                'data' => $session
+                'data' => [
+                    'id' => $session->id,
+                    'status' => $session->status,
+                    'started_at' => $session->started_at,
+                    'ended_at' => $session->ended_at,
+                    'last_activity_at' => $session->last_activity_at,
+                    'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
+                    'remaining_sessions' => $session->getRemainingSessions(),
+                    'elapsed_minutes' => $session->getElapsedMinutes(),
+                    'sessions_used' => $session->sessions_used,
+                    'sessions_remaining_before_start' => $session->sessions_remaining_before_start,
+                    'patient' => $session->patient,
+                    'doctor' => $session->doctor,
+                ]
             ]);
             
         } catch (\Exception $e) {

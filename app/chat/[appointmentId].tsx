@@ -41,6 +41,21 @@ interface ChatInfo {
   other_participant_profile_picture_url?: string;
 }
 
+interface TextSessionInfo {
+  id: number;
+  doctor_id: number;
+  doctor?: {
+    first_name: string;
+    last_name: string;
+    display_name?: string;
+    profile_picture_url?: string;
+    profile_picture?: string;
+  };
+  started_at: string;
+  status: string;
+  reason?: string;
+}
+
 export default function ChatPage() {
   const params = useLocalSearchParams();
   const appointmentId = params.appointmentId as string;
@@ -81,6 +96,9 @@ export default function ChatPage() {
   
   // Add state to track if session has ended (for doctors)
   const [sessionEnded, setSessionEnded] = useState(false);
+  
+  // Text session info state
+  const [textSessionInfo, setTextSessionInfo] = useState<TextSessionInfo | null>(null);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
@@ -166,16 +184,46 @@ export default function ChatPage() {
       // Load chat info only if authenticated
       if (isAuthenticated) {
         try {
-          const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
-          if (infoResponse.success && infoResponse.data) {
-            // console.log('🔍 Chat Info Response:', infoResponse.data);
-            const chatInfoData = infoResponse.data as ChatInfo;
-            setChatInfo(chatInfoData);
-            
-            // Check if session has ended (for doctors)
-            if (!isPatient && chatInfoData.status === 'completed') {
-              console.log('🏁 Session ended detected for doctor');
-              setSessionEnded(true);
+          if (isTextSession) {
+            // For text sessions, fetch session info
+            const sessionId = appointmentId.replace('text_session_', '');
+            const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+            if (sessionResponse.success && sessionResponse.data) {
+              const sessionData = sessionResponse.data as TextSessionInfo;
+              setTextSessionInfo(sessionData);
+              
+              // Create chat info from text session data
+              const chatInfoData: ChatInfo = {
+                appointment_id: parseInt(sessionId, 10),
+                doctor_id: sessionData.doctor_id,
+                other_participant_name: sessionData.doctor?.display_name || 
+                  `${sessionData.doctor?.first_name} ${sessionData.doctor?.last_name}`,
+                other_participant_profile_picture_url: sessionData.doctor?.profile_picture_url,
+                other_participant_profile_picture: sessionData.doctor?.profile_picture,
+                appointment_date: sessionData.started_at,
+                appointment_time: sessionData.started_at,
+                status: sessionData.status,
+              };
+              setChatInfo(chatInfoData);
+              
+              // Check if session has ended
+              if (sessionData.status === 'ended') {
+                setSessionEnded(true);
+              }
+            }
+          } else {
+            // For regular appointments, fetch chat info
+            const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
+            if (infoResponse.success && infoResponse.data) {
+              // console.log('🔍 Chat Info Response:', infoResponse.data);
+              const chatInfoData = infoResponse.data as ChatInfo;
+              setChatInfo(chatInfoData);
+              
+              // Check if session has ended (for doctors)
+              if (!isPatient && chatInfoData.status === 'completed') {
+                console.log('🏁 Session ended detected for doctor');
+                setSessionEnded(true);
+              }
             }
           }
         } catch (error) {
@@ -541,6 +589,7 @@ export default function ChatPage() {
           ended_at: new Date().toISOString(),
           session_duration: undefined,
           session_summary: undefined,
+          reason: textSessionInfo?.reason,
           messages: cleanedMessages,
           message_count: cleanedMessages.length,
         };
@@ -605,6 +654,7 @@ export default function ChatPage() {
         ended_at: new Date().toISOString(),
         session_duration: undefined,
         session_summary: undefined,
+        reason: textSessionInfo?.reason,
         messages: cleanedMessages,
         message_count: cleanedMessages.length,
       };

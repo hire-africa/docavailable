@@ -748,7 +748,7 @@ export default function PatientDashboard() {
                 doctor: appointment.doctor,
                 patient: appointment.patient,
                 status: appointment.status,
-                remaining_time_minutes: 30, // Default session time
+                remaining_time_minutes: appointment.remaining_time_minutes || 30, // Use actual remaining time
                 started_at: appointment.created_at,
                 last_activity_at: appointment.updated_at
               });
@@ -771,7 +771,7 @@ export default function PatientDashboard() {
                 doctor: activeTextSession.doctor,
                 patient: activeTextSession.patient,
                 status: activeTextSession.status,
-                remaining_time_minutes: 30, // Default session time
+                remaining_time_minutes: activeTextSession.remaining_time_minutes || 30, // Use actual remaining time
                 started_at: activeTextSession.started_at,
                 last_activity_at: activeTextSession.last_activity_at
               });
@@ -802,7 +802,7 @@ export default function PatientDashboard() {
                     doctor: activeAppointment.doctor,
                     patient: activeAppointment.patient,
                     status: activeAppointment.status,
-                    remaining_time_minutes: 30,
+                    remaining_time_minutes: activeAppointment.remaining_time_minutes || 30,
                     started_at: activeAppointment.created_at,
                     last_activity_at: activeAppointment.updated_at
                   });
@@ -1628,7 +1628,8 @@ export default function PatientDashboard() {
             .filter(session => 
               session && session.doctor_name && (
                 !messageSearchQuery || 
-                session.doctor_name.toLowerCase().includes(messageSearchQuery.toLowerCase())
+                session.doctor_name.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
+                (session.reason && session.reason.toLowerCase().includes(messageSearchQuery.toLowerCase()))
               )
             )
             .map(session => ({
@@ -1707,10 +1708,10 @@ export default function PatientDashboard() {
                     />
                     <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
                       <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
-                        {withDoctorPrefix(item.doctor_name || 'Unknown')}
+                        {item.reason || 'General Checkup'}
                       </Text>
                       <Text style={{ fontSize: 16, color: '#222' }} numberOfLines={1}>
-                        Ended Session
+                        {withDoctorPrefix(item.doctor_name || 'Unknown')}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                         <Text style={{ fontSize: 14, color: '#4CAF50', marginRight: 8 }}>

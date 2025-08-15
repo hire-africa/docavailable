@@ -5,6 +5,7 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    Image,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -14,6 +15,7 @@ import {
     View
 } from 'react-native';
 import { apiService } from '../../../app/services/apiService';
+import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SubscriptionModal from '../../../components/SubscriptionModal';
 import { Colors } from '../../../constants/Colors';
@@ -51,6 +53,7 @@ export default function DoctorProfilePage() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
   const [currentSubscription, setCurrentSubscription] = useState<any>(null);
 
   useEffect(() => {
@@ -127,14 +130,25 @@ export default function DoctorProfilePage() {
       return;
     }
     
+    // Show the direct booking modal instead of directly calling the API
+    setShowDirectBookingModal(true);
+  };
+
+  const handleDirectBookingConfirm = async (reason: string) => {
+    if (!doctor || !userData) return;
+    
     try {
-      // Start text session
+      // Start text session with reason
       const response = await apiService.post('/text-sessions/start', {
-        doctor_id: doctor.id
+        doctor_id: doctor.id,
+        reason: reason
       });
       
       if (response.success && response.data) {
         const sessionData = response.data as any;
+        
+        // Close the modal
+        setShowDirectBookingModal(false);
         
         // Show success message
         Alert.alert(
@@ -356,6 +370,14 @@ export default function DoctorProfilePage() {
         visible={showSubscriptionModal}
         onClose={handleCloseSubscriptionModal}
         onBuySessions={handleBuySessions}
+      />
+
+      {/* Direct Booking Modal */}
+      <DirectBookingModal
+        visible={showDirectBookingModal}
+        onClose={() => setShowDirectBookingModal(false)}
+        onConfirm={handleDirectBookingConfirm}
+        doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
       />
     </SafeAreaView>
   );
