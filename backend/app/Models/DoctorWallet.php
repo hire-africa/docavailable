@@ -38,36 +38,54 @@ class DoctorWallet extends Model
      */
     public function credit(float $amount, string $description, ?string $sessionType = null, ?int $sessionId = null, ?string $sessionTable = null, ?array $metadata = null): WalletTransaction
     {
-        return DB::transaction(function () use ($amount, $description, $sessionType, $sessionId, $sessionTable, $metadata) {
-            // Extract payment transaction ID and gateway from metadata
-            $paymentTransactionId = $metadata['payment_transaction_id'] ?? null;
-            $paymentGateway = $metadata['payment_gateway'] ?? null;
-            
-            // Remove payment fields from metadata to avoid duplication
-            $cleanMetadata = $metadata;
-            unset($cleanMetadata['payment_transaction_id'], $cleanMetadata['payment_gateway']);
-            
-            // Create transaction record
-            $transaction = WalletTransaction::create([
-                'doctor_id' => $this->doctor_id,
-                'type' => 'credit',
-                'amount' => $amount,
-                'description' => $description,
-                'session_type' => $sessionType,
-                'session_id' => $sessionId,
-                'session_table' => $sessionTable,
-                'metadata' => $cleanMetadata,
-                'payment_transaction_id' => $paymentTransactionId,
-                'payment_gateway' => $paymentGateway,
-                'payment_status' => 'completed',
-            ]);
+        // Reset any aborted transactions first
+        try {
+            DB::statement('ROLLBACK');
+        } catch (Exception $e) {
+            // Ignore rollback errors
+        }
 
-            // Update wallet balance
-            $this->increment('balance', $amount);
-            $this->increment('total_earned', $amount);
+        // Extract payment transaction ID and gateway from metadata
+        $paymentTransactionId = $metadata['payment_transaction_id'] ?? null;
+        $paymentGateway = $metadata['payment_gateway'] ?? null;
+        
+        // Remove payment fields from metadata to avoid duplication
+        $cleanMetadata = $metadata;
+        unset($cleanMetadata['payment_transaction_id'], $cleanMetadata['payment_gateway']);
+        
+        // Create transaction record using raw SQL
+        $transactionId = DB::select("
+            INSERT INTO wallet_transactions (doctor_id, type, amount, description, session_type, session_id, session_table, metadata, payment_transaction_id, payment_gateway, payment_status, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            RETURNING id
+        ", [
+            $this->doctor_id,
+            'credit',
+            $amount,
+            $description,
+            $sessionType,
+            $sessionId,
+            $sessionTable,
+            json_encode($cleanMetadata),
+            $paymentTransactionId,
+            $paymentGateway,
+            'completed',
+            now(),
+            now()
+        ])[0]->id;
 
-            return $transaction;
-        });
+        // Update wallet balance using raw SQL
+        DB::update("
+            UPDATE doctor_wallets 
+            SET balance = balance + ?, total_earned = total_earned + ?, updated_at = ? 
+            WHERE id = ?
+        ", [$amount, $amount, now(), $this->id]);
+
+        // Refresh the model
+        $this->refresh();
+
+        // Return the transaction
+        return WalletTransaction::find($transactionId);
     }
 
     /**

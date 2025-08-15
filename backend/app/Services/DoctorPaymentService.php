@@ -36,7 +36,7 @@ class DoctorPaymentService
     /**
      * Get payment amount for session type based on doctor's country
      */
-    private static function getPaymentAmountForDoctor(string $sessionType, User $doctor): float
+    public static function getPaymentAmountForDoctor(string $sessionType, User $doctor): float
     {
         $rates = self::getPaymentRates($doctor);
         return $rates[$sessionType] ?? $rates['text'];
@@ -45,7 +45,7 @@ class DoctorPaymentService
     /**
      * Get currency for doctor based on country
      */
-    private static function getCurrency(User $doctor): string
+    public static function getCurrency(User $doctor): string
     {
         $country = strtolower($doctor->country ?? '');
         return $country === 'malawi' ? 'MWK' : 'USD';

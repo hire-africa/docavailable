@@ -105,6 +105,13 @@ class TextSessionController extends Controller
                 RETURNING id
             ", [$chatRoomName, 'text_session', now(), now()])[0]->id;
 
+            // Update the text session with the chat_id
+            DB::update("
+                UPDATE text_sessions 
+                SET chat_id = ? 
+                WHERE id = ?
+            ", [$chatRoom, $textSessionId]);
+
             // Add participants to chat room using raw SQL
             DB::insert("
                 INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
