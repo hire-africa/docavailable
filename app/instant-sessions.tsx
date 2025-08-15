@@ -118,23 +118,9 @@ export default function InstantSessionsScreen() {
       if (response.ok) {
         setActiveSession(data.data);
         setShowDirectBookingModal(false);
-        Alert.alert(
-          'Session Started!',
-          `You can now send one message to Dr. ${data.data.doctor.name}. The doctor will respond within 90 seconds.`,
-          [
-            {
-              text: 'Go to Chat',
-              onPress: () => {
-                const chatId = `text_session_${data.data.session_id}`;
-                router.push(`/chat/${chatId}`);
-              },
-            },
-            {
-              text: 'Stay Here',
-              style: 'cancel',
-            },
-          ]
-        );
+        // Navigate directly to chat without showing alert
+        const chatId = `text_session_${data.data.session_id}`;
+        router.push(`/chat/${chatId}`);
       } else {
         // Handle specific error cases
         if (response.status === 400 && data.message?.includes('already have an active session')) {
