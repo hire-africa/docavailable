@@ -25,18 +25,33 @@ interface Doctor {
 }
 
 interface SessionInfo {
-  session_id: number;
+  id: number;
+  patient_id: number;
+  doctor_id: number;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  last_activity_at: string;
+  sessions_used: number;
+  sessions_remaining_before_start: number;
+  reason: string | null;
+  chat_id: number | null;
+  created_at: string;
+  updated_at: string;
   doctor: {
     id: number;
-    name: string;
+    first_name: string;
+    last_name: string;
     specialization: string;
-    response_time: number;
+    years_of_experience: number;
+    professional_bio: string;
+    last_online_at: string;
   };
-  session_info: {
-    started_at: string;
-    total_duration_minutes: number;
-    sessions_used: number;
-    sessions_remaining: number;
+  patient: {
+    id: number;
+    first_name: string;
+    last_name: string;
+    email: string;
   };
 }
 
@@ -73,7 +88,7 @@ export default function InstantSessionsScreen() {
 
   const checkActiveSession = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/active`, {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/active-sessions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -82,7 +97,9 @@ export default function InstantSessionsScreen() {
 
       if (response.ok) {
         const data = await response.json();
-        setActiveSession(data.data);
+        // Get the first active session if any exist
+        const activeSessionData = data.data && data.data.length > 0 ? data.data[0] : null;
+        setActiveSession(activeSessionData);
       } else if (response.status === 404) {
         setActiveSession(null);
       }
@@ -199,16 +216,16 @@ export default function InstantSessionsScreen() {
                               <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
               <Text style={styles.activeSessionTitle}>Active Session</Text>
             </View>
-            <Text style={styles.activeSessionText}>
-              You are currently in a session with Dr. {activeSession.doctor.name}
-            </Text>
-            <Text style={styles.activeSessionText}>
-              Remaining time: {activeSession.session_info.total_duration_minutes} minutes
-            </Text>
-            <TouchableOpacity
-              style={styles.goToChatButton}
-              onPress={() => router.push(`/chat/${activeSession.session_id}`)}
-            >
+                         <Text style={styles.activeSessionText}>
+               You are currently in a session with Dr. {activeSession.doctor.first_name} {activeSession.doctor.last_name}
+             </Text>
+             <Text style={styles.activeSessionText}>
+               Started: {new Date(activeSession.started_at).toLocaleString()}
+             </Text>
+             <TouchableOpacity
+               style={styles.goToChatButton}
+               onPress={() => router.push(`/chat/text_session_${activeSession.id}`)}
+             >
               <Text style={styles.goToChatButtonText}>Continue Chat</Text>
             </TouchableOpacity>
           </View>
