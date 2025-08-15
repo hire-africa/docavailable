@@ -44,6 +44,8 @@ class SessionService {
   async endSession(sessionId: string, sessionType: 'text' | 'appointment' = 'text'): Promise<{
     status: string;
     sessionsUsed: number;
+    sessionData?: any;
+    paymentData?: any;
   }> {
     try {
       let endpoint;
@@ -64,9 +66,24 @@ class SessionService {
       
       // Handle different response formats
       if (sessionType === 'text') {
-        // Text session response format - check if it has the expected structure
-        if (response.data && response.data.success) {
-          console.log('🔍 Text session ended successfully');
+        // New text session response format with payment_processing and session objects
+        if (response.data && response.data.payment_processing && response.data.session) {
+          console.log('🔍 Text session ended successfully with new format');
+          const paymentProcessing = response.data.payment_processing;
+          const session = response.data.session;
+          
+          // Check if payment processing was successful
+          const paymentSuccess = paymentProcessing.doctor_payment_success && paymentProcessing.patient_deduction_success;
+          
+          return {
+            status: paymentSuccess ? 'success' : 'success_with_warnings',
+            sessionsUsed: paymentProcessing.patient_sessions_deducted || 1,
+            sessionData: session,
+            paymentData: paymentProcessing
+          };
+        } else if (response.data && response.data.success) {
+          // Fallback for old format
+          console.log('🔍 Text session ended successfully (old format)');
           return {
             status: 'success',
             sessionsUsed: 1
