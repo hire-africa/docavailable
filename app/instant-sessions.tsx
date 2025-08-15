@@ -192,125 +192,127 @@ export default function InstantSessionsScreen() {
     );
   }
 
-  return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>Instant Text Sessions</Text>
-        <Text style={styles.subtitle}>
-          Connect with online doctors instantly
-        </Text>
-      </View>
-
-      {activeSession && (
-        <View style={styles.activeSessionCard}>
-          <View style={styles.activeSessionHeader}>
-                            <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
-            <Text style={styles.activeSessionTitle}>Active Session</Text>
-          </View>
-          <Text style={styles.activeSessionText}>
-            You are currently in a session with Dr. {activeSession.doctor.name}
+    return (
+    <>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Instant Text Sessions</Text>
+          <Text style={styles.subtitle}>
+            Connect with online doctors instantly
           </Text>
-          <Text style={styles.activeSessionText}>
-            Remaining time: {activeSession.session_info.total_duration_minutes} minutes
-          </Text>
-          <TouchableOpacity
-            style={styles.goToChatButton}
-            onPress={() => router.push(`/chat/${activeSession.session_id}`)}
-          >
-            <Text style={styles.goToChatButtonText}>Continue Chat</Text>
-          </TouchableOpacity>
         </View>
-      )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Available Doctors</Text>
-        {doctors.length === 0 ? (
-          <View style={styles.emptyState}>
-                            <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
-            <Text style={styles.emptyStateText}>No doctors available right now</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Check back later or try again in a few minutes
-            </Text>
-          </View>
-        ) : (
-          doctors.map((doctor) => (
-            <View key={doctor.id} style={styles.doctorCard}>
-              <View style={styles.doctorInfo}>
-                <View style={styles.doctorHeader}>
-                  <Text style={styles.doctorName}>
-                    Dr. {doctor.first_name} {doctor.last_name}
-                  </Text>
-                  <View style={styles.onlineIndicator}>
-                    <View style={styles.onlineDot} />
-                    <Text style={styles.onlineText}>Online</Text>
-                  </View>
-                </View>
-                <Text style={styles.doctorSpecialization}>
-                  {doctor.specialization}
-                </Text>
-                <Text style={styles.doctorExperience}>
-                  {doctor.years_of_experience} years of experience
-                </Text>
-                {doctor.professional_bio && (
-                  <Text style={styles.doctorBio} numberOfLines={2}>
-                    {doctor.professional_bio}
-                  </Text>
-                )}
-                <Text style={styles.lastSeen}>
-                  Last seen: {new Date(doctor.last_online_at).toLocaleTimeString()}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.startSessionButton,
-                  startingSession && styles.startSessionButtonDisabled,
-                ]}
-                onPress={() => handleStartSession(doctor)}
-                disabled={startingSession}
-              >
-                {startingSession ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 20, color: "#4CAF50" }}>💬</Text>
-                    <Text style={styles.startSessionButtonText}>Start Session</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+        {activeSession && (
+          <View style={styles.activeSessionCard}>
+            <View style={styles.activeSessionHeader}>
+                              <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
+              <Text style={styles.activeSessionTitle}>Active Session</Text>
             </View>
-          ))
+            <Text style={styles.activeSessionText}>
+              You are currently in a session with Dr. {activeSession.doctor.name}
+            </Text>
+            <Text style={styles.activeSessionText}>
+              Remaining time: {activeSession.session_info.total_duration_minutes} minutes
+            </Text>
+            <TouchableOpacity
+              style={styles.goToChatButton}
+              onPress={() => router.push(`/chat/${activeSession.session_id}`)}
+            >
+              <Text style={styles.goToChatButtonText}>Continue Chat</Text>
+            </TouchableOpacity>
+          </View>
         )}
-      </View>
 
-      <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>How it works:</Text>
-                 <View style={styles.infoItem}>
-                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
-           <Text style={styles.infoText}>Each session is 10 minutes long</Text>
-         </View>
-         <View style={styles.infoItem}>
-                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
-           <Text style={styles.infoText}>Doctors respond within 2 minutes</Text>
-         </View>
-         <View style={styles.infoItem}>
-                               <Text style={{ fontSize: 20, color: "#4CAF50" }}>💳</Text>
-           <Text style={styles.infoText}>Uses your subscription text sessions</Text>
-         </View>
-      </View>
-    </ScrollView>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Available Doctors</Text>
+          {doctors.length === 0 ? (
+            <View style={styles.emptyState}>
+                              <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
+              <Text style={styles.emptyStateText}>No doctors available right now</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Check back later or try again in a few minutes
+              </Text>
+            </View>
+          ) : (
+            doctors.map((doctor) => (
+              <View key={doctor.id} style={styles.doctorCard}>
+                <View style={styles.doctorInfo}>
+                  <View style={styles.doctorHeader}>
+                    <Text style={styles.doctorName}>
+                      Dr. {doctor.first_name} {doctor.last_name}
+                    </Text>
+                    <View style={styles.onlineIndicator}>
+                      <View style={styles.onlineDot} />
+                      <Text style={styles.onlineText}>Online</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.doctorSpecialization}>
+                    {doctor.specialization}
+                  </Text>
+                  <Text style={styles.doctorExperience}>
+                    {doctor.years_of_experience} years of experience
+                  </Text>
+                  {doctor.professional_bio && (
+                    <Text style={styles.doctorBio} numberOfLines={2}>
+                      {doctor.professional_bio}
+                    </Text>
+                  )}
+                  <Text style={styles.lastSeen}>
+                    Last seen: {new Date(doctor.last_online_at).toLocaleTimeString()}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.startSessionButton,
+                    startingSession && styles.startSessionButtonDisabled,
+                  ]}
+                  onPress={() => handleStartSession(doctor)}
+                  disabled={startingSession}
+                >
+                  {startingSession ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <>
+                      <Text style={{ fontSize: 20, color: "#4CAF50" }}>💬</Text>
+                      <Text style={styles.startSessionButtonText}>Start Session</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
 
-    <DirectBookingModal
-      visible={showDirectBookingModal}
-      onClose={() => setShowDirectBookingModal(false)}
-      onConfirm={startSession}
-      doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
-      loading={startingSession}
-    />
+        <View style={styles.infoSection}>
+          <Text style={styles.infoTitle}>How it works:</Text>
+                   <View style={styles.infoItem}>
+                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
+            <Text style={styles.infoText}>Each session is 10 minutes long</Text>
+          </View>
+          <View style={styles.infoItem}>
+                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
+            <Text style={styles.infoText}>Doctors respond within 2 minutes</Text>
+          </View>
+          <View style={styles.infoItem}>
+                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>💳</Text>
+            <Text style={styles.infoText}>Uses your subscription text sessions</Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      <DirectBookingModal
+        visible={showDirectBookingModal}
+        onClose={() => setShowDirectBookingModal(false)}
+        onConfirm={startSession}
+        doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
+        loading={startingSession}
+      />
+    </>
   );
 }
 
