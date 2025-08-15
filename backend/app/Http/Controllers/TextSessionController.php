@@ -156,11 +156,14 @@ class TextSessionController extends Controller
     public function activeSessions(Request $request): JsonResponse
     {
         try {
+            // Clear any cached query plans to handle schema changes
+            DB::statement('DISCARD PLANS');
+            
             $userId = auth()->id();
             $userType = auth()->user()->user_type;
 
             $query = TextSession::with(['patient', 'doctor'])
-                ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR]);
+                ->whereIn('status', ['active', 'waiting_for_doctor']);
 
             if ($userType === 'doctor') {
                 $query->where('doctor_id', $userId);
