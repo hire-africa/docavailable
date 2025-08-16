@@ -289,7 +289,7 @@ class ImageCacheService {
       // If it's a relative path like "profile_pictures/abc.jpg", turn into full /api/images URL
       if (!/^https?:\/\//i.test(url)) {
         const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
-        return `https://docavailable-1.onrender.com/api/images/${this.appendMediumIfProfilePicture(clean)}`;
+        return `https://docavailable-5.onrender.com/api/images/${this.appendMediumIfProfilePicture(clean)}`;
       }
 
       // Convert any /storage/... to /api/images/...
@@ -305,12 +305,12 @@ class ImageCacheService {
 
       // If the path refers to profile_pictures, ensure _medium suffix
       const normalizedPath = this.appendMediumIfProfilePicture(path);
-      return `https://docavailable-1.onrender.com/api/images/${normalizedPath}`;
+      return `https://docavailable-5.onrender.com/api/images/${normalizedPath}`;
     } catch (_e) {
       // If URL parsing fails, fall back to heuristic
       const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
       const normalizedPath = this.appendMediumIfProfilePicture(clean.replace(/^\/+/, ''));
-      return `https://docavailable-1.onrender.com/api/images/${normalizedPath}`;
+      return `https://docavailable-5.onrender.com/api/images/${normalizedPath}`;
     }
   }
 
@@ -319,7 +319,7 @@ class ImageCacheService {
     try {
       if (!/^https?:\/\//i.test(url)) {
         const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
-        return `https://docavailable-1.onrender.com/api/images/${clean}`;
+        return `https://docavailable-5.onrender.com/api/images/${clean}`;
       }
       const parsed = new URL(url);
       let path = parsed.pathname;
@@ -330,10 +330,10 @@ class ImageCacheService {
       } else if (path.startsWith('/')) {
         path = path.substring(1);
       }
-      return `https://docavailable-1.onrender.com/api/images/${path}`;
+      return `https://docavailable-5.onrender.com/api/images/${path}`;
     } catch (_e) {
       const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
-      return `https://docavailable-1.onrender.com/api/images/${clean.replace(/^\/+/, '')}`;
+      return `https://docavailable-5.onrender.com/api/images/${clean.replace(/^\/+/, '')}`;
     }
   }
 

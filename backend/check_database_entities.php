@@ -5,7 +5,7 @@ echo "Checking database entities...\n";
 
 // Test 1: Check if plan_id=1 exists
 echo "\n=== Test 1: Check Plan ID 1 ===\n";
-$planUrl = 'https://docavailable-1.onrender.com/api/admin/plans/1';
+$planUrl = 'https://docavailable-5.onrender.com/api/admin/plans/1';
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $planUrl);
@@ -38,7 +38,7 @@ if ($httpCode === 401) {
 
 // Test 2: Check if user_id=1 exists
 echo "\n=== Test 2: Check User ID 1 ===\n";
-$userUrl = 'https://docavailable-1.onrender.com/api/admin/users/1';
+$userUrl = 'https://docavailable-5.onrender.com/api/admin/users/1';
 
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, $userUrl);

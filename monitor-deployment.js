@@ -1,6 +1,6 @@
 const https = require('https');
 
-const BACKEND_URL = 'https://docavailable-1.onrender.com';
+const BACKEND_URL = 'https://docavailable-5.onrender.com';
 const CHECK_INTERVAL = 5000; // 5 seconds
 const MAX_CHECKS = 30; // 2.5 minutes total
 let checkCount = 0;

@@ -49,7 +49,7 @@ if (!empty($missingVars)) {
 
 // Check webhook URL configuration
 echo "\n2. Checking Webhook URL Configuration:\n";
-$webhookUrl = 'https://docavailable-1.onrender.com/api/payments/webhook';
+$webhookUrl = 'https://docavailable-5.onrender.com/api/payments/webhook';
 echo "Webhook URL: $webhookUrl\n";
 
 // Test webhook endpoint accessibility

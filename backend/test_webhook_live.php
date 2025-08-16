@@ -3,7 +3,7 @@
 echo "=== Testing Live Server Endpoints ===\n\n";
 
 // Test 1: Basic server response
-$url1 = 'https://docavailable-1.onrender.com/';
+$url1 = 'https://docavailable-5.onrender.com/';
 echo "1. Testing root endpoint: $url1\n";
 $response1 = file_get_contents($url1);
 $httpCode1 = $http_response_header[0] ?? 'Unknown';
@@ -11,7 +11,7 @@ echo "HTTP Code: " . (strpos($httpCode1, '200') !== false ? '200' : 'Error') . "
 echo "Response: " . substr($response1, 0, 100) . "...\n\n";
 
 // Test 2: Health check endpoint
-$url2 = 'https://docavailable-1.onrender.com/api/health';
+$url2 = 'https://docavailable-5.onrender.com/api/health';
 echo "2. Testing health endpoint: $url2\n";
 $response2 = file_get_contents($url2);
 $httpCode2 = $http_response_header[0] ?? 'Unknown';
@@ -19,11 +19,11 @@ echo "HTTP Code: " . (strpos($httpCode2, '200') !== false ? '200' : 'Error') . "
 echo "Response: " . substr($response2, 0, 200) . "...\n\n";
 
 // Test 3: Payment webhook endpoint (correct path)
-$url3 = 'https://docavailable-1.onrender.com/api/payments/webhook';
+$url3 = 'https://docavailable-5.onrender.com/api/payments/webhook';
 echo "3. Testing payment webhook: $url3\n";
 
 // Updated PayChangu keys
-$webhookSecret = 'https://docavailable-1.onrender.com/api/payments/webhook';
+$webhookSecret = 'https://docavailable-5.onrender.com/api/payments/webhook';
 
 $webhookData = [
     'event_type' => 'checkout.payment',
@@ -77,7 +77,7 @@ echo "HTTP Code: " . (strpos($httpCode3, '200') !== false ? '200' : (strpos($htt
 echo "Response: " . $response3 . "\n\n";
 
 // Test 4: Test webhook endpoint
-$url4 = 'https://docavailable-1.onrender.com/api/payments/test-webhook';
+$url4 = 'https://docavailable-5.onrender.com/api/payments/test-webhook';
 echo "4. Testing test webhook endpoint: $url4\n";
 
 $context4 = stream_context_create([

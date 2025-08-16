@@ -57,7 +57,7 @@ class AuthService {
 
   constructor() {
     // Get base URL without /api suffix
-    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_LARAVEL_API_URL || 'https://docavailable-1.onrender.com';
+    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_LARAVEL_API_URL || 'https://docavailable-5.onrender.com';
     
     // Remove trailing /api if it exists to avoid double /api/api/
     this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL.slice(0, -4) : rawBaseURL;
@@ -65,7 +65,7 @@ class AuthService {
     console.log('AuthService: Initialized with base URL:', this.baseURL);
     
     // Check if we're in a web environment and using localhost
-    if (typeof window !== 'undefined' && this.baseURL.includes('docavailable-1.onrender.com')) {
+    if (typeof window !== 'undefined' && this.baseURL.includes('docavailable-5.onrender.com')) {
       console.log('AuthService: Using live backend URL');
     }
     

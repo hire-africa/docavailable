@@ -1,7 +1,7 @@
 const https = require('https');
 
 const testBackend = async () => {
-  const baseURL = 'https://docavailable-1.onrender.com';
+  const baseURL = 'https://docavailable-5.onrender.com';
   
   console.log('Testing backend health...');
   

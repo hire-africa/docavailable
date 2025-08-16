@@ -4,7 +4,7 @@ const https = require('https');
 console.log('🧪 Testing API Service Configuration...\n');
 
 // Simulate the API service base URL
-const baseURL = 'https://docavailable-1.onrender.com/api';
+const baseURL = 'https://docavailable-5.onrender.com/api';
 
 console.log(`📍 API Base URL: ${baseURL}`);
 
@@ -30,7 +30,7 @@ testEndpoints.forEach((endpoint, index) => {
     console.log(`   Method: ${endpoint.method}`);
     
     const options = {
-      hostname: 'docavailable-1.onrender.com',
+      hostname: 'docavailable-5.onrender.com',
       port: 443,
       path: `/api${endpoint.path}`,
       method: endpoint.method,

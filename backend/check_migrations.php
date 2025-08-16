@@ -3,7 +3,7 @@
 echo "🔍 Checking migration status in production...\n\n";
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/debug/migrations');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/debug/migrations');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
 

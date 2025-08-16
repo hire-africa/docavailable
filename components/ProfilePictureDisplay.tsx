@@ -50,7 +50,7 @@ const ProfilePictureDisplay: React.FC<ProfilePictureDisplayProps> = ({
             return uri;
         }
         // Use the image serving route - will show placeholder if not accessible
-        return `https://docavailable-1.onrender.com/api/images/${uri}`;
+        return `https://docavailable-5.onrender.com/api/images/${uri}`;
     };
 
     // Use profilePictureUrl if available (it's already a full URL from backend)

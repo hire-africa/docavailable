@@ -172,24 +172,51 @@ class TextSessionController extends Controller
                 ], 404);
             }
             
-            $now = now();
-            $startedAt = $session->started_at;
-            $elapsedSeconds = $startedAt->diffInSeconds($now);
-            $timeRemaining = max(0, 90 - $elapsedSeconds);
-            
             // Check if session has expired waiting for doctor
-            if ($timeRemaining <= 0 && $session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
-                // Auto-expire the session
-                $session->update([
-                    'status' => TextSession::STATUS_EXPIRED,
-                    'ended_at' => now()
-                ]);
+            if ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
+                // If doctor_response_deadline is not set, patient hasn't sent first message yet
+                if (!$session->doctor_response_deadline) {
+                    return response()->json([
+                        'success' => true,
+                        'status' => 'waiting',
+                        'timeRemaining' => null, // No timer started yet
+                        'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
+                        'remainingSessions' => $session->getRemainingSessions(),
+                        'message' => 'Waiting for patient to send first message'
+                    ]);
+                }
+                
+                // Use doctor_response_deadline to calculate remaining time
+                $currentTime = now();
+                $deadline = $session->doctor_response_deadline;
+                
+                // Calculate time remaining using timestamp comparison
+                $currentTimestamp = $currentTime->timestamp;
+                $deadlineTimestamp = $deadline->timestamp;
+                $timeRemaining = max(0, $deadlineTimestamp - $currentTimestamp);
+                
+                if ($timeRemaining <= 0) {
+                    // Auto-expire the session
+                    $session->update([
+                        'status' => TextSession::STATUS_EXPIRED,
+                        'ended_at' => now()
+                    ]);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'status' => 'expired',
+                        'timeRemaining' => 0,
+                        'message' => 'Session expired - no session will be deducted'
+                    ]);
+                }
                 
                 return response()->json([
                     'success' => true,
-                    'status' => 'expired',
-                    'timeRemaining' => 0,
-                    'message' => 'Session expired - no session will be deducted'
+                    'status' => 'waiting',
+                    'timeRemaining' => $timeRemaining,
+                    'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
+                    'remainingSessions' => $session->getRemainingSessions(),
+                    'message' => 'Waiting for doctor response'
                 ]);
             }
             
@@ -209,13 +236,14 @@ class TextSessionController extends Controller
                 ]);
             }
             
+            // Session is active and has time remaining
             return response()->json([
                 'success' => true,
-                'status' => $timeRemaining > 0 ? 'waiting' : 'active',
-                'timeRemaining' => $timeRemaining,
+                'status' => 'active',
+                'timeRemaining' => 0, // No time limit for active sessions
                 'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
                 'remainingSessions' => $session->getRemainingSessions(),
-                'message' => $timeRemaining > 0 ? 'Waiting for doctor response' : 'Session is active'
+                'message' => 'Session is active'
             ]);
             
         } catch (\Exception $e) {

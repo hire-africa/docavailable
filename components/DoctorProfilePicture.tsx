@@ -44,7 +44,7 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
     cleanUri = cleanUri.replace(/^\/+/, ''); // Remove leading slashes
     
       // Use the image serving route - will show placeholder if not accessible
-  return `https://docavailable-1.onrender.com/api/images/${cleanUri}`;
+      return `https://docavailable-5.onrender.com/api/images/${cleanUri}`;
   };
 
   // Determine which image to use (priority: profilePictureUrl > profilePicture > imageUrl)

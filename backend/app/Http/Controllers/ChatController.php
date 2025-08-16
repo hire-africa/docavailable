@@ -304,23 +304,40 @@ class ChatController extends Controller
         // Update chat room keys for tracking
         $this->messageStorageService->updateChatRoomKeys($appointmentId);
         
-        // Handle text session doctor reply detection
+        // Handle text session logic
         if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
             $sessionId = str_replace('text_session_', '', $appointmentId);
             $session = \App\Models\TextSession::find($sessionId);
             
-            if ($session && $session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR) {
-                // Check if this is the first doctor message
-                $doctorMessages = $this->messageStorageService->getMessages($appointmentId)
-                    ->filter(function($msg) use ($session) {
-                        return $msg['sender_id'] == $session->doctor_id;
-                    });
-                    
-                if ($doctorMessages->count() === 1) { // First doctor message
-                    $session->update([
-                        'status' => \App\Models\TextSession::STATUS_ACTIVE,
-                        'activated_at' => now()
-                    ]);
+            if ($session) {
+                // Check if this is the first patient message (to start the 90-second timer)
+                if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->patient_id) {
+                    $patientMessages = $this->messageStorageService->getMessages($appointmentId)
+                        ->filter(function($msg) use ($session) {
+                            return $msg['sender_id'] == $session->patient_id;
+                        });
+                        
+                    if ($patientMessages->count() === 1) { // First patient message
+                        // Set the 90-second deadline for doctor response
+                        $session->update([
+                            'doctor_response_deadline' => now()->addSeconds(90)
+                        ]);
+                    }
+                }
+                
+                // Check if this is the first doctor message (to activate the session)
+                if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->doctor_id) {
+                    $doctorMessages = $this->messageStorageService->getMessages($appointmentId)
+                        ->filter(function($msg) use ($session) {
+                            return $msg['sender_id'] == $session->doctor_id;
+                        });
+                        
+                    if ($doctorMessages->count() === 1) { // First doctor message
+                        $session->update([
+                            'status' => \App\Models\TextSession::STATUS_ACTIVE,
+                            'activated_at' => now()
+                        ]);
+                    }
                 }
             }
         }

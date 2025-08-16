@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 // Replace with your actual Render URL
-const BASE_URL = 'https://docavailable-1.onrender.com/api';
+const BASE_URL = 'https://docavailable-5.onrender.com/api';
 
 // Test users from the seeder
 const testUsers = [

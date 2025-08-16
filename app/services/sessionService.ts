@@ -30,11 +30,27 @@ class SessionService {
     message?: string;
   }> {
     try {
+      console.log('🔍 [SessionService] Checking doctor response for session:', sessionId);
+      
       const response = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+      
+      // Add proper error checking
+      if (!response || !response.data) {
+        console.error('Invalid response from checkDoctorResponse API');
+        return { status: 'error', message: 'Invalid response from server' };
+      }
+      
+      // Check if the API response indicates an error
+      if (response.data.success === false) {
+        console.error('API returned error:', response.data.message);
+        return { status: 'error', message: response.data.message || 'API error' };
+      }
+      
+      console.log('🔍 [SessionService] Response received:', response.data);
       return response.data;
     } catch (error) {
       console.error('Error checking doctor response:', error);
-      return { status: 'error' };
+      return { status: 'error', message: 'Failed to check session status' };
     }
   }
 

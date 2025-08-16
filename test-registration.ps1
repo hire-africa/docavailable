@@ -12,7 +12,7 @@ $body = @{
 } | ConvertTo-Json
 
 try {
-    $response = Invoke-WebRequest -Uri "https://docavailable-1.onrender.com/api/register" -Method POST -Headers $headers -Body $body
+    $response = Invoke-WebRequest -Uri "https://docavailable-5.onrender.com/api/register" -Method POST -Headers $headers -Body $body
     Write-Host "Status: $($response.StatusCode)"
     Write-Host "Response: $($response.Content)"
 } catch {

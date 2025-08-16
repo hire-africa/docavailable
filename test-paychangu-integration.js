@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BACKEND_URL = 'https://docavailable-1.onrender.com';
+const BACKEND_URL = 'https://docavailable-5.onrender.com';
 
 async function testPayChanguIntegration() {
     console.log('🧪 Testing PayChangu Integration...\n');

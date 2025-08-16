@@ -3,7 +3,7 @@
 echo "🔍 Checking subscription table structure...\n\n";
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/debug/table-structure');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/debug/table-structure');
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
     'table' => 'subscriptions',
@@ -27,7 +27,7 @@ print_r($data);
 echo "\n🔍 Attempting direct subscription creation...\n";
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/subscriptions');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/subscriptions');
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
     'user_id' => 11,

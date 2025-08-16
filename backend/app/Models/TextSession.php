@@ -31,6 +31,8 @@ class TextSession extends Model
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
         'last_activity_at' => 'datetime',
+        'doctor_response_deadline' => 'datetime',
+        'activated_at' => 'datetime',
     ];
 
     // Status constants

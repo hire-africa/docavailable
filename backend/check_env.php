@@ -3,7 +3,7 @@
 echo "🔍 Checking environment configuration...\n\n";
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/health');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/health');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Accept: application/json'
@@ -38,7 +38,7 @@ $testData = [
 ];
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/payments/test-webhook');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/payments/test-webhook');
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($testData));
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

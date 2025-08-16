@@ -1,11 +1,11 @@
 const https = require('https');
 
-const BACKEND_URL = 'https://docavailable-1.onrender.com';
+const BACKEND_URL = 'https://docavailable-5.onrender.com';
 
 function makeRequest(path, method = 'GET') {
     return new Promise((resolve, reject) => {
         const options = {
-            hostname: 'docavailable-1.onrender.com',
+            hostname: 'docavailable-5.onrender.com',
             port: 443,
             path: path,
             method: method,

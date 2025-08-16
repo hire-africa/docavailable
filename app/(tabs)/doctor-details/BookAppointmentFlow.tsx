@@ -120,7 +120,7 @@ export default function BookAppointmentFlow() {
     if (clean.startsWith('/storage/')) clean = clean.substring('/storage/'.length);
     if (clean.startsWith('storage/')) clean = clean.substring('storage/'.length);
     clean = clean.replace(/^\/+/, '');
-    return `https://docavailable-1.onrender.com/api/images/${clean}`;
+    return `https://docavailable-5.onrender.com/api/images/${clean}`;
   };
 
   // Load subscription: prefer param; fallback to API
@@ -621,8 +621,8 @@ export default function BookAppointmentFlow() {
             source={{ uri: checkoutUrl }}
             onShouldStartLoadWithRequest={(req) => {
               const url = req.url;
-              const callback = 'https://docavailable-1.onrender.com/api/payments/paychangu/callback';
-              const ret = 'https://docavailable-1.onrender.com/api/payments/paychangu/return';
+                  const callback = 'https://docavailable-5.onrender.com/api/payments/paychangu/callback';
+    const ret = 'https://docavailable-5.onrender.com/api/payments/paychangu/return';
               if (url.startsWith(callback) || url.startsWith(ret)) {
                 setCheckoutUrl(null);
                 return false;

@@ -1,7 +1,7 @@
 // Test script to verify frontend-backend connection
 const https = require('https');
 
-const BACKEND_URL = 'https://docavailable-1.onrender.com';
+const BACKEND_URL = 'https://docavailable-5.onrender.com';
 
 console.log('🔍 Testing backend connection...\n');
 
@@ -59,7 +59,7 @@ function testFrontendConfig() {
   console.log('   Checking API service configuration...');
   
   // Simulate the API service configuration
-  const baseURL = 'https://docavailable-1.onrender.com/api';
+  const baseURL = 'https://docavailable-5.onrender.com/api';
   console.log(`   Base URL: ${baseURL}`);
   
   // Test a simple GET request

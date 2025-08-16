@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'https://docavailable-1.onrender.com/api';
+const BASE_URL = 'https://docavailable-5.onrender.com/api';
 
 async function testSimpleEndpoints() {
     console.log('🔍 Testing Simple API Endpoints\n');

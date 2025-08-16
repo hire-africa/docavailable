@@ -20,8 +20,8 @@ const getEnvVar = (key, fallback) => {
 
 const environment = {
   // API Configuration
-  BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable-1.onrender.com'),
-  LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-1.onrender.com'),
+      BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable-5.onrender.com'),
+      LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-5.onrender.com'),
 };
 
 console.log('🔍 Testing Frontend Configuration...\n');

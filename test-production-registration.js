@@ -14,7 +14,7 @@ function testRegistration() {
     });
 
     const options = {
-      hostname: 'docavailable-1.onrender.com',
+      hostname: 'docavailable-5.onrender.com',
       port: 443,
       path: '/api/register',
       method: 'POST',

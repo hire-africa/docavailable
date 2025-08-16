@@ -5,7 +5,7 @@ console.log('🔍 Testing Database Connection Configuration...\n');
 function testDBConfig() {
   return new Promise((resolve, reject) => {
     const options = {
-      hostname: 'docavailable-1.onrender.com',
+      hostname: 'docavailable-5.onrender.com',
       port: 443,
       path: '/api/test-env',
       method: 'GET',

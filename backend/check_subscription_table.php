@@ -27,7 +27,7 @@ print_r($testData);
 echo "\n";
 
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/payments/webhook');
+curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/payments/webhook');
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($testData));
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -64,7 +64,7 @@ if (isset($responseData['error']) && strpos($responseData['error'], 'constraint'
     $testData['meta']['plan_id'] = 999;
     
     $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, 'https://docavailable-1.onrender.com/api/payments/webhook');
+    curl_setopt($ch, CURLOPT_URL, 'https://docavailable-5.onrender.com/api/payments/webhook');
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($testData));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

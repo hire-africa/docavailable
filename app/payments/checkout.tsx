@@ -20,8 +20,8 @@ export default function PayChanguCheckout() {
 
   const handleIntercept = useCallback(async (url: string) => {
     console.log('WebView URL intercepted:', url);
-    const callback = 'https://docavailable-1.onrender.com/api/payments/paychangu/callback';
-    const ret = 'https://docavailable-1.onrender.com/api/payments/paychangu/return';
+      const callback = 'https://docavailable-5.onrender.com/api/payments/paychangu/callback';
+  const ret = 'https://docavailable-5.onrender.com/api/payments/paychangu/return';
 
     if (url.startsWith(callback) || url.startsWith(ret)) {
       try {

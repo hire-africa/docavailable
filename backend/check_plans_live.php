@@ -3,7 +3,7 @@
 // Check plans on live backend
 echo "Checking plans on live backend...\n";
 
-$url = 'https://docavailable-1.onrender.com/api/plans';
+$url = 'https://docavailable-5.onrender.com/api/plans';
 
 echo "Requesting plans from: $url\n\n";
 

@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const LIVE_BACKEND_URL = 'https://docavailable-1.onrender.com';
+const LIVE_BACKEND_URL = 'https://docavailable-5.onrender.com';
 const LOCAL_BACKEND_URL = 'http://172.20.10.11:8000';
 
 async function verifyDeployment() {

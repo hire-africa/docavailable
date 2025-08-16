@@ -362,23 +362,81 @@ export default function ChatPage() {
     const checkSessionExpiration = async () => {
       try {
         const sessionId = appointmentId.replace('text_session_', '');
+        console.log('🔍 [Chat] Checking session expiration for session:', sessionId);
+        
         const response = await sessionService.checkDoctorResponse(sessionId);
         
-        if (response.status === 'expired' || response.status === 'ended') {
-          // Session has expired or ended automatically
-          Alert.alert(
-            'Session Ended',
-            response.message || 'Your session has ended automatically.',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  // Store messages and show rating modal
-                  handleStoreAndClose();
+        // Add null/undefined check before accessing response.status
+        if (response && (response.status === 'expired' || response.status === 'ended')) {
+          console.log('🔍 [Chat] Session expired/ended:', response.status, response.message);
+          
+          // For expired sessions, double-check after a short delay to handle race conditions
+          if (response.status === 'expired') {
+            console.log('🔍 [Chat] Double-checking expired session after 2 seconds...');
+            setTimeout(async () => {
+              try {
+                const doubleCheckResponse = await sessionService.checkDoctorResponse(sessionId);
+                console.log('🔍 [Chat] Double-check result:', doubleCheckResponse.status);
+                
+                // If session is now active, don't show expired alert
+                if (doubleCheckResponse && doubleCheckResponse.status === 'active') {
+                  console.log('🔍 [Chat] Session is now active, skipping expired alert');
+                  return;
                 }
+                
+                // If still expired, show the alert
+                if (doubleCheckResponse && (doubleCheckResponse.status === 'expired' || doubleCheckResponse.status === 'ended')) {
+                  Alert.alert(
+                    'Session Ended',
+                    doubleCheckResponse.message || 'Your session has ended automatically.',
+                    [
+                      {
+                        text: 'OK',
+                        onPress: () => {
+                          // Store messages and show rating modal
+                          handleStoreAndClose();
+                        }
+                      }
+                    ]
+                  );
+                }
+              } catch (error) {
+                console.error('Error in double-check:', error);
+                // Show the original expired alert if double-check fails
+                Alert.alert(
+                  'Session Ended',
+                  response.message || 'Your session has ended automatically.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        // Store messages and show rating modal
+                        handleStoreAndClose();
+                      }
+                    }
+                  ]
+                );
               }
-            ]
-          );
+            }, 2000); // Wait 2 seconds before double-checking
+          } else {
+            // For ended sessions (not expired), show alert immediately
+            Alert.alert(
+              'Session Ended',
+              response.message || 'Your session has ended automatically.',
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    // Store messages and show rating modal
+                    handleStoreAndClose();
+                  }
+                }
+              ]
+            );
+          }
+        } else if (response && response.status === 'error') {
+          console.log('🔍 [Chat] Session check returned error:', response.message);
+          // Don't show alert for API errors, just log them
         }
       } catch (error) {
         console.error('Error checking session expiration:', error);
