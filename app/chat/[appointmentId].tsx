@@ -349,9 +349,52 @@ export default function ChatPage() {
     //   hasChatInfo: !!chatInfo,
     //   profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
     //   profilePicture: chatInfo?.other_participant_profile_picture,
-    //   participantName: chatInfo?.other_participant_name
+    //   participantName: chatInfo?.other_participant_profile_picture_url
     // });
   }, [chatInfo]);
+
+  // Check for session expiration (auto-end) for text sessions
+  useEffect(() => {
+    if (!isTextSession || !textSessionInfo || !isAuthenticated) {
+      return;
+    }
+
+    const checkSessionExpiration = async () => {
+      try {
+        const sessionId = appointmentId.replace('text_session_', '');
+        const response = await sessionService.checkDoctorResponse(sessionId);
+        
+        if (response.status === 'expired' || response.status === 'ended') {
+          // Session has expired or ended automatically
+          Alert.alert(
+            'Session Ended',
+            response.message || 'Your session has ended automatically.',
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Store messages and show rating modal
+                  handleStoreAndClose();
+                }
+              }
+            ]
+          );
+        }
+      } catch (error) {
+        console.error('Error checking session expiration:', error);
+      }
+    };
+
+    // Check immediately when component mounts
+    checkSessionExpiration();
+
+    // Set up periodic checking every 30 seconds
+    const intervalId = setInterval(checkSessionExpiration, 30000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isTextSession, textSessionInfo, isAuthenticated, appointmentId]);
 
   // Register for message updates and start auto-sync only if authenticated
   useEffect(() => {

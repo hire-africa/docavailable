@@ -193,6 +193,27 @@ export default function PatientDashboard() {
     }
   }, [userData]);
 
+  // Auto-refresh timer for time remaining display - updates every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Force re-render to update time remaining display
+      setActiveTextSession((prev: any) => prev ? { ...prev } : null);
+      
+      // Also refresh appointments to get updated remaining time
+      if (user) {
+        appointmentService.getAppointments()
+          .then((appointmentsData) => {
+            setAppointments(appointmentsData);
+          })
+          .catch(error => {
+            console.error('Auto-refresh: Error fetching appointments:', error);
+          });
+      }
+    }, 60000); // Update every 60 seconds (1 minute)
+
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Helper function to ensure appointments is always an array
   const getSafeAppointments = () => {
     return appointments || [];
@@ -748,7 +769,7 @@ export default function PatientDashboard() {
                 doctor: appointment.doctor,
                 patient: appointment.patient,
                 status: appointment.status,
-                remaining_time_minutes: appointment.remaining_time_minutes || 30, // Use actual remaining time
+                remaining_time_minutes: appointment.remaining_time_minutes ?? 0, // Use actual remaining time
                 started_at: appointment.created_at,
                 last_activity_at: appointment.updated_at
               });
@@ -771,7 +792,7 @@ export default function PatientDashboard() {
                 doctor: activeTextSession.doctor,
                 patient: activeTextSession.patient,
                 status: activeTextSession.status,
-                remaining_time_minutes: activeTextSession.remaining_time_minutes || 30, // Use actual remaining time
+                remaining_time_minutes: activeTextSession.remaining_time_minutes ?? 0, // Use actual remaining time
                 started_at: activeTextSession.started_at,
                 last_activity_at: activeTextSession.last_activity_at
               });
@@ -802,7 +823,7 @@ export default function PatientDashboard() {
                     doctor: activeAppointment.doctor,
                     patient: activeAppointment.patient,
                     status: activeAppointment.status,
-                    remaining_time_minutes: activeAppointment.remaining_time_minutes || 30,
+                    remaining_time_minutes: activeAppointment.remaining_time_minutes ?? 0,
                     started_at: activeAppointment.created_at,
                     last_activity_at: activeAppointment.updated_at
                   });

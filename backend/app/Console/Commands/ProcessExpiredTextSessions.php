@@ -36,7 +36,7 @@ class ProcessExpiredTextSessions extends Command
 
         // Find active sessions that have run out of time
         $timeExpiredSessions = TextSession::where('status', TextSession::STATUS_ACTIVE)
-            ->whereRaw('started_at + INTERVAL (sessions_remaining_before_start * 10) MINUTE <= ?', [now()])
+            ->whereRaw('started_at + (sessions_remaining_before_start * 10 || \' minutes\')::interval <= ?', [now()])
             ->get();
 
         $allExpiredSessions = $waitingExpiredSessions->merge($timeExpiredSessions);

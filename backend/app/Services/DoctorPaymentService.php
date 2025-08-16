@@ -54,15 +54,15 @@ class DoctorPaymentService
     /**
      * Process payment for a completed text session
      */
-    public function processTextSessionPayment(TextSession $session): bool
+    public function processTextSessionPayment(TextSession $session, int $sessionsCount = 1): bool
     {
         try {
             $doctor = $session->doctor;
             $wallet = DoctorWallet::getOrCreate($doctor->id);
 
-            $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor);
+            $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $sessionsCount; // FIX: Multiply by sessions count
             $currency = self::getCurrency($doctor);
-            $description = "Payment for text session with " . $session->patient->first_name . " " . $session->patient->last_name;
+            $description = "Payment for {$sessionsCount} text session(s) with " . $session->patient->first_name . " " . $session->patient->last_name;
             
             // Get payment transaction ID from patient's subscription
             $paymentTransactionId = null;
@@ -81,7 +81,7 @@ class DoctorPaymentService
                 [
                     'patient_name' => $session->patient->first_name . " " . $session->patient->last_name,
                     'session_duration' => $session->getTotalDurationMinutes(),
-                    'sessions_used' => $session->sessions_used,
+                    'sessions_used' => $sessionsCount, // FIX: Use actual sessions count
                     'payment_transaction_id' => $paymentTransactionId,
                     'payment_gateway' => $paymentGateway,
                     'currency' => $currency,
@@ -94,6 +94,7 @@ class DoctorPaymentService
             \Log::error('Failed to process text session payment: ' . $e->getMessage(), [
                 'session_id' => $session->id,
                 'doctor_id' => $session->doctor_id,
+                'sessions_count' => $sessionsCount,
             ]);
             return false;
         }
@@ -177,8 +178,8 @@ class DoctorPaymentService
             $result['manual_deduction'] = $manualDeduction;
             $result['patient_sessions_deducted'] = $sessionsToDeduct;
             
-            // Process doctor payment
-            $doctorPaymentSuccess = $this->processTextSessionPayment($session);
+            // Process doctor payment - FIX: Pass sessions count
+            $doctorPaymentSuccess = $this->processTextSessionPayment($session, $sessionsToDeduct);
             $result['doctor_payment_success'] = $doctorPaymentSuccess;
             $result['doctor_payment_amount'] = self::getPaymentAmountForDoctor('text', $session->doctor) * $sessionsToDeduct;
 
@@ -458,7 +459,7 @@ class DoctorPaymentService
     }
 
     /**
-     * Process auto-deduction during active session
+     * Process auto-deduction during active session - FIXED VERSION
      */
     public function processAutoDeduction(TextSession $session): bool
     {
@@ -466,27 +467,38 @@ class DoctorPaymentService
             $elapsedMinutes = $session->getElapsedMinutes();
             $autoDeductions = floor($elapsedMinutes / 10);
             
-            // Check if we need to deduct sessions
-            if ($autoDeductions > 0) {
+            // FIX: Check if we've already processed these deductions
+            $alreadyProcessed = $session->auto_deductions_processed ?? 0;
+            $newDeductions = $autoDeductions - $alreadyProcessed;
+            
+            // Only process if there are new deductions to make
+            if ($newDeductions > 0) {
                 $patient = $session->patient;
                 if ($patient && $patient->subscription) {
                     $subscription = $patient->subscription;
                     
-                    // Deduct sessions
-                    $subscription->decrement('text_sessions_remaining', $autoDeductions);
+                    // Deduct only the new sessions
+                    $subscription->decrement('text_sessions_remaining', $newDeductions);
                     
-                    // Award doctor earnings
+                    // Award doctor earnings for new deductions only
                     $doctor = $session->doctor;
                     if ($doctor) {
                         $wallet = DoctorWallet::getOrCreate($doctor->id);
-                        $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $autoDeductions;
-                        $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id}");
+                        $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $newDeductions;
+                        $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id} ({$newDeductions} sessions)");
                     }
                     
-                    \Log::info("Auto-deducted {$autoDeductions} sessions", [
+                    // Update session to track processed deductions
+                    $session->update([
+                        'auto_deductions_processed' => $autoDeductions,
+                        'sessions_used' => $session->sessions_used + $newDeductions
+                    ]);
+                    
+                    \Log::info("Auto-deducted {$newDeductions} new sessions (total: {$autoDeductions})", [
                         'session_id' => $session->id,
                         'elapsed_minutes' => $elapsedMinutes,
                         'auto_deductions' => $autoDeductions,
+                        'new_deductions' => $newDeductions,
                     ]);
                     
                     return true;
@@ -495,7 +507,10 @@ class DoctorPaymentService
             
             return false;
         } catch (\Exception $e) {
-            \Log::error('Failed to process auto-deduction: ' . $e->getMessage());
+            \Log::error('Failed to process auto-deduction: ' . $e->getMessage(), [
+                'session_id' => $session->id,
+                'elapsed_minutes' => $elapsedMinutes ?? 0,
+            ]);
             return false;
         }
     }

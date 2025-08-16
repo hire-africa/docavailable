@@ -24,6 +24,7 @@ class TextSession extends Model
         'max_duration_minutes',
         'doctor_response_deadline',
         'activated_at',
+        'auto_deductions_processed',
     ];
 
     protected $casts = [
@@ -155,10 +156,14 @@ class TextSession extends Model
         // Calculate auto-deductions (every 10 minutes)
         $autoDeductions = floor($elapsedMinutes / 10);
         
+        // FIX: Don't double-count auto-deductions that were already processed
+        $alreadyProcessed = $this->auto_deductions_processed ?? 0;
+        $newAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
+        
         // Manual end always adds 1 session
         $manualDeduction = $isManualEnd ? 1 : 0;
         
-        return $autoDeductions + $manualDeduction;
+        return $newAutoDeductions + $manualDeduction;
     }
 
     /**
