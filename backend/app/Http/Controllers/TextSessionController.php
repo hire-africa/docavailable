@@ -93,7 +93,7 @@ class TextSessionController extends Controller
                 TextSession::STATUS_WAITING_FOR_DOCTOR, 
                 now(), 
                 now(), 
-                1, 
+                0, // FIXED: Start with 0 sessions used, not 1
                 $sessionsRemaining, 
                 $reason, 
                 now(), 
