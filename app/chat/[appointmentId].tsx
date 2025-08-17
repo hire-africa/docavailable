@@ -466,11 +466,17 @@ export default function ChatPage() {
   useEffect(() => {
     // Safety check to ensure messageStorageService is available and user is authenticated
     if (!messageStorageService || !isAuthenticated) {
-      // console.log('❌ messageStorageService not available or user not authenticated');
+      console.log('❌ messageStorageService not available or user not authenticated');
       return;
     }
 
+    console.log('🔧 Registering callback for appointment:', getAppointmentIdForStorage());
+    console.log('🔧 Numeric ID for callback:', getNumericAppointmentId());
+
     messageStorageService.registerUpdateCallback(getAppointmentIdForStorage(), (updatedMessages) => {
+      console.log('🔄 CALLBACK TRIGGERED with messages:', updatedMessages.length);
+      console.log('🔄 Current messages in state:', messages.length);
+      
       // Check if there are new messages from other participants
       const hasNewMessagesFromOthers = updatedMessages.some(message => 
         message.sender_id !== currentUserId && 
@@ -532,6 +538,7 @@ export default function ChatPage() {
         }
       });
       
+      console.log('🔄 Setting messages to:', uniqueMessages.length);
       setMessages(uniqueMessages);
       
       // Reset the flag when new messages arrive from others so they can be marked as read
@@ -555,10 +562,12 @@ export default function ChatPage() {
     });
 
     // Start auto-sync for real-time updates
+    console.log('🔧 Starting auto-sync for appointment:', getAppointmentIdForStorage());
     messageStorageService.startAutoSync(getAppointmentIdForStorage());
 
     return () => {
       if (messageStorageService) {
+        console.log('🔧 Unregistering callback for appointment:', getAppointmentIdForStorage());
         messageStorageService.unregisterUpdateCallback(getAppointmentIdForStorage());
         messageStorageService.stopAutoSync(getAppointmentIdForStorage());
       }
