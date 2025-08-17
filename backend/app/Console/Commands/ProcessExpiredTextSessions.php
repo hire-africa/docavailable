@@ -30,9 +30,18 @@ class ProcessExpiredTextSessions extends Command
         $this->info('Processing expired text sessions...');
 
         // Find sessions that have been waiting for doctor for more than 90 seconds
+        // FIXED: Only expire sessions where patient has sent a message (doctor_response_deadline is set)
         $waitingExpiredSessions = TextSession::where('status', TextSession::STATUS_WAITING_FOR_DOCTOR)
-            ->where('started_at', '<=', now()->subSeconds(90))
+            ->whereNotNull('doctor_response_deadline')
+            ->where('doctor_response_deadline', '<=', now())
             ->get();
+            
+        $this->info("Found {$waitingExpiredSessions->count()} sessions waiting for doctor with expired deadline");
+        
+        // Log details for debugging
+        foreach ($waitingExpiredSessions as $session) {
+            $this->info("  Session {$session->id}: Started at {$session->started_at}, Deadline: {$session->doctor_response_deadline}");
+        }
 
         // Find active sessions that have run out of time - FIXED: Use proper logic instead of SQL
         $timeExpiredSessions = TextSession::where('status', TextSession::STATUS_ACTIVE)
