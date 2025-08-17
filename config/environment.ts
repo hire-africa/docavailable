@@ -46,6 +46,9 @@ export const environment = {
   PAYMENT_API_KEY: getEnvVar('PAYMENT_API_KEY', ''),
   SMS_API_KEY: getEnvVar('SMS_API_KEY', ''),
   EMAIL_API_KEY: getEnvVar('EMAIL_API_KEY', ''),
+  
+  // AI Service Configuration
+  DEEPSEEK_API_KEY: getEnvVar('DEEPSEEK_API_KEY', 'sk-3c2cb2ac7a554039a0e8d378fb09ef36'),
 };
 
 export default environment; 

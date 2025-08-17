@@ -158,11 +158,11 @@ export default function ChatPage() {
     );
   }
   
-  // Helper function to convert appointment ID to number for message storage service
-  const getAppointmentIdForStorage = (): number => {
+  // Helper function to get appointment ID for message storage service
+  // For text sessions, pass the full string to enable proper API endpoint formatting
+  const getAppointmentIdForStorage = (): number | string => {
     if (isTextSession) {
-      const numericPart = appointmentId.replace('text_session_', '');
-      return parseInt(numericPart, 10);
+      return appointmentId; // Return full string like "text_session_52"
     }
     return parsedAppointmentId as number;
   };

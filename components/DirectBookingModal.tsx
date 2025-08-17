@@ -76,7 +76,7 @@ export default function DirectBookingModal({
               
               <View style={styles.infoItem}>
                 <FontAwesome name="credit-card" size={16} color="#4CAF50" />
-                <Text style={styles.infoText}>Uses 1 text session per 10 minutes subscription</Text>
+                <Text style={styles.infoText}>Uses 1 text session per 10 minutes </Text>
               </View>
             </View>
 

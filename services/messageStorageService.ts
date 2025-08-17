@@ -118,8 +118,13 @@ class MessageStorageService {
   //   }
   // }
 
-  private async notifyCallbacks(appointmentId: number, messages: Message[]): Promise<void> {
-    const callback = this.updateCallbacks.get(appointmentId);
+  private async notifyCallbacks(appointmentId: number | string, messages: Message[]): Promise<void> {
+    // Convert appointmentId to number for callback lookup
+    const numericId = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_') 
+      ? parseInt(appointmentId.replace('text_session_', ''), 10) 
+      : (typeof appointmentId === 'string' ? parseInt(appointmentId, 10) : appointmentId);
+    
+    const callback = this.updateCallbacks.get(numericId);
     if (callback) {
       try {
         // Sort messages by creation time
@@ -174,7 +179,7 @@ class MessageStorageService {
   //   return Array.from(mergedMap.values());
   // }
 
-  async storeMessage(appointmentId: number, message: Message): Promise<void> {
+  async storeMessage(appointmentId: number | string, message: Message): Promise<void> {
     try {
       const data = await this.getLocalData(appointmentId);
       
@@ -305,7 +310,7 @@ class MessageStorageService {
     }
   }
 
-  async sendMessage(appointmentId: number, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
+  async sendMessage(appointmentId: number | string, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
     try {
       // Check authentication before sending message
       const isAuth = await this.isAuthenticated();
@@ -314,11 +319,16 @@ class MessageStorageService {
         return null;
       }
 
+      // Determine if this is a text session and format the API endpoint correctly
+      const isTextSession = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_');
+      const apiAppointmentId = isTextSession ? appointmentId : appointmentId.toString();
+      const numericAppointmentId = isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : appointmentId as number;
+
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
       const message: Message = {
         id: tempId, // Use temp_id as id initially
-        appointment_id: appointmentId,
+        appointment_id: numericAppointmentId,
         sender_id: senderId,
         sender_name: senderName,
         message: messageText,
@@ -331,14 +341,15 @@ class MessageStorageService {
       };
       
       // Store message locally first
-      await this.storeMessage(appointmentId, message);
+      await this.storeMessage(numericAppointmentId, message);
       
       // Update delivery status to 'sent'
       console.log(`📤 Message sent, updating status to 'sent' for tempId: ${tempId}`);
-      await this.updateMessageDeliveryStatus(appointmentId, tempId, 'sent');
+      await this.updateMessageDeliveryStatus(numericAppointmentId, tempId, 'sent');
       
       // Send to server with temp_id for duplicate detection
-      const response = await apiService.post(`/chat/${appointmentId}/messages`, {
+      // Use the correct API endpoint format for text sessions
+      const response = await apiService.post(`/chat/${apiAppointmentId}/messages`, {
         message: messageText,
         message_type: 'text',
         temp_id: tempId // Send temp_id to backend
@@ -349,11 +360,11 @@ class MessageStorageService {
         
         // Update message with server response and mark as delivered
         console.log(`📤 Message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
-        await this.updateMessageInStorage(appointmentId, tempId, serverMessage);
-        await this.updateMessageDeliveryStatus(appointmentId, serverMessage.id, 'delivered');
+        await this.updateMessageInStorage(numericAppointmentId, tempId, serverMessage);
+        await this.updateMessageDeliveryStatus(numericAppointmentId, serverMessage.id, 'delivered');
         // Nudge an immediate sync so recipients see it faster
         setTimeout(() => {
-          this.forceSync(appointmentId).catch(() => undefined);
+          this.forceSync(numericAppointmentId).catch(() => undefined);
         }, 300);
         return serverMessage;
       } else {
@@ -711,7 +722,7 @@ class MessageStorageService {
     }
   }
 
-  private async getLocalData(appointmentId: number): Promise<LocalStorageData> {
+  private async getLocalData(appointmentId: number | string): Promise<LocalStorageData> {
     try {
       const key = this.getStorageKey(appointmentId);
       const data = await AsyncStorage.getItem(key);
@@ -720,16 +731,27 @@ class MessageStorageService {
         return JSON.parse(data);
       }
       
+      // Convert appointmentId to number for storage
+      const numericId = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_') 
+        ? parseInt(appointmentId.replace('text_session_', ''), 10) 
+        : (typeof appointmentId === 'string' ? parseInt(appointmentId, 10) : appointmentId);
+      
       return {
-        appointment_id: appointmentId,
+        appointment_id: numericId,
         messages: [],
         last_sync: new Date().toISOString(),
         message_count: 0
       };
     } catch (error) {
       this.logErrorOnce('Error getting local data:', error, `appointment-${appointmentId}`);
+      
+      // Convert appointmentId to number for storage
+      const numericId = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_') 
+        ? parseInt(appointmentId.replace('text_session_', ''), 10) 
+        : (typeof appointmentId === 'string' ? parseInt(appointmentId, 10) : appointmentId);
+      
       return {
-        appointment_id: appointmentId,
+        appointment_id: numericId,
         messages: [],
         last_sync: new Date().toISOString(),
         message_count: 0
@@ -737,8 +759,12 @@ class MessageStorageService {
     }
   }
 
-  private getStorageKey(appointmentId: number): string {
-    return `${this.STORAGE_PREFIX}${appointmentId}`;
+  private getStorageKey(appointmentId: number | string): string {
+    // For text sessions, extract the numeric part for storage key
+    const numericId = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_') 
+      ? appointmentId.replace('text_session_', '') 
+      : appointmentId.toString();
+    return `${this.STORAGE_PREFIX}${numericId}`;
   }
 
   private getDeliveryStatusPriority(status: 'sending' | 'sent' | 'delivered' | 'read'): number {
