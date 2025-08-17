@@ -321,13 +321,9 @@ class ChatController extends Controller
             if ($session) {
                 // Check if this is the first patient message (to start the 90-second timer)
                 if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->patient_id) {
-                    $patientMessages = $this->messageStorageService->getMessages($appointmentId)
-                        ->filter(function($msg) use ($session) {
-                            return $msg['sender_id'] == $session->patient_id;
-                        });
-                        
-                    if ($patientMessages->count() === 1) { // First patient message
-                        // Set the 90-second deadline for doctor response
+                    // FIXED: Set deadline when patient sends ANY message while waiting
+                    // This prevents race conditions and ensures deadline is always set
+                    if (!$session->doctor_response_deadline) {
                         $session->update([
                             'doctor_response_deadline' => now()->addSeconds(90)
                         ]);
@@ -336,17 +332,12 @@ class ChatController extends Controller
                 
                 // Check if this is the first doctor message (to activate the session)
                 if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->doctor_id) {
-                    $doctorMessages = $this->messageStorageService->getMessages($appointmentId)
-                        ->filter(function($msg) use ($session) {
-                            return $msg['sender_id'] == $session->doctor_id;
-                        });
-                        
-                    if ($doctorMessages->count() === 1) { // First doctor message
-                        $session->update([
-                            'status' => \App\Models\TextSession::STATUS_ACTIVE,
-                            'activated_at' => now()
-                        ]);
-                    }
+                    // FIXED: Activate session when doctor sends ANY message while waiting
+                    // This prevents race conditions where both patient and doctor send messages quickly
+                    $session->update([
+                        'status' => \App\Models\TextSession::STATUS_ACTIVE,
+                        'activated_at' => now()
+                    ]);
                 }
             }
         }
