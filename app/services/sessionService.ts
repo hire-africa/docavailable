@@ -28,6 +28,8 @@ class SessionService {
     status: string;
     timeRemaining?: number;
     message?: string;
+    remainingTimeMinutes?: number;
+    remainingSessions?: number;
   }> {
     try {
       console.log('🔍 [SessionService] Checking doctor response for session:', sessionId);

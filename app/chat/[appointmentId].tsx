@@ -470,8 +470,24 @@ export default function ChatPage() {
             timeRemaining: response.timeRemaining,
             message: response.message
           });
+          
+          // If time remaining is low, poll more frequently
+          if (response.timeRemaining && response.timeRemaining < 60) {
+            console.log('🔍 [Chat] Low time remaining, scheduling quick re-check in 5 seconds');
+            setTimeout(() => {
+              checkSessionExpiration();
+            }, 5000);
+          }
         } else if (response && response.status === 'active') {
           console.log('🔍 [Chat] Session is active');
+          
+          // For active sessions, check if time is running low
+          if (response.remainingTimeMinutes && response.remainingTimeMinutes < 2) {
+            console.log('🔍 [Chat] Session time running low, scheduling quick re-check in 5 seconds');
+            setTimeout(() => {
+              checkSessionExpiration();
+            }, 5000);
+          }
         } else {
           console.log('🔍 [Chat] Unknown session status:', response?.status);
         }
@@ -484,12 +500,12 @@ export default function ChatPage() {
     console.log('🔍 [Chat] Performing initial session check');
     checkSessionExpiration();
 
-    // Set up periodic checking every 30 seconds
-    console.log('🔍 [Chat] Setting up periodic session checks every 30 seconds');
+    // Set up periodic checking every 10 seconds for more responsive detection
+    console.log('🔍 [Chat] Setting up periodic session checks every 10 seconds');
     const intervalId = setInterval(() => {
       console.log('🔍 [Chat] Performing periodic session check');
       checkSessionExpiration();
-    }, 30000);
+    }, 10000);
 
     return () => {
       console.log('🔍 [Chat] Cleaning up session expiration check interval');
