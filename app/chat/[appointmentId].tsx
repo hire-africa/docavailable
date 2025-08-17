@@ -167,6 +167,14 @@ export default function ChatPage() {
     return parsedAppointmentId as number;
   };
 
+  // Helper function to get numeric appointment ID for storage operations
+  const getNumericAppointmentId = (): number => {
+    if (isTextSession) {
+      return parseInt(appointmentId.replace('text_session_', ''), 10);
+    }
+    return parsedAppointmentId as number;
+  };
+
   // Load chat info and messages
   const loadChat = async () => {
     try {
@@ -232,7 +240,7 @@ export default function ChatPage() {
       }
       
       // Load messages from storage
-      const loadedMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
+      const loadedMessages = await messageStorageService.getMessages(getNumericAppointmentId());
       
       // Debug: Log all messages with media URLs
       const mediaMessages = loadedMessages.filter(msg => msg.media_url);
@@ -471,53 +479,76 @@ export default function ChatPage() {
       
       // Debug: Log delivery status changes for own messages and track image messages
       const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
-      // console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
+      console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
+      
+      // CRITICAL FIX: Preserve local messages that might not be in updatedMessages yet
+      const localMessages = messages.filter(localMsg => 
+        localMsg.sender_id === currentUserId && 
+        localMsg.delivery_status === 'sending' &&
+        !updatedMessages.some(serverMsg => 
+          serverMsg.id === localMsg.id || 
+          serverMsg.temp_id === localMsg.temp_id
+        )
+      );
+      
+      // Merge local messages with server messages
+      const mergedMessages = [...localMessages, ...updatedMessages];
+      
+      // Remove duplicates based on ID or temp_id
+      const uniqueMessages = mergedMessages.filter((message, index, self) => 
+        index === self.findIndex(m => 
+          m.id === message.id || 
+          (m.temp_id && m.temp_id === message.temp_id)
+        )
+      );
+      
+      console.log(`🔍 Merged messages: ${mergedMessages.length}, Unique: ${uniqueMessages.length}, Local preserved: ${localMessages.length}`);
       
       updatedMessages.forEach(message => {
         if (message.sender_id === currentUserId) {
-          // console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
+          console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
           
           // Check if delivery status changed
           const existingMessage = messages.find(m => m.id === message.id);
           if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
-            // console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
+            console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
           }
           
           // Check if message is read
           if (message.delivery_status === 'read') {
-            // console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
+            console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
           }
         }
         
         // Special tracking for image messages
         if (message.message_type === 'image') {
-          // console.log(`📷 Image message detected:`, {
-          //   id: message.id,
-          //   temp_id: message.temp_id,
-          //   media_url: message.media_url?.substring(0, 50) + '...',
-          //   delivery_status: message.delivery_status,
-          //   sender_id: message.sender_id
-          // });
+          console.log(`📷 Image message detected:`, {
+            id: message.id,
+            temp_id: message.temp_id,
+            media_url: message.media_url?.substring(0, 50) + '...',
+            delivery_status: message.delivery_status,
+            sender_id: message.sender_id
+          });
         }
       });
       
-      setMessages(updatedMessages);
+      setMessages(uniqueMessages);
       
       // Reset the flag when new messages arrive from others so they can be marked as read
       if (hasNewMessagesFromOthers) {
         setMessagesMarkedAsRead(false);
         setMarkReadAttempts(0); // Reset attempts for new messages
-        // console.log(`🔄 Reset read flags due to new messages from others`);
+        console.log(`🔄 Reset read flags due to new messages from others`);
       }
       
       // Also check if there are any unread messages that need to be marked
-      const hasUnreadMessages = updatedMessages.some(message => 
+      const hasUnreadMessages = uniqueMessages.some(message => 
         message.sender_id !== currentUserId && 
         (!message.read_by || !message.read_by.some(read => read.user_id === currentUserId))
       );
       
       if (hasUnreadMessages && messagesMarkedAsRead) {
-        // console.log(`🔄 Found unread messages, resetting read flag`);
+        console.log(`🔄 Found unread messages, resetting read flag`);
         setMessagesMarkedAsRead(false);
         setMarkReadAttempts(0);
       }
