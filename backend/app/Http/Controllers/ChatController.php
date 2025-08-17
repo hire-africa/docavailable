@@ -308,10 +308,12 @@ class ChatController extends Controller
         ];
         
         // Store message in cache
-        $message = $this->messageStorageService->storeMessage($appointmentId, $messageData);
+        // Use numeric ID for MessageStorageService methods
+        $message = $this->messageStorageService->storeMessage($actualId, $messageData);
         
         // Update chat room keys for tracking
-        $this->messageStorageService->updateChatRoomKeys($appointmentId);
+        // Use numeric ID for MessageStorageService methods
+        $this->messageStorageService->updateChatRoomKeys($actualId);
         
         // Handle text session logic
         if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
