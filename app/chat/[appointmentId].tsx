@@ -281,7 +281,7 @@ export default function ChatPage() {
     setSending(true);
     try {
       const sentMessage = await messageStorageService.sendMessage(
-        getNumericAppointmentId(),
+        getAppointmentIdForStorage(),
         newMessage.trim(),
         currentUserId,
         user?.first_name + ' ' + user?.last_name || 'Unknown User'
