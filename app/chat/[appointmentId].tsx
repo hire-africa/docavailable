@@ -187,7 +187,7 @@ export default function ChatPage() {
       }
       
       // Preload messages for better performance
-      await messageStorageService.preloadMessages(getAppointmentIdForStorage());
+      await messageStorageService.preloadMessages(getNumericAppointmentId());
       
       // Load chat info only if authenticated
       if (isAuthenticated) {
@@ -281,7 +281,7 @@ export default function ChatPage() {
     setSending(true);
     try {
       const sentMessage = await messageStorageService.sendMessage(
-        getAppointmentIdForStorage(),
+        getNumericAppointmentId(),
         newMessage.trim(),
         currentUserId,
         user?.first_name + ' ' + user?.last_name || 'Unknown User'
@@ -307,7 +307,7 @@ export default function ChatPage() {
     
     try {
       setIsRefreshing(true);
-      await messageStorageService.loadFromServer(getAppointmentIdForStorage());
+      await messageStorageService.loadFromServer(getNumericAppointmentId());
     } catch (error: any) {
       console.error('Error refreshing messages:', error);
     } finally {
@@ -598,7 +598,7 @@ export default function ChatPage() {
     try {
       setIsMarkingAsRead(true);
       setMarkReadAttempts(prev => prev + 1);
-      await messageStorageService.markMessagesAsRead(getAppointmentIdForStorage(), user.id);
+      await messageStorageService.markMessagesAsRead(getNumericAppointmentId(), user.id);
       setMessagesMarkedAsRead(true); // Set flag to prevent re-marking
     } catch (error) {
       console.error('❌ Error marking messages as read:', error);
@@ -705,20 +705,20 @@ export default function ChatPage() {
       }
       
       const sessionType = isTextSession ? 'text' : 'appointment';
-      // Before ending on server, capture current messages for local archive
-      const archiveMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
-      // Strip temp_id and ensure minimal consistency
-      const cleanedMessages = archiveMessages.map(m => {
-        const { temp_id, ...rest } = m as any;
-        return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-      });
+             // Before ending on server, capture current messages for local archive
+       const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+       // Strip temp_id and ensure minimal consistency
+       const cleanedMessages = archiveMessages.map(m => {
+         const { temp_id, ...rest } = m as any;
+         return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+       });
 
-      const result = await sessionService.endSession(sessionId, sessionType);
-      
-      if (result.status === 'success') {
-        // Build ended session payload for local storage
-        const endedSession: EndedSession = {
-          appointment_id: getAppointmentIdForStorage(),
+       const result = await sessionService.endSession(sessionId, sessionType);
+       
+       if (result.status === 'success') {
+         // Build ended session payload for local storage
+         const endedSession: EndedSession = {
+           appointment_id: getNumericAppointmentId(),
           doctor_id: chatInfo?.doctor_id,
           doctor_name: chatInfo?.other_participant_name,
           doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
@@ -775,15 +775,15 @@ export default function ChatPage() {
 
   // Helper function to store messages and close chat
   const handleStoreAndClose = async () => {
-    try {
-      const archiveMessages = await messageStorageService.getMessages(getAppointmentIdForStorage());
-      const cleanedMessages = archiveMessages.map(m => {
-        const { temp_id, ...rest } = m as any;
-        return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-      });
+         try {
+       const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+       const cleanedMessages = archiveMessages.map(m => {
+         const { temp_id, ...rest } = m as any;
+         return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+       });
 
-      const endedSession: EndedSession = {
-        appointment_id: getAppointmentIdForStorage(),
+       const endedSession: EndedSession = {
+         appointment_id: getNumericAppointmentId(),
         doctor_id: chatInfo?.doctor_id,
         doctor_name: chatInfo?.other_participant_name,
         doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
@@ -927,12 +927,12 @@ export default function ChatPage() {
     
     setSendingVoiceMessage(true);
     try {
-      const success = await voiceRecordingService.sendVoiceMessage(
-        getAppointmentIdForStorage(),
-        recordingUri,
-        currentUserId,
-        user?.first_name + ' ' + user?.last_name || 'Unknown User'
-      );
+             const success = await voiceRecordingService.sendVoiceMessage(
+         getNumericAppointmentId(),
+         recordingUri,
+         currentUserId,
+         user?.first_name + ' ' + user?.last_name || 'Unknown User'
+       );
       
       if (success) {
         setRecordingUri(null);
@@ -963,7 +963,7 @@ export default function ChatPage() {
       
       if (imageUri) {
         const success = await imageService.sendImageMessage(
-          getAppointmentIdForStorage(),
+          getNumericAppointmentId(),
           imageUri,
           currentUserId,
           `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
@@ -990,7 +990,7 @@ export default function ChatPage() {
       
       if (imageUri) {
         const success = await imageService.sendImageMessage(
-          getAppointmentIdForStorage(),
+          getNumericAppointmentId(),
           imageUri,
           currentUserId,
           `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
