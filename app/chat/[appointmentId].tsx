@@ -473,7 +473,7 @@ export default function ChatPage() {
     console.log('🔧 Registering callback for appointment:', getAppointmentIdForStorage());
     console.log('🔧 Numeric ID for callback:', getNumericAppointmentId());
 
-    messageStorageService.registerUpdateCallback(getAppointmentIdForStorage(), (updatedMessages) => {
+    messageStorageService.registerUpdateCallback(getNumericAppointmentId(), (updatedMessages) => {
       console.log('🔄 CALLBACK TRIGGERED with messages:', updatedMessages.length);
       console.log('🔄 Current messages in state:', messages.length);
       
@@ -563,13 +563,13 @@ export default function ChatPage() {
 
     // Start auto-sync for real-time updates
     console.log('🔧 Starting auto-sync for appointment:', getAppointmentIdForStorage());
-    messageStorageService.startAutoSync(getAppointmentIdForStorage());
+    messageStorageService.startAutoSync(getNumericAppointmentId());
 
     return () => {
       if (messageStorageService) {
         console.log('🔧 Unregistering callback for appointment:', getAppointmentIdForStorage());
-        messageStorageService.unregisterUpdateCallback(getAppointmentIdForStorage());
-        messageStorageService.stopAutoSync(getAppointmentIdForStorage());
+        messageStorageService.unregisterUpdateCallback(getNumericAppointmentId());
+        messageStorageService.stopAutoSync(getNumericAppointmentId());
       }
     };
   }, [currentUserId, isAuthenticated]); // Removed 'messages' from dependency array
