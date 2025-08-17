@@ -320,27 +320,83 @@ class ChatController extends Controller
             $sessionId = str_replace('text_session_', '', $appointmentId);
             $session = \App\Models\TextSession::find($sessionId);
             
+            Log::info("Text session message received", [
+                'appointment_id' => $appointmentId,
+                'session_id' => $sessionId,
+                'user_id' => $user->id,
+                'user_type' => $user->user_type,
+                'session_found' => $session ? 'yes' : 'no',
+                'session_status' => $session ? $session->status : 'not_found',
+                'session_patient_id' => $session ? $session->patient_id : 'not_found',
+                'session_doctor_id' => $session ? $session->doctor_id : 'not_found',
+                'doctor_response_deadline' => $session ? $session->doctor_response_deadline : 'not_set',
+                'message_type' => $request->message_type ?? 'text',
+                'message_length' => strlen($request->message)
+            ]);
+            
             if ($session) {
                 // Check if this is the first patient message (to start the 90-second timer)
                 if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->patient_id) {
+                    Log::info("Patient message detected in waiting session", [
+                        'session_id' => $sessionId,
+                        'patient_id' => $session->patient_id,
+                        'current_deadline' => $session->doctor_response_deadline,
+                        'user_id' => $user->id,
+                        'message' => substr($request->message, 0, 50) . '...'
+                    ]);
+                    
                     // FIXED: Set deadline when patient sends ANY message while waiting
                     // This prevents race conditions and ensures deadline is always set
                     if (!$session->doctor_response_deadline) {
+                        $newDeadline = now()->addSeconds(90);
                         $session->update([
-                            'doctor_response_deadline' => now()->addSeconds(90)
+                            'doctor_response_deadline' => $newDeadline
+                        ]);
+                        
+                        Log::info("90-second timer started", [
+                            'session_id' => $sessionId,
+                            'deadline_set_to' => $newDeadline,
+                            'current_time' => now(),
+                            'time_until_deadline' => 90
+                        ]);
+                    } else {
+                        Log::info("Deadline already set, not updating", [
+                            'session_id' => $sessionId,
+                            'existing_deadline' => $session->doctor_response_deadline,
+                            'time_remaining' => $session->doctor_response_deadline->diffInSeconds(now())
                         ]);
                     }
                 }
                 
                 // Check if this is the first doctor message (to activate the session)
                 if ($session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && $user->id === $session->doctor_id) {
+                    Log::info("Doctor message detected in waiting session, activating", [
+                        'session_id' => $sessionId,
+                        'doctor_id' => $session->doctor_id,
+                        'user_id' => $user->id,
+                        'message' => substr($request->message, 0, 50) . '...'
+                    ]);
+                    
                     // FIXED: Activate session when doctor sends ANY message while waiting
                     // This prevents race conditions where both patient and doctor send messages quickly
                     $session->update([
                         'status' => \App\Models\TextSession::STATUS_ACTIVE,
                         'activated_at' => now()
                     ]);
+                    
+                    Log::info("Session activated by doctor", [
+                        'session_id' => $sessionId,
+                        'activated_at' => now(),
+                        'previous_status' => \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR,
+                        'new_status' => \App\Models\TextSession::STATUS_ACTIVE
+                    ]);
                 }
+            } else {
+                Log::error("Text session not found", [
+                    'session_id' => $sessionId,
+                    'appointment_id' => $appointmentId,
+                    'user_id' => $user->id
+                ]);
             }
         }
         

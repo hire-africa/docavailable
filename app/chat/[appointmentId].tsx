@@ -364,15 +364,33 @@ export default function ChatPage() {
   // Check for session expiration (auto-end) for text sessions
   useEffect(() => {
     if (!isTextSession || !textSessionInfo || !isAuthenticated) {
+      console.log('🔍 [Chat] Skipping session expiration check:', {
+        isTextSession,
+        hasTextSessionInfo: !!textSessionInfo,
+        isAuthenticated,
+        appointmentId
+      });
       return;
     }
+
+    console.log('🔍 [Chat] Setting up session expiration check for:', {
+      appointmentId,
+      sessionId: appointmentId.replace('text_session_', ''),
+      textSessionInfo: textSessionInfo ? {
+        id: textSessionInfo.id,
+        status: textSessionInfo.status,
+        doctor_id: textSessionInfo.doctor_id
+      } : null
+    });
 
     const checkSessionExpiration = async () => {
       try {
         const sessionId = appointmentId.replace('text_session_', '');
         console.log('🔍 [Chat] Checking session expiration for session:', sessionId);
+        console.log('🔍 [Chat] Check timestamp:', new Date().toISOString());
         
         const response = await sessionService.checkDoctorResponse(sessionId);
+        console.log('🔍 [Chat] Session check response:', response);
         
         // Add null/undefined check before accessing response.status
         if (response && (response.status === 'expired' || response.status === 'ended')) {
@@ -394,6 +412,7 @@ export default function ChatPage() {
                 
                 // If still expired, show the alert
                 if (doubleCheckResponse && (doubleCheckResponse.status === 'expired' || doubleCheckResponse.status === 'ended')) {
+                  console.log('🔍 [Chat] Showing expired session alert');
                   Alert.alert(
                     'Session Ended',
                     doubleCheckResponse.message || 'Your session has ended automatically.',
@@ -409,7 +428,7 @@ export default function ChatPage() {
                   );
                 }
               } catch (error) {
-                console.error('Error in double-check:', error);
+                console.error('❌ [Chat] Error in double-check:', error);
                 // Show the original expired alert if double-check fails
                 Alert.alert(
                   'Session Ended',
@@ -428,6 +447,7 @@ export default function ChatPage() {
             }, 2000); // Wait 2 seconds before double-checking
           } else {
             // For ended sessions (not expired), show alert immediately
+            console.log('🔍 [Chat] Showing ended session alert');
             Alert.alert(
               'Session Ended',
               response.message || 'Your session has ended automatically.',
@@ -445,19 +465,34 @@ export default function ChatPage() {
         } else if (response && response.status === 'error') {
           console.log('🔍 [Chat] Session check returned error:', response.message);
           // Don't show alert for API errors, just log them
+        } else if (response && response.status === 'waiting') {
+          console.log('🔍 [Chat] Session waiting for doctor response:', {
+            timeRemaining: response.timeRemaining,
+            message: response.message
+          });
+        } else if (response && response.status === 'active') {
+          console.log('🔍 [Chat] Session is active');
+        } else {
+          console.log('🔍 [Chat] Unknown session status:', response?.status);
         }
       } catch (error) {
-        console.error('Error checking session expiration:', error);
+        console.error('❌ [Chat] Error checking session expiration:', error);
       }
     };
 
     // Check immediately when component mounts
+    console.log('🔍 [Chat] Performing initial session check');
     checkSessionExpiration();
 
     // Set up periodic checking every 30 seconds
-    const intervalId = setInterval(checkSessionExpiration, 30000);
+    console.log('🔍 [Chat] Setting up periodic session checks every 30 seconds');
+    const intervalId = setInterval(() => {
+      console.log('🔍 [Chat] Performing periodic session check');
+      checkSessionExpiration();
+    }, 30000);
 
     return () => {
+      console.log('🔍 [Chat] Cleaning up session expiration check interval');
       clearInterval(intervalId);
     };
   }, [isTextSession, textSessionInfo, isAuthenticated, appointmentId]);

@@ -312,10 +312,18 @@ class MessageStorageService {
 
   async sendMessage(appointmentId: number | string, messageText: string, senderId: number, senderName: string): Promise<Message | null> {
     try {
+      console.log('📤 [MessageStorageService] Sending message:', {
+        appointmentId,
+        messageText: messageText.substring(0, 50) + '...',
+        senderId,
+        senderName,
+        isTextSession: typeof appointmentId === 'string' && appointmentId.startsWith('text_session_')
+      });
+
       // Check authentication before sending message
       const isAuth = await this.isAuthenticated();
       if (!isAuth) {
-        console.log('❌ User not authenticated, cannot send message');
+        console.log('❌ [MessageStorageService] User not authenticated, cannot send message');
         return null;
       }
 
@@ -323,6 +331,13 @@ class MessageStorageService {
       const isTextSession = typeof appointmentId === 'string' && appointmentId.startsWith('text_session_');
       const apiAppointmentId = isTextSession ? appointmentId : appointmentId.toString();
       const numericAppointmentId = isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : appointmentId as number;
+
+      console.log('📤 [MessageStorageService] Processed appointment IDs:', {
+        original: appointmentId,
+        apiAppointmentId,
+        numericAppointmentId,
+        isTextSession
+      });
 
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
@@ -340,26 +355,52 @@ class MessageStorageService {
         temp_id: tempId // Store temp_id for tracking
       };
       
+      console.log('📤 [MessageStorageService] Created message object:', {
+        tempId,
+        appointment_id: message.appointment_id,
+        sender_id: message.sender_id,
+        delivery_status: message.delivery_status
+      });
+      
       // Store message locally first
       await this.storeMessage(numericAppointmentId, message);
       
       // Update delivery status to 'sent'
-      console.log(`📤 Message sent, updating status to 'sent' for tempId: ${tempId}`);
+      console.log(`📤 [MessageStorageService] Message sent, updating status to 'sent' for tempId: ${tempId}`);
       await this.updateMessageDeliveryStatus(numericAppointmentId, tempId, 'sent');
       
       // Send to server with temp_id for duplicate detection
       // Use the correct API endpoint format for text sessions
+      console.log('📤 [MessageStorageService] Sending to server:', {
+        endpoint: `/chat/${apiAppointmentId}/messages`,
+        payload: {
+          message: messageText,
+          message_type: 'text',
+          temp_id: tempId
+        }
+      });
+
       const response = await apiService.post(`/chat/${apiAppointmentId}/messages`, {
         message: messageText,
         message_type: 'text',
         temp_id: tempId // Send temp_id to backend
       });
       
+      console.log('📤 [MessageStorageService] Server response:', {
+        success: response.success,
+        hasData: !!response.data,
+        responseData: response.data ? {
+          id: (response.data as any).id,
+          temp_id: (response.data as any).temp_id,
+          delivery_status: (response.data as any).delivery_status
+        } : null
+      });
+      
       if (response.success && response.data) {
         const serverMessage = response.data as Message;
         
         // Update message with server response and mark as delivered
-        console.log(`📤 Message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
+        console.log(`📤 [MessageStorageService] Message delivered, updating status to 'delivered' for messageId: ${serverMessage.id}`);
         await this.updateMessageInStorage(numericAppointmentId, tempId, serverMessage);
         await this.updateMessageDeliveryStatus(numericAppointmentId, serverMessage.id, 'delivered');
         // Nudge an immediate sync so recipients see it faster
@@ -369,9 +410,11 @@ class MessageStorageService {
         return serverMessage;
       } else {
         // If server request failed, keep as 'sent' status
+        console.log('📤 [MessageStorageService] Server request failed, keeping as sent status');
         return message;
       }
     } catch (error) {
+      console.error('❌ [MessageStorageService] Error sending message:', error);
       this.logErrorOnce('Error sending message:', error, `appointment-${appointmentId}`);
       return null;
     }

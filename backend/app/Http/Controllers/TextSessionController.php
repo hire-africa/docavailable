@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log; // Added Log facade
 
 class TextSessionController extends Controller
 {
@@ -165,7 +166,18 @@ class TextSessionController extends Controller
         try {
             $session = TextSession::find($sessionId);
             
+            Log::info("Session status check requested", [
+                'session_id' => $sessionId,
+                'session_found' => $session ? 'yes' : 'no',
+                'session_status' => $session ? $session->status : 'not_found',
+                'current_time' => now()
+            ]);
+            
             if (!$session) {
+                Log::error("Session not found for status check", [
+                    'session_id' => $sessionId
+                ]);
+                
                 return response()->json([
                     'success' => false, 
                     'message' => 'Session not found'
@@ -174,8 +186,19 @@ class TextSessionController extends Controller
             
             // Check if session has expired waiting for doctor
             if ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
+                Log::info("Session is waiting for doctor", [
+                    'session_id' => $sessionId,
+                    'doctor_response_deadline' => $session->doctor_response_deadline,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id
+                ]);
+                
                 // If doctor_response_deadline is not set, patient hasn't sent first message yet
                 if (!$session->doctor_response_deadline) {
+                    Log::info("No deadline set - patient hasn't sent first message", [
+                        'session_id' => $sessionId
+                    ]);
+                    
                     return response()->json([
                         'success' => true,
                         'status' => 'waiting',
@@ -195,7 +218,24 @@ class TextSessionController extends Controller
                 $deadlineTimestamp = $deadline->timestamp;
                 $timeRemaining = max(0, $deadlineTimestamp - $currentTimestamp);
                 
+                Log::info("Calculating time remaining", [
+                    'session_id' => $sessionId,
+                    'current_time' => $currentTime,
+                    'deadline' => $deadline,
+                    'current_timestamp' => $currentTimestamp,
+                    'deadline_timestamp' => $deadlineTimestamp,
+                    'time_remaining' => $timeRemaining,
+                    'is_expired' => $timeRemaining <= 0
+                ]);
+                
                 if ($timeRemaining <= 0) {
+                    Log::info("Session expired - auto-expiring", [
+                        'session_id' => $sessionId,
+                        'time_remaining' => $timeRemaining,
+                        'deadline' => $deadline,
+                        'current_time' => $currentTime
+                    ]);
+                    
                     // Auto-expire the session
                     $session->update([
                         'status' => TextSession::STATUS_EXPIRED,
@@ -210,6 +250,12 @@ class TextSessionController extends Controller
                     ]);
                 }
                 
+                Log::info("Session still waiting with time remaining", [
+                    'session_id' => $sessionId,
+                    'time_remaining' => $timeRemaining,
+                    'remaining_time_minutes' => $session->getRemainingTimeMinutes()
+                ]);
+                
                 return response()->json([
                     'success' => true,
                     'status' => 'waiting',
@@ -222,6 +268,13 @@ class TextSessionController extends Controller
             
             // Check if active session has run out of time
             if ($session->status === TextSession::STATUS_ACTIVE && $session->hasRunOutOfTime()) {
+                Log::info("Active session has run out of time - auto-ending", [
+                    'session_id' => $sessionId,
+                    'elapsed_minutes' => $session->getElapsedMinutes(),
+                    'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
+                    'total_allowed_minutes' => $session->getTotalAllowedMinutes()
+                ]);
+                
                 // Auto-end the session
                 $session->update([
                     'status' => TextSession::STATUS_ENDED,
@@ -237,19 +290,32 @@ class TextSessionController extends Controller
             }
             
             // Session is active and has time remaining
+            Log::info("Session is active with time remaining", [
+                'session_id' => $sessionId,
+                'status' => $session->status,
+                'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
+                'elapsed_minutes' => $session->getElapsedMinutes()
+            ]);
+            
             return response()->json([
                 'success' => true,
                 'status' => 'active',
-                'timeRemaining' => 0, // No time limit for active sessions
+                'timeRemaining' => null, // Not applicable for active sessions
                 'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
                 'remainingSessions' => $session->getRemainingSessions(),
                 'message' => 'Session is active'
             ]);
             
         } catch (\Exception $e) {
+            Log::error("Error checking session response", [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to check response: ' . $e->getMessage()
+                'message' => 'Failed to check session status: ' . $e->getMessage()
             ], 500);
         }
     }
