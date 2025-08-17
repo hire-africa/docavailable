@@ -2,17 +2,17 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Image,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { apiService } from '../../../app/services/apiService';
 import DirectBookingModal from '../../../components/DirectBookingModal';
@@ -150,38 +150,9 @@ export default function DoctorProfilePage() {
         // Close the modal
         setShowDirectBookingModal(false);
         
-        // Show success message
-        Alert.alert(
-          'Direct Booking Started!',
-          `You are now connected with Dr. ${doctor.first_name} ${doctor.last_name}. You can send one message and the doctor will respond within 2 minutes.`,
-          [
-            {
-              text: 'Go to Chat',
-              onPress: () => {
-                // Navigate to chat using text session ID with proper prefix
-                const chatId = `text_session_${sessionData.session_id}`;
-                router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
-              }
-            },
-            {
-              text: 'Go to Messages',
-              onPress: () => {
-                // Navigate to messages tab with the new session
-                router.push({
-                  pathname: '/patient-dashboard',
-                  params: { 
-                    tab: 'messages',
-                    sessionId: sessionData.session_id.toString()
-                  }
-                });
-              }
-            },
-            {
-              text: 'Stay Here',
-              style: 'cancel'
-            }
-          ]
-        );
+        // Navigate directly to chat
+        const chatId = `text_session_${sessionData.session_id}`;
+        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
       } else {
         Alert.alert('Error', response.message || 'Failed to start direct booking');
       }

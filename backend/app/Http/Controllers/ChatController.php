@@ -36,6 +36,9 @@ class ChatController extends Controller
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
         
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
+        
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
             ->where('id', $actualId)
@@ -115,6 +118,9 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
+        
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
         
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
@@ -232,6 +238,9 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
+        
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
         
         // First, try to find it as a regular appointment
         $appointment = Appointment::with(['patient', 'doctor'])
@@ -384,6 +393,9 @@ class ChatController extends Controller
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
         
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
+        
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
             ->join('users as doctor', 'appointments.doctor_id', '=', 'doctor.id')
@@ -523,6 +535,9 @@ class ChatController extends Controller
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
         
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
+        
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
             ->where('id', $actualId)
@@ -592,6 +607,9 @@ class ChatController extends Controller
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
         
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
+        
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
             ->where('id', $actualId)
@@ -660,6 +678,9 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
+        
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
         
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
@@ -738,6 +759,9 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
         }
+        
+        // Convert to integer for database queries
+        $actualId = (int) $actualId;
         
         // First, try to find it as a regular appointment
         $appointment = DB::table('appointments')
