@@ -275,11 +275,29 @@ class TextSessionController extends Controller
                     'total_allowed_minutes' => $session->getTotalAllowedMinutes()
                 ]);
                 
-                // Auto-end the session
+                // Auto-end the session and process payment/deduction
                 $session->update([
                     'status' => TextSession::STATUS_ENDED,
                     'ended_at' => now()
                 ]);
+                
+                // Process payment and deduction
+                try {
+                    $paymentService = new \App\Services\DoctorPaymentService();
+                    $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
+                    
+                    Log::info("Auto-ended session payment processing result", [
+                        'session_id' => $sessionId,
+                        'doctor_payment_success' => $paymentResult['doctor_payment_success'],
+                        'patient_deduction_success' => $paymentResult['patient_deduction_success'],
+                        'sessions_deducted' => $paymentResult['patient_sessions_deducted']
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("Failed to process payment for auto-ended session", [
+                        'session_id' => $sessionId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
                 
                 return response()->json([
                     'success' => true,
