@@ -186,12 +186,15 @@ class TextSession extends Model
 
     /**
      * Get remaining time in minutes for the session (from activation point)
+     * FIXED: Added 2-minute buffer to allow auto-deductions to process
      */
     public function getRemainingTimeMinutes(): int
     {
         $totalAllowedMinutes = $this->getTotalAllowedMinutes();
         $elapsedMinutes = $this->getElapsedMinutes();
-        return max(0, $totalAllowedMinutes - $elapsedMinutes);
+        $bufferMinutes = 2; // 2-minute buffer to allow auto-deductions to process
+        
+        return max(0, ($totalAllowedMinutes + $bufferMinutes) - $elapsedMinutes);
     }
 
     /**
@@ -206,10 +209,15 @@ class TextSession extends Model
 
     /**
      * Check if session has run out of time (from activation point)
+     * FIXED: Added 2-minute buffer to allow auto-deductions to process
      */
     public function hasRunOutOfTime(): bool
     {
-        return $this->getRemainingTimeMinutes() <= 0;
+        $totalAllowedMinutes = $this->getTotalAllowedMinutes();
+        $elapsedMinutes = $this->getElapsedMinutes();
+        $bufferMinutes = 2; // 2-minute buffer to allow auto-deductions to process
+        
+        return ($totalAllowedMinutes + $bufferMinutes) - $elapsedMinutes <= 0;
     }
 
     /**
