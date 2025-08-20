@@ -140,21 +140,13 @@ class TextSession extends Model
     }
 
     /**
-     * Get total allowed minutes based on sessions remaining
+     * Get total allowed minutes based on sessions remaining when session was created
      */
     public function getTotalAllowedMinutes(): int
     {
-        $patient = $this->patient;
-        if (!$patient || !$patient->subscription) {
-            return 0;
-        }
-        
-        $subscription = $patient->subscription;
-        if (!$subscription->isActive) {
-            return 0;
-        }
-        
-        return $subscription->text_sessions_remaining * 10; // 10 minutes per session
+        // Use the sessions remaining when the session was created
+        // This ensures consistency even if subscription changes during the session
+        return $this->sessions_remaining_before_start * 10; // 10 minutes per session
     }
 
     /**
@@ -282,13 +274,13 @@ class TextSession extends Model
             
             \App\Jobs\ProcessTextSessionAutoDeduction::dispatch($this->id, $deductionCount)
                 ->delay(now()->addMinutes($minute))
-                ->onQueue('text-sessions');
+                ->onConnection('text-sessions');
         }
         
         // Schedule session end
         \App\Jobs\EndTextSession::dispatch($this->id, 'time_expired')
             ->delay(now()->addMinutes($totalAllowedMinutes))
-            ->onQueue('text-sessions');
+            ->onConnection('text-sessions');
     }
 
     /**
@@ -302,7 +294,7 @@ class TextSession extends Model
         if ($this->shouldAutoEndDueToInsufficientSessions()) {
             \App\Jobs\EndTextSession::dispatch($this->id, 'insufficient_sessions')
                 ->delay(now()->addMinutes($nextDeductionMinute - $elapsedMinutes))
-                ->onQueue('text-sessions');
+                ->onConnection('text-sessions');
         }
     }
 
