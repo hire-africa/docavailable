@@ -43,7 +43,7 @@ class ProcessQueueJobs
             // Get pending jobs from the text-sessions queue
             $jobs = DB::table('jobs')
                 ->where('queue', 'text-sessions')
-                ->where('created_at', '<=', now()->subSeconds(10)) // Only process jobs older than 10 seconds
+                ->where('available_at', '<=', now()->timestamp) // Process jobs that are ready to run
                 ->get();
             
             if ($jobs->count() === 0) {
