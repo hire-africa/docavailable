@@ -379,22 +379,15 @@ class ChatController extends Controller
                     
                     // FIXED: Activate session when doctor sends ANY message while waiting
                     // This prevents race conditions where both patient and doctor send messages quickly
-                    $session->update([
-                        'status' => \App\Models\TextSession::STATUS_ACTIVE,
-                        'activated_at' => now()
-                    ]);
+                    $session->activate();
                     
-                    // Schedule auto-deductions and auto-ending using queue system
-                    $session->scheduleAutoDeductions();
-                    $session->scheduleAutoEndForInsufficientSessions();
-                    
-                    Log::info("Session activated by doctor and scheduled", [
+                    Log::info("Session activated by doctor", [
                         'session_id' => $sessionId,
                         'activated_at' => now(),
                         'previous_status' => \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR,
                         'new_status' => \App\Models\TextSession::STATUS_ACTIVE,
-                        'auto_deductions_scheduled' => 'yes',
-                        'auto_ending_scheduled' => 'yes'
+                        'auto_deductions' => 'scheduler-based',
+                        'auto_ending' => 'existing-process'
                     ]);
                 }
             } else {

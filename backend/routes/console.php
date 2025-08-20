@@ -20,8 +20,14 @@ Schedule::command('sessions:process-appointment-sessions')
     ->withoutOverlapping()
     ->runInBackground();
 
-// Note: Auto-deductions and auto-ending for text sessions are now handled by Laravel Queues
-// This provides more precise timing and prevents double processing
+// NEW: Schedule auto-deductions for text sessions every 10 minutes
+Schedule::command('sessions:process-auto-deductions')
+    ->everyTenMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// Note: Auto-ending for text sessions is handled by the existing ProcessExpiredTextSessions command
+// This provides reliable session ending without queue complexity
 
 // Register the ClearActiveSessions command
 Artisan::command('sessions:clear-active {--force : Force clear without confirmation}', function () {

@@ -262,40 +262,22 @@ class TextSession extends Model
     }
 
     /**
-     * Schedule auto-deduction jobs for this session
+     * Activate the session (called when doctor sends first message)
      */
-    public function scheduleAutoDeductions(): void
+    public function activate(): void
     {
-        $totalAllowedMinutes = $this->getTotalAllowedMinutes();
+        $this->update([
+            'status' => self::STATUS_ACTIVE,
+            'activated_at' => now(),
+            'last_activity_at' => now()
+        ]);
         
-        // Schedule deductions every 10 minutes
-        for ($minute = 10; $minute <= $totalAllowedMinutes; $minute += 10) {
-            $deductionCount = $minute / 10;
-            
-            \App\Jobs\ProcessTextSessionAutoDeduction::dispatch($this->id, $deductionCount)
-                ->delay(now()->addMinutes($minute))
-                ->onConnection('text-sessions');
-        }
-        
-        // Schedule session end
-        \App\Jobs\EndTextSession::dispatch($this->id, 'time_expired')
-            ->delay(now()->addMinutes($totalAllowedMinutes))
-            ->onConnection('text-sessions');
-    }
-
-    /**
-     * Schedule auto-ending when sessions run out
-     */
-    public function scheduleAutoEndForInsufficientSessions(): void
-    {
-        $elapsedMinutes = $this->getElapsedMinutes();
-        $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
-        
-        if ($this->shouldAutoEndDueToInsufficientSessions()) {
-            \App\Jobs\EndTextSession::dispatch($this->id, 'insufficient_sessions')
-                ->delay(now()->addMinutes($nextDeductionMinute - $elapsedMinutes))
-                ->onConnection('text-sessions');
-        }
+        // Scheduler will handle auto-deductions - no queue jobs needed
+        \Illuminate\Support\Facades\Log::info("Text session activated", [
+            'session_id' => $this->id,
+            'activated_at' => $this->activated_at,
+            'total_allowed_minutes' => $this->getTotalAllowedMinutes()
+        ]);
     }
 
     /**

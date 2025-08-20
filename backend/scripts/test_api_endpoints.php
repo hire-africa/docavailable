@@ -115,33 +115,21 @@ try {
             'activated_at' => now()
         ]);
         
-        // Schedule auto-deductions and auto-ending
-        $session->scheduleAutoDeductions();
-        $session->scheduleAutoEndForInsufficientSessions();
+        // Session is now activated - scheduler will handle auto-deductions
+        $session->activate();
         
-        echo "✅ Session activated and queues scheduled\n";
+        echo "✅ Session activated - scheduler will handle auto-deductions\n";
         echo "   Activated at: {$session->activated_at}\n";
         echo "   Total allowed minutes: {$session->getTotalAllowedMinutes()}\n";
     }
     echo "\n";
     
-    // Test 4: Check queue jobs were created
-    echo "4️⃣ Checking queue jobs...\n";
+    // Test 4: Check scheduler-based auto-deduction
+    echo "4️⃣ Checking scheduler-based auto-deduction...\n";
     
-    $jobs = DB::table('jobs')->where('queue', 'text-sessions')->get();
-    echo "✅ Found " . $jobs->count() . " jobs in text-sessions queue\n";
-    
-    foreach ($jobs as $job) {
-        $payload = json_decode($job->payload);
-        $command = $payload->data->command;
-        
-        if (strpos($command, 'ProcessTextSessionAutoDeduction') !== false) {
-            echo "   📅 Auto-deduction job scheduled\n";
-        } elseif (strpos($command, 'EndTextSession') !== false) {
-            echo "   ⏰ Auto-end job scheduled\n";
-        }
-    }
-    echo "\n";
+    echo "✅ Scheduler will run every 10 minutes to process auto-deductions\n";
+    echo "   No queue jobs needed - using Laravel's built-in scheduler\n";
+    echo "   Command: sessions:process-auto-deductions\n\n";
     
     // Test 5: Test manual session ending via API
     echo "5️⃣ Testing manual session ending API...\n";
