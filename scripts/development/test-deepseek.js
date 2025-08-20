@@ -3,7 +3,7 @@ async function testDeepSeek() {
   console.log('🤖 Testing DeepSeek API Integration...\n');
   
   // Your API key
-  const apiKey = 'sk-3c2cb2ac7a554039a0e8d378fb09ef36';
+  const apiKey = 'sk-4678d79347b14a7fa5b0c9f0d728b166';
   
   if (!apiKey || apiKey === 'your-deepseek-api-key-here') {
     console.log('❌ No valid API key found. Please update the API key in the script.');

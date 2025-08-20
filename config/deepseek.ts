@@ -7,8 +7,24 @@ export const DEEPSEEK_CONFIG = {
   apiKey: environment.DEEPSEEK_API_KEY,
   baseURL: 'https://api.deepseek.com/v1',
   model: 'deepseek-chat',
-  maxTokens: 300,
+  maxTokens: 600,
   temperature: 0.7,
+  
+  // Response customization
+  responseStyle: {
+    tone: 'friendly_professional', // 'formal', 'casual', 'friendly_professional'
+    language: 'english', // 'english', 'swahili', 'bilingual'
+    detailLevel: 'moderate', // 'brief', 'moderate', 'detailed'
+    includeAppFeatures: true,
+    includeLocalContext: true,
+  },
+  
+  // Urgency thresholds
+  urgencyKeywords: {
+    high: ['chest pain', 'severe', 'bleeding', 'unconscious', 'difficulty breathing'],
+    medium: ['headache', 'fever', 'cough', 'fatigue', 'pain'],
+    low: ['diet', 'exercise', 'sleep', 'stress', 'hygiene']
+  }
 };
 
 // Instructions to get your DeepSeek API key:

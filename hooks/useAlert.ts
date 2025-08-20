@@ -36,11 +36,11 @@ export const useAlert = () => {
     setAlertState(prev => ({ ...prev, visible: false }));
   };
 
-  const showSuccess = (title: string, message: string, buttonText?: string) => {
+  const showSuccess = (title: string, message: string = '', buttonText?: string) => {
     showAlert(title, message, 'success', buttonText);
   };
 
-  const showError = (title: string, message: string, buttonText?: string) => {
+  const showError = (title: string, message: string = '', buttonText?: string) => {
     showAlert(title, message, 'error', buttonText);
   };
 

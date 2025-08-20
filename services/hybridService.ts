@@ -51,7 +51,7 @@ class HybridService {
   private async storeFeatureFlags() {
     // Store in AsyncStorage for persistence
     try {
-      const { AsyncStorage } = await import('@react-native-async-storage/async-storage');
+      const AsyncStorage = await import('@react-native-async-storage/async-storage');
       await AsyncStorage.setItem('feature_flags', JSON.stringify(this.featureFlags));
     } catch (error) {
       console.warn('Failed to store feature flags:', error);

@@ -780,7 +780,7 @@ class ApiService {
 
   // File upload method
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
-    console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({ key, type: typeof value })) });
+    console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({ key, type: typeof value })) });
     
     // Debug: Check token before making request
     const token = await this.getAuthToken();

@@ -1,4 +1,5 @@
-import { apiService } from '../app/services/apiService';
+import apiService from './apiService';
+import reactNativeEncryptionService from './reactNativeEncryptionService';
 
 export interface EncryptionStatus {
   encryption_enabled: boolean;

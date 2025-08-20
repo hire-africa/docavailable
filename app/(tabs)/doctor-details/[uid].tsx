@@ -1,18 +1,17 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Image,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { apiService } from '../../../app/services/apiService';
 import DirectBookingModal from '../../../components/DirectBookingModal';
@@ -45,7 +44,7 @@ interface DoctorProfile {
   is_online?: boolean;
 }
 
-const defaultProfileImage = require('../../../assets/images/doctor-illustration.png');
+
 
 export default function DoctorProfilePage() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
@@ -240,9 +239,10 @@ export default function DoctorProfilePage() {
               name={`${doctor.first_name} ${doctor.last_name}`}
             />
           ) : (
-            <Image
-              source={defaultProfileImage}
+            <DoctorProfilePicture
+              size={120}
               style={styles.profileImage}
+              name={`${doctor.first_name} ${doctor.last_name}`}
             />
           )}
         </View>

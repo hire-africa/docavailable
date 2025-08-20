@@ -27,78 +27,7 @@ use Illuminate\Support\Facades\DB;
 |--------------------------------------------------------------------------
 */
 
-// Health check endpoint
-Route::get('/health', function () {
-    $health = [
-        'status' => 'ok',
-        'timestamp' => now()->toISOString(),
-        'message' => 'Backend is running',
-        'services' => []
-    ];
 
-    // Test database connection
-    try {
-        $dbConnection = DB::connection()->getPdo();
-        $health['services']['database'] = [
-            'status' => 'ok',
-            'driver' => config('database.default'),
-            'connected' => true,
-            'name' => DB::connection()->getDatabaseName(),
-            'host' => config('database.connections.' . config('database.default') . '.host'),
-            'connection_name' => DB::connection()->getName()
-        ];
-    } catch (\Exception $e) {
-        $health['services']['database'] = [
-            'status' => 'error',
-            'driver' => config('database.default'),
-            'connected' => false,
-            'error' => $e->getMessage(),
-            'host' => config('database.connections.' . config('database.default') . '.host'),
-            'connection_name' => config('database.default')
-        ];
-        $health['status'] = 'error';
-    }
-
-    // Test JWT configuration
-    try {
-        $user = \App\Models\User::first();
-        if ($user) {
-            $token = auth('api')->login($user);
-            $health['services']['jwt'] = [
-                'status' => 'ok',
-                'secret_configured' => !empty(config('jwt.secret')),
-                'token_generated' => !empty($token),
-                'token_length' => strlen($token)
-            ];
-        } else {
-            $health['services']['jwt'] = [
-                'status' => 'warning',
-                'message' => 'No users found in database',
-                'secret_configured' => !empty(config('jwt.secret'))
-            ];
-        }
-    } catch (\Exception $e) {
-        $health['services']['jwt'] = [
-            'status' => 'error',
-            'error' => $e->getMessage(),
-            'secret_configured' => !empty(config('jwt.secret'))
-        ];
-        $health['status'] = 'error';
-    }
-
-    // Test environment configuration
-    $health['services']['environment'] = [
-        'status' => 'ok',
-        'app_env' => config('app.env'),
-        'app_debug' => config('app.debug'),
-        'db_connection' => config('database.default'),
-        'db_host' => env('DB_HOST'),
-        'db_url_set' => !empty(env('DB_URL')),
-        'jwt_secret_set' => !empty(env('JWT_SECRET'))
-    ];
-
-    return response()->json($health, $health['status'] === 'ok' ? 200 : 500);
-});
 
 // Debug endpoint for testing chat
 Route::get('/debug/chat-test', function () {
@@ -162,6 +91,94 @@ Route::post('/create-first-admin', [AuthenticationController::class, 'createFirs
 Route::post('/register', [AuthenticationController::class, 'register']);
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
+
+// Routes with queue processing middleware
+Route::middleware(['process.queue'])->group(function () {
+    // Chat routes - frequently accessed, good for queue processing
+    Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
+    Route::get('/chat/{appointmentId}/messages', [ChatController::class, 'getMessages']);
+    Route::post('/chat/{appointmentId}/typing/start', [ChatController::class, 'startTyping']);
+    Route::post('/chat/{appointmentId}/typing/stop', [ChatController::class, 'stopTyping']);
+    Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUsers']);
+    
+    // Text session routes - critical for auto-deductions
+    Route::post('/text-sessions/end/{sessionId}', [TextSessionController::class, 'endSession']);
+    Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'getActiveSessions']);
+    Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
+    
+    // Health check - good for periodic queue processing
+    Route::get('/health', function () {
+        $health = [
+            'status' => 'ok',
+            'timestamp' => now()->toISOString(),
+            'message' => 'Backend is running',
+            'services' => []
+        ];
+
+        // Test database connection
+        try {
+            $dbConnection = DB::connection()->getPdo();
+            $health['services']['database'] = [
+                'status' => 'ok',
+                'driver' => config('database.default'),
+                'connected' => true,
+                'name' => DB::connection()->getDatabaseName(),
+                'host' => config('database.connections.' . config('database.default') . '.host'),
+                'connection_name' => DB::connection()->getName()
+            ];
+        } catch (\Exception $e) {
+            $health['services']['database'] = [
+                'status' => 'error',
+                'driver' => config('database.default'),
+                'connected' => false,
+                'error' => $e->getMessage(),
+                'host' => config('database.connections.' . config('database.default') . '.host'),
+                'connection_name' => config('database.default')
+            ];
+            $health['status'] = 'error';
+        }
+
+        // Test JWT configuration
+        try {
+            $user = \App\Models\User::first();
+            if ($user) {
+                $token = auth('api')->login($user);
+                $health['services']['jwt'] = [
+                    'status' => 'ok',
+                    'secret_configured' => !empty(config('jwt.secret')),
+                    'token_generated' => !empty($token),
+                    'token_length' => strlen($token)
+                ];
+            } else {
+                $health['services']['jwt'] = [
+                    'status' => 'warning',
+                    'message' => 'No users found in database',
+                    'secret_configured' => !empty(config('jwt.secret'))
+                ];
+            }
+        } catch (\Exception $e) {
+            $health['services']['jwt'] = [
+                'status' => 'error',
+                'error' => $e->getMessage(),
+                'secret_configured' => !empty(config('jwt.secret'))
+            ];
+            $health['status'] = 'error';
+        }
+
+        // Test environment configuration
+        $health['services']['environment'] = [
+            'status' => 'ok',
+            'app_env' => config('app.env'),
+            'app_debug' => config('app.debug'),
+            'db_connection' => config('database.default'),
+            'db_host' => env('DB_HOST'),
+            'db_url_set' => !empty(env('DB_URL')),
+            'jwt_secret_set' => !empty(env('JWT_SECRET'))
+        ];
+
+        return response()->json($health, $health['status'] === 'ok' ? 200 : 500);
+    });
+});
 
 // Password reset routes (no auth required) - temporarily without rate limiting for testing
 Route::post('/forgot-password', [\App\Http\Controllers\Auth\PasswordResetLinkController::class, 'store'])->withoutMiddleware(['throttle']);
@@ -631,3 +648,68 @@ Route::middleware(['auth:api'])->group(function () {
 });
 Route::get('/payments/paychangu/callback', [PaymentController::class, 'callback'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 Route::get('/payments/paychangu/return', [PaymentController::class, 'returnHandler'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
+
+// Manual queue processing endpoint (for testing and backup)
+Route::post('/admin/process-queue', function () {
+    try {
+        $jobs = \Illuminate\Support\Facades\DB::table('jobs')->where('queue', 'text-sessions')->get();
+        
+        if ($jobs->count() === 0) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No pending jobs found',
+                'processed' => 0
+            ]);
+        }
+        
+        $processedCount = 0;
+        
+        foreach ($jobs as $job) {
+            try {
+                $payload = json_decode($job->payload);
+                $jobClass = $payload->displayName ?? 'Unknown';
+                $jobData = $payload->data ?? [];
+                
+                if (strpos($jobClass, 'ProcessTextSessionAutoDeduction') !== false) {
+                    $sessionId = $jobData->sessionId ?? null;
+                    $expectedDeductionCount = $jobData->expectedDeductionCount ?? 1;
+                    
+                    if ($sessionId) {
+                        $autoDeductionJob = new \App\Jobs\ProcessTextSessionAutoDeduction($sessionId, $expectedDeductionCount);
+                        $autoDeductionJob->handle();
+                        $processedCount++;
+                    }
+                    
+                } elseif (strpos($jobClass, 'EndTextSession') !== false) {
+                    $sessionId = $jobData->sessionId ?? null;
+                    $reason = $jobData->reason ?? 'time_expired';
+                    
+                    if ($sessionId) {
+                        $autoEndJob = new \App\Jobs\EndTextSession($sessionId, $reason);
+                        $autoEndJob->handle();
+                        $processedCount++;
+                    }
+                }
+                
+                // Delete the processed job
+                \Illuminate\Support\Facades\DB::table('jobs')->where('id', $job->id)->delete();
+                
+            } catch (Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to process queue job: ' . $e->getMessage());
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Processed {$processedCount} jobs",
+            'processed' => $processedCount,
+            'total_found' => $jobs->count()
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to process queue: ' . $e->getMessage()
+        ], 500);
+    }
+});

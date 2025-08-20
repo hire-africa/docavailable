@@ -144,7 +144,7 @@ class ImageService {
 
       console.log('ImageService: FormData prepared:', {
         fileName,
-        formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
+        formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({
           key,
           type: typeof value,
           hasUri: typeof value === 'object' && 'uri' in value,

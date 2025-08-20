@@ -48,7 +48,7 @@ export const environment = {
   EMAIL_API_KEY: getEnvVar('EMAIL_API_KEY', ''),
   
   // AI Service Configuration
-  DEEPSEEK_API_KEY: getEnvVar('DEEPSEEK_API_KEY', 'sk-3c2cb2ac7a554039a0e8d378fb09ef36'),
+  DEEPSEEK_API_KEY: getEnvVar('DEEPSEEK_API_KEY', 'sk-4678d79347b14a7fa5b0c9f0d728b166'),
 };
 
 export default environment; 

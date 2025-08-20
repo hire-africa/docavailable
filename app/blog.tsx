@@ -101,30 +101,30 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
         flexDirection: 'row', 
         alignItems: 'center', 
         backgroundColor: '#FFFFFF', 
-        borderRadius: 16, 
+        borderRadius: 20, 
         marginHorizontal: 20, 
-        marginBottom: 20, 
-        paddingHorizontal: 16, 
-        height: 48,
+        marginBottom: 24, 
+        paddingHorizontal: 18, 
+        height: 52,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        elevation: 3,
         borderWidth: 1,
-        borderColor: '#E0E0E0',
+        borderColor: '#E8F5E8',
       }}>
-        <Icon name="search" size={20} color="#4CAF50" />
+        <Icon name="search" size={22} color="#4CAF50" />
         <TextInput
-          style={{ flex: 1, fontSize: 16, color: '#666', backgroundColor: 'transparent', marginLeft: 12 }}
+          style={{ flex: 1, fontSize: 17, color: '#666', backgroundColor: 'transparent', marginLeft: 14 }}
           placeholder="Search blogs by title, description, or category..."
           placeholderTextColor="#999"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginLeft: 8 }}>
-            <Icon name="times" size={20} color="#666" />
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginLeft: 10 }}>
+            <Icon name="times" size={22} color="#666" />
           </TouchableOpacity>
         )}
       </View>
@@ -282,14 +282,16 @@ const styles = StyleSheet.create({
   featuredCard: {
     width: 220,
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     marginRight: 16,
-    padding: 14,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   featuredImage: {
     width: '100%',
@@ -322,14 +324,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     marginBottom: 18,
-    padding: 14,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   articleCategory: {
     fontSize: 13,
@@ -394,14 +398,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 18,
+    borderRadius: 20,
     marginBottom: 12,
-    padding: 14,
+    padding: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   searchResultImage: {
     width: 80,

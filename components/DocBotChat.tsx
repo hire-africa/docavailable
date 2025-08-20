@@ -1,21 +1,24 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useRef, useState } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { DeepSeekService, StreamingResponse } from '../services/deepseekService';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 interface Message {
   id?: string;
@@ -38,41 +41,86 @@ export default function DocBotChat() {
   const [isTyping, setIsTyping] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredHistory, setFilteredHistory] = useState<ChatSession[]>([]);
   const scrollViewRef = useRef<ScrollView>(null);
   
-  // Animation value for history panel
+  // Enhanced animations
   const slideAnim = useRef(new Animated.Value(-width)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  // Animation for typing indicator
+  const typingAnim = useRef(new Animated.Value(0)).current;
 
-  // Generate chat title based on first user message
-  const generateChatTitle = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
+  // Generate chat title based on conversation content
+  const generateChatTitle = (messages: Message[]): string => {
+    if (messages.length === 0) return 'New Chat';
     
-    if (lowerMessage.includes('headache') || lowerMessage.includes('head pain')) {
-      return 'Headache Consultation';
-    } else if (lowerMessage.includes('fever') || lowerMessage.includes('temperature')) {
+    // Get the first user message
+    const firstUserMessage = messages.find(msg => msg.isUser)?.text.toLowerCase() || '';
+    const botResponse = messages.find(msg => !msg.isUser)?.text.toLowerCase() || '';
+    
+    // Check for specific health topics
+    if (firstUserMessage.includes('headache') || firstUserMessage.includes('head pain') || firstUserMessage.includes('migraine')) {
+      return 'Headache & Pain';
+    } else if (firstUserMessage.includes('fever') || firstUserMessage.includes('temperature') || firstUserMessage.includes('hot')) {
       return 'Fever & Temperature';
-    } else if (lowerMessage.includes('cold') || lowerMessage.includes('flu')) {
-      return 'Cold & Flu Symptoms';
-    } else if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) {
+    } else if (firstUserMessage.includes('cold') || firstUserMessage.includes('flu') || firstUserMessage.includes('cough')) {
+      return 'Cold & Flu';
+    } else if (firstUserMessage.includes('appointment') || firstUserMessage.includes('book') || firstUserMessage.includes('schedule')) {
       return 'Appointment Booking';
-    } else if (lowerMessage.includes('emergency') || lowerMessage.includes('urgent')) {
-      return 'Emergency Guidance';
-    } else if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
+    } else if (firstUserMessage.includes('emergency') || firstUserMessage.includes('urgent') || firstUserMessage.includes('severe')) {
+      return 'Emergency Care';
+    } else if (firstUserMessage.includes('pricing') || firstUserMessage.includes('cost') || firstUserMessage.includes('price') || firstUserMessage.includes('fee')) {
+      return 'Pricing & Plans';
+    } else if (firstUserMessage.includes('stomach') || firstUserMessage.includes('nausea') || firstUserMessage.includes('vomit')) {
+      return 'Stomach Issues';
+    } else if (firstUserMessage.includes('chest') || firstUserMessage.includes('heart') || firstUserMessage.includes('breathing')) {
+      return 'Chest & Breathing';
+    } else if (firstUserMessage.includes('skin') || firstUserMessage.includes('rash') || firstUserMessage.includes('itch')) {
+      return 'Skin Problems';
+    } else if (firstUserMessage.includes('sleep') || firstUserMessage.includes('insomnia') || firstUserMessage.includes('tired')) {
+      return 'Sleep Issues';
+    } else if (firstUserMessage.includes('diet') || firstUserMessage.includes('nutrition') || firstUserMessage.includes('food')) {
+      return 'Diet & Nutrition';
+    } else if (firstUserMessage.includes('exercise') || firstUserMessage.includes('workout') || firstUserMessage.includes('fitness')) {
+      return 'Exercise & Fitness';
+    } else if (firstUserMessage.includes('mental') || firstUserMessage.includes('anxiety') || firstUserMessage.includes('depression')) {
+      return 'Mental Health';
+    } else if (firstUserMessage.includes('pregnancy') || firstUserMessage.includes('baby') || firstUserMessage.includes('prenatal')) {
+      return 'Pregnancy Care';
+    } else if (firstUserMessage.includes('child') || firstUserMessage.includes('kid') || firstUserMessage.includes('baby')) {
+      return 'Child Health';
+    } else if (firstUserMessage.includes('elderly') || firstUserMessage.includes('senior') || firstUserMessage.includes('aging')) {
+      return 'Senior Health';
+    } else if (firstUserMessage.includes('medication') || firstUserMessage.includes('medicine') || firstUserMessage.includes('drug')) {
+      return 'Medication Advice';
+    } else if (firstUserMessage.includes('vaccine') || firstUserMessage.includes('immunization') || firstUserMessage.includes('shot')) {
+      return 'Vaccination';
+    } else if (firstUserMessage.includes('hello') || firstUserMessage.includes('hi') || firstUserMessage.includes('hey')) {
       return 'General Health Chat';
-    } else if (lowerMessage.includes('thank')) {
+    } else if (firstUserMessage.includes('thank')) {
       return 'Health Consultation';
-    } else if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
+    } else if (firstUserMessage.includes('bye') || firstUserMessage.includes('goodbye')) {
       return 'Health Chat';
-    } else {
-      return 'Health Consultation';
     }
+    
+    // If no specific topic found, try to extract a meaningful title from the first message
+    const words = firstUserMessage.split(' ').filter(word => word.length > 3);
+    if (words.length > 0) {
+      const firstWord = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+      return `${firstWord} Consultation`;
+    }
+    
+    return 'Health Consultation';
   };
 
   // Save current chat to history
   const saveCurrentChat = () => {
     if (messages.length > 0) {
-      const firstUserMessage = messages.find(msg => msg.isUser)?.text || 'Health Consultation';
-      const chatTitle = generateChatTitle(firstUserMessage);
+      const chatTitle = generateChatTitle(messages);
       
       const newChatSession: ChatSession = {
         id: Date.now().toString(),
@@ -85,6 +133,21 @@ export default function DocBotChat() {
       setChatHistory(updatedHistory);
       saveChatHistoryToStorage(updatedHistory);
     }
+  };
+  
+  // Start new chat with conversation memory reset
+  const startNewChat = () => {
+    // Clear conversation memory
+    DeepSeekService.clearConversation();
+    
+    // Save current chat if it has messages
+    if (messages.length > 0) {
+      saveCurrentChat();
+    }
+    
+    // Clear current messages
+    setMessages([]);
+    setInputText('');
   };
 
   // Load chat from history
@@ -149,7 +212,55 @@ export default function DocBotChat() {
   // Load chat history on component mount
   useEffect(() => {
     loadChatHistory();
+    
+    // Start welcome animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    // Start pulse animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, []);
+
+  // Filter chat history based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredHistory(chatHistory);
+    } else {
+      const filtered = chatHistory.filter(chat => {
+        const searchLower = searchQuery.toLowerCase();
+        return (
+          chat.title.toLowerCase().includes(searchLower) ||
+          chat.messages.some(msg => 
+            msg.text.toLowerCase().includes(searchLower)
+          )
+        );
+      });
+      setFilteredHistory(filtered);
+    }
+  }, [searchQuery, chatHistory]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -163,59 +274,110 @@ export default function DocBotChat() {
     animateHistoryPanel(showHistory);
   }, [showHistory]);
 
-  const generateBotResponse = (userMessage: string): { text: string; type: Message['type'] } => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-      return {
-        text: "Hello! How are you feeling today? I'm here to help with any health questions or concerns you might have.",
-        type: 'general'
-      };
-    } else if (lowerMessage.includes('headache') || lowerMessage.includes('head pain')) {
-      return {
-        text: "I understand you're experiencing a headache. Common causes include stress, dehydration, lack of sleep, or eye strain. Try resting in a quiet, dark room, staying hydrated, and taking over-the-counter pain relievers if needed. If your headache is severe or persistent, please consult a healthcare provider.",
-        type: 'symptom'
-      };
-    } else if (lowerMessage.includes('fever') || lowerMessage.includes('temperature')) {
-      return {
-        text: "A fever is often a sign that your body is fighting an infection. Rest, stay hydrated, and monitor your temperature. If your fever is above 103°F (39.4°C) or lasts more than 3 days, please seek medical attention.",
-        type: 'symptom'
-      };
-    } else if (lowerMessage.includes('cold') || lowerMessage.includes('flu')) {
-      return {
-        text: "For cold and flu symptoms, rest, stay hydrated, and consider over-the-counter medications for symptom relief. Most colds resolve within 7-10 days. If symptoms are severe or persist, please consult a healthcare provider.",
-        type: 'symptom'
-      };
-    } else if (lowerMessage.includes('appointment') || lowerMessage.includes('book')) {
-      return {
-        text: "I can help you book an appointment! You can use the 'Discover' tab to find available doctors, or if you have a specific doctor in mind, you can book directly through their profile. Would you like me to explain the booking process?",
-        type: 'booking'
-      };
-    } else if (lowerMessage.includes('emergency') || lowerMessage.includes('urgent')) {
-      return {
-        text: "If you're experiencing a medical emergency, please call emergency services immediately (998 or 997). This could include chest pain, difficulty breathing, severe bleeding, or loss of consciousness. Don't wait - seek immediate medical attention.",
-        type: 'emergency'
-      };
-    } else if (lowerMessage.includes('thank')) {
-      return {
-        text: "You're welcome! I'm here to help. Is there anything else you'd like to know about your health?",
-        type: 'general'
-      };
-    } else if (lowerMessage.includes('bye') || lowerMessage.includes('goodbye')) {
-      return {
-        text: "Take care! Remember, I'm here whenever you need health information or guidance. Stay healthy!",
-        type: 'general'
-      };
+  // Animate typing indicator
+  useEffect(() => {
+    if (isTyping) {
+      Animated.timing(typingAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
     } else {
-      return {
-        text: "Thank you for your question. While I can provide general health information, I cannot diagnose specific conditions or provide medical advice. For personalized medical care, please consult with a healthcare provider. You can book an appointment through our app or visit a local clinic.",
-        type: 'advice'
-      };
+      Animated.timing(typingAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
     }
+  }, [isTyping]);
+
+  const generateBotResponse = async (userMessage: string): Promise<{ text: string; type: Message['type'] }> => {
+    console.log('🤖 Calling DeepSeek service with streaming...');
+    
+    return new Promise((resolve) => {
+      let finalText = '';
+      let messageType: Message['type'] = 'general';
+      
+      // Create a temporary bot message for streaming
+      const tempBotMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: '',
+        isUser: false,
+        timestamp: new Date(),
+        type: 'general'
+      };
+      
+      setMessages(prev => [...prev, tempBotMessage]);
+      
+      DeepSeekService.getStreamingResponse(
+        userMessage,
+        (chunk: StreamingResponse) => {
+          // Update the temporary message with streaming text
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempBotMessage.id 
+              ? { ...msg, text: chunk.text }
+              : msg
+          ));
+          
+          finalText = chunk.text;
+          
+          // Determine message type from final chunk
+          if (chunk.isComplete && chunk.urgency) {
+            if (chunk.urgency === 'high') {
+              messageType = 'emergency';
+            } else if (chunk.shouldBookAppointment) {
+              messageType = 'booking';
+            } else if (userMessage.toLowerCase().includes('pain') || userMessage.toLowerCase().includes('symptom')) {
+              messageType = 'symptom';
+            } else if (userMessage.toLowerCase().includes('advice') || userMessage.toLowerCase().includes('tip')) {
+              messageType = 'advice';
+            }
+            
+            // Update the message with final type
+            setMessages(prev => prev.map(msg => 
+              msg.id === tempBotMessage.id 
+                ? { ...msg, type: messageType }
+                : msg
+            ));
+          }
+          
+          // Resolve when streaming is complete
+          if (chunk.isComplete) {
+            resolve({
+              text: finalText,
+              type: messageType
+            });
+          }
+        }
+      ).catch((error) => {
+        console.error('❌ Error generating bot response:', error);
+        console.error('Error details:', error.message);
+        
+        // Remove temporary message and add error message
+        setMessages(prev => prev.filter(msg => msg.id !== tempBotMessage.id));
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'Sorry, I encountered an error. Please try again later.',
+          isUser: false,
+          timestamp: new Date(),
+          type: 'general'
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+        resolve({
+          text: 'Sorry, I encountered an error. Please try again later.',
+          type: 'general'
+        });
+      });
+    });
   };
 
   const sendMessage = async () => {
     if (!inputText.trim()) return;
+
+    // Dismiss keyboard when sending message
+    Keyboard.dismiss();
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -235,19 +397,14 @@ export default function DocBotChat() {
     setInputText('');
     setIsTyping(true);
 
-    // Simulate bot thinking time
-    setTimeout(() => {
-      const botResponse = generateBotResponse(userMessage.text);
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: botResponse.text,
-        isUser: false,
-        timestamp: new Date(),
-        type: botResponse.type
-      };
-      setMessages(prev => [...prev, botMessage]);
+    // Generate bot response with streaming
+    try {
+      await generateBotResponse(userMessage.text);
+    } catch (error) {
+      console.error('Error in sendMessage:', error);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 2000);
+    }
   };
 
   const formatTime = (date: Date) => {
@@ -286,62 +443,35 @@ export default function DocBotChat() {
 
   return (
     <View style={styles.container}>
-      {/* Modern Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          {/* History Menu Button - Left Side */}
+      {/* Invisible Header with DocBot Branding */}
+      <View style={styles.invisibleHeader}>
           <TouchableOpacity 
-            style={{
-              position: 'absolute',
-              left: 20,
-              padding: 8,
-            }}
+          style={styles.headerButton}
             onPress={() => {
               setShowHistory(!showHistory);
             }}
           >
-            <FontAwesome name="ellipsis-v" size={24} color="#4CAF50" />
+          <FontAwesome name="history" size={20} color="#666" />
           </TouchableOpacity>
           
-          <View style={styles.botAvatarContainer}>
-            <Image 
-              source={require('../assets/images/DA.png')} 
-              style={styles.botAvatar}
-              resizeMode="cover"
-            />
-          </View>
-          <View style={styles.headerText}>
-            <Text style={styles.botName}>DocBot Free</Text>
-            <Text style={styles.botSubtitle}>AI Health Assistant</Text>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>DocBot</Text>
+          <FontAwesome name="check-circle" size={16} color="#1DA1F2" style={styles.verifiedBadge} />
           </View>
           
-          {/* New Chat Button - Right Side */}
-          <TouchableOpacity 
-            style={{
-              position: 'absolute',
-              right: 20,
-              padding: 8,
-            }}
-            onPress={() => {
-              // Save current chat before clearing
-              if (messages.length > 0) {
-                saveCurrentChat();
-              }
-              // Clear all messages to start a new chat
-              setMessages([]);
-              setInputText('');
-            }}
+                    <TouchableOpacity 
+            style={styles.headerButton}
+            onPress={startNewChat}
           >
-            <FontAwesome name="plus-circle" size={24} color="#4CAF50" />
+          <FontAwesome name="plus" size={20} color="#666" />
           </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Messages Container */}
+      {/* Messages Container - Full Screen */}
       <KeyboardAvoidingView 
         style={styles.messagesContainer}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
         <ScrollView
           ref={scrollViewRef}
@@ -354,71 +484,124 @@ export default function DocBotChat() {
           }}
         >
           
-          {/* Welcome Message Placeholder - Only show when no messages exist */}
+          {/* Enhanced Welcome Message with Animations */}
           {messages.length === 0 && (
-            <View style={{
-              alignItems: 'center',
-              paddingVertical: 60,
-              paddingHorizontal: 20,
-            }}>
-              <View style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 20,
-                padding: 24,
+            <Animated.View 
+              style={{
                 alignItems: 'center',
-                maxWidth: 280,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 8,
-                elevation: 3,
-              }}>
-                <View style={{
-                  width: 60,
-                  height: 60,
-                  borderRadius: 30,
-                  backgroundColor: '#4CAF50',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  marginBottom: 16,
-                }}>
-                  <FontAwesome name="stethoscope" size={28} color="#fff" />
-                </View>
-                <Text style={{
-                  fontSize: 20,
-                  fontWeight: '600',
-                  color: '#333',
-                  textAlign: 'center',
-                  marginBottom: 8,
-                }}>
+                paddingVertical: 0,
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }]
+              }}
+            >
+              <LinearGradient
+                colors={['#FFFFFF', '#F8F9FA']}
+                style={styles.welcomeCard}
+              >
+                <TouchableOpacity
+                  onPress={startNewChat}
+                >
+                  <Animated.View 
+                    style={[
+                      styles.welcomeIconContainer,
+                      { transform: [{ scale: pulseAnim }] }
+                    ]}
+                  >
+                    <Image 
+                      source={require('../assets/images/DA.png')} 
+                      style={styles.welcomeAvatar}
+                      resizeMode="stretch"
+                    />
+                  </Animated.View>
+                </TouchableOpacity>
+                <Text style={styles.welcomeTitle}>
                   Hi, I'm DocBot! 👋
                 </Text>
-                <Text style={{
-                  fontSize: 16,
-                  color: '#666',
-                  textAlign: 'center',
-                  lineHeight: 22,
-                }}>
+                <Text style={styles.welcomeSubtitle}>
                   How can I help you today? I'm here to assist with your health questions and provide medical guidance.
                 </Text>
+                
+                {/* Quick Action Buttons */}
+                <View style={styles.quickActionsContainer}>
+                  <TouchableOpacity 
+                    style={styles.quickActionButton}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setInputText("I have a headache");
+                      sendMessage();
+                    }}
+                  >
+                    <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
+                    <Text style={styles.quickActionText}>Headache</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickActionButton}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setInputText("I have a fever");
+                      sendMessage();
+                    }}
+                  >
+                    <FontAwesome name="thermometer-half" size={16} color="#FF6B6B" />
+                    <Text style={styles.quickActionText}>Fever</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickActionButton}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setInputText("I need to book an appointment");
+                      sendMessage();
+                    }}
+                  >
+                    <FontAwesome name="calendar" size={16} color="#45B7D1" />
+                    <Text style={styles.quickActionText}>Book Appointment</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.quickActionButton}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setInputText("What are your pricing plans?");
+                      sendMessage();
+                    }}
+                  >
+                    <FontAwesome name="credit-card" size={16} color="#4ECDC4" />
+                    <Text style={styles.quickActionText}>Pricing</Text>
+                  </TouchableOpacity>
               </View>
-            </View>
+              </LinearGradient>
+            </Animated.View>
           )}
 
           {messages.map((message, index) => (
-            <View
+            <Animated.View
               key={message.id || `msg_${index}`}
               style={[
                 styles.messageContainer,
                 message.isUser ? styles.userMessage : styles.botMessage,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ 
+                    translateY: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0]
+                    })
+                  }]
+                }
               ]}
             >
+
+              
               <View
                 style={[
                   styles.messageCard,
                   message.isUser ? styles.userCard : styles.botCard,
                 ]}
               >
+
+                
                 <View style={styles.messageContent}>
                   <Text
                     style={[
@@ -428,6 +611,52 @@ export default function DocBotChat() {
                   >
                     {message.text}
                   </Text>
+                  
+                  {/* DeepSeek-style Action Buttons for Bot Messages */}
+                  {!message.isUser && (
+                    <View style={styles.messageActions}>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => {
+                          // TODO: Implement copy functionality
+                          console.log('Copy pressed');
+                        }}
+                      >
+                        <FontAwesome name="copy" size={14} color="#666" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => {
+                          // TODO: Implement reanswer functionality
+                          console.log('Reanswer pressed');
+                        }}
+                      >
+                        <FontAwesome name="refresh" size={14} color="#666" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => {
+                          // TODO: Implement thumbs up functionality
+                          console.log('Thumbs up pressed');
+                        }}
+                      >
+                        <FontAwesome name="thumbs-up" size={14} color="#666" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => {
+                          // TODO: Implement thumbs down functionality
+                          console.log('Thumbs down pressed');
+                        }}
+                      >
+                        <FontAwesome name="thumbs-down" size={14} color="#666" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  
                   <Text style={[
                     styles.messageTime,
                     message.isUser ? styles.userTime : styles.botTime
@@ -436,24 +665,38 @@ export default function DocBotChat() {
                   </Text>
                 </View>
               </View>
-            </View>
+            </Animated.View>
           ))}
           
           {isTyping && (
-            <View style={styles.messageContainer}>
+            <Animated.View 
+              style={[
+                styles.messageContainer,
+                {
+                  opacity: typingAnim,
+                  transform: [{ scale: typingAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 1]
+                  })}]
+                }
+              ]}
+            >
               <View style={styles.typingCard}>
                 <View style={styles.typingDots}>
-                  <View style={[styles.dot, styles.dot1]} />
-                  <View style={[styles.dot, styles.dot2]} />
-                  <View style={[styles.dot, styles.dot3]} />
+                  <Animated.View style={[styles.dot, styles.dot1, { opacity: typingAnim }]} />
+                  <Animated.View style={[styles.dot, styles.dot2, { opacity: typingAnim }]} />
+                  <Animated.View style={[styles.dot, styles.dot3, { opacity: typingAnim }]} />
                 </View>
               </View>
-            </View>
+            </Animated.View>
           )}
         </ScrollView>
 
-        {/* Modern Input Area */}
-        <View style={styles.inputContainer}>
+        {/* Enhanced Input Area with Gradient */}
+        <LinearGradient
+          colors={['#FFFFFF', '#F8F9FA']}
+          style={styles.inputContainer}
+        >
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
@@ -469,17 +712,22 @@ export default function DocBotChat() {
               onPress={sendMessage}
               disabled={!inputText.trim()}
             >
+              <LinearGradient
+                colors={inputText.trim() ? ['#4CAF50', '#45B7D1'] : ['#E0E0E0', '#E0E0E0']}
+                style={styles.sendButtonGradient}
+            >
               <FontAwesome 
                 name="send" 
                 size={18} 
                 color={inputText.trim() ? "#FFFFFF" : "#CCC"} 
               />
+              </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
+        </LinearGradient>
       </KeyboardAvoidingView>
       
-      {/* Chat History Side Panel */}
+      {/* Modern Full-Screen Chat History */}
       {showHistory && (
         <Animated.View 
           style={[
@@ -491,10 +739,6 @@ export default function DocBotChat() {
             })}
           ]}
         >
-          <TouchableOpacity 
-            style={styles.historyBackdrop}
-            onPress={() => setShowHistory(false)}
-          />
           <Animated.View 
             style={[
               styles.historyPanel,
@@ -506,34 +750,54 @@ export default function DocBotChat() {
             ]}
           >
             <View style={styles.historyHeader}>
+              <View style={styles.historyHeaderTop}>
+                <TouchableOpacity 
+                  onPress={() => setShowHistory(false)}
+                  style={styles.backButton}
+                >
+                  <FontAwesome name="arrow-left" size={20} color="#666" />
+                </TouchableOpacity>
               <Text style={styles.historyTitle}>Chat History</Text>
-              <View style={styles.historyHeaderButtons}>
                 {chatHistory.length > 0 && (
                   <TouchableOpacity 
                     onPress={clearAllChatHistory}
                     style={styles.clearButton}
                   >
-                    <FontAwesome name="trash" size={16} color="#FF4444" />
+                    <FontAwesome name="trash" size={18} color="#FF4444" />
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity 
-                  onPress={() => setShowHistory(false)}
-                  style={styles.closeButton}
-                >
-                  <FontAwesome name="times" size={20} color="#666" />
-                </TouchableOpacity>
+              </View>
+              
+              {/* Search Bar */}
+              <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                  <FontAwesome name="search" size={16} color="#999" style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search conversations..."
+                    placeholderTextColor="#999"
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                  />
+                </View>
               </View>
             </View>
             
             <ScrollView style={styles.historyList}>
-              {chatHistory.length === 0 ? (
+              {filteredHistory.length === 0 ? (
                 <View style={styles.emptyHistory}>
-                  <FontAwesome name="history" size={48} color="#CCC" />
-                  <Text style={styles.emptyHistoryText}>No chat history yet</Text>
-                  <Text style={styles.emptyHistorySubtext}>Your conversations will appear here</Text>
+                  <View style={styles.emptyHistoryIcon}>
+                    <FontAwesome name="search" size={48} color="#CCC" />
+                  </View>
+                  <Text style={styles.emptyHistoryText}>
+                    {searchQuery.trim() ? 'No conversations found' : 'No chat history yet'}
+                  </Text>
+                  <Text style={styles.emptyHistorySubtext}>
+                    {searchQuery.trim() ? 'Try a different search term' : 'Your conversations will appear here'}
+                  </Text>
                 </View>
               ) : (
-                chatHistory.map((chat) => (
+                filteredHistory.map((chat) => (
                   <TouchableOpacity
                     key={chat.id}
                     style={styles.historyItem}
@@ -567,50 +831,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
-  header: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  headerContent: {
+
+  // Invisible Header Styles
+  invisibleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingTop: 50,
+    backgroundColor: 'transparent',
+    zIndex: 1000,
   },
-  botAvatarContainer: {
-    marginRight: 12,
-  },
-  botAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  headerText: {
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  botName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#222',
-    marginBottom: 2,
   },
-  botSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+  verifiedBadge: {
+    marginLeft: 6,
   },
+
   messagesContainer: {
     flex: 1,
     backgroundColor: '#F8F9FA',
@@ -622,6 +875,7 @@ const styles = StyleSheet.create({
   messagesContent: {
     paddingHorizontal: 16,
     paddingVertical: 20,
+    paddingTop: 20,
     backgroundColor: '#F8F9FA',
   },
   messageContainer: {
@@ -635,19 +889,7 @@ const styles = StyleSheet.create({
   botMessage: {
     justifyContent: 'flex-start',
   },
-  botMessageAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
+
   messageCard: {
     maxWidth: width * 0.8,
     borderRadius: 16,
@@ -813,24 +1055,36 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    right: 0,
     bottom: 0,
-    width: width * 0.85,
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 8,
   },
   historyHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingTop: 50,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  historyHeaderTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    marginBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   historyTitle: {
     fontSize: 18,
@@ -842,11 +1096,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   clearButton: {
-    padding: 8,
-    marginRight: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  closeButton: {
-    padding: 8,
+  searchContainer: {
+    marginBottom: 8,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
   },
   historyList: {
     flex: 1,
@@ -856,6 +1132,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
+  },
+  emptyHistoryIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   emptyHistoryText: {
     fontSize: 16,
@@ -874,7 +1159,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
   },
   historyItemContent: {
     flex: 1,
@@ -895,5 +1181,110 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     lineHeight: 18,
+  },
+  
+  // Enhanced Styles
+  welcomeCard: {
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  welcomeIconContainer: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    marginBottom: 20,
+  },
+  welcomeAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  welcomeTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#222',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  welcomeSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  quickActionsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    minWidth: 120,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 8,
+  },
+
+  sendButtonGradient: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  messageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  actionButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
 }); 

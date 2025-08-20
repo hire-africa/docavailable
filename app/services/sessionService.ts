@@ -52,11 +52,12 @@ class SessionService {
       }
       
       console.log('🔍 [SessionService] Processed response:', {
-        status: response.status,
-        timeRemaining: response.timeRemaining,
+        success: response.success,
+        status: (response as any).status,
+        timeRemaining: (response as any).timeRemaining,
         message: response.message,
-        remainingTimeMinutes: response.remainingTimeMinutes,
-        remainingSessions: response.remainingSessions
+        remainingTimeMinutes: (response as any).remainingTimeMinutes,
+        remainingSessions: (response as any).remainingSessions
       });
       
       return response;
@@ -95,10 +96,10 @@ class SessionService {
       // Handle different response formats
       if (sessionType === 'text') {
         // New text session response format with payment_processing and session objects
-        if (response.data && response.data.payment_processing && response.data.session) {
-          console.log('🔍 Text session ended successfully with new format');
-          const paymentProcessing = response.data.payment_processing;
-          const session = response.data.session;
+        if ((response.data as any) && (response.data as any).payment_processing && (response.data as any).session) {
+          console.log('🔍 Payment processing detected');
+          const paymentProcessing = (response.data as any).payment_processing;
+          const session = (response.data as any).session;
           
           // Check if payment processing was successful
           const paymentSuccess = paymentProcessing.doctor_payment_success && paymentProcessing.patient_deduction_success;
@@ -109,18 +110,18 @@ class SessionService {
             sessionData: session,
             paymentData: paymentProcessing
           };
-        } else if (response.data && response.data.success) {
+        } else if ((response.data as any) && (response.data as any).success) {
           // Fallback for old format
           console.log('🔍 Text session ended successfully (old format)');
           return {
             status: 'success',
             sessionsUsed: 1
           };
-        } else if (response.data && response.data.message) {
+        } else if ((response.data as any) && (response.data as any).message) {
           // Handle cases where session is not found or already ended
-          console.log('🔍 Text session response:', response.data.message);
-          if (response.data.message.includes('already been ended') || 
-              response.data.message.includes('not found')) {
+          console.log('🔍 Text session response:', (response.data as any).message);
+          if ((response.data as any).message.includes('already been ended') || 
+              (response.data as any).message.includes('not found')) {
             // Treat as success since the session is effectively ended
             return {
               status: 'success',
@@ -143,21 +144,22 @@ class SessionService {
       } else {
         // Appointment response format - convert to expected format
         return {
-          status: response.data.success ? 'success' : 'error',
+          status: (response.data as any).success ? 'success' : 'error',
           sessionsUsed: 1 // Default to 1 session used
         };
       }
     } catch (error) {
       console.error('Error ending session:', error);
       console.error('Error details:', {
-        message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        statusText: error?.response?.statusText
+        message: (error as any)?.message,
+        response: (error as any)?.response?.data,
+        status: (error as any)?.response?.status,
+        data: (error as any)?.response?.data,
+        statusText: (error as any)?.response?.statusText
       });
       
       // Handle specific error cases
-      if (error?.response?.status === 404) {
+      if ((error as any)?.response?.status === 404) {
         // Session not found - treat as success since it's effectively ended
         console.log('🔍 Session not found (404) - treating as success');
         return {
@@ -189,7 +191,7 @@ class SessionService {
       console.log('🔍 Submitting rating to endpoint:', endpoint);
       console.log('🔍 Payload:', payload);
       const response = await apiService.post(endpoint, payload);
-      return response.data;
+      return (response.data as any);
     } catch (error) {
       console.error('Error submitting rating:', error);
       throw error;

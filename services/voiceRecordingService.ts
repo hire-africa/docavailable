@@ -138,7 +138,7 @@ class VoiceRecordingService {
         appointmentId,
         fileName,
         uri: uri.substring(0, 50) + '...', // Log partial URI for debugging
-        formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
+        formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({
           key,
           type: typeof value,
           hasUri: typeof value === 'object' && 'uri' in value,

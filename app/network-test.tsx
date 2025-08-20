@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Platform,
@@ -9,6 +9,7 @@ import {
     View
 } from 'react-native';
 import { apiService } from '../app/services/apiService';
+import '../utils/abortSignalPolyfill';
 
 interface TestResult {
   name: string;

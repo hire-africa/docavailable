@@ -201,7 +201,7 @@ class AuthService {
       
       // Convert FormData to JSON object (profile pictures are already converted to base64)
       const jsonData: any = {};
-      for (let [key, value] of formData.entries()) {
+      for (let [key, value] of (formData as any).entries()) {
         jsonData[key] = value;
       }
       
