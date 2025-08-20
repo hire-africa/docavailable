@@ -193,4 +193,137 @@ services:
       - key: VITE_PUSHER_SCHEME
         value: "${PUSHER_SCHEME}"
       - key: VITE_PUSHER_APP_CLUSTER
-        value: "${PUSHER_APP_CLUSTER}" 
+        value: "${PUSHER_APP_CLUSTER}"
+
+  - type: worker
+    name: docavailable-queue-worker
+    env: php
+    dockerfilePath: dockerfile.simple
+    buildFilter:
+      paths:
+        - backend/**
+    buildCommand: |
+      # Force fresh build by updating timestamp
+      echo "=== Build timestamp: $(date) - Queue Worker Build ==="
+      cd backend
+      
+      # Remove problematic files that cause autoloader issues
+      echo "=== Cleaning up autoloader issues ==="
+      rm -f database/seeders/Plan.php
+      rm -f app/Http/Controllers/Auth/AuthenticationController_fixed.php
+      
+      # Clear composer cache and install dependencies
+      echo "=== Clearing composer cache ==="
+      composer clear-cache
+      
+      # Force remove vendor directory to ensure fresh install
+      echo "=== Removing vendor directory for fresh install ==="
+      rm -rf vendor/
+      rm -f composer.lock
+      
+      # Install dependencies with optimized autoloader
+      echo "=== Installing dependencies ==="
+      composer install --optimize-autoloader --no-interaction --prefer-dist --no-progress
+      
+      # Regenerate autoloader to ensure all classes are properly mapped
+      echo "=== Regenerating autoloader ==="
+      composer dump-autoload --optimize
+      
+      # Generate application keys
+      php artisan key:generate --force
+      php artisan jwt:secret --force
+      
+      # Clear all caches to ensure clean state
+      echo "=== Clearing caches ==="
+      php artisan config:clear
+      php artisan cache:clear
+      php artisan route:clear
+      php artisan view:clear
+      
+      echo "=== Queue Worker Build completed successfully ==="
+    startCommand: |
+      cd backend
+      echo "=== Starting Queue Worker ==="
+      echo "=== Debug: Current directory ===" && pwd
+      
+      # Final cache clear before starting
+      php artisan config:clear
+      php artisan cache:clear
+      
+      # Run migrations to ensure database is up to date
+      php artisan migrate --force
+      
+      echo "=== Starting Queue Worker for text-sessions and default queues ==="
+      php artisan queue:work --queue=text-sessions,default --tries=3 --timeout=60 --sleep=3 --max-time=3600
+    rootDir: backend
+    envVars:
+      - key: APP_NAME
+        value: DocAvailable
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: false
+      - key: APP_TIMEZONE
+        value: UTC
+      - key: APP_LOCALE
+        value: en
+      - key: APP_FALLBACK_LOCALE
+        value: en
+      - key: APP_FAKER_LOCALE
+        value: en_US
+      - key: LOG_CHANNEL
+        value: stack
+      - key: LOG_DEPRECATIONS_CHANNEL
+        value: null
+      - key: LOG_LEVEL
+        value: error
+      - key: CACHE_STORE
+        value: database
+      - key: CACHE_PREFIX
+        value: laravel-cache-
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: QUEUE_FAILED_DRIVER
+        value: database-uuids
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_LIFETIME
+        value: 120
+      - key: FILESYSTEM_DISK
+        value: local
+      - key: DB_CONNECTION
+        value: pgsql_simple
+      - key: DB_HOST
+        value: ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech
+      - key: DB_PORT
+        value: 5432
+      - key: DB_DATABASE
+        value: neondb
+      - key: DB_USERNAME
+        value: neondb_owner
+      - key: DB_PASSWORD
+        value: ${DB_PASSWORD}
+      - key: DB_URL
+        value: postgresql://neondb_owner:${DB_PASSWORD}@ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-hidden-brook-aemmopjb
+      - key: DB_SSLMODE
+        value: require
+      - key: DB_CHARSET
+        value: utf8
+      - key: DB_CONNECT_TIMEOUT
+        value: 10
+      - key: DB_SOCKET_TIMEOUT
+        value: 30
+      - key: DB_PERSISTENT
+        value: false
+      - key: BROADCAST_DRIVER
+        value: log
+      - key: CACHE_DRIVER
+        value: file
+      - key: MEMCACHED_HOST
+        value: 127.0.0.1
+      - key: REDIS_HOST
+        value: 127.0.0.1
+      - key: REDIS_PASSWORD
+        value: null
+      - key: REDIS_PORT
+        value: 6379

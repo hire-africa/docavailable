@@ -384,11 +384,17 @@ class ChatController extends Controller
                         'activated_at' => now()
                     ]);
                     
-                    Log::info("Session activated by doctor", [
+                    // Schedule auto-deductions and auto-ending using queue system
+                    $session->scheduleAutoDeductions();
+                    $session->scheduleAutoEndForInsufficientSessions();
+                    
+                    Log::info("Session activated by doctor and scheduled", [
                         'session_id' => $sessionId,
                         'activated_at' => now(),
                         'previous_status' => \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR,
-                        'new_status' => \App\Models\TextSession::STATUS_ACTIVE
+                        'new_status' => \App\Models\TextSession::STATUS_ACTIVE,
+                        'auto_deductions_scheduled' => 'yes',
+                        'auto_ending_scheduled' => 'yes'
                     ]);
                 }
             } else {

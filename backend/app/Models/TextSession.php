@@ -127,49 +127,38 @@ class TextSession extends Model
     }
 
     /**
-     * Get total allowed minutes based on sessions remaining before start
-     */
-    public function getTotalAllowedMinutes(): int
-    {
-        return $this->sessions_remaining_before_start * 10;
-    }
-
-    /**
-     * Get elapsed minutes since session started
+     * Get elapsed minutes since activation (not start)
      */
     public function getElapsedMinutes(): int
     {
-        if (!$this->started_at) {
+        if (!$this->activated_at) {
+            return 0; // Session not activated yet
+        }
+        
+        $endTime = $this->ended_at ?? now();
+        return $this->activated_at->diffInMinutes($endTime);
+    }
+
+    /**
+     * Get total allowed minutes based on sessions remaining
+     */
+    public function getTotalAllowedMinutes(): int
+    {
+        $patient = $this->patient;
+        if (!$patient || !$patient->subscription) {
             return 0;
         }
-        $endTime = $this->ended_at ?? now();
-        return $this->started_at->diffInMinutes($endTime);
+        
+        $subscription = $patient->subscription;
+        if (!$subscription->isActive) {
+            return 0;
+        }
+        
+        return $subscription->text_sessions_remaining * 10; // 10 minutes per session
     }
 
     /**
-     * Calculate sessions to deduct based on elapsed time
-     * Auto-deductions happen at 10-minute intervals
-     * Manual end always adds 1 session
-     */
-    public function getSessionsToDeduct(bool $isManualEnd = false): int
-    {
-        $elapsedMinutes = $this->getElapsedMinutes();
-        
-        // Calculate auto-deductions (every 10 minutes)
-        $autoDeductions = floor($elapsedMinutes / 10);
-        
-        // FIX: Don't double-count auto-deductions that were already processed
-        $alreadyProcessed = $this->auto_deductions_processed ?? 0;
-        $newAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
-        
-        // Manual end always adds 1 session
-        $manualDeduction = $isManualEnd ? 1 : 0;
-        
-        return $newAutoDeductions + $manualDeduction;
-    }
-
-    /**
-     * Check if session should auto-end based on total time
+     * Check if session should auto-end based on total time from activation
      */
     public function shouldAutoEnd(): bool
     {
@@ -179,18 +168,18 @@ class TextSession extends Model
     }
 
     /**
-     * Get the next auto-deduction time
+     * Get the next auto-deduction time (from activation point)
      */
     public function getNextAutoDeductionTime(): ?\Carbon\Carbon
     {
-        if (!$this->started_at) {
-            return null;
+        if (!$this->activated_at) {
+            return null; // Session not activated yet
         }
         
         $elapsedMinutes = $this->getElapsedMinutes();
         $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
         
-        return $this->started_at->addMinutes($nextDeductionMinute);
+        return $this->activated_at->addMinutes($nextDeductionMinute);
     }
 
     /**
@@ -204,7 +193,7 @@ class TextSession extends Model
     }
 
     /**
-     * Get remaining time in minutes for the session
+     * Get remaining time in minutes for the session (from activation point)
      */
     public function getRemainingTimeMinutes(): int
     {
@@ -214,7 +203,7 @@ class TextSession extends Model
     }
 
     /**
-     * Get remaining sessions count
+     * Get remaining sessions count (based on activation time)
      */
     public function getRemainingSessions(): int
     {
@@ -224,10 +213,132 @@ class TextSession extends Model
     }
 
     /**
-     * Check if session has run out of time
+     * Check if session has run out of time (from activation point)
      */
     public function hasRunOutOfTime(): bool
     {
         return $this->getRemainingTimeMinutes() <= 0;
+    }
+
+    /**
+     * Check if session should be auto-ended due to insufficient sessions
+     */
+    public function shouldAutoEndDueToInsufficientSessions(): bool
+    {
+        $patient = $this->patient;
+        if (!$patient || !$patient->subscription) {
+            return true; // No subscription, auto-end
+        }
+        
+        $subscription = $patient->subscription;
+        if (!$subscription->isActive) {
+            return true; // Inactive subscription, auto-end
+        }
+        
+        // Check if we have enough sessions for the next 10-minute block
+        $elapsedMinutes = $this->getElapsedMinutes();
+        $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
+        $sessionsNeededForNextBlock = 1; // 1 session per 10 minutes
+        
+        return $subscription->text_sessions_remaining < $sessionsNeededForNextBlock;
+    }
+
+    /**
+     * Get detailed session status for debugging
+     */
+    public function getSessionStatusDetails(): array
+    {
+        return [
+            'session_id' => $this->id,
+            'status' => $this->status,
+            'started_at' => $this->started_at,
+            'activated_at' => $this->activated_at,
+            'ended_at' => $this->ended_at,
+            'elapsed_minutes' => $this->getElapsedMinutes(),
+            'total_allowed_minutes' => $this->getTotalAllowedMinutes(),
+            'remaining_time_minutes' => $this->getRemainingTimeMinutes(),
+            'sessions_remaining_before_start' => $this->sessions_remaining_before_start,
+            'sessions_used' => $this->sessions_used,
+            'auto_deductions_processed' => $this->auto_deductions_processed,
+            'remaining_sessions' => $this->getRemainingSessions(),
+            'has_run_out_of_time' => $this->hasRunOutOfTime(),
+            'should_auto_end' => $this->shouldAutoEnd(),
+            'should_auto_end_insufficient_sessions' => $this->shouldAutoEndDueToInsufficientSessions(),
+            'next_deduction_time' => $this->getNextAutoDeductionTime(),
+            'time_until_next_deduction' => $this->getTimeUntilNextDeduction(),
+        ];
+    }
+
+    /**
+     * Schedule auto-deduction jobs for this session
+     */
+    public function scheduleAutoDeductions(): void
+    {
+        $totalAllowedMinutes = $this->getTotalAllowedMinutes();
+        
+        // Schedule deductions every 10 minutes
+        for ($minute = 10; $minute <= $totalAllowedMinutes; $minute += 10) {
+            $deductionCount = $minute / 10;
+            
+            \App\Jobs\ProcessTextSessionAutoDeduction::dispatch($this->id, $deductionCount)
+                ->delay(now()->addMinutes($minute))
+                ->onQueue('text-sessions');
+        }
+        
+        // Schedule session end
+        \App\Jobs\EndTextSession::dispatch($this->id, 'time_expired')
+            ->delay(now()->addMinutes($totalAllowedMinutes))
+            ->onQueue('text-sessions');
+    }
+
+    /**
+     * Schedule auto-ending when sessions run out
+     */
+    public function scheduleAutoEndForInsufficientSessions(): void
+    {
+        $elapsedMinutes = $this->getElapsedMinutes();
+        $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
+        
+        if ($this->shouldAutoEndDueToInsufficientSessions()) {
+            \App\Jobs\EndTextSession::dispatch($this->id, 'insufficient_sessions')
+                ->delay(now()->addMinutes($nextDeductionMinute - $elapsedMinutes))
+                ->onQueue('text-sessions');
+        }
+    }
+
+    /**
+     * Handle manual session ending with atomic operations
+     */
+    public function endManually($reason = 'manual_end'): bool
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () {
+            $session = self::lockForUpdate()->find($this->id);
+            
+            if (!$session || $session->status !== self::STATUS_ACTIVE) {
+                return false;
+            }
+
+            // Process final deduction for manual end
+            $paymentService = new \App\Services\DoctorPaymentService();
+            $deductionResult = $paymentService->processManualEndDeduction($session);
+
+            if ($deductionResult) {
+                $session->update([
+                    'status' => self::STATUS_ENDED,
+                    'ended_at' => now(),
+                    'reason' => $reason,
+                    'sessions_used' => $session->sessions_used + 1 // +1 for manual end
+                ]);
+
+                \Illuminate\Support\Facades\Log::info("Session ended manually", [
+                    'session_id' => $this->id,
+                    'reason' => $reason
+                ]);
+
+                return true;
+            }
+
+            return false;
+        });
     }
 } 

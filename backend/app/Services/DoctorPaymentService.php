@@ -436,6 +436,27 @@ class DoctorPaymentService
                 return false;
             }
 
+            // SAFETY CHECK: Prevent negative sessions
+            if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
+                \Log::warning('Insufficient sessions remaining for deduction', [
+                    'session_id' => $session->id,
+                    'patient_id' => $patient->id,
+                    'sessions_remaining' => $subscription->text_sessions_remaining,
+                    'sessions_to_deduct' => $sessionsToDeduct,
+                ]);
+                return false;
+            }
+
+            // SAFETY CHECK: Ensure sessions to deduct is positive
+            if ($sessionsToDeduct <= 0) {
+                \Log::info('No sessions to deduct (sessions_to_deduct <= 0)', [
+                    'session_id' => $session->id,
+                    'patient_id' => $patient->id,
+                    'sessions_to_deduct' => $sessionsToDeduct,
+                ]);
+                return true; // Not an error, just no deduction needed
+            }
+
             // Deduct the specified number of sessions
             $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
             
@@ -477,6 +498,18 @@ class DoctorPaymentService
                 if ($patient && $patient->subscription) {
                     $subscription = $patient->subscription;
                     
+                    // SAFETY CHECK: Prevent negative sessions
+                    if ($subscription->text_sessions_remaining < $newDeductions) {
+                        \Log::warning('Insufficient sessions remaining for auto-deduction', [
+                            'session_id' => $session->id,
+                            'patient_id' => $patient->id,
+                            'sessions_remaining' => $subscription->text_sessions_remaining,
+                            'new_deductions' => $newDeductions,
+                            'elapsed_minutes' => $elapsedMinutes,
+                        ]);
+                        return false;
+                    }
+                    
                     // Deduct only the new sessions
                     $subscription->decrement('text_sessions_remaining', $newDeductions);
                     
@@ -498,18 +531,21 @@ class DoctorPaymentService
                         'session_id' => $session->id,
                         'elapsed_minutes' => $elapsedMinutes,
                         'auto_deductions' => $autoDeductions,
+                        'already_processed' => $alreadyProcessed,
                         'new_deductions' => $newDeductions,
+                        'sessions_remaining_after' => $subscription->text_sessions_remaining,
                     ]);
                     
                     return true;
                 }
             }
             
-            return false;
+            return true; // No new deductions needed
+            
         } catch (\Exception $e) {
             \Log::error('Failed to process auto-deduction: ' . $e->getMessage(), [
                 'session_id' => $session->id,
-                'elapsed_minutes' => $elapsedMinutes ?? 0,
+                'patient_id' => $session->patient_id,
             ]);
             return false;
         }
@@ -547,5 +583,86 @@ class DoctorPaymentService
             'video' => $rates['video'],
             'currency' => $currency,
         ];
+    }
+
+    /**
+     * Process manual end deduction (1 session for manual ending)
+     */
+    public function processManualEndDeduction(TextSession $session): bool
+    {
+        try {
+            $patient = $session->patient;
+            if (!$patient || !$patient->subscription) {
+                \Log::warning('No subscription found for manual end deduction', [
+                    'session_id' => $session->id,
+                    'patient_id' => $session->patient_id,
+                ]);
+                return false;
+            }
+            
+            $subscription = $patient->subscription;
+            if (!$subscription->isActive) {
+                \Log::warning('Inactive subscription for manual end deduction', [
+                    'session_id' => $session->id,
+                    'patient_id' => $session->patient_id,
+                ]);
+                return false;
+            }
+            
+            // SAFETY CHECK: Prevent negative sessions
+            if ($subscription->text_sessions_remaining <= 0) {
+                \Log::warning('No sessions remaining for manual end deduction', [
+                    'session_id' => $session->id,
+                    'patient_id' => $session->patient_id,
+                    'sessions_remaining' => $subscription->text_sessions_remaining,
+                ]);
+                return false;
+            }
+            
+            // Deduct 1 session for manual end
+            $subscription->decrement('text_sessions_remaining', 1);
+            
+            // Award doctor earnings for manual end
+            $doctor = $session->doctor;
+            if ($doctor) {
+                $wallet = DoctorWallet::getOrCreate($doctor->id);
+                $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor);
+                $currency = self::getCurrency($doctor);
+                
+                $wallet->credit(
+                    $paymentAmount,
+                    "Manual end payment for session {$session->id}",
+                    'text',
+                    $session->id,
+                    'text_sessions',
+                    [
+                        'patient_name' => $session->patient->first_name . " " . $session->patient->last_name,
+                        'session_duration' => $session->getElapsedMinutes(),
+                        'sessions_used' => 1,
+                        'payment_transaction_id' => $subscription->payment_transaction_id,
+                        'payment_gateway' => $subscription->payment_gateway,
+                        'currency' => $currency,
+                        'payment_amount' => $paymentAmount,
+                        'end_type' => 'manual'
+                    ]
+                );
+            }
+            
+            \Log::info("Manual end deduction processed", [
+                'session_id' => $session->id,
+                'patient_id' => $session->patient_id,
+                'sessions_remaining_after' => $subscription->text_sessions_remaining,
+                'end_type' => 'manual'
+            ]);
+            
+            return true;
+            
+        } catch (\Exception $e) {
+            \Log::error('Failed to process manual end deduction: ' . $e->getMessage(), [
+                'session_id' => $session->id,
+                'patient_id' => $session->patient_id,
+            ]);
+            return false;
+        }
     }
 } 

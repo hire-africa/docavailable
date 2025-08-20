@@ -307,6 +307,45 @@ class TextSessionController extends Controller
                 ]);
             }
             
+            // Check if active session should end due to insufficient sessions
+            if ($session->status === TextSession::STATUS_ACTIVE && $session->shouldAutoEndDueToInsufficientSessions()) {
+                Log::info("Active session should end due to insufficient sessions", [
+                    'session_id' => $sessionId,
+                    'session_details' => $session->getSessionStatusDetails()
+                ]);
+                
+                // Auto-end the session and process payment/deduction
+                $session->update([
+                    'status' => TextSession::STATUS_ENDED,
+                    'ended_at' => now()
+                ]);
+                
+                // Process payment and deduction
+                try {
+                    $paymentService = new \App\Services\DoctorPaymentService();
+                    $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
+                    
+                    Log::info("Auto-ended session due to insufficient sessions - payment processing result", [
+                        'session_id' => $sessionId,
+                        'doctor_payment_success' => $paymentResult['doctor_payment_success'],
+                        'patient_deduction_success' => $paymentResult['patient_deduction_success'],
+                        'sessions_deducted' => $paymentResult['patient_sessions_deducted']
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error("Failed to process payment for session ended due to insufficient sessions", [
+                        'session_id' => $sessionId,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+                
+                return response()->json([
+                    'success' => true,
+                    'status' => 'ended',
+                    'timeRemaining' => 0,
+                    'message' => 'Session has ended - no sessions remaining'
+                ]);
+            }
+            
             // Session is active and has time remaining
             Log::info("Session is active with time remaining", [
                 'session_id' => $sessionId,
@@ -438,34 +477,22 @@ class TextSessionController extends Controller
                 ], 403);
             }
 
-            // End the session first
-            $session->endSession();
-
-            // Process payment and deduction using the comprehensive service
-            $paymentService = new \App\Services\DoctorPaymentService();
-            $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
-
-            // Prepare response message based on payment results
-            $responseMessage = 'Session ended successfully';
-            $warnings = [];
-
-            if (!$paymentResult['doctor_payment_success']) {
-                $warnings[] = 'Doctor payment could not be processed';
-            }
-            if (!$paymentResult['patient_deduction_success']) {
-                $warnings[] = 'Patient subscription deduction could not be processed';
-            }
-
-            if (!empty($warnings)) {
-                $responseMessage .= '. Note: ' . implode(', ', $warnings);
+            // End the session using the new queue-based approach with atomic operations
+            $endResult = $session->endManually('manual_end');
+            
+            if (!$endResult) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to end session. It may have already been ended or is not active.'
+                ], 400);
             }
 
             return response()->json([
                 'success' => true,
-                'message' => $responseMessage,
+                'message' => 'Session ended successfully',
                 'data' => [
                     'session' => $session,
-                    'payment_processing' => $paymentResult
+                    'ended_successfully' => true
                 ]
             ]);
 

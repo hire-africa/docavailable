@@ -42,6 +42,14 @@ return [
             'after_commit' => false,
         ],
 
+        'text-sessions' => [
+            'driver' => 'database',
+            'table' => 'jobs',
+            'queue' => 'text-sessions',
+            'retry_after' => 90,
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('REDIS_HOST', '127.0.0.1'),

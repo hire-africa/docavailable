@@ -14,23 +14,14 @@ Schedule::command('text-sessions:cleanup-messages')
     ->withoutOverlapping()
     ->runInBackground();
 
-// Schedule expired text session processing to run every minute
-Schedule::command('sessions:process-expired-text-sessions')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
-
 // Schedule appointment session processing to run every 5 minutes
 Schedule::command('sessions:process-appointment-sessions')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
 
-// Schedule auto-deductions for text sessions to run every 10 minutes
-Schedule::command('sessions:process-auto-deductions')
-    ->everyTenMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+// Note: Auto-deductions and auto-ending for text sessions are now handled by Laravel Queues
+// This provides more precise timing and prevents double processing
 
 // Register the ClearActiveSessions command
 Artisan::command('sessions:clear-active {--force : Force clear without confirmation}', function () {
