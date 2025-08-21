@@ -101,6 +101,16 @@ Route::get('/test-email-verification', function () {
     ]);
 });
 
+// Test POST endpoint for debugging
+Route::post('/test-post-endpoint', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'POST test endpoint working',
+        'timestamp' => now()->toISOString(),
+        'method' => 'POST'
+    ]);
+});
+
 // Email verification routes (no auth required) - Production ready - Moved to top
 Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']); // Temporarily removed throttle
 Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']); // Temporarily removed throttle
