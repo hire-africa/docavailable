@@ -92,7 +92,7 @@ Route::post('/register', [AuthenticationController::class, 'register']);
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
 
-// Email verification routes (no auth required)
+// Email verification routes (no auth required) - Production ready
 Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
     ->middleware('throttle:3,1'); // Max 3 requests per minute
 Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail'])
