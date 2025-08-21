@@ -93,12 +93,12 @@ Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
 
 // Email verification routes (no auth required) - Production ready
-Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
-    ->middleware('throttle:3,1')
-    ->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class]); // Max 3 requests per minute
-Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail'])
-    ->middleware('throttle:5,1')
-    ->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class]); // Max 5 attempts per minute
+Route::group(['middleware' => []], function () {
+    Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
+        ->middleware('throttle:3,1'); // Max 3 requests per minute
+    Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail'])
+        ->middleware('throttle:5,1'); // Max 5 attempts per minute
+});
 
 // Chat routes (removed queue middleware)
 Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
