@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
 
 // Import crypto polyfill early to ensure it's loaded before any encryption services
@@ -17,12 +17,12 @@ export default function RootLayout() {
     <AuthProvider>
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="signup" options={{ headerShown: false }} />
-        <Stack.Screen name="doctor-signup" options={{ headerShown: false }} />
-        <Stack.Screen name="patient-signup" options={{ headerShown: false }} />
-        <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
-        <Stack.Screen name="password-reset/[token]" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
+        <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
+        <Stack.Screen name="doctor-signup" options={{ headerShown: false, gestureEnabled: true }} />
+        <Stack.Screen name="patient-signup" options={{ headerShown: false, gestureEnabled: true }} />
+        <Stack.Screen name="forgot-password" options={{ headerShown: false, gestureEnabled: true }} />
+        <Stack.Screen name="password-reset/[token]" options={{ headerShown: false, gestureEnabled: true }} />
         <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />

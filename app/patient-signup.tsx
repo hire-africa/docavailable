@@ -1,5 +1,6 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -18,6 +19,7 @@ import {
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
+import { navigateToLogin } from '../utils/navigationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -43,6 +45,17 @@ interface Step1Props {
     setCountry: (country: string) => void;
     city: string;
     setCity: (city: string) => void;
+    acceptPolicies: boolean;
+    setAcceptPolicies: (accept: boolean) => void;
+    errors: any;
+}
+
+interface Step3Props {
+    email: string;
+    verificationCode: string;
+    setVerificationCode: (code: string) => void;
+    isVerifying: boolean;
+    onResendCode: () => void;
     errors: any;
 }
 
@@ -65,6 +78,8 @@ const Step1: React.FC<Step1Props> = ({
     setCountry,
     city,
     setCity,
+    acceptPolicies,
+    setAcceptPolicies,
     errors,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
@@ -169,6 +184,8 @@ const Step1: React.FC<Step1Props> = ({
                 {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
             </View>
 
+
+
             <View style={styles.formSection}>
                 <LocationPicker
                     country={country}
@@ -178,21 +195,66 @@ const Step1: React.FC<Step1Props> = ({
                     errors={errors}
                 />
             </View>
+
+            <View style={styles.formSection}>
+                <View style={styles.policyContainer}>
+                    <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => setAcceptPolicies(!acceptPolicies)}
+                    >
+                        <View style={[styles.checkbox, acceptPolicies && styles.checkboxChecked]}>
+                            {acceptPolicies && <FontAwesome name="check" size={12} color="#FFFFFF" />}
+                        </View>
+                        <Text style={styles.policyText}>
+                            I accept the{' '}
+                            <Text style={styles.policyLink}>Platform Terms of Service</Text>
+                            {' '}and{' '}
+                            <Text style={styles.policyLink}>Privacy Policy</Text>
+                        </Text>
+                    </TouchableOpacity>
+                    {errors.acceptPolicies && <Text style={styles.errorText}>{errors.acceptPolicies}</Text>}
+                </View>
+            </View>
         </ScrollView>
     );
 };
 
 const Step2 = () => {
     const [idType, setIdType] = useState<string | null>(null);
+    const [idDocument, setIdDocument] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
 
-    const handleUpload = () => {
-        setIsUploading(true);
-        // Simulate upload process
-        setTimeout(() => {
+    const handleUpload = async () => {
+        if (!idType) {
+            Alert.alert('Error', 'Please select an ID type first.');
+            return;
+        }
+
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+                return;
+            }
+
+            setIsUploading(true);
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 1.0,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setIdDocument(result.assets[0].uri);
+                Alert.alert('Success', 'ID document uploaded successfully!');
+            }
+        } catch (error) {
+            console.error('Error uploading ID:', error);
+            Alert.alert('Error', 'Failed to upload ID document. Please try again.');
+        } finally {
             setIsUploading(false);
-            Alert.alert('Success', 'ID uploaded successfully!');
-        }, 2000);
+        }
     };
 
     return (
@@ -252,24 +314,106 @@ const Step2 = () => {
                 </Text>
                 
                 <TouchableOpacity 
-                    style={[styles.photoUpload, isUploading && styles.photoUploadUploading]} 
+                    style={[styles.photoUpload, isUploading && styles.photoUploadUploading, idDocument && styles.photoUploadSuccess]} 
                     onPress={handleUpload}
                     disabled={isUploading}
                 >
                     {isUploading ? (
                         <ActivityIndicator size="large" color="#4CAF50" />
+                    ) : idDocument ? (
+                        <>
+                            <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+                        </>
                     ) : (
                         <>
                             <FontAwesome name="camera" size={48} color="#4CAF50" />
-                            <Text style={styles.photoUploadText}>Tap to Upload</Text>
                         </>
                     )}
                 </TouchableOpacity>
+                
+                <Text style={styles.photoUploadText}>
+                    {idDocument ? 'Document Uploaded' : 'Tap to Upload'}
+                </Text>
+
+                {idDocument && (
+                    <View style={styles.uploadSuccessNote}>
+                        <FontAwesome name="check-circle" size={16} color="#4CAF50" />
+                        <Text style={styles.uploadSuccessText}>
+                            ID document uploaded successfully. This step is optional.
+                        </Text>
+                    </View>
+                )}
+
+                <View style={styles.skipNote}>
+                    <FontAwesome name="info-circle" size={16} color="#666" />
+                    <Text style={styles.skipNoteText}>
+                        Don't have your ID handy? You can skip this step and update it later in your profile settings.
+                    </Text>
+                </View>
 
                 <View style={styles.securityNote}>
                     <FontAwesome name="lock" size={20} color="#4CAF50" />
                     <Text style={styles.securityNoteText}>
                         Your information is encrypted and secure. We follow strict privacy guidelines.
+                    </Text>
+                </View>
+            </View>
+        </ScrollView>
+    );
+};
+
+// Step 3 Component: Email Verification
+const Step3: React.FC<Step3Props> = ({
+    email,
+    verificationCode,
+    setVerificationCode,
+    isVerifying,
+    onResendCode,
+    errors,
+}) => {
+    return (
+        <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
+            <View style={styles.stepHeader}>
+                <FontAwesome name="envelope" size={32} color="#4CAF50" />
+                <Text style={styles.stepTitle}>Email Verification</Text>
+                <Text style={styles.stepSubtitle}>Verify your email address to complete registration</Text>
+            </View>
+
+            <View style={styles.formSection}>
+                <Text style={styles.sectionLabel}>Verification Code</Text>
+                <Text style={styles.verificationDescription}>
+                    We've sent a verification code to{' '}
+                    <Text style={styles.emailHighlight}>{email}</Text>
+                </Text>
+                
+                <Text style={styles.inputLabel}>Enter Verification Code</Text>
+                <TextInput
+                    style={[styles.input, errors.verificationCode && styles.inputError]}
+                    placeholder="Enter 6-digit code"
+                    placeholderTextColor="#999"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    autoFocus
+                />
+                {errors.verificationCode && <Text style={styles.errorText}>{errors.verificationCode}</Text>}
+
+                <TouchableOpacity
+                    style={styles.resendButton}
+                    onPress={onResendCode}
+                    disabled={isVerifying}
+                >
+                    <FontAwesome name="refresh" size={16} color="#4CAF50" />
+                    <Text style={styles.resendButtonText}>Resend Code</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.formSection}>
+                <View style={styles.verificationNote}>
+                    <FontAwesome name="info-circle" size={16} color="#666" />
+                    <Text style={styles.verificationNoteText}>
+                        Check your email inbox and spam folder. The code expires in 10 minutes.
                     </Text>
                 </View>
             </View>
@@ -288,7 +432,14 @@ export default function PatientSignUp() {
     const [password, setPassword] = useState('');
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');
+    const [acceptPolicies, setAcceptPolicies] = useState(false);
     const [loading, setLoading] = useState(false);
+    
+    // Step 3 state
+    const [verificationCode, setVerificationCode] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [isResending, setIsResending] = useState(false);
+    
     const [errors, setErrors] = useState({
         firstName: null,
         surname: null,
@@ -298,6 +449,8 @@ export default function PatientSignUp() {
         password: null,
         country: null,
         city: null,
+        acceptPolicies: null,
+        verificationCode: null,
     });
 
     const validateStep1 = () => {
@@ -337,8 +490,81 @@ export default function PatientSignUp() {
             isValid = false;
         }
 
+        if (!acceptPolicies) {
+            newErrors.acceptPolicies = 'You must accept the platform policies.';
+            isValid = false;
+        }
+
         setErrors(newErrors);
         return isValid;
+    };
+
+    const validateStep3 = () => {
+        const newErrors: any = {};
+        let isValid = true;
+
+        if (!verificationCode.trim()) {
+            newErrors.verificationCode = 'Please enter the verification code.';
+            isValid = false;
+        } else if (verificationCode.length !== 6) {
+            newErrors.verificationCode = 'Verification code must be 6 digits.';
+            isValid = false;
+        }
+
+        setErrors(newErrors);
+        return isValid;
+    };
+
+    const sendVerificationCode = async () => {
+        try {
+            setIsResending(true);
+            // Call backend to send verification code
+            const response = await fetch('/api/send-verification-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+            
+            if (response.ok) {
+                Alert.alert('Success', 'Verification code sent to your email!');
+            } else {
+                throw new Error('Failed to send verification code');
+            }
+        } catch (error) {
+            console.error('Error sending verification code:', error);
+            Alert.alert('Error', 'Failed to send verification code. Please try again.');
+        } finally {
+            setIsResending(false);
+        }
+    };
+
+    const verifyEmail = async () => {
+        try {
+            setIsVerifying(true);
+            // Call backend to verify the code
+            const response = await fetch('/api/verify-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, code: verificationCode }),
+            });
+            
+            if (response.ok) {
+                return true;
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Invalid verification code');
+            }
+        } catch (error) {
+            console.error('Error verifying email:', error);
+            Alert.alert('Error', error.message || 'Invalid verification code. Please try again.');
+            return false;
+        } finally {
+            setIsVerifying(false);
+        }
     };
 
     const handleSignUp = async () => {
@@ -485,13 +711,22 @@ export default function PatientSignUp() {
         }
     };
 
-    const handleContinue = () => {
+    const handleContinue = async () => {
         if (step === 1) {
             if (validateStep1()) {
                 setStep(step + 1);
             }
         } else if (step === 2) {
-            handleSignUp();
+            // Send verification code when moving to step 3
+            await sendVerificationCode();
+            setStep(step + 1);
+        } else if (step === 3) {
+            if (validateStep3()) {
+                const isVerified = await verifyEmail();
+                if (isVerified) {
+                    handleSignUp();
+                }
+            }
         }
     };
 
@@ -518,11 +753,24 @@ export default function PatientSignUp() {
                         setCountry={setCountry}
                         city={city}
                         setCity={setCity}
+                        acceptPolicies={acceptPolicies}
+                        setAcceptPolicies={setAcceptPolicies}
                         errors={errors}
                     />
                 );
             case 2:
                 return <Step2 />;
+            case 3:
+                return (
+                    <Step3
+                        email={email}
+                        verificationCode={verificationCode}
+                        setVerificationCode={setVerificationCode}
+                        isVerifying={isVerifying}
+                        onResendCode={sendVerificationCode}
+                        errors={errors}
+                    />
+                );
             default:
                 return (
                     <Step1
@@ -544,6 +792,8 @@ export default function PatientSignUp() {
                         setCountry={setCountry}
                         city={city}
                         setCity={setCity}
+                        acceptPolicies={acceptPolicies}
+                        setAcceptPolicies={setAcceptPolicies}
                         errors={errors}
                     />
                 );
@@ -556,7 +806,7 @@ export default function PatientSignUp() {
                 <View style={styles.header}>
                     <TouchableOpacity 
                         style={styles.backToSignupButton}
-                        onPress={() => router.push('/login?userType=patient')}
+                        onPress={() => navigateToLogin({ userType: 'patient' })}
                     >
                         <Text style={styles.backToSignupText}>← Back to Login</Text>
                     </TouchableOpacity>
@@ -568,8 +818,9 @@ export default function PatientSignUp() {
                     <View style={styles.progressBar}>
                         <View style={[styles.progressStep, step >= 1 && styles.progressStepActive]} />
                         <View style={[styles.progressStep, step >= 2 && styles.progressStepActive]} />
+                        <View style={[styles.progressStep, step >= 3 && styles.progressStepActive]} />
                     </View>
-                    <Text style={styles.progressText}>Step {step} of 2</Text>
+                    <Text style={styles.progressText}>Step {step} of 3</Text>
                 </View>
                 
                 {renderStep()}
@@ -594,13 +845,13 @@ export default function PatientSignUp() {
                             <>
                                 <ActivityIndicator color="#FFFFFF" size="small" />
                                 <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
-                                    {step === 2 ? 'Creating Account...' : 'Processing...'}
+                                    {step === 3 ? 'Creating Account...' : 'Processing...'}
                                 </Text>
                             </>
                         ) : (
                             <>
                                 <Text style={styles.continueButtonText}>
-                                    {step === 2 ? 'Create Account' : 'Continue'}
+                                    {step === 3 ? 'Create Account' : 'Continue'}
                                 </Text>
                                 <Text style={styles.arrowIcon}>→</Text>
                             </>
@@ -927,5 +1178,123 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         marginRight: 8,
+    },
+    policyContainer: {
+        marginTop: 16,
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: '#E0E0E0',
+        backgroundColor: '#FFFFFF',
+        marginRight: 12,
+        marginTop: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxChecked: {
+        backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
+    },
+    policyText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+    },
+    policyLink: {
+        color: '#4CAF50',
+        fontWeight: '600',
+        textDecorationLine: 'underline',
+    },
+    photoUploadSuccess: {
+        backgroundColor: '#E8F5E9',
+        borderColor: '#4CAF50',
+        borderStyle: 'solid',
+    },
+    uploadSuccessNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 16,
+        padding: 12,
+        backgroundColor: '#E8F5E9',
+        borderRadius: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#4CAF50',
+    },
+    uploadSuccessText: {
+        marginLeft: 8,
+        color: '#4CAF50',
+        fontSize: 14,
+        fontWeight: '500',
+        flex: 1,
+    },
+    skipNote: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginTop: 20,
+        padding: 16,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#666',
+    },
+    skipNoteText: {
+        marginLeft: 12,
+        color: '#666',
+        fontSize: 14,
+        lineHeight: 20,
+        flex: 1,
+    },
+    verificationDescription: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 24,
+    },
+    emailHighlight: {
+        color: '#4CAF50',
+        fontWeight: '600',
+    },
+    resendButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    resendButtonText: {
+        marginLeft: 8,
+        color: '#4CAF50',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    verificationNote: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        padding: 16,
+        backgroundColor: '#F0F8FF',
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#4CAF50',
+    },
+    verificationNoteText: {
+        marginLeft: 12,
+        color: '#666',
+        fontSize: 14,
+        lineHeight: 20,
+        flex: 1,
     },
 }); 

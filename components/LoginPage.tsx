@@ -1,7 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import * as AuthSession from 'expo-auth-session';
-import { Link, router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
+import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -42,16 +43,16 @@ export default function LoginPage() {
             if (authState.data && authState.data.user) {
                 console.log('LoginPage: User data found:', authState.data.user);
                 if (authState.data.user.user_type === 'admin') {
-                    router.replace('/admin-dashboard');
+                    navigateToDashboard('admin', true);
                 } else if (authState.data.user.user_type === 'doctor') {
                     if (authState.data.user.status !== 'approved') {
                         Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
                         await authService.signOut();
                         return;
                     }
-                    router.replace('/doctor-dashboard');
+                    navigateToDashboard('doctor', true);
                 } else if (authState.data.user.user_type === 'patient') {
-                    router.replace('/patient-dashboard');
+                    navigateToDashboard('patient', true);
                 } else {
                     router.replace('/'); // fallback
                 }
@@ -406,20 +407,20 @@ export default function LoginPage() {
                     </TouchableOpacity>
 
                     <View style={styles.linksContainer}>
-                        <Link href="/forgot-password" asChild>
-                            <TouchableOpacity>
-                                <Text style={styles.linkText}>Forgot Password?</Text>
-                            </TouchableOpacity>
-                        </Link>
+                        <TouchableOpacity
+                            onPress={() => navigateToForgotPassword({ userType })}
+                        >
+                            <Text style={styles.linkText}>Forgot Password?</Text>
+                        </TouchableOpacity>
                     </View>
 
                     <View style={styles.signupContainer}>
                         <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-                        <Link href={userType ? `/${userType}-signup` : '/signup'} asChild>
-                            <TouchableOpacity>
-                                <Text style={styles.signupLink}>Sign Up</Text>
-                            </TouchableOpacity>
-                        </Link>
+                        <TouchableOpacity
+                            onPress={() => navigateToSignup({ userType })}
+                        >
+                            <Text style={styles.signupLink}>Sign Up</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>

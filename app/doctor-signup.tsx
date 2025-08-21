@@ -20,6 +20,7 @@ import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
+import { navigateToLogin } from '../utils/navigationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -52,17 +53,30 @@ interface Step1Props {
     setCountry: (country: string) => void;
     city: string;
     setCity: (city: string) => void;
+    languagesSpoken: string[];
+    setLanguagesSpoken: (languages: string[]) => void;
+    acceptPolicies: boolean;
+    setAcceptPolicies: (accept: boolean) => void;
     errors: any;
 }
 
 interface Step2Props {
-    nationalId: string | null;
-    setNationalId: (uri: string | null) => void;
-    medicalDegree: string | null;
-    setMedicalDegree: (uri: string | null) => void;
-    medicalLicence: string | null;
-    setMedicalLicence: (uri: string | null) => void;
+    nationalIdPassport: string | null;
+    setNationalIdPassport: (uri: string | null) => void;
+    highestMedicalCertificate: string | null;
+    setHighestMedicalCertificate: (uri: string | null) => void;
+    specialistCertificate: string | null;
+    setSpecialistCertificate: (uri: string | null) => void;
     isUploading: boolean;
+    errors: any;
+}
+
+interface Step3Props {
+    email: string;
+    verificationCode: string;
+    setVerificationCode: (code: string) => void;
+    isVerifying: boolean;
+    onResendCode: () => void;
     errors: any;
 }
 
@@ -73,7 +87,8 @@ const Step1: React.FC<Step1Props> = ({
     dob, setDob, gender, setGender,
     email, setEmail, password, setPassword, yearsOfExperience, setYearsOfExperience,
     specializations, setSpecializations,
-    professionalBio, setProfessionalBio, country, setCountry, city, setCity, errors,
+    professionalBio, setProfessionalBio, country, setCountry, city, setCity,
+    languagesSpoken, setLanguagesSpoken, acceptPolicies, setAcceptPolicies, errors,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
 
@@ -217,6 +232,19 @@ const Step1: React.FC<Step1Props> = ({
             </View>
 
             <View style={styles.formSection}>
+                <Text style={styles.sectionLabel}>Languages Spoken</Text>
+                <Text style={styles.inputLabel}>Languages you can communicate in</Text>
+                <TextInput
+                    style={[styles.input, errors.languagesSpoken && styles.inputError]}
+                    placeholder="e.g., English, Spanish, French"
+                    placeholderTextColor="#999"
+                    value={languagesSpoken.join(', ')}
+                    onChangeText={(text) => setLanguagesSpoken(text.split(',').map(lang => lang.trim()).filter(lang => lang))}
+                />
+                {errors.languagesSpoken && <Text style={styles.errorText}>{errors.languagesSpoken}</Text>}
+            </View>
+
+            <View style={styles.formSection}>
                 <LocationPicker
                     country={country}
                     setCountry={setCountry}
@@ -225,22 +253,42 @@ const Step1: React.FC<Step1Props> = ({
                     errors={errors}
                 />
             </View>
+
+            <View style={styles.formSection}>
+                <View style={styles.policyContainer}>
+                    <TouchableOpacity
+                        style={styles.checkboxContainer}
+                        onPress={() => setAcceptPolicies(!acceptPolicies)}
+                    >
+                        <View style={[styles.checkbox, acceptPolicies && styles.checkboxChecked]}>
+                            {acceptPolicies && <FontAwesome name="check" size={12} color="#FFFFFF" />}
+                        </View>
+                        <Text style={styles.policyText}>
+                            I accept the{' '}
+                            <Text style={styles.policyLink}>Platform Terms of Service</Text>
+                            {' '}and{' '}
+                            <Text style={styles.policyLink}>Privacy Policy</Text>
+                        </Text>
+                    </TouchableOpacity>
+                    {errors.acceptPolicies && <Text style={styles.errorText}>{errors.acceptPolicies}</Text>}
+                </View>
+            </View>
         </ScrollView>
     );
 };
 
 // Step 2 Component: Document Upload
 const Step2: React.FC<Step2Props> = ({
-    nationalId,
-    setNationalId,
-    medicalDegree,
-    setMedicalDegree,
-    medicalLicence,
-    setMedicalLicence,
+    nationalIdPassport,
+    setNationalIdPassport,
+    highestMedicalCertificate,
+    setHighestMedicalCertificate,
+    specialistCertificate,
+    setSpecialistCertificate,
     isUploading,
     errors,
 }) => {
-    const handleFileUpload = async (type: 'nationalId' | 'medicalDegree' | 'medicalLicence', setter: (uri: string | null) => void) => {
+    const handleFileUpload = async (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate', setter: (uri: string | null) => void) => {
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
@@ -274,60 +322,119 @@ const Step2: React.FC<Step2Props> = ({
 
             <View style={styles.formSection}>
                 <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>National ID *</Text>
+                    <Text style={styles.documentLabel}>National ID / Passport *</Text>
                     <TouchableOpacity
-                        style={[styles.uploadButton, nationalId && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('nationalId', setNationalId)}
+                        style={[styles.uploadButton, nationalIdPassport && styles.uploadButtonSuccess]}
+                        onPress={() => handleFileUpload('nationalIdPassport', setNationalIdPassport)}
                         disabled={isUploading}
                     >
                         <FontAwesome
-                            name={nationalId ? "check-circle" : "upload"}
+                            name={nationalIdPassport ? "check-circle" : "upload"}
                             size={24}
-                            color={nationalId ? "#4CAF50" : "#666"}
+                            color={nationalIdPassport ? "#4CAF50" : "#666"}
                         />
                         <Text style={styles.uploadButtonText}>
-                            {nationalId ? 'Document uploaded' : 'Upload National ID'}
+                            {nationalIdPassport ? 'Document uploaded' : 'Upload National ID or Passport'}
                         </Text>
                     </TouchableOpacity>
-                    {errors.nationalId && <Text style={styles.errorText}>{errors.nationalId}</Text>}
+                    {errors.nationalIdPassport && <Text style={styles.errorText}>{errors.nationalIdPassport}</Text>}
                 </View>
 
                 <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>Medical Degree *</Text>
+                    <Text style={styles.documentLabel}>Highest Medical Certificate *</Text>
                     <TouchableOpacity
-                        style={[styles.uploadButton, medicalDegree && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('medicalDegree', setMedicalDegree)}
+                        style={[styles.uploadButton, highestMedicalCertificate && styles.uploadButtonSuccess]}
+                        onPress={() => handleFileUpload('highestMedicalCertificate', setHighestMedicalCertificate)}
                         disabled={isUploading}
                     >
                         <FontAwesome
-                            name={medicalDegree ? "check-circle" : "upload"}
+                            name={highestMedicalCertificate ? "check-circle" : "upload"}
                             size={24}
-                            color={medicalDegree ? "#4CAF50" : "#666"}
+                            color={highestMedicalCertificate ? "#4CAF50" : "#666"}
                         />
                         <Text style={styles.uploadButtonText}>
-                            {medicalDegree ? 'Document uploaded' : 'Upload Medical Degree'}
+                            {highestMedicalCertificate ? 'Document uploaded' : 'Upload Highest Medical Certificate'}
                         </Text>
                     </TouchableOpacity>
-                    {errors.medicalDegree && <Text style={styles.errorText}>{errors.medicalDegree}</Text>}
+                    {errors.highestMedicalCertificate && <Text style={styles.errorText}>{errors.highestMedicalCertificate}</Text>}
                 </View>
 
                 <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>Medical License (Optional)</Text>
+                    <Text style={styles.documentLabel}>Specialist Certificate (Optional)</Text>
                     <TouchableOpacity
-                        style={[styles.uploadButton, medicalLicence && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('medicalLicence', setMedicalLicence)}
+                        style={[styles.uploadButton, specialistCertificate && styles.uploadButtonSuccess]}
+                        onPress={() => handleFileUpload('specialistCertificate', setSpecialistCertificate)}
                         disabled={isUploading}
                     >
                         <FontAwesome
-                            name={medicalLicence ? "check-circle" : "upload"}
+                            name={specialistCertificate ? "check-circle" : "upload"}
                             size={24}
-                            color={medicalLicence ? "#4CAF50" : "#666"}
+                            color={specialistCertificate ? "#4CAF50" : "#666"}
                         />
                         <Text style={styles.uploadButtonText}>
-                            {medicalLicence ? 'Document uploaded' : 'Upload Medical License'}
+                            {specialistCertificate ? 'Document uploaded' : 'Upload Specialist Certificate'}
                         </Text>
                     </TouchableOpacity>
-                    {errors.medicalLicence && <Text style={styles.errorText}>{errors.medicalLicence}</Text>}
+                    {errors.specialistCertificate && <Text style={styles.errorText}>{errors.specialistCertificate}</Text>}
+                </View>
+            </View>
+        </ScrollView>
+    );
+};
+
+// Step 3 Component: Email Verification
+const Step3: React.FC<Step3Props> = ({
+    email,
+    verificationCode,
+    setVerificationCode,
+    isVerifying,
+    onResendCode,
+    errors,
+}) => {
+    return (
+        <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
+            <View style={styles.stepHeader}>
+                <FontAwesome name="envelope" size={32} color="#4CAF50" />
+                <Text style={styles.stepTitle}>Email Verification</Text>
+                <Text style={styles.stepSubtitle}>Verify your email address to complete registration</Text>
+            </View>
+
+            <View style={styles.formSection}>
+                <Text style={styles.sectionLabel}>Verification Code</Text>
+                <Text style={styles.verificationDescription}>
+                    We've sent a verification code to{' '}
+                    <Text style={styles.emailHighlight}>{email}</Text>
+                </Text>
+                
+                <Text style={styles.inputLabel}>Enter Verification Code</Text>
+                <TextInput
+                    style={[styles.input, errors.verificationCode && styles.inputError]}
+                    placeholder="Enter 6-digit code"
+                    placeholderTextColor="#999"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    autoFocus
+                />
+                {errors.verificationCode && <Text style={styles.errorText}>{errors.verificationCode}</Text>}
+
+                <TouchableOpacity
+                    style={styles.resendButton}
+                    onPress={onResendCode}
+                    disabled={isVerifying}
+                >
+                    <FontAwesome name="refresh" size={16} color="#4CAF50" />
+                    <Text style={styles.resendButtonText}>Resend Code</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={styles.formSection}>
+                <View style={styles.verificationNote}>
+                    <FontAwesome name="info-circle" size={16} color="#666" />
+                    <Text style={styles.verificationNoteText}>
+                        Check your email inbox and spam folder. The code expires in 10 minutes.
+                    </Text>
                 </View>
             </View>
         </ScrollView>
@@ -354,10 +461,19 @@ export default function DoctorSignUp() {
     const [city, setCity] = useState('');
     const [profilePicture, setProfilePicture] = useState<string | null>(null);
 
+    // Step 1 additional state
+    const [languagesSpoken, setLanguagesSpoken] = useState<string[]>([]);
+    const [acceptPolicies, setAcceptPolicies] = useState(false);
+
     // Step 2 state
-    const [nationalId, setNationalId] = useState<string | null>(null);
-    const [medicalDegree, setMedicalDegree] = useState<string | null>(null);
-    const [medicalLicence, setMedicalLicence] = useState<string | null>(null);
+    const [nationalIdPassport, setNationalIdPassport] = useState<string | null>(null);
+    const [highestMedicalCertificate, setHighestMedicalCertificate] = useState<string | null>(null);
+    const [specialistCertificate, setSpecialistCertificate] = useState<string | null>(null);
+
+    // Step 3 state
+    const [verificationCode, setVerificationCode] = useState('');
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [isResending, setIsResending] = useState(false);
 
     const [errors, setErrors] = useState<any>({});
 
@@ -420,6 +536,14 @@ export default function DoctorSignUp() {
             newErrors.city = 'City is required.';
         }
 
+        if (languagesSpoken.length === 0) {
+            newErrors.languagesSpoken = 'At least one language is required.';
+        }
+
+        if (!acceptPolicies) {
+            newErrors.acceptPolicies = 'You must accept the platform policies.';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -427,16 +551,84 @@ export default function DoctorSignUp() {
     const validateStep2 = () => {
         const newErrors: any = {};
 
-        if (!nationalId) {
-            newErrors.nationalId = 'National ID is required.';
+        if (!nationalIdPassport) {
+            newErrors.nationalIdPassport = 'National ID or Passport is required.';
         }
 
-        if (!medicalDegree) {
-            newErrors.medicalDegree = 'Medical degree is required.';
+        if (!highestMedicalCertificate) {
+            newErrors.highestMedicalCertificate = 'Highest Medical Certificate is required.';
         }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
+    };
+
+    const validateStep3 = () => {
+        const newErrors: any = {};
+        let isValid = true;
+
+        if (!verificationCode.trim()) {
+            newErrors.verificationCode = 'Please enter the verification code.';
+            isValid = false;
+        } else if (verificationCode.length !== 6) {
+            newErrors.verificationCode = 'Verification code must be 6 digits.';
+            isValid = false;
+        }
+
+        setErrors(newErrors);
+        return isValid;
+    };
+
+    const sendVerificationCode = async () => {
+        try {
+            setIsResending(true);
+            // Call backend to send verification code
+            const response = await fetch('/api/send-verification-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+            
+            if (response.ok) {
+                Alert.alert('Success', 'Verification code sent to your email!');
+            } else {
+                throw new Error('Failed to send verification code');
+            }
+        } catch (error) {
+            console.error('Error sending verification code:', error);
+            Alert.alert('Error', 'Failed to send verification code. Please try again.');
+        } finally {
+            setIsResending(false);
+        }
+    };
+
+    const verifyEmail = async () => {
+        try {
+            setIsVerifying(true);
+            // Call backend to verify the code
+            const response = await fetch('/api/verify-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, code: verificationCode }),
+            });
+            
+            if (response.ok) {
+                return true;
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Invalid verification code');
+            }
+        } catch (error) {
+            console.error('Error verifying email:', error);
+            Alert.alert('Error', error.message || 'Invalid verification code. Please try again.');
+            return false;
+        } finally {
+            setIsVerifying(false);
+        }
     };
 
     const handleContinue = async () => {
@@ -446,7 +638,16 @@ export default function DoctorSignUp() {
             }
         } else if (step === 2) {
             if (validateStep2()) {
-                await handleSignUp();
+                // Send verification code when moving to step 3
+                await sendVerificationCode();
+                setStep(3);
+            }
+        } else if (step === 3) {
+            if (validateStep3()) {
+                const isVerified = await verifyEmail();
+                if (isVerified) {
+                    await handleSignUp();
+                }
             }
         }
     };
@@ -470,6 +671,7 @@ export default function DoctorSignUp() {
             formData.append('specializations', JSON.stringify(specializations));
             formData.append('years_of_experience', yearsOfExperience.toString());
             formData.append('bio', professionalBio);
+            formData.append('languages_spoken', JSON.stringify(languagesSpoken));
 
             if (profilePicture) {
                 // Convert profile picture to base64 with timeout
@@ -495,9 +697,9 @@ export default function DoctorSignUp() {
                     // Continue without profile picture if conversion fails
                 }
             }
-            if (nationalId) {
+            if (nationalIdPassport) {
                 try {
-                    const response = await fetch(nationalId);
+                    const response = await fetch(nationalIdPassport);
                     const blob = await response.blob();
                     const base64 = await Promise.race([
                         new Promise<string>((resolve) => {
@@ -512,15 +714,15 @@ export default function DoctorSignUp() {
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
-                    formData.append('national_id', base64);
+                    formData.append('national_id_passport', base64);
                 } catch (conversionError) {
-                    console.warn('National ID conversion failed:', conversionError);
-                    throw new Error('Failed to process National ID. Please try again.');
+                    console.warn('National ID/Passport conversion failed:', conversionError);
+                    throw new Error('Failed to process National ID/Passport. Please try again.');
                 }
             }
-            if (medicalDegree) {
+            if (highestMedicalCertificate) {
                 try {
-                    const response = await fetch(medicalDegree);
+                    const response = await fetch(highestMedicalCertificate);
                     const blob = await response.blob();
                     const base64 = await Promise.race([
                         new Promise<string>((resolve) => {
@@ -535,15 +737,15 @@ export default function DoctorSignUp() {
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
-                    formData.append('medical_degree', base64);
+                    formData.append('highest_medical_certificate', base64);
                 } catch (conversionError) {
-                    console.warn('Medical degree conversion failed:', conversionError);
-                    throw new Error('Failed to process Medical Degree. Please try again.');
+                    console.warn('Highest Medical Certificate conversion failed:', conversionError);
+                    throw new Error('Failed to process Highest Medical Certificate. Please try again.');
                 }
             }
-            if (medicalLicence) {
+            if (specialistCertificate) {
                 try {
-                    const response = await fetch(medicalLicence);
+                    const response = await fetch(specialistCertificate);
                     const blob = await response.blob();
                     const base64 = await Promise.race([
                         new Promise<string>((resolve) => {
@@ -558,10 +760,10 @@ export default function DoctorSignUp() {
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
-                    formData.append('medical_licence', base64);
+                    formData.append('specialist_certificate', base64);
                 } catch (conversionError) {
-                    console.warn('Medical licence conversion failed:', conversionError);
-                    // Medical licence is optional, so we can continue without it
+                    console.warn('Specialist Certificate conversion failed:', conversionError);
+                    // Specialist Certificate is optional, so we can continue without it
                 }
             }
 
@@ -661,19 +863,34 @@ export default function DoctorSignUp() {
                         setCountry={setCountry}
                         city={city}
                         setCity={setCity}
+                        languagesSpoken={languagesSpoken}
+                        setLanguagesSpoken={setLanguagesSpoken}
+                        acceptPolicies={acceptPolicies}
+                        setAcceptPolicies={setAcceptPolicies}
                         errors={errors}
                     />
                 );
             case 2:
                 return (
                     <Step2 
-                        nationalId={nationalId}
-                        setNationalId={setNationalId}
-                        medicalDegree={medicalDegree}
-                        setMedicalDegree={setMedicalDegree}
-                        medicalLicence={medicalLicence}
-                        setMedicalLicence={setMedicalLicence}
+                        nationalIdPassport={nationalIdPassport}
+                        setNationalIdPassport={setNationalIdPassport}
+                        highestMedicalCertificate={highestMedicalCertificate}
+                        setHighestMedicalCertificate={setHighestMedicalCertificate}
+                        specialistCertificate={specialistCertificate}
+                        setSpecialistCertificate={setSpecialistCertificate}
                         isUploading={isUploading}
+                        errors={errors}
+                    />
+                );
+            case 3:
+                return (
+                    <Step3
+                        email={email}
+                        verificationCode={verificationCode}
+                        setVerificationCode={setVerificationCode}
+                        isVerifying={isVerifying}
+                        onResendCode={sendVerificationCode}
                         errors={errors}
                     />
                 );
@@ -688,7 +905,7 @@ export default function DoctorSignUp() {
                 <View style={styles.header}>
                     <TouchableOpacity
                         style={styles.backToSignupButton}
-                        onPress={() => router.push('/login?userType=doctor')}
+                        onPress={() => navigateToLogin({ userType: 'doctor' })}
                     >
                         <Text style={styles.backToSignupText}>← Back to Login</Text>
                     </TouchableOpacity>
@@ -700,8 +917,9 @@ export default function DoctorSignUp() {
                     <View style={styles.progressBar}>
                         <View style={[styles.progressStep, step >= 1 && styles.progressStepActive]} />
                         <View style={[styles.progressStep, step >= 2 && styles.progressStepActive]} />
+                        <View style={[styles.progressStep, step >= 3 && styles.progressStepActive]} />
                     </View>
-                    <Text style={styles.progressText}>Step {step} of 2</Text>
+                    <Text style={styles.progressText}>Step {step} of 3</Text>
                 </View>
                 
                 {renderStep()}
@@ -726,7 +944,7 @@ export default function DoctorSignUp() {
                             <ActivityIndicator color="#fff" />
                         ) : (
                             <Text style={styles.continueButtonText}>
-                                {step === 2 ? 'Complete Registration' : 'Continue'}
+                                {step === 3 ? 'Complete Registration' : 'Continue'}
                             </Text>
                         )}
                     </TouchableOpacity>
@@ -1015,5 +1233,84 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
         fontWeight: '500',
+    },
+    policyContainer: {
+        marginTop: 16,
+    },
+    checkboxContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    checkbox: {
+        width: 20,
+        height: 20,
+        borderRadius: 4,
+        borderWidth: 2,
+        borderColor: '#E0E0E0',
+        backgroundColor: '#FFFFFF',
+        marginRight: 12,
+        marginTop: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxChecked: {
+        backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
+    },
+    policyText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+    },
+    policyLink: {
+        color: '#4CAF50',
+        fontWeight: '600',
+        textDecorationLine: 'underline',
+    },
+    verificationDescription: {
+        fontSize: 16,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 24,
+    },
+    emailHighlight: {
+        color: '#4CAF50',
+        fontWeight: '600',
+    },
+    resendButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        backgroundColor: '#F8F9FA',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    resendButtonText: {
+        marginLeft: 8,
+        color: '#4CAF50',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    verificationNote: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        padding: 16,
+        backgroundColor: '#F0F8FF',
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#4CAF50',
+    },
+    verificationNoteText: {
+        marginLeft: 12,
+        color: '#666',
+        fontSize: 14,
+        lineHeight: 20,
+        flex: 1,
     },
 }); 

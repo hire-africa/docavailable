@@ -1,15 +1,19 @@
 import { router } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import AnimatedSplashScreen from '../components/AnimatedSplashScreen';
 import LandingPage from '../components/LandingPage';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Index() {
   const { user, userData, loading } = useAuth();
   const hasNavigated = useRef(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashCompleted, setSplashCompleted] = useState(false);
 
   useEffect(() => {
-    if (loading || hasNavigated.current) return;
+    // Only run routing logic after splash animation is complete
+    if (!splashCompleted || loading || hasNavigated.current) return;
 
     if (!user) {
       // Do NOT auto-redirect to /login
@@ -40,7 +44,17 @@ export default function Index() {
       router.replace('/patient-dashboard');
       return;
     }
-  }, [user, userData, loading]);
+  }, [user, userData, loading, splashCompleted]);
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    setSplashCompleted(true);
+  };
+
+  // Show animated splash screen first
+  if (showSplash) {
+    return <AnimatedSplashScreen onAnimationComplete={handleSplashComplete} />;
+  }
 
   // Show loading screen while initializing or routing
   if (loading || hasNavigated.current) {

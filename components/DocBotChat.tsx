@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Animated,
+    Dimensions,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { DeepSeekService, StreamingResponse } from '../services/deepseekService';
 
@@ -43,7 +43,72 @@ export default function DocBotChat() {
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredHistory, setFilteredHistory] = useState<ChatSession[]>([]);
+  const [thinkingState, setThinkingState] = useState(0); // 0: thinking, 1: analyzing, 2: preparing
+  const [thinkingTipState, setThinkingTipState] = useState(0); // 0-3: different tips
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Local greeting responses to avoid API calls for simple greetings
+  const getLocalGreetingResponse = (message: string): { text: string; type: Message['type'] } | null => {
+    const lowerMessage = message.toLowerCase().trim();
+    
+    // Common greetings
+    if (['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'morning', 'afternoon', 'evening'].some(greeting => 
+      lowerMessage.includes(greeting)
+    )) {
+      const responses = [
+        "Hello! 👋 How can I help you with your health today?",
+        "Hi there! 😊 What health questions do you have?",
+        "Hey! 👋 I'm here to help with any health concerns you might have.",
+        "Hello! 😊 How are you feeling today? I'm here to help."
+      ];
+      return {
+        text: responses[Math.floor(Math.random() * responses.length)],
+        type: 'general' as Message['type']
+      };
+    }
+    
+    // How are you responses
+    if (['how are you', 'how are you doing', 'how do you do', 'how you doing', 'how\'s it going', 'how is it going'].some(phrase => 
+      lowerMessage.includes(phrase)
+    )) {
+      return {
+        text: "I'm doing great, thank you! 😊 I'm here and ready to help with any health questions you have. How can I assist you today?",
+        type: 'general' as Message['type']
+      };
+    }
+    
+    // Thanks responses
+    if (['thank you', 'thanks', 'thank you so much', 'thanks a lot', 'thx', 'ty'].some(phrase => 
+      lowerMessage.includes(phrase)
+    )) {
+      return {
+        text: "You're very welcome! 😊 I'm here whenever you need health advice or have questions. Don't hesitate to ask!",
+        type: 'general' as Message['type']
+      };
+    }
+    
+    // Goodbye responses
+    if (['bye', 'goodbye', 'see you', 'take care', 'see you later', 'talk to you later', 'later'].some(phrase => 
+      lowerMessage.includes(phrase)
+    )) {
+      return {
+        text: "Take care! 👋 Remember, I'm here whenever you need health advice. Stay healthy!",
+        type: 'general' as Message['type']
+      };
+    }
+    
+    // What's up responses
+    if (['what\'s up', 'whats up', 'sup', 'what up'].some(phrase => 
+      lowerMessage.includes(phrase)
+    )) {
+      return {
+        text: "Not much, just here to help with your health! 😊 What can I assist you with today?",
+        type: 'general' as Message['type']
+      };
+    }
+    
+    return null; // Not a greeting, will use API
+  };
   
   // Enhanced animations
   const slideAnim = useRef(new Animated.Value(-width)).current;
@@ -53,6 +118,11 @@ export default function DocBotChat() {
   
   // Animation for typing indicator
   const typingAnim = useRef(new Animated.Value(0)).current;
+  const dot1Anim = useRef(new Animated.Value(0)).current;
+  const dot2Anim = useRef(new Animated.Value(0)).current;
+  const dot3Anim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const cardPulseAnim = useRef(new Animated.Value(1)).current;
 
   // Generate chat title based on conversation content
   const generateChatTitle = (messages: Message[]): string => {
@@ -282,12 +352,104 @@ export default function DocBotChat() {
         duration: 300,
         useNativeDriver: true,
       }).start();
+      
+      // Start progress animation
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 8000, // 8 seconds for full progress
+        useNativeDriver: false,
+      }).start();
+      
+      // Start card pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(cardPulseAnim, {
+            toValue: 1.02,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+          Animated.timing(cardPulseAnim, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+      
+      // Animate dots in sequence
+      const animateDots = () => {
+        Animated.sequence([
+          Animated.timing(dot1Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot2Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dot3Anim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.parallel([
+            Animated.timing(dot1Anim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot2Anim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(dot3Anim, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]),
+        ]).start(() => {
+          if (isTyping) {
+            animateDots();
+          }
+        });
+      };
+      
+      animateDots();
+      
+      // Cycle through thinking states
+      const thinkingInterval = setInterval(() => {
+        setThinkingState(prev => (prev + 1) % 3);
+      }, 2000); // Change state every 2 seconds
+      
+      // Cycle through thinking tips
+      const tipInterval = setInterval(() => {
+        setThinkingTipState(prev => (prev + 1) % 4);
+      }, 3000); // Change tip every 3 seconds
+      
+      return () => {
+        clearInterval(thinkingInterval);
+        clearInterval(tipInterval);
+        dot1Anim.stopAnimation();
+        dot2Anim.stopAnimation();
+        dot3Anim.stopAnimation();
+      };
     } else {
       Animated.timing(typingAnim, {
         toValue: 0,
         duration: 200,
         useNativeDriver: true,
       }).start();
+      setThinkingState(0);
+      setThinkingTipState(0);
+      dot1Anim.setValue(0);
+      dot2Anim.setValue(0);
+      dot3Anim.setValue(0);
+      progressAnim.setValue(0);
+      cardPulseAnim.setValue(1);
     }
   }, [isTyping]);
 
@@ -297,6 +459,7 @@ export default function DocBotChat() {
     return new Promise((resolve) => {
       let finalText = '';
       let messageType: Message['type'] = 'general';
+      let isFirstChunk = true;
       
       // Create a temporary bot message for streaming
       const tempBotMessage: Message = {
@@ -312,6 +475,12 @@ export default function DocBotChat() {
       DeepSeekService.getStreamingResponse(
         userMessage,
         (chunk: StreamingResponse) => {
+          // Hide typing indicator on first chunk
+          if (isFirstChunk) {
+            setIsTyping(false);
+            isFirstChunk = false;
+          }
+          
           // Update the temporary message with streaming text
           setMessages(prev => prev.map(msg => 
             msg.id === tempBotMessage.id 
@@ -352,6 +521,9 @@ export default function DocBotChat() {
       ).catch((error) => {
         console.error('❌ Error generating bot response:', error);
         console.error('Error details:', error.message);
+        
+        // Hide typing indicator on error
+        setIsTyping(false);
         
         // Remove temporary message and add error message
         setMessages(prev => prev.filter(msg => msg.id !== tempBotMessage.id));
@@ -395,6 +567,28 @@ export default function DocBotChat() {
       }, 1000); // Save after bot responds
     }
     setInputText('');
+    
+    // Check for local greeting response first
+    const localResponse = getLocalGreetingResponse(userMessage.text);
+    
+    if (localResponse) {
+      // Use local response for greetings - instant response
+      const botMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: localResponse.text,
+        isUser: false,
+        timestamp: new Date(),
+        type: localResponse.type
+      };
+      
+      // Small delay to make it feel more natural
+      setTimeout(() => {
+        setMessages(prev => [...prev, botMessage]);
+      }, 300 + Math.random() * 200); // Random delay between 300-500ms
+      return;
+    }
+    
+    // For non-greetings, use API with typing indicator
     setIsTyping(true);
 
     // Generate bot response with streaming
@@ -403,7 +597,7 @@ export default function DocBotChat() {
     } catch (error) {
       console.error('Error in sendMessage:', error);
     } finally {
-      setIsTyping(false);
+      // Note: setIsTyping(false) is now handled in generateBotResponse when streaming starts
     }
   };
 
@@ -674,18 +868,82 @@ export default function DocBotChat() {
                 styles.messageContainer,
                 {
                   opacity: typingAnim,
-                  transform: [{ scale: typingAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.8, 1]
-                  })}]
+                  transform: [
+                    { scale: typingAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 1]
+                    })},
+                    { scale: cardPulseAnim }
+                  ]
                 }
               ]}
             >
               <View style={styles.typingCard}>
+                <View style={styles.typingHeader}>
+                  <View style={styles.typingAvatar}>
+                    <FontAwesome name="user-md" size={20} color="#4CAF50" />
+                  </View>
+                  <View style={styles.typingInfo}>
+                    <Text style={styles.typingName}>DocBot</Text>
+                    <Text style={styles.typingStatus}>
+                      {thinkingState === 0 && "🤔 Thinking..."}
+                      {thinkingState === 1 && "🔍 Analyzing your question..."}
+                      {thinkingState === 2 && "📝 Preparing response..."}
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.typingDots}>
-                  <Animated.View style={[styles.dot, styles.dot1, { opacity: typingAnim }]} />
-                  <Animated.View style={[styles.dot, styles.dot2, { opacity: typingAnim }]} />
-                  <Animated.View style={[styles.dot, styles.dot3, { opacity: typingAnim }]} />
+                  <Animated.View style={[
+                    styles.dot, 
+                    { 
+                      opacity: dot1Anim,
+                      transform: [{ scale: dot1Anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1.2]
+                      })}]
+                    }
+                  ]} />
+                  <Animated.View style={[
+                    styles.dot, 
+                    { 
+                      opacity: dot2Anim,
+                      transform: [{ scale: dot2Anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1.2]
+                      })}]
+                    }
+                  ]} />
+                  <Animated.View style={[
+                    styles.dot, 
+                    { 
+                      opacity: dot3Anim,
+                      transform: [{ scale: dot3Anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.5, 1.2]
+                      })}]
+                    }
+                  ]} />
+                </View>
+                <View style={styles.progressContainer}>
+                  <Animated.View 
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: progressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%']
+                        })
+                      }
+                    ]} 
+                  />
+                </View>
+                <View style={styles.typingTips}>
+                  <Text style={styles.typingTipText}>
+                    {thinkingTipState === 0 && "💡 Tip: While I'm thinking, you can browse our doctors in the Discover tab"}
+                    {thinkingTipState === 1 && "💡 Tip: You can also check your appointment history in the Dashboard"}
+                    {thinkingTipState === 2 && "💡 Tip: Need urgent care? Our doctors are available 24/7"}
+                    {thinkingTipState === 3 && "💡 Tip: You can ask me about symptoms, medications, or general health advice"}
+                  </Text>
                 </View>
               </View>
             </Animated.View>
@@ -965,9 +1223,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
   },
+  typingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  typingAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#E0F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typingInfo: {
+    marginLeft: 12,
+  },
+  typingName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#222',
+  },
+  typingStatus: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
   typingDots: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
+  },
+  typingTips: {
+    alignItems: 'center',
+  },
+  typingTipText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
   },
   dot: {
     width: 8,
@@ -1286,5 +1579,17 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+  },
+  progressContainer: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 4,
   },
 }); 

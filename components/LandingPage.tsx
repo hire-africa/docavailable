@@ -1,5 +1,3 @@
-import { Link } from 'expo-router';
-import React from 'react';
 import {
     Dimensions,
     Image,
@@ -9,6 +7,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { navigateToLogin } from '../utils/navigationUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -39,18 +38,20 @@ export default function LandingPage() {
       {/* Buttons Container */}
       <View style={styles.buttonContainer}>
         {/* Doctor Button */}
-        <Link href="/login?userType=doctor" asChild>
-          <TouchableOpacity style={styles.doctorButton}>
-            <Text style={styles.doctorButtonText}>I'm a Doctor</Text>
-          </TouchableOpacity>
-        </Link>
+        <TouchableOpacity 
+          style={styles.doctorButton}
+          onPress={() => navigateToLogin({ userType: 'doctor' })}
+        >
+          <Text style={styles.doctorButtonText}>I'm a Doctor</Text>
+        </TouchableOpacity>
 
         {/* Patient Button */}
-        <Link href="/login?userType=patient" asChild>
-          <TouchableOpacity style={styles.patientButton}>
-            <Text style={styles.patientButtonText}>I'm a Patient</Text>
-          </TouchableOpacity>
-        </Link>
+        <TouchableOpacity 
+          style={styles.patientButton}
+          onPress={() => navigateToLogin({ userType: 'patient' })}
+        >
+          <Text style={styles.patientButtonText}>I'm a Patient</Text>
+        </TouchableOpacity>
 
         
       </View>

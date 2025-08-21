@@ -1,20 +1,21 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import authService from '../services/authService';
+import { navigateToLogin, navigateToSignup } from '../utils/navigationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -24,6 +25,7 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const { userType } = useLocalSearchParams<{ userType?: string }>();
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,7 +53,10 @@ export default function ForgotPassword() {
         [
           {
             text: 'OK',
-            onPress: () => router.replace('/login')
+            onPress: () => {
+              // Navigate back to login with userType preserved
+              navigateToLogin({ userType });
+            }
           }
         ]
       );
@@ -64,7 +69,8 @@ export default function ForgotPassword() {
   };
 
   const handleBackToLogin = () => {
-    router.replace('/login');
+    // Use router.back() to return to the previous screen in the navigation stack
+    router.back();
   };
 
   return (
@@ -85,6 +91,20 @@ export default function ForgotPassword() {
             <Text style={styles.title}>Forgot Password</Text>
             <View style={{ width: 44 }} />
           </View>
+
+          {/* User Type Indicator */}
+          {userType && (
+            <View style={styles.userTypeIndicator}>
+              <FontAwesome 
+                name={userType === 'doctor' ? 'user-md' : 'user'} 
+                size={16} 
+                color="#4CAF50" 
+              />
+              <Text style={styles.userTypeText}>
+                {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
+              </Text>
+            </View>
+          )}
 
           {/* Main Content */}
           <View style={styles.mainContent}>
@@ -136,7 +156,7 @@ export default function ForgotPassword() {
                 Don't have an account?{' '}
                 <Text 
                   style={styles.linkText}
-                  onPress={() => router.replace('/signup')}
+                  onPress={() => navigateToSignup({ userType })}
                 >
                   Sign up
                 </Text>
@@ -180,6 +200,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  userTypeIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E0F2F7',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    marginHorizontal: 20,
+    marginTop: 16,
+    alignSelf: 'center',
+  },
+  userTypeText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
   mainContent: {
     flex: 1,
     paddingHorizontal: 24,
@@ -213,7 +250,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
-  input: {
+  input: Platform.OS === 'web' ? {
     borderWidth: 1,
     borderColor: '#E0E0E0',
     borderRadius: 12,
@@ -223,11 +260,17 @@ const styles = StyleSheet.create({
     color: '#333',
     backgroundColor: '#FFFFFF',
     marginBottom: 24,
-    ...Platform.select({
-      web: {
-        outlineStyle: 'none',
-      },
-    }),
+    outlineStyle: 'none',
+  } : {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 24,
   },
   resetButton: {
     backgroundColor: '#4CAF50',

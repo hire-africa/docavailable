@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 use App\Traits\HasImageUrls;
+use App\Mail\VerificationCodeMail;
 
 class AuthenticationController extends Controller
 {
@@ -909,6 +911,134 @@ class AuthenticationController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Password change failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Send verification code to email
+     */
+    public function sendVerificationCode(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $email = $request->email;
+            
+            // Generate a 6-digit verification code
+            $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+            
+            // Store the code in cache with 10 minutes expiration
+            $cacheKey = 'email_verification_' . $email;
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $code, now()->addMinutes(10));
+            
+            // Send email with verification code
+            try {
+                Mail::to($email)->send(new VerificationCodeMail($code, $email));
+                Log::info('Email verification code sent successfully', [
+                    'email' => $email,
+                    'code' => $code
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Failed to send verification email', [
+                    'email' => $email,
+                    'error' => $e->getMessage()
+                ]);
+                
+                // Fallback to logging for development
+                Log::info('Email verification code (fallback logging)', [
+                    'email' => $email,
+                    'code' => $code
+                ]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Verification code sent successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to send verification code', [
+                'error' => $e->getMessage(),
+                'email' => $request->email ?? 'unknown'
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send verification code',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify email with code
+     */
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'code' => 'required|string|size:6',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $email = $request->email;
+            $code = $request->code;
+            
+            // Get the stored code from cache
+            $cacheKey = 'email_verification_' . $email;
+            $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            
+            if (!$storedCode) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Verification code has expired or not found'
+                ], 400);
+            }
+            
+            if ($code !== $storedCode) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid verification code'
+                ], 400);
+            }
+            
+            // Code is valid, remove it from cache
+            \Illuminate\Support\Facades\Cache::forget($cacheKey);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Email verified successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to verify email', [
+                'error' => $e->getMessage(),
+                'email' => $request->email ?? 'unknown'
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to verify email',
                 'error' => $e->getMessage()
             ], 500);
         }
