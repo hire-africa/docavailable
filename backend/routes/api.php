@@ -111,6 +111,35 @@ Route::post('/test-post-endpoint', function () {
     ]);
 });
 
+// Test email sending endpoint for debugging
+Route::post('/test-email-sending', function (Request $request) {
+    try {
+        $email = $request->input('email', 'test@example.com');
+        $code = '123456';
+        
+        // Test basic email sending
+        \Illuminate\Support\Facades\Mail::raw("Test email with code: $code", function($message) use ($email) {
+            $message->to($email)
+                    ->subject('Test Email from DocAvailable')
+                    ->from('Docavailable01@gmail.com', 'DocAvailable');
+        });
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Test email sent successfully',
+            'email' => $email,
+            'code' => $code
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test email failed',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
 // Email verification routes (no auth required) - Production ready - Moved to top
 Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
     ->middleware('throttle:3,1'); // Max 3 requests per minute
