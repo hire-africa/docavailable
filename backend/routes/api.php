@@ -112,8 +112,10 @@ Route::post('/test-post-endpoint', function () {
 });
 
 // Email verification routes (no auth required) - Production ready - Moved to top
-Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']); // Temporarily removed throttle
-Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']); // Temporarily removed throttle
+Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
+    ->middleware('throttle:3,1'); // Max 3 requests per minute
+Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail'])
+    ->middleware('throttle:5,1'); // Max 5 attempts per minute
 
 // Chat routes (removed queue middleware)
 Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
