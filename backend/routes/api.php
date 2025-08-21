@@ -92,6 +92,15 @@ Route::post('/register', [AuthenticationController::class, 'register']);
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
 
+// Test endpoint for debugging
+Route::get('/test-email-verification', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'Email verification test endpoint working',
+        'timestamp' => now()->toISOString()
+    ]);
+});
+
 // Email verification routes (no auth required) - Production ready
 Route::group(['middleware' => []], function () {
     Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
