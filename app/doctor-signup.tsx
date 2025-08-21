@@ -582,19 +582,12 @@ export default function DoctorSignUp() {
     const sendVerificationCode = async () => {
         try {
             setIsResending(true);
-            // Call backend to send verification code
-            const response = await fetch('/api/send-verification-code', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email }),
-            });
+            const response = await authService.sendVerificationCode(email);
             
-            if (response.ok) {
+            if (response.success) {
                 Alert.alert('Success', 'Verification code sent to your email!');
             } else {
-                throw new Error('Failed to send verification code');
+                throw new Error(response.message || 'Failed to send verification code');
             }
         } catch (error) {
             console.error('Error sending verification code:', error);
@@ -607,20 +600,12 @@ export default function DoctorSignUp() {
     const verifyEmail = async () => {
         try {
             setIsVerifying(true);
-            // Call backend to verify the code
-            const response = await fetch('/api/verify-email', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, code: verificationCode }),
-            });
+            const response = await authService.verifyEmail(email, verificationCode);
             
-            if (response.ok) {
+            if (response.success) {
                 return true;
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Invalid verification code');
+                throw new Error(response.message || 'Invalid verification code');
             }
         } catch (error) {
             console.error('Error verifying email:', error);
@@ -646,7 +631,7 @@ export default function DoctorSignUp() {
             if (validateStep3()) {
                 const isVerified = await verifyEmail();
                 if (isVerified) {
-                    await handleSignUp();
+                await handleSignUp();
                 }
             }
         }
