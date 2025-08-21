@@ -92,22 +92,20 @@ Route::post('/register', [AuthenticationController::class, 'register']);
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
 
-// Routes with queue processing middleware
-Route::middleware(['process.queue'])->group(function () {
-    // Chat routes - frequently accessed, good for queue processing
-    Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
-    Route::get('/chat/{appointmentId}/messages', [ChatController::class, 'getMessages']);
-    Route::post('/chat/{appointmentId}/typing/start', [ChatController::class, 'startTyping']);
-    Route::post('/chat/{appointmentId}/typing/stop', [ChatController::class, 'stopTyping']);
-    Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUsers']);
-    
-    // Text session routes - critical for auto-deductions
-    Route::post('/text-sessions/end/{sessionId}', [TextSessionController::class, 'endSession']);
-    Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'getActiveSessions']);
-    Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
-    
-    // Health check - good for periodic queue processing
-    Route::get('/health', function () {
+// Chat routes (removed queue middleware)
+Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
+Route::get('/chat/{appointmentId}/messages', [ChatController::class, 'getMessages']);
+Route::post('/chat/{appointmentId}/typing/start', [ChatController::class, 'startTyping']);
+Route::post('/chat/{appointmentId}/typing/stop', [ChatController::class, 'stopTyping']);
+Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUsers']);
+
+// Text session routes
+Route::post('/text-sessions/end/{sessionId}', [TextSessionController::class, 'endSession']);
+Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'getActiveSessions']);
+Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
+
+// Health check
+Route::get('/health', function () {
         $health = [
             'status' => 'ok',
             'timestamp' => now()->toISOString(),
@@ -178,6 +176,26 @@ Route::middleware(['process.queue'])->group(function () {
 
         return response()->json($health, $health['status'] === 'ok' ? 200 : 500);
     });
+
+// Webhook for auto-deductions (called by external services every 10 minutes)
+Route::get('/webhook/auto-deductions', function() {
+    try {
+        // Process auto-deductions
+        Artisan::call('sessions:process-auto-deductions');
+        
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Auto-deductions processed',
+            'timestamp' => now()->toISOString(),
+            'processed_at' => now()->format('Y-m-d H:i:s')
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to process auto-deductions: ' . $e->getMessage(),
+            'timestamp' => now()->toISOString()
+        ], 500);
+    }
 });
 
 // Password reset routes (no auth required) - temporarily without rate limiting for testing

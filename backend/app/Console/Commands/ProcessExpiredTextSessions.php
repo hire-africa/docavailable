@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\TextSession;
 use App\Services\DoctorPaymentService;
+use Illuminate\Support\Facades\DB;
 
 class ProcessExpiredTextSessions extends Command
 {
@@ -75,17 +76,48 @@ class ProcessExpiredTextSessions extends Command
                     
                     $this->info("Session {$session->id} expired waiting for doctor - no session deducted from patient");
                 } else {
-                    // Session ran out of time - process final deduction
-                    $session->update([
-                        'status' => TextSession::STATUS_ENDED,
-                        'ended_at' => now()
-                    ]);
-                    
-                    // Process final deduction
-                    $sessionsToDeduct = $session->getSessionsToDeduct(true); // Manual end
-                    $paymentService->processSessionEnd($session, true);
-                    
-                    $this->info("Session {$session->id} ran out of time - {$sessionsToDeduct} sessions deducted from patient");
+                    // Session ran out of time - process auto-deductions first, then end
+                    DB::transaction(function () use ($session, $paymentService) {
+                        // Process any pending auto-deductions before ending
+                        $elapsedMinutes = now()->diffInMinutes($session->activated_at);
+                        $expectedDeductions = max(0, floor($elapsedMinutes / 10)); // Ensure non-negative
+                        $alreadyProcessed = $session->auto_deductions_processed ?? 0;
+                        $newDeductions = $expectedDeductions - $alreadyProcessed;
+
+                        $this->info("Session {$session->id}: Debug - Elapsed: {$elapsedMinutes}min, Expected: {$expectedDeductions}, Already: {$alreadyProcessed}, New: {$newDeductions}");
+
+                        if ($newDeductions > 0) {
+                            $this->info("Session {$session->id}: Processing {$newDeductions} auto-deductions before ending");
+                            
+                            // Deduct sessions from patient's subscription
+                            $patient = $session->patient;
+                            $patient->subscription->decrement('text_sessions_remaining', $newDeductions);
+                            
+                            // Award doctor earnings
+                            $earningsPerSession = 50; // $0.50 per session
+                            $totalEarnings = $newDeductions * $earningsPerSession;
+                            $doctor = $session->doctor;
+                            $doctor->increment('wallet_balance', $totalEarnings);
+                            
+                            // Update session with new deductions
+                            $session->update([
+                                'sessions_used' => $expectedDeductions,
+                                'auto_deductions_processed' => $expectedDeductions,
+                            ]);
+                            
+                            $this->info("Session {$session->id}: {$newDeductions} sessions deducted, doctor awarded ${$totalEarnings/100}");
+                        } else {
+                            $this->info("Session {$session->id}: No new auto-deductions needed (already processed: {$alreadyProcessed})");
+                        }
+                        
+                        // Now end the session
+                        $session->update([
+                            'status' => TextSession::STATUS_ENDED,
+                            'ended_at' => now()
+                        ]);
+                        
+                        $this->info("Session {$session->id} ended successfully");
+                    });
                 }
                 
                 $processedCount++;
