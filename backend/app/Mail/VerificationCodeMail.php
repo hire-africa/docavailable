@@ -32,7 +32,10 @@ class VerificationCodeMail extends Mailable
     {
         return new Envelope(
             subject: 'Email Verification Code - Doc Available',
-            from: config('mail.from.address'),
+            from: new \Illuminate\Mail\Mailables\Address(
+                config('mail.from.address'),
+                'Doc Available'
+            ),
         );
     }
 

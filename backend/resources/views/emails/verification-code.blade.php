@@ -85,6 +85,15 @@
             font-weight: 600;
             color: #2c3e50;
             margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .profile-pic {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
         }
         @media (max-width: 600px) {
             .container {
@@ -104,7 +113,10 @@
 <body>
     <div class="container">
         <div class="content">
-            <div class="greeting">Hello!</div>
+            <div class="greeting">
+                <img src="data:image/png;base64,{{ base64_encode(file_get_contents(public_path('images/da.png'))) }}" alt="Doc Available" class="profile-pic">
+                <span>Hello!</span>
+            </div>
             <p>Thank you for registering with {{ $appName }}. To complete your account setup, please use the verification code below:</p>
             
             <div class="verification-code">
