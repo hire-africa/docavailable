@@ -528,6 +528,7 @@ export default function PatientSignUp() {
         } catch (error) {
             console.error('Error sending verification code:', error);
             Alert.alert('Error', 'Failed to send verification code. Please try again.');
+            throw error; // Re-throw the error so handleContinue knows it failed
         } finally {
             setIsResending(false);
         }
@@ -703,8 +704,13 @@ export default function PatientSignUp() {
             }
         } else if (step === 2) {
             // Send verification code when moving to step 3
-            await sendVerificationCode();
-            setStep(step + 1);
+            try {
+                await sendVerificationCode();
+                setStep(step + 1);
+            } catch (error) {
+                console.error('Failed to send verification code:', error);
+                // Don't move to step 3 if email sending fails
+            }
         } else if (step === 3) {
             if (validateStep3()) {
                 const isVerified = await verifyEmail();

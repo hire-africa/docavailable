@@ -953,14 +953,16 @@ class AuthenticationController extends Controller
             } catch (\Exception $e) {
                 Log::error('Failed to send verification email', [
                     'email' => $email,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
                 ]);
                 
-                // Fallback to logging for development
-                Log::info('Email verification code (fallback logging)', [
-                    'email' => $email,
-                    'code' => $code
-                ]);
+                // Return error to frontend instead of success
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send verification email: ' . $e->getMessage(),
+                    'error' => $e->getMessage()
+                ], 500);
             }
             
             return response()->json([
