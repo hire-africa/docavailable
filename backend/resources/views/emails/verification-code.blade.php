@@ -21,22 +21,6 @@
             overflow: hidden;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .header {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            padding: 40px 30px;
-            text-align: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 600;
-        }
-        .header p {
-            margin: 10px 0 0 0;
-            opacity: 0.9;
-            font-size: 16px;
-        }
         .content {
             padding: 40px 30px;
         }
@@ -85,11 +69,6 @@
             color: #6c757d;
             font-size: 14px;
         }
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
         .expiry-notice {
             background-color: #fff3cd;
             border: 1px solid #ffeaa7;
@@ -101,25 +80,18 @@
         .expiry-notice strong {
             color: #856404;
         }
-        .button {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 6px;
+        .greeting {
+            font-size: 24px;
             font-weight: 600;
-            margin: 20px 0;
-        }
-        .button:hover {
-            background-color: #45a049;
+            color: #2c3e50;
+            margin-bottom: 20px;
         }
         @media (max-width: 600px) {
             .container {
                 margin: 10px;
                 border-radius: 8px;
             }
-            .header, .content, .footer {
+            .content, .footer {
                 padding: 20px;
             }
             .code {
@@ -131,14 +103,8 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <div class="logo">🏥 {{ $appName }}</div>
-            <h1>Email Verification</h1>
-            <p>Complete your account registration</p>
-        </div>
-        
         <div class="content">
-            <h2>Hello!</h2>
+            <div class="greeting">Hello!</div>
             <p>Thank you for registering with {{ $appName }}. To complete your account setup, please use the verification code below:</p>
             
             <div class="verification-code">
