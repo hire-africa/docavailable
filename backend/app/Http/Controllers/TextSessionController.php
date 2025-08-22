@@ -354,6 +354,27 @@ class TextSessionController extends Controller
                 'elapsed_minutes' => $session->getElapsedMinutes()
             ]);
             
+            // 🔧 AUTO-DETECTION FIX: Trigger auto-deduction processing for active sessions
+            // This ensures auto-deductions happen when frontend polls for session status
+            try {
+                $paymentService = new \App\Services\DoctorPaymentService();
+                $autoDeductionResult = $paymentService->processAutoDeduction($session);
+                
+                Log::info("Auto-deduction processed during status check", [
+                    'session_id' => $sessionId,
+                    'auto_deduction_result' => $autoDeductionResult,
+                    'elapsed_minutes' => $session->getElapsedMinutes(),
+                    'auto_deductions_processed' => $session->auto_deductions_processed,
+                    'sessions_used' => $session->sessions_used
+                ]);
+            } catch (\Exception $e) {
+                Log::error("Failed to process auto-deduction during status check", [
+                    'session_id' => $sessionId,
+                    'error' => $e->getMessage()
+                ]);
+                // Don't fail the status check if auto-deduction fails
+            }
+            
             return response()->json([
                 'success' => true,
                 'status' => 'active',
