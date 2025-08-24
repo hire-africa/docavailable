@@ -111,7 +111,7 @@ return [
             'sslmode' => env('DB_SSLMODE', 'require'),
             // Add the endpoint as an array to avoid Laravel 12 bug
             'options' => [
-                'endpoint' => 'ep-hidden-brook-aemmopjb-pooler'
+                'endpoint' => 'ep-royal-term-admnvjn0-pooler'
             ],
             // Use custom connector for Neon
             'connector' => \App\Connectors\NeonPostgresConnector::class,
