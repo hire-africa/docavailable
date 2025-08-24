@@ -67,6 +67,47 @@ Route::get('/debug/doctor-test', function () {
     }
 });
 
+// Debug endpoint for testing migrations
+Route::get('/debug/migrations', function () {
+    try {
+        // Check if migrations table exists
+        if (\Illuminate\Support\Facades\Schema::hasTable('migrations')) {
+            $runMigrations = \Illuminate\Support\Facades\DB::table('migrations')->get();
+            $migrationCount = $runMigrations->count();
+            
+            // Check if key tables exist
+            $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
+            $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
+            $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
+            
+            return response()->json([
+                'status' => 'ok',
+                'migrations_table_exists' => true,
+                'run_migrations_count' => $migrationCount,
+                'tables_exist' => [
+                    'users' => $usersExists,
+                    'appointments' => $appointmentsExists,
+                    'subscriptions' => $subscriptionsExists
+                ],
+                'last_migrations' => $runMigrations->take(5)->pluck('migration')->toArray(),
+                'timestamp' => now()->toISOString()
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Migrations table does not exist',
+                'timestamp' => now()->toISOString()
+            ]);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Error: ' . $e->getMessage(),
+            'timestamp' => now()->toISOString()
+        ]);
+    }
+});
+
 // Test chat endpoints
 Route::get('/debug/chat-endpoints', function () {
     return response()->json([
