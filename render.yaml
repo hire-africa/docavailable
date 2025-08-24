@@ -65,8 +65,27 @@ services:
       php artisan route:clear
       php artisan view:clear
       
-      # Run migrations only (no seeders to preserve data)
+      # Run migrations and seed database
+      echo "=== Running database migrations ==="
       php artisan migrate --force
+      
+      # Check if migrations were successful
+      if [ $? -eq 0 ]; then
+        echo "=== Migrations completed successfully ==="
+        
+        # Run seeders to populate initial data
+        echo "=== Running database seeders ==="
+        php artisan db:seed --force
+        
+        if [ $? -eq 0 ]; then
+          echo "=== Database seeding completed successfully ==="
+        else
+          echo "=== Warning: Database seeding failed, but continuing ==="
+        fi
+      else
+        echo "=== Error: Database migrations failed ==="
+        exit 1
+      fi
       
       echo "=== Debug: Starting PHP server with router.php ==="
       php -S 0.0.0.0:$PORT -t public public/router.php
@@ -109,7 +128,7 @@ services:
       - key: DB_CONNECTION
         value: pgsql_simple
       - key: DB_HOST
-        value: ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech
+        value: ep-royal-term-admnvjn0-pooler.c-2.us-east-1.aws.neon.tech
       - key: DB_PORT
         value: 5432
       - key: DB_DATABASE
@@ -117,9 +136,9 @@ services:
       - key: DB_USERNAME
         value: neondb_owner
       - key: DB_PASSWORD
-        value: ${DB_PASSWORD}
+        value: npg_bKHVCx2Wy3AR
       - key: DB_URL
-        value: postgresql://neondb_owner:${DB_PASSWORD}@ep-hidden-brook-aemmopjb-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require&options=endpoint%3Dep-hidden-brook-aemmopjb
+        value: postgresql://neondb_owner:npg_bKHVCx2Wy3AR@ep-royal-term-admnvjn0-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
       - key: DB_SSLMODE
         value: require
       - key: DB_CHARSET
