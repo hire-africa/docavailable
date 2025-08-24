@@ -945,7 +945,22 @@ class AuthenticationController extends Controller
             
             // Send email with verification code
             try {
+                // Log before sending
+                Log::info('Attempting to send verification email', [
+                    'email' => $email,
+                    'code' => $code,
+                    'mail_config' => [
+                        'driver' => config('mail.default'),
+                        'host' => config('mail.mailers.smtp.host'),
+                        'port' => config('mail.mailers.smtp.port'),
+                        'username' => config('mail.mailers.smtp.username'),
+                        'from_address' => config('mail.from.address'),
+                        'from_name' => config('mail.from.name'),
+                    ]
+                ]);
+                
                 Mail::to($email)->send(new VerificationCodeMail($code, $email));
+                
                 Log::info('Email verification code sent successfully', [
                     'email' => $email,
                     'code' => $code
@@ -954,7 +969,15 @@ class AuthenticationController extends Controller
                 Log::error('Failed to send verification email', [
                     'email' => $email,
                     'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
+                    'trace' => $e->getTraceAsString(),
+                    'mail_config' => [
+                        'driver' => config('mail.default'),
+                        'host' => config('mail.mailers.smtp.host'),
+                        'port' => config('mail.mailers.smtp.port'),
+                        'username' => config('mail.mailers.smtp.username'),
+                        'from_address' => config('mail.from.address'),
+                        'from_name' => config('mail.from.name'),
+                    ]
                 ]);
                 
                 // Return error to frontend instead of success
@@ -990,12 +1013,25 @@ class AuthenticationController extends Controller
     public function verifyEmail(Request $request): JsonResponse
     {
         try {
+            // Log the incoming request for debugging
+            Log::info('Email verification request received', [
+                'email' => $request->email ?? 'not_provided',
+                'code_length' => strlen($request->code ?? ''),
+                'has_code' => !empty($request->code),
+                'request_data' => $request->all()
+            ]);
+
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email',
                 'code' => 'required|string|size:6',
             ]);
 
             if ($validator->fails()) {
+                Log::warning('Email verification validation failed', [
+                    'email' => $request->email ?? 'not_provided',
+                    'errors' => $validator->errors()->toArray()
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -1010,7 +1046,20 @@ class AuthenticationController extends Controller
             $cacheKey = 'email_verification_' . $email;
             $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
             
+            Log::info('Email verification cache check', [
+                'email' => $email,
+                'cache_key' => $cacheKey,
+                'stored_code_exists' => !empty($storedCode),
+                'stored_code_length' => strlen($storedCode ?? ''),
+                'provided_code' => $code
+            ]);
+            
             if (!$storedCode) {
+                Log::warning('Email verification code not found in cache', [
+                    'email' => $email,
+                    'cache_key' => $cacheKey
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Verification code has expired or not found'
@@ -1018,6 +1067,12 @@ class AuthenticationController extends Controller
             }
             
             if ($code !== $storedCode) {
+                Log::warning('Email verification code mismatch', [
+                    'email' => $email,
+                    'provided_code' => $code,
+                    'stored_code' => $storedCode
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid verification code'
@@ -1027,6 +1082,11 @@ class AuthenticationController extends Controller
             // Code is valid, remove it from cache
             \Illuminate\Support\Facades\Cache::forget($cacheKey);
             
+            Log::info('Email verification successful', [
+                'email' => $email,
+                'code' => $code
+            ]);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Email verified successfully'
@@ -1035,7 +1095,11 @@ class AuthenticationController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to verify email', [
                 'error' => $e->getMessage(),
-                'email' => $request->email ?? 'unknown'
+                'email' => $request->email ?? 'unknown',
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'request_data' => $request->all()
             ]);
 
             return response()->json([

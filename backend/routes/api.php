@@ -323,11 +323,34 @@ Route::post('/test-email-sending', function (Request $request) {
     }
 });
 
+// Test verification email endpoint
+Route::post('/test-verification-email', function (Request $request) {
+    try {
+        $email = $request->input('email', 'test@example.com');
+        $code = '123456';
+        
+        // Test verification email sending
+        \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\VerificationCodeMail($code, $email));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Verification email sent successfully',
+            'email' => $email,
+            'code' => $code
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Verification email failed',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
 // Email verification routes (no auth required) - Production ready - Moved to top
-Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode'])
-    ->middleware('throttle:3,1'); // Max 3 requests per minute
-Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail'])
-    ->middleware('throttle:5,1'); // Max 5 attempts per minute
+Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']);
+Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
 
 // Chat routes (removed queue middleware)
 Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
