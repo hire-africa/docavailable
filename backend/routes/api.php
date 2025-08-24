@@ -108,6 +108,46 @@ Route::get('/debug/migrations', function () {
     }
 });
 
+// Debug endpoint to force run migrations
+Route::post('/debug/run-migrations', function () {
+    try {
+        // Run migrations
+        $exitCode = \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+        
+        if ($exitCode === 0) {
+            // Check tables after migration
+            $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
+            $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
+            $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
+            
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Migrations completed successfully',
+                'exit_code' => $exitCode,
+                'tables_created' => [
+                    'users' => $usersExists,
+                    'appointments' => $appointmentsExists,
+                    'subscriptions' => $subscriptionsExists
+                ],
+                'timestamp' => now()->toISOString()
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Migrations failed',
+                'exit_code' => $exitCode,
+                'timestamp' => now()->toISOString()
+            ]);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Error running migrations: ' . $e->getMessage(),
+            'timestamp' => now()->toISOString()
+        ]);
+    }
+});
+
 // Test chat endpoints
 Route::get('/debug/chat-endpoints', function () {
     return response()->json([
