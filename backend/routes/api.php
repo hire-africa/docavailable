@@ -40,6 +40,57 @@ Route::get('/debug/chat-test', function () {
     ]);
 });
 
+// Debug endpoint to trigger migrations
+Route::get('/debug/trigger-migrations', function () {
+    try {
+        // Check current table status
+        $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
+        $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
+        $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
+        
+        if ($usersExists && $appointmentsExists && $subscriptionsExists) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'All tables already exist',
+                'tables_exist' => true,
+                'timestamp' => now()->toISOString()
+            ]);
+        }
+        
+        // Run migrations
+        $exitCode = \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+        
+        // Check tables after migration
+        $usersExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('users');
+        $appointmentsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('appointments');
+        $subscriptionsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
+        
+        if ($exitCode === 0 && $usersExistsAfter && $appointmentsExistsAfter && $subscriptionsExistsAfter) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Migrations completed successfully',
+                'exit_code' => $exitCode,
+                'tables_created' => true,
+                'timestamp' => now()->toISOString()
+            ]);
+        } else {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Migrations failed or incomplete',
+                'exit_code' => $exitCode,
+                'tables_created' => false,
+                'timestamp' => now()->toISOString()
+            ]);
+        }
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Error running migrations: ' . $e->getMessage(),
+            'timestamp' => now()->toISOString()
+        ]);
+    }
+});
+
 // Debug endpoint for testing doctor profile
 Route::get('/debug/doctor-test', function () {
     try {
