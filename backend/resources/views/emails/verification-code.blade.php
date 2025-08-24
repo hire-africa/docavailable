@@ -114,7 +114,16 @@
     <div class="container">
         <div class="content">
             <div class="greeting">
-                <img src="data:image/png;base64,{{ base64_encode(file_get_contents(public_path('images/da.png'))) }}" alt="Doc Available" class="profile-pic">
+                @php
+                    $imagePath = public_path('images/da.png');
+                    $imageData = '';
+                    if (file_exists($imagePath)) {
+                        $imageData = base64_encode(file_get_contents($imagePath));
+                    }
+                @endphp
+                @if($imageData)
+                    <img src="data:image/png;base64,{{ $imageData }}" alt="Doc Available" class="profile-pic">
+                @endif
                 <span>Hello!</span>
             </div>
             <p>Thank you for registering with {{ $appName }}. To complete your account setup, please use the verification code below:</p>
