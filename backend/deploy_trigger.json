@@ -1,7 +1,9 @@
 {
-    "timestamp": "2025-08-25 14:01:32",
-    "database_host": null,
-    "database_url": null,
-    "app_env": null,
-    "message": "Force redeploy with correct database configuration"
+    "timestamp": "2025-08-25T14:30:00.000000Z",
+    "database_host": "ep-royal-term-admnvjn0-pooler.c-2.us-east-1.aws.neon.tech",
+    "database_url": "postgresql://neondb_owner:npg_bKHVCx2Wy3AR@ep-royal-term-admnvjn0-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+    "app_env": "production",
+    "message": "Force redeploy with correct database configuration - UPDATED",
+    "deploy_reason": "Database configuration fix - using ep-royal-term instead of ep-hidden-brook",
+    "status": "pending_redeploy"
 }
