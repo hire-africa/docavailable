@@ -1,3 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🚀 Starting DocAvailable backend..."
+
+if [ ! -f "artisan" ]; then
+  echo "❌ artisan not found. Run from backend directory."
+  exit 1
+fi
+
+echo "🔧 Ensuring APP_KEY..."
+if [ -z "${APP_KEY:-}" ] || [ "${APP_KEY}" = "" ]; then
+  php artisan key:generate --force || true
+fi
+
+echo "📦 Installing optimized autoloader (if vendor missing)..."
+if [ ! -d "vendor" ]; then
+  composer install --no-dev --optimize-autoloader --no-interaction
+fi
+
+echo "🧹 Clearing caches..."
+php artisan config:clear || true
+php artisan cache:clear || true
+php artisan route:clear || true
+php artisan view:clear || true
+
+echo "🔗 Ensuring storage symlink..."
+php artisan storage:link || true
+
+echo "🗄️ Running migrations..."
+php artisan migrate --force || true
+
+echo "⚡ Caching configuration and routes..."
+php artisan config:cache || true
+php artisan route:cache || true
+php artisan view:cache || true
+php artisan optimize || true
+
+echo "🌐 Starting HTTP server..."
+php artisan serve --host=0.0.0.0 --port=${PORT:-8080}
+
 #!/bin/bash
 
 echo "🚀 Starting DocAvailable backend..."

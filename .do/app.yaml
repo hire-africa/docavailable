@@ -5,7 +5,8 @@ services:
   github:
     repo: your-github-username/docavailable
     branch: main
-  run_command: php artisan serve --host=0.0.0.0 --port=$PORT
+  build_command: composer install --no-dev --optimize-autoloader --no-interaction
+  run_command: bash scripts/start.sh
   environment_slug: php
   instance_count: 1
   instance_size_slug: basic-xxs
@@ -29,7 +30,9 @@ services:
   - key: DB_USERNAME
     value: doadmin
   - key: DB_PASSWORD
-    value: your_database_password_here
+    value: ${DB_PASSWORD}
+  - key: DB_SSLMODE
+    value: require
   - key: CACHE_DRIVER
     value: file
   - key: SESSION_DRIVER
@@ -38,30 +41,30 @@ services:
     value: sync
   - key: LOG_CHANNEL
     value: stack
-  - key: DEEPSEEK_API_KEY
-    value: your_deepseek_api_key_here
-  - key: PAYCHANGU_API_KEY
-    value: your_paychangu_api_key
-  - key: PAYCHANGU_SECRET_KEY
-    value: your_paychangu_secret_key
-  - key: PAYCHANGU_MERCHANT_ID
-    value: your_merchant_id
-  - key: PAYCHANGU_WEBHOOK_SECRET
-    value: your_webhook_secret
-  - key: PAYCHANGU_ENVIRONMENT
-    value: sandbox
-  - key: SPACES_KEY
-    value: your_spaces_key_here
-  - key: SPACES_SECRET
-    value: your_spaces_secret_here
-  - key: SPACES_ENDPOINT
-    value: https://nyc1.digitaloceanspaces.com
-  - key: SPACES_REGION
-    value: nyc1
-  - key: SPACES_BUCKET
-    value: docavailable-storage
   - key: FILESYSTEM_DISK
     value: spaces
+  - key: SPACES_KEY
+    value: ${SPACES_KEY}
+  - key: SPACES_SECRET
+    value: ${SPACES_SECRET}
+  - key: SPACES_ENDPOINT
+    value: ${SPACES_ENDPOINT}
+  - key: SPACES_REGION
+    value: ${SPACES_REGION}
+  - key: SPACES_BUCKET
+    value: ${SPACES_BUCKET}
+  - key: PAYCHANGU_API_KEY
+    value: ${PAYCHANGU_API_KEY}
+  - key: PAYCHANGU_SECRET_KEY
+    value: ${PAYCHANGU_SECRET_KEY}
+  - key: PAYCHANGU_MERCHANT_ID
+    value: ${PAYCHANGU_MERCHANT_ID}
+  - key: PAYCHANGU_WEBHOOK_SECRET
+    value: ${PAYCHANGU_WEBHOOK_SECRET}
+  - key: PAYCHANGU_ENVIRONMENT
+    value: ${PAYCHANGU_ENVIRONMENT}
+  - key: DEEPSEEK_API_KEY
+    value: ${DEEPSEEK_API_KEY}
 
 databases:
 - name: docavailable-db
