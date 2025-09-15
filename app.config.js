@@ -48,6 +48,10 @@ export default {
       appName: process.env.EXPO_PUBLIC_APP_NAME || "DocAvailable",
       appVersion: process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0",
       
+      // Google OAuth Configuration
+      EXPO_PUBLIC_GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+      EXPO_PUBLIC_GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,
+      
       // Feature Flags - Set to false for minimal build
       useBackendChat: false,
       useBackendWallet: false,
