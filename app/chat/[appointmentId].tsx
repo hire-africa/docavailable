@@ -28,6 +28,7 @@ import { EndedSession, endedSessionStorageService } from '../../services/endedSe
 import { imageService } from '../../services/imageService';
 import { Message, messageStorageService } from '../../services/messageStorageService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
+import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import sessionService from '../services/sessionService';
 
 interface ChatInfo {
@@ -40,6 +41,7 @@ interface ChatInfo {
   patient_id?: number;
   other_participant_profile_picture?: string;
   other_participant_profile_picture_url?: string;
+  appointment_type?: string;
 }
 
 interface TextSessionInfo {
@@ -103,15 +105,35 @@ export default function ChatPage() {
   
   // Audio call modal state
   const [showAudioCallModal, setShowAudioCallModal] = useState(false);
+  const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
+  const [appointmentType, setAppointmentType] = useState<string | null>(null);
+  
+  // WebRTC session management state
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
+  const [doctorResponseTimeRemaining, setDoctorResponseTimeRemaining] = useState<number | null>(null);
+  const [sessionDeductionInfo, setSessionDeductionInfo] = useState<any>(null);
+  const [isWebRTCConnected, setIsWebRTCConnected] = useState(false);
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
   
   // Check if current user is a patient
   const isPatient = user?.user_type === 'patient';
+  const isDoctor = user?.user_type === 'doctor';
   
   // Parse and validate appointment ID
   const isTextSession = appointmentId && appointmentId.startsWith('text_session_');
+  
+  // Determine if call button should be enabled
+  const isCallEnabled = () => {
+    if (isTextSession) {
+      // Always enabled for instant sessions
+      return true;
+    } else {
+      // Only enabled for call appointments
+      return appointmentType === 'audio' || appointmentType === 'voice';
+    }
+  };
   const parsedAppointmentId = isTextSession ? appointmentId : (appointmentId ? parseInt(appointmentId, 10) : null);
   
   // Check if user is authenticated
@@ -231,6 +253,11 @@ export default function ChatPage() {
               const chatInfoData = infoResponse.data as ChatInfo;
               setChatInfo(chatInfoData);
               
+              // Set appointment type for call button logic
+              if (chatInfoData.appointment_type) {
+                setAppointmentType(chatInfoData.appointment_type);
+              }
+              
               // Check if session has ended (for doctors)
               if (!isPatient && chatInfoData.status === 'completed') {
                 console.log('🏁 Session ended detected for doctor');
@@ -275,28 +302,47 @@ export default function ChatPage() {
   const sendMessage = async () => {
     if (!newMessage.trim() || sending || !isAuthenticated) return;
 
-    // Safety check
-    if (!messageStorageService) {
-      console.error('❌ messageStorageService not available in sendMessage');
-      Alert.alert('Error', 'Message service not available');
-      return;
-    }
-
     setSending(true);
     try {
-      const sentMessage = await messageStorageService.sendMessage(
-        getAppointmentIdForStorage(),
-        newMessage.trim(),
-        currentUserId,
-        user?.first_name + ' ' + user?.last_name || 'Unknown User'
-      );
-      
-      if (sentMessage) {
-        setNewMessage('');
-        // Messages will be updated via callback
+      // Create message object
+      const messageData = {
+        appointment_id: getNumericAppointmentId(),
+        sender_id: currentUserId,
+        sender_name: user?.first_name + ' ' + user?.last_name || 'Unknown User',
+        message: newMessage.trim(),
+        message_type: 'text' as const,
+        created_at: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
+        delivery_status: 'sending' as const,
+        temp_id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      if (isWebRTCConnected) {
+        // Send via WebRTC (which handles session management)
+        await webrtcSessionService.sendMessage(messageData);
       } else {
-        Alert.alert('Error', 'Failed to send message');
+        // Fallback to polling system
+        if (!messageStorageService) {
+          console.error('❌ messageStorageService not available in sendMessage');
+          Alert.alert('Error', 'Message service not available');
+          return;
+        }
+
+        const sentMessage = await messageStorageService.sendMessage(
+          getAppointmentIdForStorage(),
+          newMessage.trim(),
+          currentUserId,
+          user?.first_name + ' ' + user?.last_name || 'Unknown User'
+        );
+        
+        if (!sentMessage) {
+          Alert.alert('Error', 'Failed to send message');
+          return;
+        }
       }
+      
+      setNewMessage('');
+      
     } catch (error: any) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message');
@@ -517,110 +563,208 @@ export default function ChatPage() {
     };
   }, [isTextSession, textSessionInfo, isAuthenticated, appointmentId]);
 
-  // Register for message updates and start auto-sync only if authenticated
+  // Initialize WebRTC session management
   useEffect(() => {
-    // Safety check to ensure messageStorageService is available and user is authenticated
-    if (!messageStorageService || !isAuthenticated) {
-      console.log('❌ messageStorageService not available or user not authenticated');
-      return;
-    }
+    if (!isAuthenticated) return;
 
-    console.log('🔧 Registering callback for appointment:', getAppointmentIdForStorage());
-    console.log('🔧 Numeric ID for callback:', getNumericAppointmentId());
-
-    messageStorageService.registerUpdateCallback(getNumericAppointmentId(), (updatedMessages) => {
-      console.log('🔄 CALLBACK TRIGGERED with messages:', updatedMessages.length);
-      console.log('🔄 Current messages in state:', messages.length);
-      
-      // Check if there are new messages from other participants
-      const hasNewMessagesFromOthers = updatedMessages.some(message => 
-        message.sender_id !== currentUserId && 
-        !messages.some(existingMessage => existingMessage.id === message.id)
-      );
-      
-      // Debug: Log delivery status changes for own messages and track image messages
-      const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
-      console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
-      
-      // CRITICAL FIX: Preserve local messages that might not be in updatedMessages yet
-      const localMessages = messages.filter(localMsg => 
-        localMsg.sender_id === currentUserId && 
-        localMsg.delivery_status === 'sending' &&
-        !updatedMessages.some(serverMsg => 
-          serverMsg.id === localMsg.id || 
-          serverMsg.temp_id === localMsg.temp_id
-        )
-      );
-      
-      // Merge local messages with server messages
-      const mergedMessages = [...localMessages, ...updatedMessages];
-      
-      // Remove duplicates based on ID or temp_id
-      const uniqueMessages = mergedMessages.filter((message, index, self) => 
-        index === self.findIndex(m => 
-          m.id === message.id || 
-          (m.temp_id && m.temp_id === message.temp_id)
-        )
-      );
-      
-      console.log(`🔍 Merged messages: ${mergedMessages.length}, Unique: ${uniqueMessages.length}, Local preserved: ${localMessages.length}`);
-      
-      updatedMessages.forEach(message => {
-        if (message.sender_id === currentUserId) {
-          console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
+    const initializeWebRTCSession = async () => {
+      try {
+        await webrtcSessionService.initialize(appointmentId, {
+          onSessionActivated: (sessionId: string, sessionType: 'instant' | 'appointment') => {
+            console.log('✅ Session activated via WebRTC:', sessionId, sessionType);
+            setSessionEnded(false);
+            setIsWebRTCConnected(true);
+          },
           
-          // Check if delivery status changed
-          const existingMessage = messages.find(m => m.id === message.id);
-          if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
-            console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
+          onSessionExpired: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+            console.log('⏰ Session expired via WebRTC:', sessionId, reason, sessionType);
+            Alert.alert(
+              'Session Expired',
+              reason,
+              [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    handleStoreAndClose();
+                  }
+                }
+              ]
+            );
+          },
+          
+          onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+            console.log('🏁 Session ended via WebRTC:', sessionId, reason, sessionType);
+            setSessionEnded(true);
+            // Show rating modal or navigate back
+            setShowRatingModal(true);
+          },
+          
+          onSessionDeduction: (sessionId: string, deductionData: any, sessionType: 'instant' | 'appointment') => {
+            console.log('💰 Session deduction via WebRTC:', deductionData, sessionType);
+            setSessionDeductionInfo(deductionData);
+            
+            // Show deduction notification for instant sessions only
+            if (sessionType === 'instant') {
+              Alert.alert(
+                'Session Deduction',
+                `${deductionData.sessionsDeducted} session(s) deducted. ${deductionData.remainingSessions} remaining.`,
+                [{ text: 'OK' }]
+              );
+            }
+          },
+          
+          onDoctorResponseTimerStarted: (sessionId: string, timeRemaining: number) => {
+            console.log('⏱️ Doctor response timer started:', timeRemaining);
+            setDoctorResponseTimeRemaining(timeRemaining);
+            
+            // Start countdown timer
+            const countdown = setInterval(() => {
+              setDoctorResponseTimeRemaining(prev => {
+                if (prev && prev > 0) {
+                  return prev - 1;
+                } else {
+                  clearInterval(countdown);
+                  return null;
+                }
+              });
+            }, 1000);
+          },
+          
+          onAppointmentStarted: (sessionId: string) => {
+            console.log('🚀 Appointment started via WebRTC:', sessionId);
+            setIsWebRTCConnected(true);
+          },
+          
+          onSessionStatusUpdate: (status: SessionStatus) => {
+            console.log('📊 Session status updated:', status);
+            setSessionStatus(status);
+          },
+          
+          onError: (error: string) => {
+            console.error('❌ WebRTC session error:', error);
+            Alert.alert('Session Error', error);
+          }
+        });
+
+        // Request initial session status
+        webrtcSessionService.requestSessionStatus();
+        setIsWebRTCConnected(true);
+
+      } catch (error) {
+        console.error('❌ Failed to initialize WebRTC session:', error);
+        // Fallback to polling if WebRTC fails
+        initializePollingFallback();
+      }
+    };
+
+    const initializePollingFallback = () => {
+      // Safety check to ensure messageStorageService is available and user is authenticated
+      if (!messageStorageService || !isAuthenticated) {
+        console.log('❌ messageStorageService not available or user not authenticated');
+        return;
+      }
+
+      console.log('🔧 Registering callback for appointment:', getAppointmentIdForStorage());
+      console.log('🔧 Numeric ID for callback:', getNumericAppointmentId());
+
+      messageStorageService.registerUpdateCallback(getNumericAppointmentId(), (updatedMessages) => {
+        console.log('🔄 CALLBACK TRIGGERED with messages:', updatedMessages.length);
+        console.log('🔄 Current messages in state:', messages.length);
+        
+        // Check if there are new messages from other participants
+        const hasNewMessagesFromOthers = updatedMessages.some(message => 
+          message.sender_id !== currentUserId && 
+          !messages.some(existingMessage => existingMessage.id === message.id)
+        );
+        
+        // Debug: Log delivery status changes for own messages and track image messages
+        const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
+        console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
+        
+        // CRITICAL FIX: Preserve local messages that might not be in updatedMessages yet
+        const localMessages = messages.filter(localMsg => 
+          localMsg.sender_id === currentUserId && 
+          localMsg.delivery_status === 'sending' &&
+          !updatedMessages.some(serverMsg => 
+            serverMsg.id === localMsg.id || 
+            serverMsg.temp_id === localMsg.temp_id
+          )
+        );
+        
+        // Merge local messages with server messages
+        const mergedMessages = [...localMessages, ...updatedMessages];
+        
+        // Remove duplicates based on ID or temp_id
+        const uniqueMessages = mergedMessages.filter((message, index, self) => 
+          index === self.findIndex(m => 
+            m.id === message.id || 
+            (m.temp_id && m.temp_id === message.temp_id)
+          )
+        );
+        
+        console.log(`🔍 Merged messages: ${mergedMessages.length}, Unique: ${uniqueMessages.length}, Local preserved: ${localMessages.length}`);
+        
+        updatedMessages.forEach(message => {
+          if (message.sender_id === currentUserId) {
+            console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
+            
+            // Check if delivery status changed
+            const existingMessage = messages.find(m => m.id === message.id);
+            if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
+              console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
+            }
+            
+            // Check if message is read
+            if (message.delivery_status === 'read') {
+              console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
+            }
           }
           
-          // Check if message is read
-          if (message.delivery_status === 'read') {
-            console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
+          // Special tracking for image messages
+          if (message.message_type === 'image') {
+            console.log(`📷 Image message detected:`, {
+              id: message.id,
+              temp_id: message.temp_id,
+              media_url: message.media_url?.substring(0, 50) + '...',
+              delivery_status: message.delivery_status,
+              sender_id: message.sender_id
+            });
           }
+        });
+        
+        console.log('🔄 Setting messages to:', uniqueMessages.length);
+        setMessages(uniqueMessages);
+        
+        // Reset the flag when new messages arrive from others so they can be marked as read
+        if (hasNewMessagesFromOthers) {
+          setMessagesMarkedAsRead(false);
+          setMarkReadAttempts(0); // Reset attempts for new messages
+          console.log(`🔄 Reset read flags due to new messages from others`);
         }
         
-        // Special tracking for image messages
-        if (message.message_type === 'image') {
-          console.log(`📷 Image message detected:`, {
-            id: message.id,
-            temp_id: message.temp_id,
-            media_url: message.media_url?.substring(0, 50) + '...',
-            delivery_status: message.delivery_status,
-            sender_id: message.sender_id
-          });
+        // Also check if there are any unread messages that need to be marked
+        const hasUnreadMessages = uniqueMessages.some(message => 
+          message.sender_id !== currentUserId && 
+          (!message.read_by || !message.read_by.some(read => read.user_id === currentUserId))
+        );
+        
+        if (hasUnreadMessages && messagesMarkedAsRead) {
+          console.log(`🔄 Found unread messages, resetting read flag`);
+          setMessagesMarkedAsRead(false);
+          setMarkReadAttempts(0);
         }
       });
-      
-      console.log('🔄 Setting messages to:', uniqueMessages.length);
-      setMessages(uniqueMessages);
-      
-      // Reset the flag when new messages arrive from others so they can be marked as read
-      if (hasNewMessagesFromOthers) {
-        setMessagesMarkedAsRead(false);
-        setMarkReadAttempts(0); // Reset attempts for new messages
-        console.log(`🔄 Reset read flags due to new messages from others`);
-      }
-      
-      // Also check if there are any unread messages that need to be marked
-      const hasUnreadMessages = uniqueMessages.some(message => 
-        message.sender_id !== currentUserId && 
-        (!message.read_by || !message.read_by.some(read => read.user_id === currentUserId))
-      );
-      
-      if (hasUnreadMessages && messagesMarkedAsRead) {
-        console.log(`🔄 Found unread messages, resetting read flag`);
-        setMessagesMarkedAsRead(false);
-        setMarkReadAttempts(0);
-      }
-    });
 
-    // Start auto-sync for real-time updates
-    console.log('🔧 Starting auto-sync for appointment:', getAppointmentIdForStorage());
-    messageStorageService.startAutoSync(getNumericAppointmentId());
+      // Start auto-sync for real-time updates
+      console.log('🔧 Starting auto-sync for appointment:', getAppointmentIdForStorage());
+      messageStorageService.startAutoSync(getNumericAppointmentId());
+    };
 
+    initializeWebRTCSession();
+
+    // Cleanup
     return () => {
+      webrtcSessionService.disconnect();
       if (messageStorageService) {
         console.log('🔧 Unregistering callback for appointment:', getAppointmentIdForStorage());
         messageStorageService.unregisterUpdateCallback(getNumericAppointmentId());
@@ -760,15 +904,53 @@ export default function ChatPage() {
       }
       
       const sessionType = isTextSession ? 'text' : 'appointment';
-             // Before ending on server, capture current messages for local archive
-       const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
-       // Strip temp_id and ensure minimal consistency
-       const cleanedMessages = archiveMessages.map(m => {
-         const { temp_id, ...rest } = m as any;
-         return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-       });
+      
+      if (isWebRTCConnected) {
+        // Use WebRTC session service for real-time ending
+        await webrtcSessionService.endSession('manual_end');
+        
+        // Capture messages for local archive
+        const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+        const cleanedMessages = archiveMessages.map(m => {
+          const { temp_id, ...rest } = m as any;
+          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+        });
 
-       const result = await sessionService.endSession(sessionId, sessionType);
+        // Build ended session payload for local storage
+        const endedSession: EndedSession = {
+          appointment_id: getNumericAppointmentId(),
+          doctor_id: chatInfo?.doctor_id,
+          doctor_name: chatInfo?.other_participant_name,
+          doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+          doctor_profile_picture: chatInfo?.other_participant_profile_picture,
+          patient_id: user?.id || 0,
+          patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+          appointment_date: chatInfo?.appointment_date,
+          appointment_time: chatInfo?.appointment_time,
+          ended_at: new Date().toISOString(),
+          session_duration: undefined,
+          session_summary: undefined,
+          reason: textSessionInfo?.reason,
+          messages: cleanedMessages,
+          message_count: cleanedMessages.length,
+        };
+
+        try {
+          await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+        } catch (e) {
+          console.error('Failed to store ended session locally:', e);
+        }
+      } else {
+        // Fallback to API calls
+        // Before ending on server, capture current messages for local archive
+        const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+        // Strip temp_id and ensure minimal consistency
+        const cleanedMessages = archiveMessages.map(m => {
+          const { temp_id, ...rest } = m as any;
+          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+        });
+
+        const result = await sessionService.endSession(sessionId, sessionType);
        
        if (result.status === 'success') {
          // Build ended session payload for local storage
@@ -802,6 +984,7 @@ export default function ChatPage() {
         setShowRatingModal(true);
       } else {
         Alert.alert('Error', 'Failed to end session. Please try again.');
+      }
       }
     } catch (error: any) {
       console.error('Error ending session:', error);
@@ -1155,17 +1338,105 @@ export default function ChatPage() {
           <TouchableOpacity 
             style={{ 
               padding: 8,
+              opacity: isCallEnabled() ? 1 : 0.3
             }}
             onPress={() => {
-              setShowAudioCallModal(true);
+              if (isCallEnabled()) {
+                setShowAudioCallModal(true);
+              } else {
+                Alert.alert(
+                  'Call Not Available',
+                  isTextSession 
+                    ? 'Call feature is not available for this session type.'
+                    : 'Call feature is only available for audio appointments.'
+                );
+              }
             }}
+            disabled={!isCallEnabled()}
           >
-            <Icon name="voice" size={24} color="#4CAF50" />
+            <Icon name="voice" size={24} color={isCallEnabled() ? "#4CAF50" : "#999"} />
           </TouchableOpacity>
         </View>
         
 
       </View>
+
+      {/* WebRTC Session Status */}
+      {isWebRTCConnected && (
+        <View style={{
+          backgroundColor: '#f8f9fa',
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: '#E5E5E5',
+        }}>
+          {sessionStatus && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 4,
+            }}>
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: '#333',
+              }}>
+                {sessionStatus.sessionType === 'instant' ? 'Instant Session' : 'Appointment'} • 
+                {sessionStatus.status === 'active' ? ' Active' : 
+                 sessionStatus.status === 'waiting_for_doctor' ? ' Waiting for Doctor' :
+                 sessionStatus.status === 'in_progress' ? ' In Progress' : 
+                 sessionStatus.status}
+              </Text>
+              
+              {sessionStatus.remainingTimeMinutes && (
+                <Text style={{
+                  fontSize: 12,
+                  color: '#666',
+                }}>
+                  {sessionStatus.remainingTimeMinutes} min remaining
+                </Text>
+              )}
+            </View>
+          )}
+          
+          {doctorResponseTimeRemaining && (
+            <View style={{
+              backgroundColor: '#fff3cd',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+              marginBottom: 4,
+            }}>
+              <Text style={{
+                fontSize: 12,
+                color: '#856404',
+                fontWeight: '500',
+              }}>
+                ⏱️ Doctor response: {doctorResponseTimeRemaining}s
+              </Text>
+            </View>
+          )}
+          
+          {sessionDeductionInfo && (
+            <View style={{
+              backgroundColor: '#d1ecf1',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 6,
+            }}>
+              <Text style={{
+                fontSize: 12,
+                color: '#0c5460',
+                fontWeight: '500',
+              }}>
+                💰 {sessionDeductionInfo.sessionsDeducted} session(s) deducted • 
+                {sessionDeductionInfo.remainingSessions} remaining
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Messages */}
       <KeyboardAvoidingView 
@@ -1389,7 +1660,13 @@ export default function ChatPage() {
           
           <TextInput
             value={newMessage}
-            onChangeText={setNewMessage}
+            onChangeText={(text) => {
+              setNewMessage(text);
+              // Send typing indicator via WebRTC
+              if (isWebRTCConnected) {
+                webrtcSessionService.sendTypingIndicator(text.length > 0);
+              }
+            }}
             placeholder={sessionEnded && !isPatient ? "Session ended" : "Type a message..."}
             style={{
               flex: 1,
@@ -1674,7 +1951,81 @@ export default function ChatPage() {
         isDoctor={!isPatient}
         doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
         patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : chatInfo?.other_participant_name}
+        onCallTimeout={() => setShowDoctorUnavailableModal(true)}
+        onCallRejected={() => setShowDoctorUnavailableModal(true)}
       />
+
+      {/* Doctor Unavailable Modal */}
+      <Modal
+        visible={showDoctorUnavailableModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDoctorUnavailableModal(false)}
+      >
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20
+        }}>
+          <View style={{
+            backgroundColor: 'white',
+            borderRadius: 12,
+            padding: 24,
+            alignItems: 'center',
+            minWidth: 280,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 8
+          }}>
+            <Ionicons name="call" size={48} color="#FF4444" style={{ marginBottom: 16 }} />
+            <Text style={{
+              fontSize: 20,
+              fontWeight: '600',
+              color: '#333',
+              marginBottom: 8,
+              textAlign: 'center'
+            }}>
+              Doctor Unavailable
+            </Text>
+            <Text style={{
+              fontSize: 16,
+              color: '#666',
+              textAlign: 'center',
+              lineHeight: 22,
+              marginBottom: 24
+            }}>
+              The doctor is currently unavailable to take your call. Please try again later or send a message.
+            </Text>
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#4CAF50',
+                paddingHorizontal: 24,
+                paddingVertical: 12,
+                borderRadius: 8,
+                minWidth: 120
+              }}
+              onPress={() => {
+                setShowDoctorUnavailableModal(false);
+                setShowAudioCallModal(false);
+                // Optionally navigate back or stay in chat
+              }}
+            >
+              <Text style={{
+                color: 'white',
+                fontSize: 16,
+                fontWeight: '500',
+                textAlign: 'center'
+              }}>
+                OK
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 } 

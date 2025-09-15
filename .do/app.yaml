@@ -65,6 +65,11 @@ services:
     value: production
   - key: PAYCHANGU_PAYMENT_URL
     value: https://api.paychangu.com/payment
+  # Google OAuth Configuration
+  - key: GOOGLE_CLIENT_ID
+    value: ${GOOGLE_CLIENT_ID}
+  - key: GOOGLE_CLIENT_SECRET
+    value: ${GOOGLE_CLIENT_SECRET}
   - key: PAYCHANGU_VERIFY_URL
     value: https://api.paychangu.com/verify-payment
   - key: PAYCHANGU_CALLBACK_URL

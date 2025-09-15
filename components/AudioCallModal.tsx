@@ -17,6 +17,8 @@ interface AudioCallModalProps {
   isDoctor: boolean;
   doctorName?: string;
   patientName?: string;
+  onCallTimeout?: () => void;
+  onCallRejected?: () => void;
 }
 
 export default function AudioCallModal({
@@ -27,6 +29,8 @@ export default function AudioCallModal({
   isDoctor,
   doctorName,
   patientName,
+  onCallTimeout,
+  onCallRejected,
 }: AudioCallModalProps) {
   const [showAudioCall, setShowAudioCall] = useState(false);
 
@@ -39,6 +43,16 @@ export default function AudioCallModal({
     onClose();
   };
 
+  const handleCallTimeout = () => {
+    setShowAudioCall(false);
+    onCallTimeout?.();
+  };
+
+  const handleCallRejected = () => {
+    setShowAudioCall(false);
+    onCallRejected?.();
+  };
+
   if (showAudioCall) {
     return (
       <AudioCall
@@ -48,6 +62,8 @@ export default function AudioCallModal({
         doctorName={doctorName}
         patientName={patientName}
         onEndCall={handleEndCall}
+        onCallTimeout={handleCallTimeout}
+        onCallRejected={handleCallRejected}
       />
     );
   }
