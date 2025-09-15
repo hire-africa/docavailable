@@ -1,0 +1,73 @@
+name: docavailable-backend
+# Force rebuild with new configuration
+services:
+- name: laravel-backend
+  source_dir: /backend
+  github:
+    repo: docavailable/docavailable
+    branch: main
+  dockerfile_path: ./Dockerfile
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  run_command: sh -c "cd backend && echo '=== NEW STARTUP SEQUENCE ===' && echo 'Starting Laravel application...' && php artisan config:clear && php artisan cache:clear && echo 'Testing database connection...' && php artisan tinker --execute='DB::connection()->getPdo(); echo \"Database connected successfully\";' && echo 'Starting server...' && php artisan serve --host=0.0.0.0 --port=8080"
+  envs:
+  - key: APP_NAME
+    value: DocAvailable
+  - key: APP_ENV
+    value: production
+  - key: APP_DEBUG
+    value: false
+  - key: APP_URL
+    value: ${APP_URL}
+  - key: DB_CONNECTION
+    value: ${DB_CONNECTION}
+  - key: DB_HOST
+    value: ${DB_HOST}
+  - key: DB_PORT
+    value: ${DB_PORT}
+  - key: DB_DATABASE
+    value: ${DB_DATABASE}
+  - key: DB_USERNAME
+    value: ${DB_USERNAME}
+  - key: DB_PASSWORD
+    value: ${DB_PASSWORD}
+  - key: DB_URL
+    value: ${DB_URL}
+  - key: DB_SSLMODE
+    value: ${DB_SSLMODE}
+  - key: MAIL_MAILER
+    value: smtp
+  - key: MAIL_HOST
+    value: smtp.gmail.com
+  - key: MAIL_PORT
+    value: "587"
+  - key: MAIL_USERNAME
+    value: Docavailable01@gmail.com
+  - key: MAIL_PASSWORD
+    value: sdekzppdxdknhlkd
+  - key: MAIL_ENCRYPTION
+    value: tls
+  - key: MAIL_FROM_ADDRESS
+    value: Docavailable01@gmail.com
+  - key: MAIL_FROM_NAME
+    value: DocAvailable
+  # PayChangu Configuration
+  - key: PAYCHANGU_PUBLIC_KEY
+    value: ${PAYCHANGU_PUBLIC_KEY}
+  - key: PAYCHANGU_SECRET_KEY
+    value: ${PAYCHANGU_SECRET_KEY}
+  - key: PAYCHANGU_MERCHANT_ID
+    value: ${PAYCHANGU_MERCHANT_ID}
+  - key: PAYCHANGU_WEBHOOK_SECRET
+    value: ${PAYCHANGU_WEBHOOK_SECRET}
+  - key: PAYCHANGU_ENVIRONMENT
+    value: production
+  - key: PAYCHANGU_PAYMENT_URL
+    value: https://api.paychangu.com/payment
+  - key: PAYCHANGU_VERIFY_URL
+    value: https://api.paychangu.com/verify-payment
+  - key: PAYCHANGU_CALLBACK_URL
+    value: https://docavailable-3vbdv.ondigitalocean.app/api/payments/webhook
+  - key: PAYCHANGU_RETURN_URL
+    value: https://docavailable-3vbdv.ondigitalocean.app/payment/success

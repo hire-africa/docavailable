@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DocAvailable Backend Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🏥 DocAvailable Backend Test</h1>
+    
+    <div class="test-section info">
+        <h3>Backend URL</h3>
+        <input type="text" id="backendUrl" value="https://docavailable-backend.ondigitalocean.app" style="width: 100%; padding: 8px;">
+        <p><small>Update this URL if your backend is deployed elsewhere</small></p>
+    </div>
+
+    <div class="test-section">
+        <h3>🧪 API Tests</h3>
+        <button onclick="testHealth()">Test Health Check</button>
+        <button onclick="testBasic()">Test Basic Endpoint</button>
+        <button onclick="testAllEndpoints()">Test All Endpoints</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        function getBackendUrl() {
+            return document.getElementById('backendUrl').value.replace(/\/$/, '');
+        }
+
+        async function testEndpoint(url, method = 'GET') {
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                return {
+                    success: response.ok,
+                    status: response.status,
+                    data: data
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    status: 0,
+                    error: error.message
+                };
+            }
+        }
+
+        function displayResult(title, result) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-section ${result.success ? 'success' : 'error'}`;
+            
+            resultDiv.innerHTML = `
+                <h4>${title}</h4>
+                <p><strong>Status:</strong> ${result.success ? '✅ SUCCESS' : '❌ FAILED'}</p>
+                <p><strong>HTTP Status:</strong> ${result.status}</p>
+                <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+            `;
+            
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        async function testHealth() {
+            const url = getBackendUrl() + '/api/health';
+            const result = await testEndpoint(url);
+            displayResult('Health Check', result);
+        }
+
+        async function testBasic() {
+            const url = getBackendUrl() + '/api/test';
+            const result = await testEndpoint(url);
+            displayResult('Basic Test Endpoint', result);
+        }
+
+        async function testAllEndpoints() {
+            const baseUrl = getBackendUrl();
+            const endpoints = [
+                { name: 'Health Check', url: '/api/health' },
+                { name: 'Test Endpoint', url: '/api/test' },
+                { name: 'Debug Chat Test', url: '/api/debug/chat-test' },
+                { name: 'Debug Migrations', url: '/api/debug/migrations' },
+                { name: 'Test Login', url: '/api/test-login' }
+            ];
+
+            for (const endpoint of endpoints) {
+                const result = await testEndpoint(baseUrl + endpoint.url);
+                displayResult(endpoint.name, result);
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            testHealth();
+        };
+    </script>
+</body>
+</html>

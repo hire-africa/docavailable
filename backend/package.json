@@ -1,0 +1,19 @@
+{
+  "name": "docavailable-webrtc-signaling",
+  "version": "1.0.0",
+  "description": "WebRTC signaling server for DocAvailable audio calls",
+  "main": "webrtc-signaling-server.js",
+  "scripts": {
+    "start": "node webrtc-signaling-server.js",
+    "dev": "nodemon webrtc-signaling-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": ["webrtc", "signaling", "websocket", "audio", "healthcare"],
+  "author": "DocAvailable Team",
+  "license": "MIT"
+}

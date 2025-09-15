@@ -1,0 +1,33 @@
+{
+  "cli": {
+    "version": ">= 16.17.4",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "env": {
+        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "channel": "production",
+      "env": {
+        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

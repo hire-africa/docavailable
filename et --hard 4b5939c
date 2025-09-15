@@ -1,0 +1,10 @@
+[33md97e4fb[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m feat: modernize signup pages with improved UX and button positioning
+[33mda6feb5[m Fix email template display issues
+[33md4f7fcb[m Add professional email branding with banner and logo
+[33m4b5939c[m Add public plans endpoints for testing
+[33mb6b8190[m Fix authentication issues and backend 500 errors
+[33mb829b9a[m feat: update frontend to use new DigitalOcean backend URL
+[33me3072dc[m feat: add test endpoint for frontend integration
+[33m5255d82[m fix: use environment variables for database connection test
+[33m630c851[m debug: enhance startup logging with clear sections
+[33m726503c[m debug: add database connection debugging
