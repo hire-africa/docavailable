@@ -186,10 +186,12 @@ const Step1: React.FC<Step1Props> = ({
                         <Text style={styles.inputLabel}>First Name</Text>
                         <TextInput
                             style={[styles.input, errors?.firstName && styles.inputError]}
-                            placeholder="Enter your first name"
+                            placeholder="First name"
                             placeholderTextColor="#999"
                             value={firstName}
                             onChangeText={setFirstName}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
                         />
                                                     {errors?.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                     </View>
@@ -197,10 +199,12 @@ const Step1: React.FC<Step1Props> = ({
                         <Text style={styles.inputLabel}>Surname</Text>
                         <TextInput
                             style={[styles.input, errors.surname && styles.inputError]}
-                            placeholder="Enter your surname"
+                            placeholder="Surname"
                             placeholderTextColor="#999"
                             value={surname}
                             onChangeText={setSurname}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
                         />
                         {errors.surname && <Text style={styles.errorText}>{errors.surname}</Text>}
                     </View>

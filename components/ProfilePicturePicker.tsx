@@ -158,8 +158,8 @@ const styles = StyleSheet.create({
     },
     editButton: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 12,
+        right: 12,
         backgroundColor: '#4CAF50',
         width: 32,
         height: 32,
@@ -171,8 +171,8 @@ const styles = StyleSheet.create({
     },
     addButton: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 12,
+        right: 12,
         backgroundColor: '#4CAF50',
         width: 32,
         height: 32,

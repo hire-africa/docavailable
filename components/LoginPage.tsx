@@ -453,12 +453,14 @@ const styles = StyleSheet.create({
     userTypeIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#E0F2F7',
+        backgroundColor: '#FFFFFF',
         borderRadius: 20,
         paddingVertical: 8,
         paddingHorizontal: 15,
         marginBottom: 20,
         alignSelf: 'center',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
     },
     userTypeText: {
         marginLeft: 8,

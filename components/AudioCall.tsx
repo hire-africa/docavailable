@@ -21,6 +21,8 @@ interface AudioCallProps {
   doctorName?: string;
   patientName?: string;
   onEndCall: () => void;
+  onCallTimeout?: () => void;
+  onCallRejected?: () => void;
 }
 
 export default function AudioCall({ 
@@ -29,7 +31,9 @@ export default function AudioCall({
   isDoctor, 
   doctorName = 'Doctor',
   patientName = 'Patient',
-  onEndCall 
+  onEndCall,
+  onCallTimeout,
+  onCallRejected
 }: AudioCallProps) {
   const [callState, setCallState] = useState<AudioCallState>({
     isConnected: false,
@@ -72,6 +76,17 @@ export default function AudioCall({
           Alert.alert('Call Error', error, [
             { text: 'OK', onPress: onEndCall }
           ]);
+        },
+        onCallAnswered: () => {
+          console.log('✅ Call answered - session will be activated');
+        },
+        onCallRejected: () => {
+          console.log('❌ Call rejected');
+          onCallRejected?.();
+        },
+        onCallTimeout: () => {
+          console.log('⏰ Call timeout');
+          onCallTimeout?.();
         },
       };
 

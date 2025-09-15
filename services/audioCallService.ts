@@ -18,6 +18,9 @@ export interface AudioCallEvents {
   onRemoteStream: (stream: MediaStream) => void;
   onCallEnded: () => void;
   onError: (error: string) => void;
+  onCallAnswered: () => void;
+  onCallRejected: () => void;
+  onCallTimeout: () => void;
 }
 
 class AudioCallService {
@@ -28,6 +31,10 @@ class AudioCallService {
   private callTimer: NodeJS.Timeout | null = null;
   private callStartTime: number = 0;
   private events: AudioCallEvents | null = null;
+  private callTimeoutTimer: NodeJS.Timeout | null = null;
+  private isCallAnswered: boolean = false;
+  private appointmentId: string | null = null;
+  private userId: string | null = null;
 
   // STUN servers for NAT traversal
   private iceServers = [
@@ -50,6 +57,9 @@ class AudioCallService {
   async initialize(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
     try {
       this.events = events;
+      this.appointmentId = appointmentId;
+      this.userId = userId;
+      this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
 
       // Get user media (audio only)
@@ -112,6 +122,9 @@ class AudioCallService {
       // Connect to signaling server
       await this.connectSignaling(appointmentId, userId);
 
+      // Start call timeout (30 seconds for doctor to answer)
+      this.startCallTimeout();
+
     } catch (error) {
       console.error('❌ Failed to initialize audio call:', error);
       this.events?.onError(`Failed to initialize call: ${error.message}`);
@@ -152,6 +165,15 @@ class AudioCallService {
                     break;
               case 'call-ended':
                     this.endCall();
+                    break;
+              case 'call-answered':
+                    this.handleCallAnswered();
+                    break;
+              case 'call-rejected':
+                    this.handleCallRejected();
+                    break;
+              case 'call-timeout':
+                    this.handleCallTimeout();
                     break;
             }
           } catch (error) {
@@ -256,6 +278,58 @@ class AudioCallService {
   }
 
   /**
+   * Start call timeout timer
+   */
+  private startCallTimeout(): void {
+    this.callTimeoutTimer = setTimeout(() => {
+      if (!this.isCallAnswered) {
+        console.log('⏰ Call timeout - doctor did not answer');
+        this.handleCallTimeout();
+      }
+    }, 30000); // 30 seconds timeout
+  }
+
+  /**
+   * Handle call answered
+   */
+  private handleCallAnswered(): void {
+    console.log('✅ Call answered by doctor');
+    this.isCallAnswered = true;
+    this.clearCallTimeout();
+    this.events?.onCallAnswered();
+  }
+
+  /**
+   * Handle call rejected
+   */
+  private handleCallRejected(): void {
+    console.log('❌ Call rejected by doctor');
+    this.clearCallTimeout();
+    this.events?.onCallRejected();
+    this.endCall();
+  }
+
+  /**
+   * Handle call timeout
+   */
+  private handleCallTimeout(): void {
+    console.log('⏰ Call timeout');
+    this.clearCallTimeout();
+    this.events?.onCallTimeout();
+    this.endCall();
+  }
+
+  /**
+   * Clear call timeout timer
+   */
+  private clearCallTimeout(): void {
+    if (this.callTimeoutTimer) {
+      clearTimeout(this.callTimeoutTimer);
+      this.callTimeoutTimer = null;
+    }
+  }
+
+  /**
    * Toggle audio mute/unmute
    */
   toggleAudio(): boolean {
@@ -327,6 +401,9 @@ class AudioCallService {
     try {
       console.log('📞 Ending audio call...');
       
+      // Clear call timeout
+      this.clearCallTimeout();
+      
       // Stop call timer
       this.stopCallTimer();
       
@@ -341,6 +418,11 @@ class AudioCallService {
         this.peerConnection.close();
         this.peerConnection = null;
       }
+      
+      // Send call ended message
+      this.sendSignalingMessage({
+        type: 'call-ended'
+      });
       
       // Close signaling connection
       if (this.signalingChannel) {

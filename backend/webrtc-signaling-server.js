@@ -1,6 +1,7 @@
 const WebSocket = require('ws');
 const http = require('http');
 const url = require('url');
+const axios = require('axios');
 
 // Create HTTP server
 const server = http.createServer();
@@ -14,14 +15,26 @@ const wss = new WebSocket.Server({
 // Store active connections by appointment ID
 const connections = new Map();
 
+// Store session timers and states
+const sessionTimers = new Map();
+const sessionStates = new Map();
+
+// API base URL
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
+
 // Handle WebSocket connections
 wss.on('connection', (ws, req) => {
   console.log('🔌 New WebSocket connection established');
   
-  // Extract appointment ID from URL path
+  // Extract appointment ID from URL path or query parameters
   const urlParts = url.parse(req.url, true);
   const pathParts = urlParts.pathname.split('/');
-  const appointmentId = pathParts[pathParts.length - 1];
+  let appointmentId = pathParts[pathParts.length - 1];
+  
+  // If no appointment ID in path, try query parameter
+  if (!appointmentId || appointmentId === 'audio-signaling') {
+    appointmentId = urlParts.query.appointmentId;
+  }
   
   if (!appointmentId) {
     console.error('❌ No appointment ID provided');
@@ -50,13 +63,59 @@ wss.on('connection', (ws, req) => {
       const data = JSON.parse(message);
       console.log(`📨 Message received for appointment ${appointmentId}:`, data.type);
       
-      // Broadcast message to other participants in the same appointment
-      const appointmentConnections = connections.get(appointmentId) || [];
-      appointmentConnections.forEach(connection => {
-        if (connection !== ws && connection.readyState === WebSocket.OPEN) {
-          connection.send(JSON.stringify(data));
-        }
-      });
+      // Handle different message types
+      switch (data.type) {
+        case 'offer':
+        case 'answer':
+        case 'ice-candidate':
+        case 'call-ended':
+        case 'call-answered':
+        case 'call-rejected':
+        case 'call-timeout':
+          // Handle call-based session activation
+          if (data.type === 'call-answered') {
+            handleCallAnswered(appointmentId, data, ws);
+          } else if (data.type === 'call-rejected' || data.type === 'call-timeout') {
+            handleCallRejected(appointmentId, data, ws);
+          }
+          // Broadcast to others
+          broadcastToOthers(ws, appointmentId, data);
+          break;
+          
+        case 'chat-message':
+          // Handle chat messages and session management
+          handleChatMessage(appointmentId, data, ws);
+          break;
+          
+        case 'session-status-request':
+          // Handle session status requests
+          handleSessionStatusRequest(appointmentId, ws);
+          break;
+          
+        case 'session-end-request':
+          // Handle manual session ending
+          handleSessionEndRequest(appointmentId, data, ws);
+          break;
+          
+        case 'appointment-start-request':
+          // Handle appointment session start
+          handleAppointmentStartRequest(appointmentId, data, ws);
+          break;
+          
+        case 'typing-indicator':
+          // Handle typing indicators
+          broadcastToOthers(ws, appointmentId, data);
+          break;
+          
+        case 'message-read':
+          // Handle read receipts
+          broadcastToOthers(ws, appointmentId, data);
+          break;
+          
+        default:
+          // Broadcast other messages to participants
+          broadcastToOthers(ws, appointmentId, data);
+      }
       
     } catch (error) {
       console.error('❌ Error parsing message:', error);
@@ -78,21 +137,22 @@ wss.on('connection', (ws, req) => {
       appointmentConnections.splice(index, 1);
     }
     
-    // If no more connections for this appointment, clean up
-    if (appointmentConnections.length === 0) {
-      connections.delete(appointmentId);
-      console.log(`🧹 Cleaned up connections for appointment ${appointmentId}`);
-    } else {
-      // Notify remaining participants that someone left
-      appointmentConnections.forEach(connection => {
-        if (connection.readyState === WebSocket.OPEN) {
-          connection.send(JSON.stringify({
-            type: 'participant-left',
-            timestamp: new Date().toISOString()
-          }));
-        }
-      });
-    }
+  // If no more connections for this appointment, clean up
+  if (appointmentConnections.length === 0) {
+    cleanupSessionTimers(appointmentId);
+    connections.delete(appointmentId);
+    console.log(`🧹 Cleaned up connections for appointment ${appointmentId}`);
+  } else {
+    // Notify remaining participants that someone left
+    appointmentConnections.forEach(connection => {
+      if (connection.readyState === WebSocket.OPEN) {
+        connection.send(JSON.stringify({
+          type: 'participant-left',
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
+  }
   });
   
   // Handle connection errors
@@ -153,6 +213,509 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
+});
+
+// ========================================
+// SESSION MANAGEMENT FUNCTIONS
+// ========================================
+
+// Handle chat messages and session management
+async function handleChatMessage(appointmentId, data, senderWs) {
+  try {
+    // First, send to your existing API to store in database
+    const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
+      message: data.message.message,
+      message_type: data.message.message_type,
+      media_url: data.message.media_url,
+      temp_id: data.message.temp_id
+    }, {
+      headers: {
+        'Authorization': `Bearer ${data.authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      // Check if this message triggers session activation
+      await checkSessionActivation(appointmentId, data.message, response.data.data);
+      
+      // Broadcast message to all participants
+      broadcastToAll(appointmentId, {
+        type: 'chat-message',
+        message: response.data.data
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error handling chat message:', error);
+    senderWs.send(JSON.stringify({
+      type: 'error',
+      message: 'Failed to send message'
+    }));
+  }
+}
+
+// Check if message triggers session activation
+async function checkSessionActivation(appointmentId, message, messageData) {
+  try {
+    // Check if this is a text session (instant session)
+    if (appointmentId.startsWith('text_session_')) {
+      const sessionId = appointmentId.replace('text_session_', '');
+      
+      // Get session status from your API
+      const sessionResponse = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`, {
+        headers: {
+          'Authorization': `Bearer ${message.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (sessionResponse.data.success) {
+        const sessionData = sessionResponse.data.data;
+        
+        // If session is waiting for doctor and doctor sent message, activate
+        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.doctor_id) {
+          await activateTextSession(sessionId, appointmentId);
+        }
+        
+        // If session is waiting and patient sent message, start 90-second timer
+        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.patient_id) {
+          await startDoctorResponseTimer(sessionId, appointmentId);
+        }
+      }
+    }
+    // For appointments, no special activation logic needed - they activate at scheduled time
+  } catch (error) {
+    console.error('❌ Error checking session activation:', error);
+  }
+}
+
+// Activate text session when doctor sends first message
+async function activateTextSession(sessionId, appointmentId) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/activate`, {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      console.log(`✅ Text session ${sessionId} activated`);
+      
+      // Start auto-deduction timer (every 10 minutes)
+      startAutoDeductionTimer(sessionId, appointmentId);
+      
+      // Notify all participants
+      broadcastToAll(appointmentId, {
+        type: 'session-activated',
+        sessionId: sessionId,
+        sessionType: 'instant',
+        activatedAt: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error activating text session:', error);
+  }
+}
+
+// Start 90-second doctor response timer for text sessions
+async function startDoctorResponseTimer(sessionId, appointmentId) {
+  // Clear existing timer if any
+  if (sessionTimers.has(`response_${sessionId}`)) {
+    clearTimeout(sessionTimers.get(`response_${sessionId}`));
+  }
+
+  // Set new timer
+  const timer = setTimeout(async () => {
+    await checkDoctorResponse(sessionId, appointmentId);
+  }, 90000); // 90 seconds
+
+  sessionTimers.set(`response_${sessionId}`, timer);
+  
+  // Notify participants about timer start
+  broadcastToAll(appointmentId, {
+    type: 'doctor-response-timer-started',
+    sessionId: sessionId,
+    sessionType: 'instant',
+    timeRemaining: 90
+  });
+}
+
+// Check if doctor responded within 90 seconds
+async function checkDoctorResponse(sessionId, appointmentId) {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/check-response`);
+    
+    if (response.data.success) {
+      const sessionData = response.data.data;
+      
+      if (sessionData.status === 'expired') {
+        // Session expired, notify participants
+        broadcastToAll(appointmentId, {
+          type: 'session-expired',
+          sessionId: sessionId,
+          sessionType: 'instant',
+          reason: 'Doctor did not respond within 90 seconds'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error checking doctor response:', error);
+  }
+}
+
+// Start auto-deduction timer for text sessions (every 10 minutes)
+function startAutoDeductionTimer(sessionId, appointmentId) {
+  // Clear existing timer if any
+  if (sessionTimers.has(`deduction_${sessionId}`)) {
+    clearInterval(sessionTimers.get(`deduction_${sessionId}`));
+  }
+
+  // Set interval for every 10 minutes
+  const timer = setInterval(async () => {
+    await processAutoDeduction(sessionId, appointmentId);
+  }, 10 * 60 * 1000); // 10 minutes
+
+  sessionTimers.set(`deduction_${sessionId}`, timer);
+}
+
+// Process auto-deduction for text sessions
+async function processAutoDeduction(sessionId, appointmentId) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/auto-deduct`, {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      const deductionData = response.data.data;
+      
+      // Notify participants about deduction
+      broadcastToAll(appointmentId, {
+        type: 'session-deduction',
+        sessionId: sessionId,
+        sessionType: 'instant',
+        sessionsDeducted: deductionData.sessionsDeducted,
+        totalSessionsUsed: deductionData.totalSessionsUsed,
+        remainingSessions: deductionData.remainingSessions
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error processing auto-deduction:', error);
+  }
+}
+
+// Handle session status requests
+async function handleSessionStatusRequest(appointmentId, ws) {
+  try {
+    if (appointmentId.startsWith('text_session_')) {
+      // Handle text session status
+      const sessionId = appointmentId.replace('text_session_', '');
+      
+      const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`);
+      
+      if (response.data.success) {
+        ws.send(JSON.stringify({
+          type: 'session-status',
+          sessionType: 'instant',
+          sessionData: response.data.data
+        }));
+      }
+    } else {
+      // Handle appointment status
+      const response = await axios.get(`${API_BASE_URL}/api/appointments/${appointmentId}/status`);
+      
+      if (response.data.success) {
+        ws.send(JSON.stringify({
+          type: 'session-status',
+          sessionType: 'appointment',
+          sessionData: response.data.data
+        }));
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error getting session status:', error);
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: 'Failed to get session status'
+    }));
+  }
+}
+
+// Handle manual session ending
+async function handleSessionEndRequest(appointmentId, data, ws) {
+  try {
+    if (appointmentId.startsWith('text_session_')) {
+      // Handle text session ending
+      const sessionId = appointmentId.replace('text_session_', '');
+      
+      const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/end`, {
+        reason: data.reason || 'manual_end'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${data.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        // Clean up timers
+        cleanupSessionTimers(appointmentId);
+        
+        // Notify all participants
+        broadcastToAll(appointmentId, {
+          type: 'session-ended',
+          sessionId: sessionId,
+          sessionType: 'instant',
+          reason: data.reason || 'manual_end',
+          endedAt: new Date().toISOString()
+        });
+      }
+    } else {
+      // Handle appointment ending
+      const response = await axios.post(`${API_BASE_URL}/api/appointments/${appointmentId}/end`, {
+        reason: data.reason || 'manual_end'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${data.authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        // Notify all participants
+        broadcastToAll(appointmentId, {
+          type: 'session-ended',
+          sessionId: appointmentId,
+          sessionType: 'appointment',
+          reason: data.reason || 'manual_end',
+          endedAt: new Date().toISOString()
+        });
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error ending session:', error);
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: 'Failed to end session'
+    }));
+  }
+}
+
+// Handle appointment session start
+async function handleAppointmentStartRequest(appointmentId, data, ws) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/appointments/${appointmentId}/start`, {}, {
+      headers: {
+        'Authorization': `Bearer ${data.authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      // Notify all participants
+      broadcastToAll(appointmentId, {
+        type: 'appointment-started',
+        sessionId: appointmentId,
+        sessionType: 'appointment',
+        startedAt: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error starting appointment:', error);
+    ws.send(JSON.stringify({
+      type: 'error',
+      message: 'Failed to start appointment'
+    }));
+  }
+}
+
+// Clean up session timers
+function cleanupSessionTimers(appointmentId) {
+  if (appointmentId.startsWith('text_session_')) {
+    const sessionId = appointmentId.replace('text_session_', '');
+    
+    // Clear response timer
+    if (sessionTimers.has(`response_${sessionId}`)) {
+      clearTimeout(sessionTimers.get(`response_${sessionId}`));
+      sessionTimers.delete(`response_${sessionId}`);
+    }
+    
+    // Clear deduction timer
+    if (sessionTimers.has(`deduction_${sessionId}`)) {
+      clearInterval(sessionTimers.get(`deduction_${sessionId}`));
+      sessionTimers.delete(`deduction_${sessionId}`);
+    }
+  }
+}
+
+// Helper function to broadcast to all participants
+function broadcastToAll(appointmentId, data) {
+  const appointmentConnections = connections.get(appointmentId) || [];
+  appointmentConnections.forEach(connection => {
+    if (connection.readyState === WebSocket.OPEN) {
+      connection.send(JSON.stringify(data));
+    }
+  });
+}
+
+// Helper function to broadcast to others (excluding sender)
+function broadcastToOthers(senderWs, appointmentId, data) {
+  const appointmentConnections = connections.get(appointmentId) || [];
+  appointmentConnections.forEach(connection => {
+    if (connection !== senderWs && connection.readyState === WebSocket.OPEN) {
+      connection.send(JSON.stringify(data));
+    }
+  });
+}
+
+// ========================================
+// CALL-BASED SESSION MANAGEMENT FUNCTIONS
+// ========================================
+
+// Handle call answered - activate session
+async function handleCallAnswered(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call answered for appointment: ${appointmentId}`);
+    
+    if (appointmentId.startsWith('text_session_')) {
+      // Handle instant session activation
+      const sessionId = appointmentId.replace('text_session_', '');
+      await activateTextSession(sessionId, appointmentId);
+    } else {
+      // Handle appointment session activation
+      await activateAppointmentSession(appointmentId);
+    }
+  } catch (error) {
+    console.error('❌ Error handling call answered:', error);
+  }
+}
+
+// Handle call rejected or timeout
+async function handleCallRejected(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call rejected/timeout for appointment: ${appointmentId}`);
+    
+    // Notify all participants that call was not answered
+    broadcastToAll(appointmentId, {
+      type: 'call-not-answered',
+      reason: data.type === 'call-timeout' ? 'timeout' : 'rejected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error handling call rejected:', error);
+  }
+}
+
+// Activate appointment session when call is answered
+async function activateAppointmentSession(appointmentId) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/appointments/${appointmentId}/start`, {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      console.log(`✅ Appointment session ${appointmentId} activated via call`);
+      
+      // Start auto-deduction timer (every 10 minutes)
+      startAutoDeductionTimerForAppointment(appointmentId);
+      
+      // Notify all participants
+      broadcastToAll(appointmentId, {
+        type: 'session-activated',
+        sessionId: appointmentId,
+        sessionType: 'appointment',
+        activatedAt: new Date().toISOString(),
+        activationMethod: 'call'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error activating appointment session:', error);
+  }
+}
+
+// Start auto-deduction timer for appointments (every 10 minutes)
+function startAutoDeductionTimerForAppointment(appointmentId) {
+  // Clear existing timer if any
+  if (sessionTimers.has(`deduction_appointment_${appointmentId}`)) {
+    clearInterval(sessionTimers.get(`deduction_appointment_${appointmentId}`));
+  }
+
+  // Set interval for every 10 minutes
+  const timer = setInterval(async () => {
+    await processAutoDeductionForAppointment(appointmentId);
+  }, 10 * 60 * 1000); // 10 minutes
+
+  sessionTimers.set(`deduction_appointment_${appointmentId}`, timer);
+}
+
+// Process auto-deduction for appointments
+async function processAutoDeductionForAppointment(appointmentId) {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/appointments/${appointmentId}/auto-deduct`, {}, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      const deductionData = response.data.data;
+      
+      // Notify participants about deduction
+      broadcastToAll(appointmentId, {
+        type: 'session-deduction',
+        sessionId: appointmentId,
+        sessionType: 'appointment',
+        sessionsDeducted: deductionData.sessionsDeducted,
+        totalSessionsUsed: deductionData.totalSessionsUsed,
+        remainingSessions: deductionData.remainingSessions
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error processing auto-deduction for appointment:', error);
+  }
+}
+
+// Server is already started above
+
+// Add health check endpoint
+server.on('request', (req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      status: 'healthy', 
+      timestamp: new Date().toISOString(),
+      connections: connections.size,
+      port: PORT
+    }));
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server error:', error);
+});
+
+// Handle process termination
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down WebRTC signaling server...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Shutting down WebRTC signaling server...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = { server, wss };
