@@ -2,8 +2,8 @@ import Constants from 'expo-constants';
 
 // Google OAuth Configuration
 export const GOOGLE_OAUTH_CONFIG = {
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID',
-  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || 'YOUR_GOOGLE_CLIENT_SECRET',
+  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '584940778531-fncqbp1secm3v81kbp2sfrqk1ullt7uq.apps.googleusercontent.com',
+  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || '584940778531-fncqbp1secm3v81kbp2sfrqk1ullt7uq',
   scopes: ['openid', 'profile', 'email'],
   redirectUri: 'docavailable://',
   discovery: {
