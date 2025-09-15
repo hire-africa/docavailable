@@ -3288,6 +3288,16 @@ export default function PatientDashboard() {
               },
             ]}
           >
+            <ScrollView 
+              style={styles.sidebarScrollView}
+              contentContainerStyle={styles.sidebarContent}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+              alwaysBounceVertical={false}
+              scrollEnabled={true}
+              nestedScrollEnabled={true}
+              keyboardShouldPersistTaps="handled"
+            >
             {/* Profile Header */}
             <View style={styles.profileHeader}>
               {user?.profile_picture_url ? (
@@ -3346,6 +3356,7 @@ export default function PatientDashboard() {
                 </View>
               </TouchableOpacity>
             </View>
+              
             
             {/* Logout */}
             <TouchableOpacity style={[styles.sidebarMenuItem, { marginTop: 20 }]} onPress={() => { closeSidebar(); handleLogout(); }}>
@@ -3355,6 +3366,7 @@ export default function PatientDashboard() {
                 <Icon name="chevronRight" size={20} color="#FF3B30" />
               </View>
             </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
         </View>
       )}
@@ -4564,13 +4576,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 18,
     borderBottomLeftRadius: 18,
-    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
-    justifyContent: 'space-between',
+  },
+  sidebarScrollView: {
+    flex: 1,
+  },
+  sidebarContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
   sidebarHeader: {
     marginTop: 32,
@@ -4639,9 +4656,6 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-  },
-  sidebarContent: {
-    flex: 1,
   },
   logoutButton: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -12,12 +12,12 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { apiService } from '../app/services/apiService';
 import DatePickerField from '../components/DatePickerField';
 import { Icon } from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../app/services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';

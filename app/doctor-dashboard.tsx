@@ -1856,6 +1856,14 @@ export default function DoctorDashboard() {
               },
             ]}
           >
+            <ScrollView 
+              style={styles.sidebarScrollView}
+              contentContainerStyle={styles.sidebarContent}
+              showsVerticalScrollIndicator={true}
+              bounces={true}
+              alwaysBounceVertical={false}
+              scrollEnabled={true}
+            >
             {/* Profile Header */}
             <View style={styles.sidebarHeader}>
               {user?.profile_picture_url ? (
@@ -1910,6 +1918,7 @@ export default function DoctorDashboard() {
                 </View>
               </TouchableOpacity>
             </View>
+              
             
             {/* Logout */}
             <TouchableOpacity style={[styles.sidebarMenuItem, { marginTop: 20 }]} onPress={() => { closeSidebar(); handleLogout(); }}>
@@ -1919,6 +1928,7 @@ export default function DoctorDashboard() {
                 <Icon name="chevronRight" size={20} color="#FF3B30" />
               </View>
             </TouchableOpacity>
+            </ScrollView>
           </Animated.View>
         </View>
       )}
@@ -2887,13 +2897,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopLeftRadius: 18,
     borderBottomLeftRadius: 18,
-    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 5,
-    justifyContent: 'flex-start',
+  },
+  sidebarScrollView: {
+    flex: 1,
+  },
+  sidebarContent: {
+    padding: 20,
+    paddingBottom: 40,
   },
   sidebarHeader: {
     marginTop: 32,
