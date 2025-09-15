@@ -16,6 +16,7 @@ import {
 import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
+import GoogleAuthDebug from './GoogleAuthDebug';
 
 const { width } = Dimensions.get('window');
 
@@ -405,6 +406,9 @@ export default function LoginPage() {
                             <Text style={styles.googleButtonText}>Continue with Google</Text>
                         </View>
                     </TouchableOpacity>
+
+                    {/* Debug Component - Remove after fixing */}
+                    <GoogleAuthDebug />
 
                     <View style={styles.linksContainer}>
                         <TouchableOpacity
