@@ -20,8 +20,8 @@ class AppServiceProvider extends ServiceProvider
             return new TextSessionMessageService();
         });
 
-        // Register Intervention Image service provider
-        $this->app->register(\Intervention\Image\ImageServiceProvider::class);
+        // Register Intervention Image service provider (v3)
+        $this->app->register(\Intervention\Image\Laravel\ServiceProvider::class);
     }
 
     /**
@@ -38,7 +38,7 @@ class AppServiceProvider extends ServiceProvider
             return new OneSignalChannel();
         });
 
-        // Register Intervention Image facade
+        // Register Intervention Image facade (v3)
         $this->app->alias('Intervention\Image\ImageManager', 'Image');
     }
 }
