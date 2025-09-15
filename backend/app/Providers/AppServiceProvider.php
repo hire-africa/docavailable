@@ -21,7 +21,9 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Register Intervention Image service provider (v3)
-        $this->app->register(\Intervention\Image\Laravel\ServiceProvider::class);
+        $this->app->singleton(\Intervention\Image\ImageManager::class, function ($app) {
+            return new \Intervention\Image\ImageManager(new \Intervention\Image\Drivers\Gd\Driver());
+        });
     }
 
     /**
@@ -39,6 +41,6 @@ class AppServiceProvider extends ServiceProvider
         });
 
         // Register Intervention Image facade (v3)
-        $this->app->alias('Intervention\Image\ImageManager', 'Image');
+        $this->app->alias(\Intervention\Image\ImageManager::class, 'Image');
     }
 }
