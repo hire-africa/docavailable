@@ -1,0 +1,24 @@
+meta {
+  name: Delete Working Hours
+  type: http
+  seq: 15
+}
+
+delete {
+  url: http://172.20.10.11:8000/api/working-hours/1
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2xvZ2luIiwiaWF0IjoxNzUyNDQ0Nzg4LCJleHAiOjE3NTI0NDgzODgsIm5iZiI6MTc1MjQ0NDc4OCwianRpIjoiMUt1akJQSTE5dVR4eEhKciIsInN1YiI6IjEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.ipofxF5G1CZ-J85EbrPEJWziuHRvxDsrWglMfmsxC8Y
+}
+
+body:json {
+  {
+  "doctor_id": 2,
+  "day": "Monday",
+  "start_time": "09:00:00",
+  "end_time": "17:00:00"
+  }
+}

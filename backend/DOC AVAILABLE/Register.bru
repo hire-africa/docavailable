@@ -1,0 +1,19 @@
+meta {
+  name: Register
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://172.20.10.11:8000/api/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "reviewuser",
+    "email": "reviewuser@example.com",
+    "password": "password"
+  }
+}

@@ -1,0 +1,24 @@
+meta {
+  name: Create Review
+  type: http
+  seq: 9
+}
+
+post {
+  url: http://172.20.10.11:8000/api/create_review
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2xvZ2luIiwiaWF0IjoxNzUyNDE4ODUxLCJleHAiOjE3NTI0MjI0NTEsIm5iZiI6MTc1MjQxODg1MSwianRpIjoiOVZjdTE5eklNS2s5OFR4UiIsInN1YiI6IjEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.quRKwjETq_lOXyffL4VcoH2wROQ8pTCVEmLxC0WfL-E
+}
+
+body:json {
+  {
+    "user_id": 1,
+    "reviewer_id": 2,
+     "rating": 5,
+     "comment":"Great service"
+  }
+}

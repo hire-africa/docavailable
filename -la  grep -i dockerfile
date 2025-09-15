@@ -1,0 +1,5 @@
+[33m2e9cd04[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix Docker deployment configuration for Render - add root Dockerfile and update backend Dockerfile with better error handling
+[33m2ed709a[m Update app configuration and components - comprehensive changes across multiple files
+[33m3f1825f[m Add voice recording features and image message components with profile picture improvements
+[33m3405253[m Add read receipts feature and web environment setup
+[33m4941206[m Add PayChangu payment integration and various improvements - Add PayChangu service and integration guide - Update payment services and encryption - Add new components and scripts - Update app configuration and dependencies
