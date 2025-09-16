@@ -2,19 +2,19 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Animated,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
-import { DeepSeekService } from '../services/deepseekService';
+import { OpenAIService } from '../services/openaiService';
 import DocAvaHistory from './DocAvaHistory';
 
 const { width, height } = Dimensions.get('window');
@@ -264,12 +264,12 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
   }, [showHistoryPage]);
 
   const generateBotResponse = async (userMessage: string): Promise<{ text: string; type: Message['type'] }> => {
-    console.log('🤖 Calling DeepSeek service with:', userMessage);
+    console.log('🤖 Calling OpenAI service with:', userMessage);
     
     try {
-      console.log('📡 Making DeepSeek API call...');
-      const response = await DeepSeekService.getResponse(userMessage);
-      console.log('✅ DeepSeek response received:', response);
+      console.log('📡 Making OpenAI API call...');
+      const response = await OpenAIService.getResponse(userMessage);
+      console.log('✅ OpenAI response received:', response);
       
       // Determine message type based on urgency and content
       let messageType: Message['type'] = 'general';

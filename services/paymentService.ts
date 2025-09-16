@@ -27,21 +27,50 @@ export const paymentService = {
         throw new Error('Phone number is required for Paychangu payments');
       }
 
-      // Create Paychangu payment request
+      // Get user data from auth service
+      const authService = (await import('./authService')).default;
+      const user = await authService.getCurrentUser();
+      
+      if (!user) {
+        throw new Error('User not authenticated. Please log in to continue.');
+      }
+
+      // Create Paychangu payment request with actual user data
       const paychanguRequest: PaychanguPaymentRequest = {
         amount: request.amount,
         currency: request.currency,
-        phoneNumber: request.phoneNumber,
+        email: user.email || 'user@example.com',
+        firstName: user.firstName || user.display_name?.split(' ')[0] || 'User',
+        lastName: user.lastName || user.display_name?.split(' ').slice(1).join(' ') || 'Name',
         description: request.description,
         reference: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        callbackUrl: `${process.env.EXPO_PUBLIC_API_BASE_URL}/api/payments/webhook`
+        callbackUrl: 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/callback',
+        returnUrl: 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/return',
+        meta: {
+          phoneNumber: request.phoneNumber,
+          plan_id: 1, // You might want to pass this from the calling component
+          user_id: user.id
+        }
       };
 
       // Initiate payment with Paychangu
+      console.log('PaymentService: Calling Paychangu service with request:', paychanguRequest);
       const result = await paychanguService.initiatePayment(paychanguRequest);
+      console.log('PaymentService: Paychangu service response:', result);
 
       if (result.success) {
-        console.log('PaymentService: Payment initiated successfully, transaction ID:', result.transactionId);
+        console.log('PaymentService: Payment initiated successfully');
+        console.log('PaymentService: Transaction ID:', result.transactionId);
+        console.log('PaymentService: Payment URL:', result.paymentUrl);
+        console.log('PaymentService: Status:', result.status);
+        
+        // Validate that we have the required data
+        if (!result.paymentUrl) {
+          throw new Error('Payment URL is missing from PayChangu response');
+        }
+        if (!result.transactionId) {
+          throw new Error('Transaction ID is missing from PayChangu response');
+        }
         
         return {
           success: true,
@@ -50,6 +79,7 @@ export const paymentService = {
           status: result.status
         };
       } else {
+        console.error('PaymentService: Payment initiation failed:', result.error);
         throw new Error(result.error || 'Payment initiation failed');
       }
     } catch (error) {

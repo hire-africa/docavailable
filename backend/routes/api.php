@@ -820,6 +820,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
     Route::post('/notifications/mark-read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    Route::post('/notifications/send-chat-message', [NotificationController::class, 'sendChatMessageNotification']);
     Route::get('/notifications/preferences', [NotificationController::class, 'getPreferences']);
     Route::patch('/notifications/preferences', [NotificationController::class, 'updatePreferences']);
     Route::post('/notifications/push-token', [NotificationController::class, 'updatePushToken']);

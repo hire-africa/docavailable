@@ -2,34 +2,38 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
+import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
+import IncomingCallScreen from '../../components/IncomingCallScreen';
 import RatingModal from '../../components/RatingModal';
-import ReadReceipt from '../../components/ReadReceipt';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
+import { AudioCallService } from '../../services/audioCallService';
+import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
-import { imageService } from '../../services/imageService';
-import { Message, messageStorageService } from '../../services/messageStorageService';
+import sessionService from '../../services/sessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
+import { WebRTCChatService } from '../../services/webrtcChatService';
+import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
-import sessionService from '../services/sessionService';
+import { ChatMessage } from '../../types/chat';
 
 interface ChatInfo {
   appointment_id: number;
@@ -47,7 +51,15 @@ interface ChatInfo {
 interface TextSessionInfo {
   id: number;
   doctor_id: number;
+  patient_id: number;
   doctor?: {
+    first_name: string;
+    last_name: string;
+    display_name?: string;
+    profile_picture_url?: string;
+    profile_picture?: string;
+  };
+  patient?: {
     first_name: string;
     last_name: string;
     display_name?: string;
@@ -65,7 +77,7 @@ export default function ChatPage() {
   const router = useRouter();
   const { user, loading: authLoading, refreshUserData } = useAuth();
   
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -90,12 +102,6 @@ export default function ChatPage() {
   const [sendingCameraImage, setSendingCameraImage] = useState(false);
   const [sendingGalleryImage, setSendingGalleryImage] = useState(false);
   
-  // Add state to track if messages have been marked as read
-  // This prevents unnecessary API calls and improves performance
-  const [messagesMarkedAsRead, setMessagesMarkedAsRead] = useState(false);
-  const [isMarkingAsRead, setIsMarkingAsRead] = useState(false);
-  const [markReadAttempts, setMarkReadAttempts] = useState(0);
-  const MAX_MARK_READ_ATTEMPTS = 3;
   
   // Add state to track if session has ended (for doctors)
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -105,6 +111,11 @@ export default function ChatPage() {
   
   // Audio call modal state
   const [showAudioCallModal, setShowAudioCallModal] = useState(false);
+  const [showIncomingCall, setShowIncomingCall] = useState(false);
+  const [isAnsweringCall, setIsAnsweringCall] = useState(false);
+  const [showAudioCall, setShowAudioCall] = useState(false);
+  const [incomingCallerName, setIncomingCallerName] = useState<string>('');
+  const [incomingCallerProfilePicture, setIncomingCallerProfilePicture] = useState<string | null>(null);
   const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
   const [appointmentType, setAppointmentType] = useState<string | null>(null);
   
@@ -114,8 +125,26 @@ export default function ChatPage() {
   const [sessionDeductionInfo, setSessionDeductionInfo] = useState<any>(null);
   const [isWebRTCConnected, setIsWebRTCConnected] = useState(false);
   
+  // WebRTC audio call state
+  const [webrtcReady, setWebrtcReady] = useState(false);
+  
+  // WebRTC chat service
+  const [webrtcChatService, setWebrtcChatService] = useState<WebRTCChatService | null>(null);
+  const [isWebRTCServiceActive, setIsWebRTCServiceActive] = useState(false);
+  
+  // Typing indicator state
+  const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
+  const [typingTimeout, setTypingTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
+
+  // Auto-scroll functionality
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
   
   // Check if current user is a patient
   const isPatient = user?.user_type === 'patient';
@@ -138,257 +167,25 @@ export default function ChatPage() {
   
   // Check if user is authenticated
   const isAuthenticated = !!user && !!user.id;
-  
-  // Show authentication error if user is not authenticated
-  if (!authLoading && !isAuthenticated) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-        <StatusBar barStyle="dark-content" />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Ionicons name="lock-closed" size={64} color="#FF4444" />
-          <Text style={{ fontSize: 20, fontWeight: '600', color: '#333', marginTop: 16, textAlign: 'center' }}>
-            Authentication Required
-          </Text>
-          <Text style={{ fontSize: 16, color: '#666', marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
-            You need to be logged in to access this chat. Please log in and try again.
-          </Text>
-          <TouchableOpacity 
-            style={{ 
-              marginTop: 24, 
-              paddingHorizontal: 24, 
-              paddingVertical: 12, 
-              backgroundColor: '#4CAF50', 
-              borderRadius: 8 
-            }}
-            onPress={() => router.replace('/login')}
-          >
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500' }}>Go to Login</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-  
-  // Validate appointment ID
-  if (!parsedAppointmentId || (!isTextSession && isNaN(parsedAppointmentId as number))) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 18, color: '#666' }}>Invalid appointment ID</Text>
-        <TouchableOpacity 
-          style={{ marginTop: 20, padding: 10, backgroundColor: '#4CAF50', borderRadius: 8 }}
-          onPress={() => router.back()}
-        >
-          <Text style={{ color: '#fff' }}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-  
-  // Helper function to get appointment ID for message storage service
-  // For text sessions, pass the full string to enable proper API endpoint formatting
-  const getAppointmentIdForStorage = (): number | string => {
-    if (isTextSession) {
-      return appointmentId; // Return full string like "text_session_52"
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      scrollToBottom();
     }
-    return parsedAppointmentId as number;
-  };
-
-  // Helper function to get numeric appointment ID for storage operations
-  const getNumericAppointmentId = (): number => {
-    if (isTextSession) {
-      return parseInt(appointmentId.replace('text_session_', ''), 10);
-    }
-    return parsedAppointmentId as number;
-  };
-
-  // Load chat info and messages
-  const loadChat = async () => {
-    try {
-      setLoading(true);
-      
-      // Safety check
-      if (!messageStorageService) {
-        console.error('❌ messageStorageService not available in loadChat');
-        return;
-      }
-      
-      // Preload messages for better performance
-      await messageStorageService.preloadMessages(getNumericAppointmentId());
-      
-      // Load chat info only if authenticated
-      if (isAuthenticated) {
-        try {
-          if (isTextSession) {
-            // For text sessions, fetch session info
-            const sessionId = appointmentId.replace('text_session_', '');
-            const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
-            if (sessionResponse.success && sessionResponse.data) {
-              const sessionData = sessionResponse.data as TextSessionInfo;
-              setTextSessionInfo(sessionData);
-              
-              // Create chat info from text session data
-              const chatInfoData: ChatInfo = {
-                appointment_id: parseInt(sessionId, 10),
-                doctor_id: sessionData.doctor_id,
-                other_participant_name: sessionData.doctor?.display_name || 
-                  `${sessionData.doctor?.first_name} ${sessionData.doctor?.last_name}`,
-                other_participant_profile_picture_url: sessionData.doctor?.profile_picture_url,
-                other_participant_profile_picture: sessionData.doctor?.profile_picture,
-                appointment_date: sessionData.started_at,
-                appointment_time: sessionData.started_at,
-                status: sessionData.status,
-              };
-              setChatInfo(chatInfoData);
-              
-              // Check if session has ended
-              if (sessionData.status === 'ended') {
-                setSessionEnded(true);
-              }
-            }
-          } else {
-            // For regular appointments, fetch chat info
-            const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
-            if (infoResponse.success && infoResponse.data) {
-              // console.log('🔍 Chat Info Response:', infoResponse.data);
-              const chatInfoData = infoResponse.data as ChatInfo;
-              setChatInfo(chatInfoData);
-              
-              // Set appointment type for call button logic
-              if (chatInfoData.appointment_type) {
-                setAppointmentType(chatInfoData.appointment_type);
-              }
-              
-              // Check if session has ended (for doctors)
-              if (!isPatient && chatInfoData.status === 'completed') {
-                console.log('🏁 Session ended detected for doctor');
-                setSessionEnded(true);
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error loading chat info:', error);
-        }
-      }
-      
-      // Load messages from storage
-      const loadedMessages = await messageStorageService.getMessages(getNumericAppointmentId());
-      
-      // Debug: Log all messages with media URLs
-      const mediaMessages = loadedMessages.filter(msg => msg.media_url);
-      if (mediaMessages.length > 0) {
-        console.log('📱 Found messages with media URLs:', mediaMessages.map(msg => ({
-          id: msg.id,
-          type: msg.message_type,
-          mediaUrl: msg.media_url,
-          message: msg.message?.substring(0, 50) + '...'
-        })));
-      }
-      
-      setMessages(loadedMessages);
-      
-      // Mark messages as read if user is authenticated
-      if (isAuthenticated && !messagesMarkedAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS) {
-        markMessagesAsRead();
-      }
-      
-    } catch (error) {
-      console.error('Error loading chat:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Send message
-  const sendMessage = async () => {
-    if (!newMessage.trim() || sending || !isAuthenticated) return;
-
-    setSending(true);
-    try {
-      // Create message object
-      const messageData = {
-        appointment_id: getNumericAppointmentId(),
-        sender_id: currentUserId,
-        sender_name: user?.first_name + ' ' + user?.last_name || 'Unknown User',
-        message: newMessage.trim(),
-        message_type: 'text' as const,
-        created_at: new Date().toISOString(),
-        timestamp: new Date().toISOString(),
-        delivery_status: 'sending' as const,
-        temp_id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      };
-
-      if (isWebRTCConnected) {
-        // Send via WebRTC (which handles session management)
-        await webrtcSessionService.sendMessage(messageData);
-      } else {
-        // Fallback to polling system
-        if (!messageStorageService) {
-          console.error('❌ messageStorageService not available in sendMessage');
-          Alert.alert('Error', 'Message service not available');
-          return;
-        }
-
-        const sentMessage = await messageStorageService.sendMessage(
-          getAppointmentIdForStorage(),
-          newMessage.trim(),
-          currentUserId,
-          user?.first_name + ' ' + user?.last_name || 'Unknown User'
-        );
-        
-        if (!sentMessage) {
-          Alert.alert('Error', 'Failed to send message');
-          return;
-        }
-      }
-      
-      setNewMessage('');
-      
-    } catch (error: any) {
-      console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Safe manual refresh
-  const safeRefreshMessages = async () => {
-    if (isRefreshing || !isAuthenticated) return;
-    
-    try {
-      setIsRefreshing(true);
-      await messageStorageService.loadFromServer(getNumericAppointmentId());
-    } catch (error: any) {
-      console.error('Error refreshing messages:', error);
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+  }, [messages.length]);
 
   // Load chat on mount only if authenticated
   useEffect(() => {
-    if (messageStorageService && isAuthenticated) {
+    if (isAuthenticated) {
       loadChat();
-      
-            // Debug profile picture data
-      // console.log('🔍 Chat Profile Picture Debug:', {
-      //   user_profile_picture_url: user?.profile_picture_url,
-      //   user_profile_picture: user?.profile_picture,
-      //   chatInfo_other_participant_profile_picture_url: chatInfo?.other_participant_profile_picture_url,    
-      //   chatInfo_other_participant_profile_picture: chatInfo?.other_participant_profile_picture,
-      //   currentUserId,
-      //   user_id: user?.id
-      // });
       
       // Refresh user data to ensure profile pictures are up to date
       if (user && (!user.profile_picture_url || !user.profile_picture)) {
-        // console.log('🔄 Refreshing user data to update profile pictures...');
         refreshUserData().catch((error: any) => {
           console.error('Error refreshing user data:', error);
         });
       }
-    } else if (!isAuthenticated && !authLoading) {
-      // console.log('❌ User not authenticated, skipping chat load');
     }
   }, [isAuthenticated, authLoading]);
 
@@ -411,157 +208,81 @@ export default function ChatPage() {
     // });
   }, [chatInfo]);
 
-  // Check for session expiration (auto-end) for text sessions
+  // Initialize WebRTC Chat Service
   useEffect(() => {
-    if (!isTextSession || !textSessionInfo || !isAuthenticated) {
-      console.log('🔍 [Chat] Skipping session expiration check:', {
-        isTextSession,
-        hasTextSessionInfo: !!textSessionInfo,
-        isAuthenticated,
-        appointmentId
-      });
-      return;
-    }
+    if (!isAuthenticated || !appointmentId) return;
 
-    console.log('🔍 [Chat] Setting up session expiration check for:', {
-      appointmentId,
-      sessionId: appointmentId.replace('text_session_', ''),
-      textSessionInfo: textSessionInfo ? {
-        id: textSessionInfo.id,
-        status: textSessionInfo.status,
-        doctor_id: textSessionInfo.doctor_id
-      } : null
-    });
-
-    const checkSessionExpiration = async () => {
+    const initializeWebRTCChat = async () => {
       try {
-        const sessionId = appointmentId.replace('text_session_', '');
-        console.log('🔍 [Chat] Checking session expiration for session:', sessionId);
-        console.log('🔍 [Chat] Check timestamp:', new Date().toISOString());
-        
-        const response = await sessionService.checkDoctorResponse(sessionId);
-        console.log('🔍 [Chat] Session check response:', response);
-        
-        // Add null/undefined check before accessing response.status
-        if (response && (response.status === 'expired' || response.status === 'ended')) {
-          console.log('🔍 [Chat] Session expired/ended:', response.status, response.message);
-          
-          // For expired sessions, double-check after a short delay to handle race conditions
-          if (response.status === 'expired') {
-            console.log('🔍 [Chat] Double-checking expired session after 2 seconds...');
-            setTimeout(async () => {
-              try {
-                const doubleCheckResponse = await sessionService.checkDoctorResponse(sessionId);
-                console.log('🔍 [Chat] Double-check result:', doubleCheckResponse.status);
-                
-                // If session is now active, don't show expired alert
-                if (doubleCheckResponse && doubleCheckResponse.status === 'active') {
-                  console.log('🔍 [Chat] Session is now active, skipping expired alert');
-                  return;
-                }
-                
-                // If still expired, show the alert
-                if (doubleCheckResponse && (doubleCheckResponse.status === 'expired' || doubleCheckResponse.status === 'ended')) {
-                  console.log('🔍 [Chat] Showing expired session alert');
-                  Alert.alert(
-                    'Session Ended',
-                    doubleCheckResponse.message || 'Your session has ended automatically.',
-                    [
-                      {
-                        text: 'OK',
-                        onPress: () => {
-                          // Store messages and show rating modal
-                          handleStoreAndClose();
-                        }
-                      }
-                    ]
-                  );
-                }
-              } catch (error) {
-                console.error('❌ [Chat] Error in double-check:', error);
-                // Show the original expired alert if double-check fails
-                Alert.alert(
-                  'Session Ended',
-                  response.message || 'Your session has ended automatically.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        // Store messages and show rating modal
-                        handleStoreAndClose();
-                      }
-                    }
-                  ]
-                );
+        const config = await configService.getConfig();
+        const chatService = new WebRTCChatService({
+          baseUrl: config.apiUrl,
+          appointmentId: appointmentId,
+          userId: currentUserId,
+          userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+          apiKey: (user as any)?.api_key || '',
+          webrtcConfig: config.webrtc
+        }, {
+          onMessage: (message) => {
+            console.log('📨 [ChatComponent] Message received:', message.id);
+            console.log('📨 [ChatComponent] Message details:', {
+              id: message.id,
+              sender_id: message.sender_id,
+              currentUserId: currentUserId,
+              message: message.message,
+              timestamp: message.created_at
+            });
+            
+            setMessages(prev => {
+              console.log('📨 [ChatComponent] Current messages count:', prev.length);
+              
+              // Check if message already exists to prevent duplicates
+              const existingMessage = prev.find(msg => msg.id === message.id);
+              if (existingMessage) {
+                console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
+                return prev;
               }
-            }, 2000); // Wait 2 seconds before double-checking
-          } else {
-            // For ended sessions (not expired), show alert immediately
-            console.log('🔍 [Chat] Showing ended session alert');
-            Alert.alert(
-              'Session Ended',
-              response.message || 'Your session has ended automatically.',
-              [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    // Store messages and show rating modal
-                    handleStoreAndClose();
-                  }
-                }
-              ]
-            );
+              
+              console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
+              const newMessages = [...prev, message];
+              console.log('📨 [ChatComponent] New messages count:', newMessages.length);
+              return newMessages;
+            });
+            scrollToBottom();
+          },
+          onError: (error) => {
+            console.error('❌ [WebRTCChat] Error:', error);
+            Alert.alert('Chat Error', error);
           }
-        } else if (response && response.status === 'error') {
-          console.log('🔍 [Chat] Session check returned error:', response.message);
-          // Don't show alert for API errors, just log them
-        } else if (response && response.status === 'waiting') {
-          console.log('🔍 [Chat] Session waiting for doctor response:', {
-            timeRemaining: response.timeRemaining,
-            message: response.message
-          });
-          
-          // If time remaining is low, poll more frequently
-          if (response.timeRemaining && response.timeRemaining < 60) {
-            console.log('🔍 [Chat] Low time remaining, scheduling quick re-check in 5 seconds');
-            setTimeout(() => {
-              checkSessionExpiration();
-            }, 5000);
-          }
-        } else if (response && response.status === 'active') {
-          console.log('🔍 [Chat] Session is active');
-          
-          // For active sessions, check if time is running low
-          if (response.remainingTimeMinutes && response.remainingTimeMinutes < 2) {
-            console.log('🔍 [Chat] Session time running low, scheduling quick re-check in 5 seconds');
-            setTimeout(() => {
-              checkSessionExpiration();
-            }, 5000);
-          }
-        } else {
-          console.log('🔍 [Chat] Unknown session status:', response?.status);
-        }
+        });
+
+        await chatService.connect();
+        setWebrtcChatService(chatService);
+        setIsWebRTCServiceActive(true);
+        
+        // Set up typing indicator listener
+        chatService.setOnTypingIndicator(handleTypingIndicator);
+        
+        // Load existing messages from storage
+        const existingMessages = await chatService.getMessages();
+        setMessages(existingMessages);
+        console.log('✅ [WebRTCChat] Service initialized successfully with', existingMessages.length, 'messages');
       } catch (error) {
-        console.error('❌ [Chat] Error checking session expiration:', error);
+        console.error('❌ [WebRTCChat] Failed to initialize:', error);
+        Alert.alert('Connection Error', 'Failed to connect to chat service. Please try again.');
       }
     };
 
-    // Check immediately when component mounts
-    console.log('🔍 [Chat] Performing initial session check');
-    checkSessionExpiration();
-
-    // Set up periodic checking every 10 seconds for more responsive detection
-    console.log('🔍 [Chat] Setting up periodic session checks every 10 seconds');
-    const intervalId = setInterval(() => {
-      console.log('🔍 [Chat] Performing periodic session check');
-      checkSessionExpiration();
-    }, 10000);
+    initializeWebRTCChat();
 
     return () => {
-      console.log('🔍 [Chat] Cleaning up session expiration check interval');
-      clearInterval(intervalId);
+      if (webrtcChatService) {
+        console.log('🔌 [WebRTCChat] Disconnecting service');
+        webrtcChatService.disconnect();
+        setIsWebRTCServiceActive(false);
+      }
     };
-  }, [isTextSession, textSessionInfo, isAuthenticated, appointmentId]);
+  }, [isAuthenticated, appointmentId, currentUserId, user]);
 
   // Initialize WebRTC session management
   useEffect(() => {
@@ -650,114 +371,13 @@ export default function ChatPage() {
         webrtcSessionService.requestSessionStatus();
         setIsWebRTCConnected(true);
 
+        // Initialize WebRTC audio call service
+        await initializeWebRTCAudioCalls();
+
       } catch (error) {
         console.error('❌ Failed to initialize WebRTC session:', error);
-        // Fallback to polling if WebRTC fails
-        initializePollingFallback();
+        Alert.alert('Connection Error', 'Failed to connect to session service. Please try again.');
       }
-    };
-
-    const initializePollingFallback = () => {
-      // Safety check to ensure messageStorageService is available and user is authenticated
-      if (!messageStorageService || !isAuthenticated) {
-        console.log('❌ messageStorageService not available or user not authenticated');
-        return;
-      }
-
-      console.log('🔧 Registering callback for appointment:', getAppointmentIdForStorage());
-      console.log('🔧 Numeric ID for callback:', getNumericAppointmentId());
-
-      messageStorageService.registerUpdateCallback(getNumericAppointmentId(), (updatedMessages) => {
-        console.log('🔄 CALLBACK TRIGGERED with messages:', updatedMessages.length);
-        console.log('🔄 Current messages in state:', messages.length);
-        
-        // Check if there are new messages from other participants
-        const hasNewMessagesFromOthers = updatedMessages.some(message => 
-          message.sender_id !== currentUserId && 
-          !messages.some(existingMessage => existingMessage.id === message.id)
-        );
-        
-        // Debug: Log delivery status changes for own messages and track image messages
-        const imageMessages = updatedMessages.filter(m => m.message_type === 'image');
-        console.log(`🔍 Total messages: ${updatedMessages.length}, Image messages: ${imageMessages.length}`);
-        
-        // CRITICAL FIX: Preserve local messages that might not be in updatedMessages yet
-        const localMessages = messages.filter(localMsg => 
-          localMsg.sender_id === currentUserId && 
-          localMsg.delivery_status === 'sending' &&
-          !updatedMessages.some(serverMsg => 
-            serverMsg.id === localMsg.id || 
-            serverMsg.temp_id === localMsg.temp_id
-          )
-        );
-        
-        // Merge local messages with server messages
-        const mergedMessages = [...localMessages, ...updatedMessages];
-        
-        // Remove duplicates based on ID or temp_id
-        const uniqueMessages = mergedMessages.filter((message, index, self) => 
-          index === self.findIndex(m => 
-            m.id === message.id || 
-            (m.temp_id && m.temp_id === message.temp_id)
-          )
-        );
-        
-        console.log(`🔍 Merged messages: ${mergedMessages.length}, Unique: ${uniqueMessages.length}, Local preserved: ${localMessages.length}`);
-        
-        updatedMessages.forEach(message => {
-          if (message.sender_id === currentUserId) {
-            console.log(`🔍 Message ${message.id} delivery status: ${message.delivery_status}, readBy:`, message.read_by);
-            
-            // Check if delivery status changed
-            const existingMessage = messages.find(m => m.id === message.id);
-            if (existingMessage && existingMessage.delivery_status !== message.delivery_status) {
-              console.log(`🔄 Delivery status changed for message ${message.id}: ${existingMessage.delivery_status} → ${message.delivery_status}`);
-            }
-            
-            // Check if message is read
-            if (message.delivery_status === 'read') {
-              console.log(`🔵 READ STATUS: Message ${message.id} is marked as read with blue ticks`);
-            }
-          }
-          
-          // Special tracking for image messages
-          if (message.message_type === 'image') {
-            console.log(`📷 Image message detected:`, {
-              id: message.id,
-              temp_id: message.temp_id,
-              media_url: message.media_url?.substring(0, 50) + '...',
-              delivery_status: message.delivery_status,
-              sender_id: message.sender_id
-            });
-          }
-        });
-        
-        console.log('🔄 Setting messages to:', uniqueMessages.length);
-        setMessages(uniqueMessages);
-        
-        // Reset the flag when new messages arrive from others so they can be marked as read
-        if (hasNewMessagesFromOthers) {
-          setMessagesMarkedAsRead(false);
-          setMarkReadAttempts(0); // Reset attempts for new messages
-          console.log(`🔄 Reset read flags due to new messages from others`);
-        }
-        
-        // Also check if there are any unread messages that need to be marked
-        const hasUnreadMessages = uniqueMessages.some(message => 
-          message.sender_id !== currentUserId && 
-          (!message.read_by || !message.read_by.some(read => read.user_id === currentUserId))
-        );
-        
-        if (hasUnreadMessages && messagesMarkedAsRead) {
-          console.log(`🔄 Found unread messages, resetting read flag`);
-          setMessagesMarkedAsRead(false);
-          setMarkReadAttempts(0);
-        }
-      });
-
-      // Start auto-sync for real-time updates
-      console.log('🔧 Starting auto-sync for appointment:', getAppointmentIdForStorage());
-      messageStorageService.startAutoSync(getNumericAppointmentId());
     };
 
     initializeWebRTCSession();
@@ -765,64 +385,13 @@ export default function ChatPage() {
     // Cleanup
     return () => {
       webrtcSessionService.disconnect();
-      if (messageStorageService) {
-        console.log('🔧 Unregistering callback for appointment:', getAppointmentIdForStorage());
-        messageStorageService.unregisterUpdateCallback(getNumericAppointmentId());
-        messageStorageService.stopAutoSync(getNumericAppointmentId());
+      // Clean up incoming call WebSocket
+      if ((global as any).incomingCallWebSocket) {
+        (global as any).incomingCallWebSocket.close();
+        (global as any).incomingCallWebSocket = null;
       }
     };
-  }, [currentUserId, isAuthenticated]); // Removed 'messages' from dependency array
-
-  // Mark messages as read when chat is viewed
-  const markMessagesAsRead = async () => {
-    if (!user?.id || isMarkingAsRead || markReadAttempts >= MAX_MARK_READ_ATTEMPTS || !isAuthenticated) return;
-    
-    // Safety check
-    if (!messageStorageService) {
-      console.error('❌ messageStorageService not available in markMessagesAsRead');
-      return;
-    }
-    
-    // Check if there are any unread messages from other participants
-    const hasUnreadMessages = messages.some(message => 
-      message.sender_id !== user.id && 
-      (!message.read_by || !message.read_by.some(read => read.user_id === user.id))
-    );
-    
-    if (!hasUnreadMessages) {
-      setMessagesMarkedAsRead(true);
-      return;
-    }
-    
-    try {
-      setIsMarkingAsRead(true);
-      setMarkReadAttempts(prev => prev + 1);
-      await messageStorageService.markMessagesAsRead(getNumericAppointmentId(), user.id);
-      setMessagesMarkedAsRead(true); // Set flag to prevent re-marking
-    } catch (error) {
-      console.error('❌ Error marking messages as read:', error);
-    } finally {
-      setIsMarkingAsRead(false);
-    }
-  };
-
-  // Mark messages as read when component mounts and when messages change
-  useEffect(() => {
-    // Check if there are unread messages that need to be marked
-    const hasUnreadMessages = messages.some(message => 
-      message.sender_id !== user?.id && 
-      (!message.read_by || !message.read_by.some(read => read.user_id === user?.id))
-    );
-    
-    if (messages.length > 0 && !loading && hasUnreadMessages && !isMarkingAsRead && markReadAttempts < MAX_MARK_READ_ATTEMPTS && isAuthenticated) {
-      // Add a small delay to prevent rapid successive calls
-      const timeoutId = setTimeout(() => {
-        markMessagesAsRead();
-      }, 1000); // Increased delay to prevent rapid calls and ensure messages are fully loaded
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [messages, loading, isMarkingAsRead, markReadAttempts, user?.id, isAuthenticated]);
+  }, [currentUserId, isAuthenticated]);
 
   // Cleanup recording interval on unmount
   useEffect(() => {
@@ -833,6 +402,291 @@ export default function ChatPage() {
       }
     };
   }, []);
+  
+  // Show authentication error if user is not authenticated
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Ionicons name="lock-closed" size={64} color="#FF4444" />
+          <Text style={{ fontSize: 20, fontWeight: '600', color: '#333', marginTop: 16, textAlign: 'center' }}>
+            Authentication Required
+          </Text>
+          <Text style={{ fontSize: 16, color: '#666', marginTop: 8, textAlign: 'center', lineHeight: 22 }}>
+            You need to be logged in to access this chat. Please log in and try again.
+          </Text>
+          <TouchableOpacity 
+            style={{ 
+              marginTop: 24, 
+              paddingHorizontal: 24, 
+              paddingVertical: 12, 
+              backgroundColor: '#4CAF50', 
+              borderRadius: 8 
+            }}
+            onPress={() => router.replace('/login')}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '500' }}>Go to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  
+  // Validate appointment ID
+  if (!parsedAppointmentId || (!isTextSession && isNaN(parsedAppointmentId as number))) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 18, color: '#666' }}>Invalid appointment ID</Text>
+        <TouchableOpacity 
+          style={{ marginTop: 20, padding: 10, backgroundColor: '#4CAF50', borderRadius: 8 }}
+          onPress={() => router.back()}
+        >
+          <Text style={{ color: '#fff' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+  
+  // Helper function to get appointment ID for message storage service
+  // For text sessions, pass the full string to enable proper API endpoint formatting
+  const getAppointmentIdForStorage = (): number | string => {
+    if (isTextSession) {
+      return appointmentId; // Return full string like "text_session_52"
+    }
+    return parsedAppointmentId as number;
+  };
+
+  // Helper function to get numeric appointment ID for storage operations
+  const getNumericAppointmentId = (): number => {
+    if (isTextSession) {
+      return parseInt(appointmentId.replace('text_session_', ''), 10);
+    }
+    return parsedAppointmentId as number;
+  };
+
+  // Load chat info and messages
+  const loadChat = async () => {
+    try {
+      setLoading(true);
+      
+      // Load chat info only if authenticated
+      if (isAuthenticated) {
+        try {
+          if (isTextSession) {
+            // For text sessions, fetch session info
+            const sessionId = appointmentId.replace('text_session_', '');
+            const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+            if (sessionResponse.success && sessionResponse.data) {
+              const sessionData = sessionResponse.data as TextSessionInfo;
+              setTextSessionInfo(sessionData);
+              
+              // Create chat info from text session data
+              const doctorName = sessionData.doctor?.display_name || 
+                `${sessionData.doctor?.first_name} ${sessionData.doctor?.last_name}`;
+              const patientName = sessionData.patient?.display_name || 
+                `${sessionData.patient?.first_name} ${sessionData.patient?.last_name}`;
+              
+              const chatInfoData: ChatInfo = {
+                appointment_id: parseInt(sessionId, 10),
+                doctor_id: sessionData.doctor_id,
+                other_participant_name: isPatient ? doctorName : patientName,
+                other_participant_profile_picture_url: isPatient ? sessionData.doctor?.profile_picture_url : sessionData.patient?.profile_picture_url,
+                other_participant_profile_picture: isPatient ? sessionData.doctor?.profile_picture : sessionData.patient?.profile_picture,
+                appointment_date: sessionData.started_at,
+                appointment_time: sessionData.started_at,
+                status: sessionData.status,
+              };
+              setChatInfo(chatInfoData);
+              
+              // Check if session has ended
+              if (sessionData.status === 'ended') {
+                setSessionEnded(true);
+              }
+            }
+          } else {
+            // For regular appointments, fetch chat info
+            const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
+            if (infoResponse.success && infoResponse.data) {
+              // console.log('🔍 Chat Info Response:', infoResponse.data);
+              const chatInfoData = infoResponse.data as ChatInfo;
+              setChatInfo(chatInfoData);
+              
+              // Set appointment type for call button logic
+              if (chatInfoData.appointment_type) {
+                setAppointmentType(chatInfoData.appointment_type);
+              }
+              
+              // Check if session has ended (for doctors)
+              if (!isPatient && chatInfoData.status === 'completed') {
+                console.log('🏁 Session ended detected for doctor');
+                setSessionEnded(true);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error loading chat info:', error);
+        }
+      }
+      
+      // Load messages from WebRTC chat service
+      if (webrtcChatService) {
+        const loadedMessages = await webrtcChatService.getMessages();
+        setMessages(loadedMessages);
+      }
+      
+    } catch (error) {
+      console.error('Error loading chat:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send message via WebRTC
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !webrtcChatService) return;
+    
+    try {
+      setSending(true);
+      const message = await webrtcChatService.sendMessage(newMessage.trim());
+      if (message) {
+        setNewMessage('');
+        // Message will be added to the list via the WebRTC service's message handling
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Handle typing indicator
+  const handleTypingIndicator = (isTyping: boolean) => {
+    console.log('⌨️ [Chat] Typing indicator received:', isTyping);
+    
+    if (isTyping) {
+      setIsOtherUserTyping(true);
+      
+      // Clear existing timeout
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+      }
+      
+      // Set timeout to hide typing indicator after 3 seconds
+      const timeout = setTimeout(() => {
+        setIsOtherUserTyping(false);
+      }, 3000) as ReturnType<typeof setTimeout>;
+      
+      setTypingTimeout(timeout);
+    } else {
+      setIsOtherUserTyping(false);
+      if (typingTimeout) {
+        clearTimeout(typingTimeout);
+        setTypingTimeout(null);
+      }
+    }
+  };
+
+
+  // Initialize WebRTC audio calls
+  const initializeWebRTCAudioCalls = async () => {
+    try {
+      console.log('🔌 Initializing WebRTC audio calls...');
+      
+      // Initialize webrtcService
+      const webrtcConnected = await webrtcService.initialize();
+      if (webrtcConnected) {
+        setWebrtcReady(true);
+        console.log('✅ WebRTC audio calls ready');
+        
+        // Set up incoming call listener for both doctors and patients
+        setupIncomingCallListener();
+      } else {
+        console.error('❌ Failed to initialize WebRTC audio calls');
+      }
+    } catch (error) {
+      console.error('❌ Error initializing WebRTC audio calls:', error);
+    }
+  };
+
+  // Set up incoming call listener
+  const setupIncomingCallListener = () => {
+    if (!appointmentId || !currentUserId) return;
+
+    console.log('📞 Setting up incoming call listener...');
+    
+    // Clean up any existing connection
+    if ((global as any).incomingCallWebSocket) {
+      console.log('🧹 Cleaning up existing incoming call WebSocket');
+      (global as any).incomingCallWebSocket.close();
+    }
+    
+    // Create WebSocket connection for incoming calls
+    const wsUrl = `ws://46.101.123.123:8080/audio-signaling/${appointmentId}`;
+    const signalingChannel = new WebSocket(wsUrl);
+    
+    // Store reference for cleanup
+    (global as any).incomingCallWebSocket = signalingChannel;
+    
+    signalingChannel.onopen = () => {
+      console.log('📞 Incoming call WebSocket connected');
+    };
+    
+    signalingChannel.onmessage = async (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        console.log('📨 Incoming call message:', message.type);
+        
+        // If we receive an offer, handle the incoming call
+        if (message.type === 'offer') {
+          console.log('📞 Offer received - checking senderId filter:', {
+            messageSenderId: message.senderId,
+            currentUserId: currentUserId,
+            currentUserIdString: currentUserId.toString(),
+            userType: user?.user_type,
+            appointmentId: appointmentId
+          });
+          
+          // Check if this offer is from ourselves (ignore our own offers)
+          if (message.senderId && message.senderId === currentUserId.toString()) {
+            console.log('📞 Ignoring own offer - not showing incoming call screen');
+            return;
+          }
+          
+          console.log('📞 Incoming call detected! Showing incoming call screen...', {
+            from: user?.user_type,
+            messageType: message.type,
+            isReceivingCall: true,
+            senderId: message.senderId,
+            currentUserId
+          });
+          // Store the offer for the AudioCallService to use
+          (global as any).pendingOffer = message.offer;
+          
+          // Set caller information for the incoming call screen
+          const callerName = user?.user_type === 'doctor' ? 
+            (chatInfo?.other_participant_name || 'Patient') : 
+            (chatInfo?.other_participant_name || 'Doctor');
+          setIncomingCallerName(callerName);
+          setIncomingCallerProfilePicture(chatInfo?.other_participant_profile_picture);
+          
+          // Show Instagram-style incoming call screen (only for receiver)
+          setShowIncomingCall(true);
+        }
+      } catch (error) {
+        console.error('❌ Error handling incoming call message:', error);
+      }
+    };
+    
+    signalingChannel.onerror = (error) => {
+      console.error('❌ Incoming call WebSocket error:', error);
+    };
+    
+    signalingChannel.onclose = () => {
+      console.log('📞 Incoming call WebSocket closed');
+    };
+  };
 
   // Handle back button press
   const handleBackPress = () => {
@@ -910,7 +764,7 @@ export default function ChatPage() {
         await webrtcSessionService.endSession('manual_end');
         
         // Capture messages for local archive
-        const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+        const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
         const cleanedMessages = archiveMessages.map(m => {
           const { temp_id, ...rest } = m as any;
           return { ...rest, delivery_status: rest.delivery_status || 'sent' };
@@ -937,13 +791,17 @@ export default function ChatPage() {
 
         try {
           await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+          // Clear messages from WebRTC chat service after archiving
+          if (webrtcChatService) {
+            await webrtcChatService.clearMessages();
+          }
         } catch (e) {
           console.error('Failed to store ended session locally:', e);
         }
       } else {
         // Fallback to API calls
         // Before ending on server, capture current messages for local archive
-        const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+        const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
         // Strip temp_id and ensure minimal consistency
         const cleanedMessages = archiveMessages.map(m => {
           const { temp_id, ...rest } = m as any;
@@ -975,6 +833,10 @@ export default function ChatPage() {
         try {
           // Store for both patient and doctor
           await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+          // Clear messages from WebRTC chat service after archiving
+          if (webrtcChatService) {
+            await webrtcChatService.clearMessages();
+          }
         } catch (e) {
           console.error('Failed to store ended session locally:', e);
         }
@@ -1014,7 +876,7 @@ export default function ChatPage() {
   // Helper function to store messages and close chat
   const handleStoreAndClose = async () => {
          try {
-       const archiveMessages = await messageStorageService.getMessages(getNumericAppointmentId());
+       const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
        const cleanedMessages = archiveMessages.map(m => {
          const { temp_id, ...rest } = m as any;
          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
@@ -1039,6 +901,10 @@ export default function ChatPage() {
       };
 
       await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+      // Clear messages from WebRTC chat service after archiving
+      if (webrtcChatService) {
+        await webrtcChatService.clearMessages();
+      }
       setShowEndSessionModal(false);
       setShowRatingModal(true);
     } catch (e) {
@@ -1161,29 +1027,8 @@ export default function ChatPage() {
   };
 
   const sendVoiceMessage = async () => {
-    if (!recordingUri || sendingVoiceMessage) return;
-    
-    setSendingVoiceMessage(true);
-    try {
-             const success = await voiceRecordingService.sendVoiceMessage(
-         getNumericAppointmentId(),
-         recordingUri,
-         currentUserId,
-         user?.first_name + ' ' + user?.last_name || 'Unknown User'
-       );
-      
-      if (success) {
-        setRecordingUri(null);
-        setRecordingDuration(0);
-      } else {
-        Alert.alert('Error', 'Failed to send voice message.');
-      }
-    } catch (error: any) {
-      console.error('Error sending voice message:', error);
-      Alert.alert('Error', 'Failed to send voice message.');
-    } finally {
-      setSendingVoiceMessage(false);
-    }
+    console.log('📤 [SendVoice] Voice message sending is disabled');
+    Alert.alert('Disabled', 'Voice message sending has been disabled');
   };
 
   const formatDuration = (seconds: number): string => {
@@ -1194,57 +1039,13 @@ export default function ChatPage() {
 
   // Image handling functions
   const handleTakePhoto = async () => {
-    try {
-      setSendingCameraImage(true);
-      
-      const imageUri = await imageService.takePhoto();
-      
-      if (imageUri) {
-        const success = await imageService.sendImageMessage(
-          getNumericAppointmentId(),
-          imageUri,
-          currentUserId,
-          `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
-        );
-        
-        if (success) {
-          // console.log('📷 Photo sent successfully');
-        } else {
-          console.error('❌ Failed to send photo');
-        }
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-    } finally {
-      setSendingCameraImage(false);
-    }
+    console.log('📤 [Camera] Image sending is disabled');
+    Alert.alert('Disabled', 'Image sending has been disabled');
   };
 
   const handlePickImage = async () => {
-    try {
-      setSendingGalleryImage(true);
-      
-      const imageUri = await imageService.pickImage();
-      
-      if (imageUri) {
-        const success = await imageService.sendImageMessage(
-          getNumericAppointmentId(),
-          imageUri,
-          currentUserId,
-          `${user?.first_name || ''} ${user?.last_name || ''}`.trim() || 'User'
-        );
-        
-        if (success) {
-          // console.log('📷 Image picked and sent successfully');
-        } else {
-          console.error('❌ Failed to send picked image');
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-    } finally {
-      setSendingGalleryImage(false);
-    }
+    console.log('📤 [Gallery] Image sending is disabled');
+    Alert.alert('Disabled', 'Image sending has been disabled');
   };
 
   // Debug modal state
@@ -1316,11 +1117,14 @@ export default function ChatPage() {
         {/* Name */}
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
-            {chatInfo?.other_participant_name || 'Chat'}
+            {isPatient 
+              ? (chatInfo?.other_participant_name || 'Doctor')
+              : (chatInfo?.other_participant_name || 'Patient')
+            }
           </Text>
         </View>
         
-        {/* Call Icons */}
+        {/* Call Icons - Role-based calling */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
           <TouchableOpacity 
             style={{ 
@@ -1335,27 +1139,57 @@ export default function ChatPage() {
             <Icon name="video" size={24} color="#4CAF50" />
           </TouchableOpacity>
           
-          <TouchableOpacity 
-            style={{ 
+          {/* Audio Call Button - Only patients can initiate calls */}
+          {user?.user_type === 'patient' && (
+            <TouchableOpacity 
+              style={{ 
+                padding: 8,
+                opacity: (isCallEnabled() && webrtcReady && !showIncomingCall) ? 1 : 0.3
+              }}
+              onPress={() => {
+                if (isCallEnabled() && webrtcReady) {
+                  console.log('📞 Patient call button pressed:', {
+                    appointmentId,
+                    currentUserId,
+                    isDoctor: user?.user_type === 'doctor',
+                    userType: user?.user_type
+                  });
+                  
+                  // Clear any pending offer before starting new call
+                  (global as any).pendingOffer = null;
+                  // Clear incoming call flag for outgoing calls
+                  (global as any).isIncomingCall = false;
+                  
+                  // Initialize audio call
+                  // AudioCallService is already imported as audioCallService
+                  
+                  setShowAudioCallModal(true);
+                } else if (!webrtcReady) {
+                  Alert.alert('Call Not Ready', 'WebRTC is not ready yet. Please wait a moment.');
+                } else {
+                  Alert.alert(
+                    'Call Not Available',
+                    isTextSession 
+                      ? 'Call feature is not available for this session type.'
+                      : 'Call feature is only available for audio appointments.'
+                  );
+                }
+              }}
+              disabled={!isCallEnabled() || !webrtcReady || showIncomingCall}
+            >
+              <Icon name="voice" size={24} color={(isCallEnabled() && webrtcReady && !showIncomingCall) ? "#4CAF50" : "#999"} />
+            </TouchableOpacity>
+          )}
+          
+          {/* Doctor Status - Doctors can only answer calls */}
+          {user?.user_type === 'doctor' && (
+            <View style={{ 
               padding: 8,
-              opacity: isCallEnabled() ? 1 : 0.3
-            }}
-            onPress={() => {
-              if (isCallEnabled()) {
-                setShowAudioCallModal(true);
-              } else {
-                Alert.alert(
-                  'Call Not Available',
-                  isTextSession 
-                    ? 'Call feature is not available for this session type.'
-                    : 'Call feature is only available for audio appointments.'
-                );
-              }
-            }}
-            disabled={!isCallEnabled()}
-          >
-            <Icon name="voice" size={24} color={isCallEnabled() ? "#4CAF50" : "#999"} />
-          </TouchableOpacity>
+              opacity: 0.7
+            }}>
+              <Icon name="voice" size={24} color="#999" />
+            </View>
+          )}
         </View>
         
 
@@ -1438,6 +1272,7 @@ export default function ChatPage() {
         </View>
       )}
 
+
       {/* Messages */}
       <KeyboardAvoidingView 
         style={{ flex: 1 }} 
@@ -1511,7 +1346,6 @@ export default function ChatPage() {
                         audioUri={message.media_url}
                         isOwnMessage={message.sender_id === currentUserId}
                         timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
                         profilePictureUrl={
                           message.sender_id === currentUserId
                             ? (user?.profile_picture_url || user?.profile_picture || undefined)
@@ -1533,20 +1367,11 @@ export default function ChatPage() {
                         imageUrl={message.media_url}
                         isOwnMessage={message.sender_id === currentUserId}
                         timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
                         profilePictureUrl={
                           message.sender_id === currentUserId
                             ? (user?.profile_picture_url || user?.profile_picture || undefined)
                             : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
                         }
-                        readBy={message.read_by}
-                        otherParticipantId={
-                          chatInfo?.doctor_id === currentUserId 
-                            ? chatInfo?.patient_id 
-                            : chatInfo?.doctor_id || 
-                              (message.sender_id !== currentUserId ? message.sender_id : undefined)
-                        }
-                        messageTime={message.created_at}
                       />
                     );
                   })()
@@ -1570,24 +1395,73 @@ export default function ChatPage() {
                     >
                       {message.message}
                     </Text>
-                    <ReadReceipt
-                      isOwnMessage={message.sender_id === currentUserId}
-                      deliveryStatus={message.delivery_status || (message.sender_id === currentUserId ? 'sent' : 'delivered')}
-                      readBy={message.read_by}
-                      otherParticipantId={
-                        chatInfo?.doctor_id === currentUserId 
-                          ? chatInfo?.patient_id 
-                          : chatInfo?.doctor_id || 
-                            (message.sender_id !== currentUserId ? message.sender_id : undefined)
-                      }
-                      messageTime={message.created_at}
-                    />
                   </View>
                 )}
               </View>
             );
           })}
         </ScrollView>
+
+        {/* Typing Indicator */}
+        {isOtherUserTyping && (
+          <View style={{
+            alignSelf: 'flex-start',
+            marginBottom: 12,
+            maxWidth: '80%',
+          }}>
+            <View
+              style={{
+                backgroundColor: '#F0F0F0',
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                borderRadius: 20,
+                borderBottomLeftRadius: 4,
+                borderBottomRightRadius: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <Text
+                style={{
+                  color: '#666',
+                  fontSize: 16,
+                  fontStyle: 'italic',
+                  marginRight: 8,
+                }}
+              >
+                typing
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}>
+                <View style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: '#666',
+                  marginRight: 2,
+                  opacity: 0.7,
+                }} />
+                <View style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: '#666',
+                  marginRight: 2,
+                  opacity: 0.5,
+                }} />
+                <View style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: '#666',
+                  opacity: 0.3,
+                }} />
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Input */}
         <View style={{ 
@@ -1938,19 +1812,184 @@ export default function ChatPage() {
         visible={showRatingModal}
         onClose={handleCloseRatingModal}
         onSubmit={handleSubmitRating}
-        doctorName={chatInfo?.other_participant_name || 'Doctor'}
+        doctorName={isPatient ? (chatInfo?.other_participant_name || 'Doctor') : (user?.display_name || `${user?.first_name} ${user?.last_name}` || 'Doctor')}
         sessionType={isTextSession ? 'instant' : 'appointment'}
       />
 
+      {/* Incoming Call Screen */}
+      <IncomingCallScreen
+        visible={showIncomingCall}
+        callerName={incomingCallerName}
+        callerProfilePicture={incomingCallerProfilePicture}
+        onAccept={async () => {
+          console.log('📞 Incoming call accepted - initializing AudioCallService...');
+          setShowIncomingCall(false);
+          setShowAudioCallModal(true);
+          setIsAnsweringCall(true);
+          
+          // Set flag to indicate this is an incoming call
+          (global as any).isIncomingCall = true;
+          
+          try {
+            // Initialize AudioCallService for incoming call
+            console.log('🔧 [Chat] Calling initializeForIncomingCall with:', {
+              appointmentId,
+              userId: currentUserId.toString(),
+              appointmentIdType: typeof appointmentId
+            });
+            const audioCallService = AudioCallService.getInstance();
+            await audioCallService.initializeForIncomingCall(
+              appointmentId, 
+              currentUserId.toString(), 
+              {
+                onStateChange: (state) => {
+                  console.log('📊 Call state changed:', state);
+                },
+                onCallAnswered: () => {
+                  console.log('📞 Call answered successfully');
+                },
+                onCallEnded: () => {
+                  console.log('📞 Call ended');
+                  setShowAudioCallModal(false);
+                  setIsAnsweringCall(false);
+                },
+                onError: (error) => {
+                  console.error('❌ Call error:', error);
+                  setShowAudioCallModal(false);
+                  setIsAnsweringCall(false);
+                },
+                onRemoteStream: (stream) => {
+                  console.log('🎵 Remote stream received');
+                },
+                onCallRejected: () => {
+                  console.log('📞 Call rejected');
+                  setShowAudioCallModal(false);
+                  setIsAnsweringCall(false);
+                  setShowDoctorUnavailableModal(true);
+                },
+                onCallTimeout: () => {
+                  console.log('⏰ Call timeout');
+                  setShowAudioCallModal(false);
+                  setIsAnsweringCall(false);
+                }
+              }
+            );
+            
+            // Wait a moment for WebSocket to be fully established, then send call-answered signal
+            console.log('🔗 Waiting for WebSocket connection to be established...');
+            
+            // Retry sending call-answered signal with timeout
+            let retryCount = 0;
+            const maxRetries = 10;
+            const retryInterval = 100; // 100ms
+            
+            const sendCallAnsweredSignal = () => {
+              if (audioCallService.isConnectedToSignaling()) {
+                const callAnsweredMessage = {
+                  type: 'call-answered',
+                  appointmentId: appointmentId,
+                  timestamp: new Date().toISOString()
+                };
+                audioCallService.sendMessage(callAnsweredMessage);
+                console.log('📤 Call-answered signal sent to server:', callAnsweredMessage);
+                return true;
+              } else if (retryCount < maxRetries) {
+                retryCount++;
+                console.log(`🔄 WebSocket not ready, retrying (${retryCount}/${maxRetries})...`);
+                setTimeout(sendCallAnsweredSignal, retryInterval);
+                return false;
+              } else {
+                console.error('❌ Failed to send call-answered signal after maximum retries:', {
+                  appointmentId: appointmentId,
+                  maxRetries: maxRetries
+                });
+                return false;
+              }
+            };
+            
+            sendCallAnsweredSignal();
+          } catch (error) {
+            console.error('❌ Error accepting incoming call:', error);
+            setShowAudioCallModal(false);
+            setIsAnsweringCall(false);
+          }
+        }}
+        onDecline={async () => {
+          console.log('📞 Incoming call declined');
+          setShowIncomingCall(false);
+          
+          // Clear pending offer
+          (global as any).pendingOffer = null;
+          
+          // Send call-rejected signal to server
+          try {
+            const audioCallService = AudioCallService.getInstance();
+            const callRejectedMessage = {
+              type: 'call-rejected',
+              appointmentId: appointmentId,
+              reason: 'doctor_on_another_call',
+              timestamp: new Date().toISOString()
+            };
+            audioCallService.sendMessage(callRejectedMessage);
+            console.log('📤 Call-rejected signal sent to server:', callRejectedMessage);
+          } catch (error) {
+            console.error('❌ Error sending call-rejected signal:', error);
+          }
+        }}
+      />
+
+      {/* Audio Call Interface - Show when answering incoming call */}
+      {showAudioCall && isAnsweringCall && (
+        <Modal
+          visible={true}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowAudioCall(false);
+            setIsAnsweringCall(false);
+            const audioCallService = AudioCallService.getInstance();
+            audioCallService.endCall();
+          }}
+          statusBarTranslucent={true}
+        >
+          <AudioCall
+            appointmentId={appointmentId}
+            userId={currentUserId.toString()}
+            isDoctor={user?.user_type === 'doctor'}
+            doctorName={textSessionInfo ? 
+              (textSessionInfo.doctor?.display_name?.includes('Dr.') ?
+                textSessionInfo.doctor.display_name :
+                `Dr. ${textSessionInfo.doctor?.display_name || 'Doctor'}`) :
+              chatInfo?.other_participant_name || 'Doctor'
+            }
+            patientName={textSessionInfo ? 
+              'Patient' : 
+              chatInfo?.other_participant_name || 'Patient'
+            }
+            otherParticipantProfilePictureUrl={textSessionInfo?.doctor?.profile_picture || chatInfo?.other_participant_profile_picture}
+            onEndCall={() => {
+              setShowAudioCall(false);
+              setIsAnsweringCall(false);
+            }}
+            isIncomingCall={true}
+          />
+        </Modal>
+      )}
+
       {/* Audio Call Modal */}
       <AudioCallModal
-        visible={showAudioCallModal}
-        onClose={() => setShowAudioCallModal(false)}
+        visible={showAudioCallModal && !showIncomingCall}
+        onClose={() => {
+          setShowAudioCallModal(false);
+          // Clear the incoming call flag when closing
+          (global as any).isIncomingCall = false;
+        }}
         appointmentId={appointmentId}
         userId={currentUserId.toString()}
         isDoctor={!isPatient}
         doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
         patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : chatInfo?.other_participant_name}
+        isIncomingCall={!!(global as any).isIncomingCall}
         onCallTimeout={() => setShowDoctorUnavailableModal(true)}
         onCallRejected={() => setShowDoctorUnavailableModal(true)}
       />
@@ -1998,7 +2037,7 @@ export default function ChatPage() {
               lineHeight: 22,
               marginBottom: 24
             }}>
-              The doctor is currently unavailable to take your call. Please try again later or send a message.
+              The doctor is currently unavailable. They might be attending another patient. Please try again later or send a message.
             </Text>
             <TouchableOpacity
               style={{

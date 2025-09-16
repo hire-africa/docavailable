@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
-import { apiService } from '../app/services/apiService';
+import { apiService } from './apiService';
 
 export interface ImageUploadResult {
   success: boolean;
@@ -184,42 +184,8 @@ class ImageService {
     senderId: number,
     senderName: string
   ): Promise<boolean> {
-    try {
-      const uploadResult = await this.uploadImage(appointmentId, imageUri);
-      
-      if (!uploadResult.success || !uploadResult.mediaUrl) {
-        console.error('ImageService: Failed to upload image:', uploadResult.error);
-        Alert.alert('Error', uploadResult.error || 'Failed to upload image');
-        return false;
-      }
-
-      const imageMessageId = `image_${appointmentId}_${senderId}_${Date.now()}_${Math.random().toString(36).substr(2, 12)}`;
-      console.log('ImageService: Sending image message with unique ID:', imageMessageId);
-
-      console.log('📷 ImageService: About to send image message with ID:', imageMessageId);
-      
-      const message = await import('../services/messageStorageService').then(
-        ({ messageStorageService }) => messageStorageService.sendImageMessage(
-          appointmentId,
-          uploadResult.mediaUrl,
-          senderId,
-          senderName,
-          imageMessageId
-        )
-      );
-
-      if (message) {
-        console.log('📷 ImageService: Image message sent successfully:', message.id);
-      } else {
-        console.error('📷 ImageService: Failed to send image message');
-      }
-
-      return !!message;
-    } catch (error) {
-      console.error('ImageService: Error sending image message:', error);
-      Alert.alert('Error', 'Failed to send image message');
-      return false;
-    }
+    console.log('📤 [ImageService] Image sending is disabled');
+    return false;
   }
 }
 

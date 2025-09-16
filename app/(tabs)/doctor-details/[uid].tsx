@@ -13,12 +13,12 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../../../app/services/apiService';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SubscriptionModal from '../../../components/SubscriptionModal';
 import { Colors } from '../../../constants/Colors';
 import { useAuth } from '../../../contexts/AuthContext';
+import { apiService } from '../../../services/apiService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';

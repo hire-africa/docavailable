@@ -28,7 +28,15 @@ class MessageStorageService
             $existingMessage = null;
             
             foreach ($messages as $existingMsg) {
-                // Check by temp_id first
+                // Check by message ID first (most reliable)
+                if (!empty($messageData['id']) && !empty($existingMsg['id']) && 
+                    $existingMsg['id'] === $messageData['id']) {
+                    $isDuplicate = true;
+                    $existingMessage = $existingMsg;
+                    break;
+                }
+                
+                // Check by temp_id second
                 if (!empty($messageData['temp_id']) && !empty($existingMsg['temp_id']) && 
                     $existingMsg['temp_id'] === $messageData['temp_id']) {
                     $isDuplicate = true;
@@ -94,8 +102,8 @@ class MessageStorageService
                 return $existingMessage;
             }
             
-            // Add new message with unique ID
-            $messageId = Str::uuid()->toString();
+            // Add new message with unique ID (use provided ID if available)
+            $messageId = $messageData['id'] ?? Str::uuid()->toString();
             $message = [
                 'id' => $messageId,
                 'appointment_id' => $appointmentId,

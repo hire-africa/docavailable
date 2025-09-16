@@ -1,6 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     StyleSheet,
@@ -8,7 +8,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
+import { apiService } from '../../services/apiService';
 
 const AppointmentDetails = () => {
   const router = router;

@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { hybridService } from '@/services/hybridService';
 import { notificationApiService } from '@/services/notificationApiService';
 import { walletApiService } from '@/services/walletApiService';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     ScrollView,

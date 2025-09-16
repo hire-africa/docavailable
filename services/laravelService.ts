@@ -256,28 +256,6 @@ class LaravelService {
     return apiService.post<ChatRoom>('/chat/private', { participant_id: participantId });
   }
 
-  async sendMessage(roomId: number, content: string, messageType: 'text' | 'file' = 'text', file?: File): Promise<any> { // Changed from ApiResponse to any
-    if (file) {
-      const formData = new FormData();
-      formData.append('content', content);
-      formData.append('message_type', messageType);
-      formData.append('file', file);
-      return apiService.uploadFile<ChatMessage>(`/chat/rooms/${roomId}/messages`, formData);
-    } else {
-      return apiService.post<ChatMessage>(`/chat/rooms/${roomId}/messages`, {
-        content,
-        message_type: messageType
-      });
-    }
-  }
-
-  async getMessages(roomId: number, page: number = 1): Promise<any> { // Changed from ApiResponse to any
-    return apiService.get(`/chat/rooms/${roomId}/messages`, { page });
-  }
-
-  async markMessagesAsRead(roomId: number, messageIds: number[]): Promise<any> { // Changed from ApiResponse to any
-    return apiService.post(`/chat/rooms/${roomId}/mark-read`, { message_ids: messageIds });
-  }
 
   // Wallet operations (for doctors)
   async getWallet(): Promise<any> { // Changed from ApiResponse to any

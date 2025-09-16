@@ -424,4 +424,75 @@ class NotificationController extends Controller
             'data' => $request->all(),
         ]);
     }
+
+    /**
+     * Send chat message notification (for WebRTC integration)
+     */
+    public function sendChatMessageNotification(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'appointment_id' => 'required|integer',
+            'sender_id' => 'required|integer',
+            'recipient_id' => 'required|integer',
+            'message' => 'required|string',
+            'message_id' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $appointmentId = $request->appointment_id;
+            $senderId = $request->sender_id;
+            $recipientId = $request->recipient_id;
+            $message = $request->message;
+            $messageId = $request->message_id;
+
+            // Get sender and recipient
+            $sender = User::find($senderId);
+            $recipient = User::find($recipientId);
+
+            if (!$sender || !$recipient) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sender or recipient not found',
+                ], 404);
+            }
+
+            // Get appointment
+            $appointment = Appointment::find($appointmentId);
+            if (!$appointment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment not found',
+                ], 404);
+            }
+
+            // Send notification
+            $notification = new \App\Notifications\ChatMessageNotification(
+                $sender, 
+                $appointment, 
+                $message, 
+                $messageId
+            );
+            
+            $recipient->notify($notification);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Chat message notification sent successfully',
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send notification: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }
