@@ -103,16 +103,27 @@ class AuthService {
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
           
-          try {
-            // Clear stored token and user data
-            await AsyncStorage.removeItem('auth_token');
-            await AsyncStorage.removeItem('user_data');
-            this.currentUser = null;
-            
-            // Notify subscribers of logout
-            this.notifySubscribers({ user: null, token: null });
-          } catch (refreshError) {
-            console.error('Token refresh error:', refreshError);
+          // Only clear auth data for authentication-related endpoints
+          const authEndpoints = ['/auth/', '/login', '/logout', '/user', '/me'];
+          const isAuthEndpoint = authEndpoints.some(endpoint => 
+            originalRequest.url?.includes(endpoint)
+          );
+          
+          if (isAuthEndpoint) {
+            try {
+              // Clear stored token and user data
+              await AsyncStorage.removeItem('auth_token');
+              await AsyncStorage.removeItem('user_data');
+              this.currentUser = null;
+              
+              // Notify subscribers of logout
+              this.notifySubscribers({ user: null, token: null });
+            } catch (refreshError) {
+              console.error('Token refresh error:', refreshError);
+            }
+          } else {
+            // For non-auth endpoints, just log the error but don't clear user data
+            console.warn('Non-auth endpoint returned 401, not clearing user data:', originalRequest.url);
           }
         }
         

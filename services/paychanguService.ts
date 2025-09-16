@@ -12,7 +12,12 @@ export interface PaychanguPaymentRequest {
   callbackUrl: string;
   returnUrl: string;
   title?: string;
-  meta?: Record<string, any>;
+  meta?: {
+    phoneNumber?: string;
+    plan_id?: number;
+    user_id?: number;
+    transaction_id?: number;
+  };
 }
 
 export interface PaychanguPaymentResponse {
@@ -42,52 +47,51 @@ class PaychanguService {
   private baseUrl: string;
 
   constructor() {
-    this.secretKey = Constants.expoConfig?.extra?.paychanguSecretKey || '';
-    this.environment = Constants.expoConfig?.extra?.paychanguEnvironment || 'sandbox';
-    
-    // PayChangu standard checkout endpoint
-    this.baseUrl = 'https://api.paychangu.com/payment';
+    // Frontend should not handle PayChangu API directly
+    // All PayChangu operations should go through the backend
+    this.secretKey = '';
+    this.environment = 'production';
+    this.baseUrl = '';
   }
 
   /**
-   * Initialize a payment transaction
+   * Initialize a payment transaction through backend API
    */
   async initiatePayment(request: PaychanguPaymentRequest): Promise<PaychanguPaymentResponse> {
     try {
-      console.log('PaychanguService: Initiating payment:', request);
+      console.log('PaychanguService: Initiating payment through backend:', request);
 
-      const payload = {
-        amount: request.amount.toString(),
+      // Get the backend URL from environment
+      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable-3vbdv.ondigitalocean.app';
+      
+      // Call backend API to initiate PayChangu payment
+      const response = await axios.post(`${backendUrl}/api/payments/paychangu/initiate`, {
+        plan_id: request.meta?.plan_id || 1, // Default to plan 1 if not specified
+        amount: request.amount,
         currency: request.currency,
         email: request.email,
         first_name: request.firstName,
         last_name: request.lastName,
-        callback_url: request.callbackUrl,
-        return_url: request.returnUrl,
-        tx_ref: request.reference,
-        customization: {
-          title: request.title || "DocAvailable Payment",
-          description: request.description
-        },
-        meta: request.meta || {}
-      };
-
-      const response = await axios.post(this.baseUrl, payload, {
+        phone: request.meta?.phoneNumber || '+265000000000'
+      }, {
         headers: {
-          'Authorization': `Bearer ${this.secretKey}`,
           'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          // Add authentication token if available
+          'Authorization': `Bearer ${await this.getAuthToken()}`
         }
       });
 
-      if (response.data.status === 'success') {
+      if (response.data.success) {
+        console.log('PaychanguService: Backend response data:', response.data);
         return {
           success: true,
-          transactionId: response.data.data.data.tx_ref,
+          transactionId: response.data.data.reference,
           paymentUrl: response.data.data.checkout_url,
-          status: response.data.data.data.status
+          status: 'pending'
         };
       } else {
+        console.error('PaychanguService: Backend returned error:', response.data);
         return {
           success: false,
           error: response.data.message || 'Payment initiation failed'
@@ -103,24 +107,43 @@ class PaychanguService {
   }
 
   /**
-   * Check payment status
+   * Get authentication token from auth service
+   */
+  private async getAuthToken(): Promise<string> {
+    try {
+      // Import authService to get the stored token
+      const authService = (await import('./authService')).default;
+      const token = await authService.getStoredToken();
+      console.log('PaychanguService: Retrieved auth token:', token ? 'Present' : 'Missing');
+      return token || '';
+    } catch (error) {
+      console.error('PaychanguService: Error getting auth token:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Check payment status through backend API
    */
   async checkPaymentStatus(transactionId: string): Promise<PaychanguPaymentResponse> {
     try {
       console.log('PaychanguService: Checking payment status for:', transactionId);
 
-      const response = await axios.get(`${this.baseUrl}/payments/${transactionId}/status`, {
+      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable-3vbdv.ondigitalocean.app';
+      
+      const response = await axios.get(`${backendUrl}/api/payments/status?transaction_id=${encodeURIComponent(transactionId)}`, {
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
         }
       });
 
       if (response.data.success) {
         return {
           success: true,
-          transactionId: response.data.transaction_id,
-          status: response.data.status
+          transactionId: response.data.data.tx_ref || transactionId,
+          status: response.data.data.status
         };
       } else {
         return {

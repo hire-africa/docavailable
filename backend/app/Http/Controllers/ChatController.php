@@ -304,7 +304,8 @@ class ChatController extends Controller
             'message' => $request->message,
             'message_type' => $request->message_type ?? 'text',
             'media_url' => $request->media_url ?? null,
-            'temp_id' => $request->temp_id ?? null // Include temp_id if provided
+            'temp_id' => $request->temp_id ?? null, // Include temp_id if provided
+            'id' => $request->message_id ?? null // Include message_id from WebRTC if provided
         ];
         
         // Store message in cache

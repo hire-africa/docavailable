@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -11,10 +11,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { apiService } from '../../app/services/apiService';
 import DoctorProfilePicture from '../../components/DoctorProfilePicture';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiService } from '../../services/apiService';
 import { stripDoctorPrefix, withDoctorPrefix } from '../../utils/name';
 
 const { width } = Dimensions.get('window');

@@ -37,7 +37,7 @@ import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
-import { apiService } from '../app/services/apiService';
+import { apiService } from '../services/apiService';
 import { APPOINTMENT_STATUS, appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 
@@ -83,10 +83,10 @@ interface SubscriptionPlan {
 
 interface UserSubscription {
   id: string;
-  planId: string;
+  plan_id: string;
   planName: string;
-  planPrice: number;
-  planCurrency: string;
+  plan_price: number;
+  plan_currency: string;
   textSessionsRemaining: number;
   voiceCallsRemaining: number;
   videoCallsRemaining: number;
@@ -994,11 +994,27 @@ export default function PatientDashboard() {
       console.log('Payment API response:', res);
       if (res?.success && res.data?.checkout_url) {
         console.log('Navigating to checkout with URL:', res.data.checkout_url);
-        // Navigate to a dedicated WebView screen for checkout
-        router.push({
-          pathname: '/payments/checkout',
+        console.log('Router object:', router);
+        console.log('Navigation params:', {
+          path: '/checkout',
           params: { url: res.data.checkout_url, tx_ref: res.data.reference }
         });
+        
+        try {
+            // Navigate to checkout screen
+            console.log('🔄 Attempting router.navigate to checkout...');
+            console.log('🔄 URL being passed:', res.data.checkout_url);
+            console.log('🔄 Reference being passed:', res.data.reference);
+            
+            router.push('/payments/checkout?url=' + encodeURIComponent(res.data.checkout_url) + '&tx_ref=' + encodeURIComponent(res.data.reference || ''));
+            console.log('✅ Navigation command sent successfully');
+          
+          
+          
+        } catch (error) {
+          console.error('❌ Navigation failed:', error);
+          showError('Navigation Error', 'Failed to open payment page. Please try again.');
+        }
         return;
       }
       console.log('Payment failed - no checkout URL in response');
@@ -2776,7 +2792,7 @@ export default function PatientDashboard() {
   const renderSubscriptionsContent = () => {
     // Find the selected plan object
     const selectedPlan = subscriptionPlans.find(plan => plan.id === selectedPlanId) || null;
-    const activePlan = currentSubscription ? subscriptionPlans.find(plan => plan.id === currentSubscription.planId) : null;
+    const activePlan = currentSubscription ? subscriptionPlans.find(plan => plan.id === currentSubscription.plan_id) : null;
   return (
       <View style={{
         position: 'absolute',
@@ -2929,9 +2945,38 @@ export default function PatientDashboard() {
           <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#222', marginTop: 10, marginBottom: 18 }}>
             {currentSubscription ? 'Add More Sessions' : 'Choose a plan'}
           </Text>
+          
+          {currentSubscription && (
+            <View style={styles.currentPlanCard}>
+              <View style={styles.currentPlanHeader}>
+                <Icon name="check" size={24} color="#4CAF50" />
+                <Text style={styles.currentPlanTitle}>Current Plan: {currentSubscription.planName}</Text>
+              </View>
+              <Text style={styles.currentPlanPrice}>
+                {LocationService.getCurrencySymbol(currentSubscription.plan_currency)}{currentSubscription.plan_price.toLocaleString()}/month
+              </Text>
+              <View style={styles.currentPlanFeatures}>
+                <Text style={styles.currentPlanFeature}>
+                  Text Sessions: {currentSubscription.textSessionsRemaining} remaining
+                </Text>
+                <Text style={styles.currentPlanFeature}>
+                  Voice Calls: {currentSubscription.voiceCallsRemaining} remaining
+                </Text>
+                <Text style={styles.currentPlanFeature}>
+                  Video Calls: {currentSubscription.videoCallsRemaining} remaining
+                </Text>
+                {currentSubscription.expiresAt && (
+                  <Text style={styles.currentPlanFeature}>
+                    Expires: {new Date(currentSubscription.expiresAt).toLocaleDateString()}
+                  </Text>
+                )}
+              </View>
+            </View>
+          )}
+          
           {currentSubscription && (
             <Text style={{ fontSize: 16, color: '#666', marginBottom: 18, textAlign: 'center', paddingHorizontal: 20 }}>
-              You already have an active subscription. Select a plan to add more sessions to your existing subscription.
+              Select a plan below to add more sessions to your existing subscription.
             </Text>
           )}
           
@@ -2991,22 +3036,40 @@ export default function PatientDashboard() {
           ) : (
             subscriptionPlans.map((plan) => {
             const isSelected = selectedPlanId === plan.id;
+            const isActivePlan = currentSubscription && currentSubscription.plan_id === plan.id;
+            
             return (
               <View key={plan.id} style={{
-                backgroundColor: '#fff',
+                backgroundColor: isActivePlan ? '#F8FFF8' : '#fff',
                 borderRadius: 16,
-                borderWidth: 1,
-                borderColor: isSelected ? '#4CAF50' : '#E6ECE3',
+                borderWidth: 2,
+                borderColor: isActivePlan ? '#4CAF50' : isSelected ? '#4CAF50' : '#E6ECE3',
                 marginBottom: 18,
                 padding: 20,
                 shadowColor: '#000',
-                shadowOpacity: 0.03,
-                shadowRadius: 4,
-                elevation: 1,
+                shadowOpacity: isActivePlan ? 0.08 : 0.03,
+                shadowRadius: isActivePlan ? 6 : 4,
+                elevation: isActivePlan ? 3 : 1,
                 position: 'relative',
               }}>
-                {/* Popular Badge */}
-                {plan.popular && (
+                {/* Active Plan Badge - Highest Priority */}
+                {isActivePlan && (
+                  <View style={{
+                    position: 'absolute',
+                    top: -8,
+                    right: 16,
+                    backgroundColor: '#4CAF50',
+                    paddingHorizontal: 12,
+                    paddingVertical: 4,
+                    borderRadius: 12,
+                    zIndex: 3,
+                  }}>
+                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>ACTIVE</Text>
+                  </View>
+                )}
+                
+                {/* Popular Badge - Only show if not active */}
+                {plan.popular && !isActivePlan && (
                   <View style={{
                     position: 'absolute',
                     top: -8,
@@ -3021,8 +3084,8 @@ export default function PatientDashboard() {
                   </View>
                 )}
                 
-                {/* Best Value Badge */}
-                {plan.bestValue && (
+                {/* Best Value Badge - Only show if not active */}
+                {plan.bestValue && !isActivePlan && (
                   <View style={{
                     position: 'absolute',
                     top: -8,
@@ -3036,24 +3099,39 @@ export default function PatientDashboard() {
                     <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>BEST VALUE</Text>
                   </View>
                 )}
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 4 }}>{plan.name}</Text>
+                <Text style={{ 
+                  fontSize: 18, 
+                  fontWeight: 'bold', 
+                  color: isActivePlan ? '#4CAF50' : '#222', 
+                  marginBottom: 4 
+                }}>
+                  {plan.name}
+                  {isActivePlan && ' ✓'}
+                </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 18 }}>
                   <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#222' }}>{LocationService.getCurrencySymbol(plan.currency)}{plan.price.toLocaleString()}</Text>
                   <Text style={{ fontSize: 18, color: '#222', marginBottom: 2 }}>/month</Text>
                 </View>
                 <TouchableOpacity
                   style={{
-                    backgroundColor: isSelected ? '#EAF4EC' : '#F5F8F3',
+                    backgroundColor: isActivePlan ? '#E8F5E8' : isSelected ? '#EAF4EC' : '#F5F8F3',
                     borderRadius: 24,
                     paddingVertical: 12,
                     alignItems: 'center',
                     marginBottom: 18,
+                    borderWidth: isActivePlan ? 1 : 0,
+                    borderColor: isActivePlan ? '#4CAF50' : 'transparent',
                   }}
-                  onPress={() => setSelectedPlanId(plan.id)}
-                  activeOpacity={0.85}
+                  onPress={() => !isActivePlan && setSelectedPlanId(plan.id)}
+                  activeOpacity={isActivePlan ? 1 : 0.85}
+                  disabled={isActivePlan}
                 >
-                  <Text style={{ fontWeight: 'bold', fontSize: 17, color: '#222' }}>
-                    {currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
+                  <Text style={{ 
+                    fontWeight: 'bold', 
+                    fontSize: 17, 
+                    color: isActivePlan ? '#4CAF50' : '#222' 
+                  }}>
+                    {isActivePlan ? `Current Plan` : currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
                   </Text>
                 </TouchableOpacity>
                 {/* Session Details */}
@@ -4958,4 +5036,5 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 });
+
 

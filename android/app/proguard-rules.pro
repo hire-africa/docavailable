@@ -11,16 +11,4 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# WebRTC
--keep class org.webrtc.** { *; }
--keep class com.oney.WebRTCModule.** { *; }
-
-# Jitsi Meet
--keep class com.facebook.react.bridge.** { *; }
--keep class com.facebook.react.uimanager.** { *; }
--keep class com.facebook.react.views.** { *; }
-
-# React Native Vector Icons
--keep class com.oblador.vectoricons.** { *; }
-
 # Add any project specific keep options here:

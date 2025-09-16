@@ -1,11 +1,13 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import {
     Alert,
     Modal,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
@@ -34,6 +36,7 @@ interface PaymentModalProps {
 type PaymentMethod = 'bank' | 'mobile';
 
 export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess }: PaymentModalProps) {
+  const router = useRouter();
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('mobile');
   const [isProcessing, setIsProcessing] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -76,32 +79,42 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
 
       const result = await paymentService.processPayment(paymentRequest);
 
+      console.log('📋 Payment result received:', {
+        success: result.success,
+        paymentUrl: result.paymentUrl,
+        transactionId: result.transactionId,
+        status: result.status,
+        error: result.error
+      });
+
       if (result.success) {
         if (result.paymentUrl) {
-          // For Paychangu, we need to redirect to payment URL or show payment instructions
-          Alert.alert(
-            'Payment Initiated!',
-            `Please complete your payment using the provided link.\nTransaction ID: ${result.transactionId}`,
-            [
-              {
-                text: 'Complete Payment',
-                onPress: () => {
-                  // Here you would typically open the payment URL
-                  // For now, we'll simulate success
-                  onPaymentSuccess();
-                  onClose();
-                  setIsProcessing(false);
-                }
-              },
-              {
-                text: 'Cancel',
-                onPress: () => {
-                  setIsProcessing(false);
-                }
-              }
-            ]
-          );
+          // For Paychangu, redirect to checkout screen
+          console.log('🔄 Closing PaymentModal and navigating to checkout...');
+          onClose();
+          setIsProcessing(false);
+          
+          // Navigate to PayChangu checkout screen
+          console.log('🚀 Navigating to checkout with URL:', result.paymentUrl);
+          console.log('🚀 Transaction ID:', result.transactionId);
+          
+          try {
+            console.log('🔄 Attempting navigation to checkout...');
+            console.log('🔄 Router object:', router);
+            
+            const checkoutUrl = '/payments/checkout?url=' + encodeURIComponent(result.paymentUrl) + '&tx_ref=' + encodeURIComponent(result.transactionId || '');
+            console.log('🔄 Full checkout URL:', checkoutUrl);
+            
+            router.push(checkoutUrl);
+            console.log('✅ Navigation command sent successfully');
+            
+          } catch (error) {
+            console.error('❌ Navigation failed:', error);
+            Alert.alert('Navigation Error', 'Failed to open payment page. Please try again.');
+          }
         } else {
+          console.error('❌ No payment URL received from service');
+          console.error('❌ Full result object:', result);
           // Direct success (for immediate payments)
           Alert.alert(
             'Payment Successful!',
@@ -119,6 +132,8 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
           );
         }
       } else {
+        console.error('❌ Payment failed:', result.error);
+        console.error('❌ Full result object:', result);
         Alert.alert('Payment Failed', result.error || 'Please try again or contact support.');
         setIsProcessing(false);
       }
@@ -212,9 +227,14 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
               {selectedPaymentMethod === 'mobile' && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Phone Number</Text>
-                  <Text style={styles.textInput}>
-                    Enter your phone number
-                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your phone number"
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                  />
                 </View>
               )}
             </TouchableOpacity>
@@ -248,9 +268,14 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
               {selectedPaymentMethod === 'bank' && (
                 <View style={styles.inputContainer}>
                   <Text style={styles.inputLabel}>Account Number</Text>
-                  <Text style={styles.textInput}>
-                    Enter your account number
-                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter your account number"
+                    value={accountNumber}
+                    onChangeText={setAccountNumber}
+                    keyboardType="numeric"
+                    autoCapitalize="none"
+                  />
                 </View>
               )}
             </TouchableOpacity>
@@ -279,6 +304,17 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
 
         {/* Payment Button */}
         <View style={styles.footer}>
+          {/* Test Navigation Button */}
+          <TouchableOpacity
+            style={[styles.payButton, { backgroundColor: '#FF9800', marginBottom: 10 }]}
+            onPress={() => {
+              console.log('🧪 Testing direct navigation to checkout...');
+              router.push('/payments/checkout?url=' + encodeURIComponent('https://checkout.paychangu.com/test') + '&tx_ref=' + encodeURIComponent('TEST_123'));
+            }}
+          >
+            <Text style={styles.payButtonText}>Test Checkout Navigation</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[
               styles.payButton,
@@ -298,6 +334,7 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
               </Text>
             )}
           </TouchableOpacity>
+          
         </View>
       </View>
     </Modal>

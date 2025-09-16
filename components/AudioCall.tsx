@@ -10,7 +10,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import AudioCallService, { AudioCallEvents, AudioCallState } from '../services/audioCallService';
+import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -20,9 +20,12 @@ interface AudioCallProps {
   isDoctor: boolean;
   doctorName?: string;
   patientName?: string;
+  otherParticipantProfilePictureUrl?: string;
   onEndCall: () => void;
   onCallTimeout?: () => void;
   onCallRejected?: () => void;
+  onCallAnswered?: () => void;
+  isIncomingCall?: boolean;
 }
 
 export default function AudioCall({ 
@@ -31,9 +34,12 @@ export default function AudioCall({
   isDoctor, 
   doctorName = 'Doctor',
   patientName = 'Patient',
+  otherParticipantProfilePictureUrl,
   onEndCall,
   onCallTimeout,
-  onCallRejected
+  onCallRejected,
+  onCallAnswered,
+  isIncomingCall = false
 }: AudioCallProps) {
   const [callState, setCallState] = useState<AudioCallState>({
     isConnected: false,
@@ -47,12 +53,31 @@ export default function AudioCall({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    initializeCall();
+    const setupCall = async () => {
+      console.log('🎯 AudioCall useEffect triggered:', {
+        isIncomingCall,
+        appointmentId,
+        userId,
+        isDoctor
+      });
+      
+      if (!isIncomingCall) {
+        console.log('🚀 AudioCall: Initializing call (outgoing)');
+        await initializeCall();
+      } else {
+        console.log('📞 AudioCall: Setting up for incoming call');
+        // For incoming calls, set up event listeners and process offer
+        await setupEventListeners();
+      }
+    };
+    
+    setupCall();
     startPulseAnimation();
     return () => {
-      AudioCallService.endCall();
+      console.log('🧹 AudioCall cleanup - ending call');
+      AudioCallService.getInstance().endCall();
     };
-  }, []);
+  }, [isIncomingCall]);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
@@ -60,8 +85,84 @@ export default function AudioCall({
     }
   }, [callState.connectionState]);
 
+  const setupEventListeners = async () => {
+    console.log('📞 AudioCall: Setting up event listeners for incoming call');
+    
+    const events: AudioCallEvents = {
+      onStateChange: (state) => {
+        console.log('📊 Call state changed:', state);
+        setCallState(state);
+      },
+      onRemoteStream: (stream) => {
+        console.log('🎵 Remote audio stream received');
+      },
+      onCallEnded: () => {
+        console.log('📞 Call ended');
+        onEndCall();
+      },
+      onError: (error) => {
+        console.error('❌ Call error:', error);
+        Alert.alert('Call Error', error);
+      },
+      onCallAnswered: () => {
+        console.log('✅ Call answered');
+        onCallAnswered?.();
+      },
+      onCallRejected: () => {
+        console.log('❌ Call rejected');
+        onCallRejected?.();
+      },
+      onCallTimeout: () => {
+        console.log('⏰ Call timeout');
+        onCallTimeout?.();
+      },
+    };
+
+    // Set up event listeners
+    AudioCallService.getInstance().setEvents(events);
+    
+    // Wait for WebSocket connection to be fully established
+    const audioCallService = AudioCallService.getInstance();
+    
+    // Wait for connection to be ready with retry logic
+    let retryCount = 0;
+    const maxRetries = 50; // 5 seconds total
+    const retryInterval = 100; // 100ms
+    
+    console.log('⏳ Waiting for WebSocket connection to be established...');
+    while (retryCount < maxRetries) {
+      if (audioCallService.isConnectedToSignaling()) {
+        console.log('✅ WebSocket connection established, proceeding with offer processing');
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, retryInterval));
+      retryCount++;
+    }
+    
+    if (retryCount >= maxRetries) {
+      console.error('❌ WebSocket connection timeout after 5 seconds');
+      Alert.alert('Connection Error', 'Failed to establish connection. Please try again.');
+      onEndCall();
+      return;
+    }
+    
+    // Now process the pending offer
+    try {
+      console.log('📞 AudioCall: Processing incoming offer...');
+      await audioCallService.processIncomingOffer();
+      console.log('✅ AudioCall: Incoming offer processed successfully');
+    } catch (error) {
+      console.error('❌ AudioCall: Failed to process incoming offer:', error);
+      Alert.alert('Call Error', 'Failed to accept call. Please try again.');
+      onEndCall();
+    }
+  };
+
   const initializeCall = async () => {
     try {
+      // Reset the service state before initializing
+      await AudioCallService.getInstance().reset();
+
       const events: AudioCallEvents = {
         onStateChange: (state) => {
           setCallState(state);
@@ -90,12 +191,10 @@ export default function AudioCall({
         },
       };
 
-      await AudioCallService.initialize(appointmentId, userId, events);
+      await AudioCallService.getInstance().initialize(appointmentId, userId, events);
       
-      // If doctor, create offer immediately
-      if (isDoctor) {
-        await AudioCallService.createOffer();
-      }
+      // Offer creation is now handled automatically in AudioCallService.initialize
+      console.log('📞 Call initialization completed - offer will be created automatically if needed');
       
     } catch (error) {
       console.error('Failed to initialize audio call:', error);
@@ -124,7 +223,7 @@ export default function AudioCall({
   };
 
   const toggleAudio = () => {
-    const isEnabled = AudioCallService.toggleAudio();
+    const isEnabled = AudioCallService.getInstance().toggleAudio();
     // Visual feedback
     if (isEnabled) {
       // Haptic feedback could be added here
@@ -141,7 +240,7 @@ export default function AudioCall({
           text: 'End Call', 
           style: 'destructive',
           onPress: async () => {
-            await AudioCallService.endCall();
+            await AudioCallService.getInstance().endCall();
             onEndCall();
           }
         }

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiService } from '../app/services/apiService';
+import { apiService } from './apiService';
 import reactNativeEncryptionService from './reactNativeEncryptionService';
 
 interface LocalMessage {

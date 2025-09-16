@@ -17,6 +17,8 @@ interface AudioCallModalProps {
   isDoctor: boolean;
   doctorName?: string;
   patientName?: string;
+  otherParticipantProfilePictureUrl?: string;
+  isIncomingCall?: boolean;
   onCallTimeout?: () => void;
   onCallRejected?: () => void;
 }
@@ -29,6 +31,8 @@ export default function AudioCallModal({
   isDoctor,
   doctorName,
   patientName,
+  otherParticipantProfilePictureUrl,
+  isIncomingCall = false,
   onCallTimeout,
   onCallRejected,
 }: AudioCallModalProps) {
@@ -52,6 +56,30 @@ export default function AudioCallModal({
     setShowAudioCall(false);
     onCallRejected?.();
   };
+
+  // For incoming calls, skip the modal and go directly to AudioCall
+  if (isIncomingCall) {
+    return (
+      <Modal
+        visible={visible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={handleEndCall}
+        statusBarTranslucent={true}
+      >
+        <AudioCall
+          appointmentId={appointmentId}
+          userId={userId}
+          isDoctor={isDoctor}
+          doctorName={doctorName}
+          patientName={patientName}
+          otherParticipantProfilePictureUrl={otherParticipantProfilePictureUrl}
+          onEndCall={handleEndCall}
+          isIncomingCall={isIncomingCall}
+        />
+      </Modal>
+    );
+  }
 
   if (showAudioCall) {
     return (

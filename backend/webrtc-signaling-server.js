@@ -6,10 +6,16 @@ const axios = require('axios');
 // Create HTTP server
 const server = http.createServer();
 
-// Create WebSocket server
-const wss = new WebSocket.Server({ 
+// Create WebSocket server for audio signaling
+const audioWss = new WebSocket.Server({ 
   server,
   path: '/audio-signaling'
+});
+
+// Create WebSocket server for chat signaling
+const chatWss = new WebSocket.Server({ 
+  server,
+  path: '/chat-signaling'
 });
 
 // Store active connections by appointment ID
@@ -22,8 +28,8 @@ const sessionStates = new Map();
 // API base URL
 const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
 
-// Handle WebSocket connections
-wss.on('connection', (ws, req) => {
+// Handle WebSocket connections for both audio and chat
+const handleConnection = (ws, req, connectionType) => {
   console.log('🔌 New WebSocket connection established');
   
   // Extract appointment ID from URL path or query parameters
@@ -32,7 +38,7 @@ wss.on('connection', (ws, req) => {
   let appointmentId = pathParts[pathParts.length - 1];
   
   // If no appointment ID in path, try query parameter
-  if (!appointmentId || appointmentId === 'audio-signaling') {
+  if (!appointmentId || appointmentId === 'audio-signaling' || appointmentId === 'chat-signaling') {
     appointmentId = urlParts.query.appointmentId;
   }
   
@@ -159,6 +165,16 @@ wss.on('connection', (ws, req) => {
   ws.on('error', (error) => {
     console.error(`❌ WebSocket error for appointment ${appointmentId}:`, error);
   });
+};
+
+// Set up event listeners for both WebSocket servers
+audioWss.on('connection', (ws, req) => {
+  console.log('🔌 [Audio] New audio WebSocket connection');
+  handleConnection(ws, req, 'audio');
+});
+chatWss.on('connection', (ws, req) => {
+  console.log('🔌 [Chat] New chat WebSocket connection');
+  handleConnection(ws, req, 'chat');
 });
 
 // Health check endpoint
@@ -181,7 +197,8 @@ server.on('request', (req, res) => {
 const PORT = process.env.WEBRTC_SIGNALING_PORT || 8080;
 server.listen(PORT, () => {
   console.log(`🚀 WebRTC Signaling Server running on port ${PORT}`);
-  console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}/audio-signaling/{appointmentId}`);
+  console.log(`📡 Audio WebSocket endpoint: ws://localhost:${PORT}/audio-signaling/{appointmentId}`);
+  console.log(`💬 Chat WebSocket endpoint: ws://localhost:${PORT}/chat-signaling/{appointmentId}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
 });
 
@@ -216,18 +233,114 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // ========================================
+// PUSH NOTIFICATION FUNCTIONS
+// ========================================
+
+// Send push notification for chat message
+async function sendPushNotification(appointmentId, messageData, apiMessageData) {
+  try {
+    console.log(`🔔 [Backend] Sending push notification for message:`, {
+      appointmentId,
+      senderId: messageData.sender_id,
+      messageId: apiMessageData.id
+    });
+
+    // Get appointment details to find recipient
+    const appointmentResponse = await axios.get(`${API_BASE_URL}/api/appointments/${appointmentId}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN || 'your-api-token'}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!appointmentResponse.data.success) {
+      console.error('❌ [Backend] Failed to get appointment details for notification');
+      return;
+    }
+
+    const appointment = appointmentResponse.data.data;
+    const senderId = messageData.sender_id;
+    
+    // Determine recipient
+    let recipientId = null;
+    if (senderId === appointment.patient_id) {
+      recipientId = appointment.doctor_id;
+    } else if (senderId === appointment.doctor_id) {
+      recipientId = appointment.patient_id;
+    }
+
+    if (!recipientId) {
+      console.error('❌ [Backend] Could not determine recipient for notification');
+      return;
+    }
+
+    // Get recipient user details
+    const userResponse = await axios.get(`${API_BASE_URL}/api/users/${recipientId}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN || 'your-api-token'}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!userResponse.data.success) {
+      console.error('❌ [Backend] Failed to get recipient details for notification');
+      return;
+    }
+
+    const recipient = userResponse.data.data;
+    
+    // Check if recipient has push notifications enabled
+    if (!recipient.push_notifications_enabled || !recipient.push_token) {
+      console.log('🔔 [Backend] Recipient has push notifications disabled or no token');
+      return;
+    }
+
+    // Send notification via API
+    const notificationResponse = await axios.post(`${API_BASE_URL}/api/notifications/send-chat-message`, {
+      appointment_id: appointmentId,
+      sender_id: senderId,
+      recipient_id: recipientId,
+      message: messageData.message,
+      message_id: apiMessageData.id
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN || 'your-api-token'}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (notificationResponse.data.success) {
+      console.log('✅ [Backend] Push notification sent successfully');
+    } else {
+      console.error('❌ [Backend] Failed to send push notification:', notificationResponse.data);
+    }
+
+  } catch (error) {
+    console.error('❌ [Backend] Error sending push notification:', error);
+  }
+}
+
+// ========================================
 // SESSION MANAGEMENT FUNCTIONS
 // ========================================
 
 // Handle chat messages and session management
 async function handleChatMessage(appointmentId, data, senderWs) {
   try {
+    console.log(`📨 [Backend] Handling chat message for appointment ${appointmentId}:`, {
+      messageId: data.message.id,
+      senderId: data.message.sender_id,
+      hasAuthToken: !!data.authToken,
+      message: data.message.message
+    });
+
     // First, send to your existing API to store in database
     const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
       message: data.message.message,
       message_type: data.message.message_type,
       media_url: data.message.media_url,
-      temp_id: data.message.temp_id
+      temp_id: data.message.temp_id,
+      message_id: data.message.id // Include the message ID from WebRTC
     }, {
       headers: {
         'Authorization': `Bearer ${data.authToken}`,
@@ -235,18 +348,29 @@ async function handleChatMessage(appointmentId, data, senderWs) {
       }
     });
 
+    console.log(`📨 [Backend] API response:`, {
+      success: response.data.success,
+      messageId: response.data.data?.id
+    });
+
     if (response.data.success) {
       // Check if this message triggers session activation
       await checkSessionActivation(appointmentId, data.message, response.data.data);
       
-      // Broadcast message to all participants
-      broadcastToAll(appointmentId, {
+      // Send push notification to the recipient
+      await sendPushNotification(appointmentId, data.message, response.data.data);
+      
+      // Broadcast message to other participants (excluding sender)
+      console.log(`📤 [Backend] Broadcasting message to other participants for appointment ${appointmentId}`);
+      broadcastToOthers(senderWs, appointmentId, {
         type: 'chat-message',
         message: response.data.data
       });
+    } else {
+      console.error('❌ [Backend] API returned error:', response.data);
     }
   } catch (error) {
-    console.error('❌ Error handling chat message:', error);
+    console.error('❌ [Backend] Error handling chat message:', error);
     senderWs.send(JSON.stringify({
       type: 'error',
       message: 'Failed to send message'
@@ -562,11 +686,21 @@ function broadcastToAll(appointmentId, data) {
 // Helper function to broadcast to others (excluding sender)
 function broadcastToOthers(senderWs, appointmentId, data) {
   const appointmentConnections = connections.get(appointmentId) || [];
-  appointmentConnections.forEach(connection => {
+  console.log(`📤 [Broadcast] Total connections for appointment ${appointmentId}: ${appointmentConnections.length}`);
+  
+  let sentCount = 0;
+  appointmentConnections.forEach((connection, index) => {
     if (connection !== senderWs && connection.readyState === WebSocket.OPEN) {
       connection.send(JSON.stringify(data));
+      sentCount++;
+      console.log(`📤 [Broadcast] Sent to connection ${index + 1}`);
+    } else if (connection === senderWs) {
+      console.log(`📤 [Broadcast] Skipped sender connection ${index + 1}`);
+    } else {
+      console.log(`📤 [Broadcast] Skipped closed connection ${index + 1}`);
     }
   });
+  console.log(`📤 [Broadcast] Sent to ${sentCount} other participants`);
 }
 
 // ========================================

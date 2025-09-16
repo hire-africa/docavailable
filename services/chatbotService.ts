@@ -1,17 +1,17 @@
 // Chatbot Service for handling health-related questions
-// Uses DeepSeek API for intelligent responses with fallback to keyword-based system
+// Uses OpenAI API for intelligent responses with fallback to keyword-based system
 
-import { DeepSeekResponse, DeepSeekService } from './deepseekService';
+import { OpenAIResponse, OpenAIService } from './openaiService';
 
 // Re-export the interface for backward compatibility
-export interface ChatbotResponse extends DeepSeekResponse {}
+export interface ChatbotResponse extends OpenAIResponse {}
 
 
 
 export class ChatbotService {
   static async getResponse(userInput: string): Promise<ChatbotResponse> {
-    // Delegate to DeepSeek service
-    return DeepSeekService.getResponse(userInput);
+    // Delegate to OpenAI service
+    return OpenAIService.getResponse(userInput);
   }
 
 

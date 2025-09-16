@@ -67,12 +67,15 @@ services:
     value: https://api.paychangu.com/payment
   # Google OAuth Configuration
   - key: GOOGLE_CLIENT_ID
-    value: ${GOOGLE_CLIENT_ID}
+    value: 584940778531-f1n0j5i8a7bd7hm8g57fbafk0falikbv.apps.googleusercontent.com
   - key: GOOGLE_CLIENT_SECRET
-    value: ${GOOGLE_CLIENT_SECRET}
+    value: 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
   - key: PAYCHANGU_VERIFY_URL
     value: https://api.paychangu.com/verify-payment
   - key: PAYCHANGU_CALLBACK_URL
     value: https://docavailable-3vbdv.ondigitalocean.app/api/payments/webhook
   - key: PAYCHANGU_RETURN_URL
     value: https://docavailable-3vbdv.ondigitalocean.app/payment/success
+  # OpenAI Configuration
+  - key: OPENAI_API_KEY
+    value: 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

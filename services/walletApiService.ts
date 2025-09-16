@@ -1,4 +1,4 @@
-import { ApiResponse, apiService } from '../app/services/apiService';
+import { ApiResponse, apiService } from './apiService';
 
 // Wallet interfaces matching Laravel backend
 export interface DoctorWallet {

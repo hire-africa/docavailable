@@ -1,4 +1,4 @@
-import { ApiResponse, apiService } from '../app/services/apiService';
+import { ApiResponse, apiService } from './apiService';
 
 // Notification interfaces matching Laravel backend
 export interface Notification {

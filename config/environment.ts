@@ -49,6 +49,7 @@ export const environment = {
   
   // AI Service Configuration
   DEEPSEEK_API_KEY: getEnvVar('DEEPSEEK_API_KEY', ''),
+  OPENAI_API_KEY: getEnvVar('OPENAI_API_KEY', ''),
 };
 
 export default environment; 

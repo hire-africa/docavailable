@@ -1,6 +1,5 @@
 import { Audio } from 'expo-av';
 import { apiService } from '../app/services/apiService';
-import { messageStorageService } from './messageStorageService';
 
 export interface VoiceRecordingState {
   isRecording: boolean;
@@ -172,34 +171,8 @@ class VoiceRecordingService {
     senderId: number,
     senderName: string
   ): Promise<boolean> {
-    try {
-      // Upload the voice message first
-      const mediaUrl = await this.uploadVoiceMessage(appointmentId, audioUri);
-      
-      if (!mediaUrl) {
-        console.error('Failed to upload voice message');
-        return false;
-      }
-
-      // Generate a more unique identifier for voice messages
-      const voiceMessageId = `voice_${appointmentId}_${senderId}_${Date.now()}_${Math.random().toString(36).substr(2, 12)}`;
-      
-      console.log('🎤 Sending voice message with unique ID:', voiceMessageId);
-
-      // Use the messageStorageService to send the voice message
-      const message = await messageStorageService.sendVoiceMessage(
-        appointmentId,
-        mediaUrl,
-        senderId,
-        senderName,
-        voiceMessageId // Pass the unique voice message ID
-      );
-
-      return !!message;
-    } catch (error) {
-      console.error('Error sending voice message:', error);
-      return false;
-    }
+    console.log('📤 [VoiceService] Voice message sending is disabled');
+    return false;
   }
 
   getRecordingDuration(): number {

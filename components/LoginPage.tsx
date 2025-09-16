@@ -171,9 +171,7 @@ export default function LoginPage() {
             }
 
             // Google OAuth configuration
-            const redirectUri = AuthSession.makeRedirectUri({
-                scheme: 'docavailable',
-            });
+            const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app';
 
             const request = new AuthSession.AuthRequest({
                 clientId: GOOGLE_OAUTH_CONFIG.clientId,

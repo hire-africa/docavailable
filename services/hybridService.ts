@@ -1,4 +1,4 @@
-import { apiService } from '../app/services/apiService';
+import { apiService } from './apiService';
 import { notificationApiService } from './notificationApiService';
 import { walletApiService } from './walletApiService';
 
