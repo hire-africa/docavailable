@@ -892,6 +892,18 @@ Route::middleware(['auth:api'])->group(function () {
 Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
 Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
 
+// Debug endpoint to check environment variables
+Route::get('/chatbot/debug', function () {
+    return response()->json([
+        'openai_key_exists' => !empty(env('OPENAI_API_KEY')),
+        'openai_key_length' => env('OPENAI_API_KEY') ? strlen(env('OPENAI_API_KEY')) : 0,
+        'openai_key_starts_with_sk' => env('OPENAI_API_KEY') ? str_starts_with(env('OPENAI_API_KEY'), 'sk-') : false,
+        'openai_key_preview' => env('OPENAI_API_KEY') ? substr(env('OPENAI_API_KEY'), 0, 10) . '...' : 'not set',
+        'app_env' => env('APP_ENV'),
+        'app_debug' => env('APP_DEBUG')
+    ]);
+});
+
 // Admin routes (admin only)
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::get('/admin/users', [AdminController::class, 'getAllUsers']);
