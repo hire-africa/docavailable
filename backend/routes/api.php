@@ -917,22 +917,17 @@ Route::get('/chatbot/test-simple-openai', function () {
     $apiKey = trim(env('OPENAI_API_KEY'));
     
     try {
+        // Try with a simpler model first
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
             'Content-Type' => 'application/json',
-        ])->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
-            'model' => 'gpt-3.5-turbo',
-            'messages' => [
-                ['role' => 'user', 'content' => 'Hello']
-            ],
-            'max_tokens' => 10,
-        ]);
+        ])->timeout(30)->post('https://api.openai.com/v1/models');
         
         return response()->json([
             'status' => $response->status(),
             'success' => $response->successful(),
             'body' => $response->body(),
-            'headers' => $response->headers(),
+            'api_key_preview' => substr($apiKey, 0, 20) . '...' . substr($apiKey, -10),
         ]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()]);
