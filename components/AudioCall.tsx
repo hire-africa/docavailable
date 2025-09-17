@@ -53,6 +53,7 @@ export default function AudioCall({
   const [isInitializing, setIsInitializing] = useState(!isIncomingCall);
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Track speaker state
   
   // For outgoing calls, we should never show incoming call UI
   const shouldShowIncomingUI = isIncomingCall && isRinging;
@@ -277,6 +278,15 @@ export default function AudioCall({
     Vibration.vibrate(50);
   };
 
+  const toggleSpeaker = () => {
+    Vibration.vibrate(50);
+    setIsSpeakerOn(prev => !prev);
+    
+    // Toggle speaker mode in AudioCallService
+    const audioCallService = AudioCallService.getInstance();
+    audioCallService.toggleSpeaker(!isSpeakerOn);
+  };
+
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
@@ -446,8 +456,19 @@ export default function AudioCall({
         /* Connected Call Controls - Speaker/Mute/End */
         <View style={styles.controls}>
           {/* Speaker Button */}
-          <TouchableOpacity style={styles.controlButton}>
-            <Ionicons name="volume-high" size={20} color="white" />
+          <TouchableOpacity 
+            style={[
+              styles.controlButton,
+              isSpeakerOn && styles.activeButton
+            ]}
+            onPress={toggleSpeaker}
+            activeOpacity={0.8}
+          >
+            <Ionicons 
+              name={isSpeakerOn ? "volume-high" : "volume-medium"} 
+              size={20} 
+              color="white" 
+            />
           </TouchableOpacity>
 
           {/* Mute/Unmute Button */}
@@ -581,6 +602,9 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     opacity: 0.5,
+  },
+  activeButton: {
+    backgroundColor: '#4CAF50',
   },
   endCallButton: {
     backgroundColor: '#F44336',
