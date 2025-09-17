@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Success - DocAvailable</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            max-width: 500px;
+        }
+        .success-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        .message {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .details {
+            font-size: 1rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+        .button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        .code-display {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✅</div>
+        <div class="message">Google Authentication Successful!</div>
+        <div class="details">
+            <p>You have successfully authenticated with Google.</p>
+            <p>You can now close this window and return to the DocAvailable app.</p>
+        </div>
+        
+        <div id="codeSection" style="display: none;">
+            <p><strong>Authorization Code:</strong></p>
+            <div class="code-display" id="authCode"></div>
+            <button onclick="copyCode()" class="button">Copy Code</button>
+        </div>
+        
+        <div>
+            <a href="javascript:window.close()" class="button">Close Window</a>
+            <a href="/" class="button">Go to Home</a>
+        </div>
+    </div>
+
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const error = urlParams.get('error');
+
+        if (error) {
+            // Handle OAuth error
+            document.querySelector('.success-icon').textContent = '❌';
+            document.querySelector('.message').textContent = 'OAuth Error';
+            document.querySelector('.details').innerHTML = `
+                <p>Error: ${error}</p>
+                <p>Description: ${urlParams.get('error_description') || 'Unknown error'}</p>
+                <p>Please try again.</p>
+            `;
+        } else if (code) {
+            // Show the authorization code for debugging
+            document.getElementById('codeSection').style.display = 'block';
+            document.getElementById('authCode').textContent = code;
+            
+            // Log for debugging
+            console.log('OAuth Success - Authorization Code:', code);
+        }
+
+        function copyCode() {
+            if (code) {
+                navigator.clipboard.writeText(code).then(() => {
+                    alert('Code copied to clipboard!');
+                }).catch(() => {
+                    // Fallback for older browsers
+                    const textArea = document.createElement('textarea');
+                    textArea.value = code;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('Code copied to clipboard!');
+                });
+            }
+        }
+
+        // Auto-close after 10 seconds if no interaction
+        setTimeout(() => {
+            if (confirm('Close this window and return to the app?')) {
+                window.close();
+            }
+        }, 10000);
+    </script>
+</body>
+</html>

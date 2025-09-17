@@ -1,6 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as AuthSession from 'expo-auth-session';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -14,9 +13,10 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
+import { GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
+import GoogleOAuthWebView from './GoogleOAuthWebView';
 
 const { width } = Dimensions.get('window');
 
@@ -27,6 +27,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showWebView, setShowWebView] = useState(false);
     const { userType } = useLocalSearchParams<{ userType?: string }>();
 
     const handleLogin = async () => {
@@ -60,19 +61,18 @@ export default function LoginPage() {
                 } else if (authState.data.user.user_type === 'patient') {
                     navigateToDashboard('patient', true);
                 } else {
-                    router.replace('/'); // fallback
+                    navigateToDashboard('patient', true);
                 }
             } else {
-                console.error('LoginPage: No user data in response:', authState);
-                Alert.alert('Login Failed', 'User data not found.');
-                await authService.signOut();
+                console.log('LoginPage: No user data in response');
+                Alert.alert('Login Failed', 'Invalid credentials. Please try again.');
             }
         } catch (error: any) {
             console.error('LoginPage: Login error:', error);
             
-            // Enhanced error handling with detailed messages and suggestions
+            // Enhanced error handling
             let errorMessage = 'Login failed. Please try again.';
-            let errorTitle = 'Login Failed';
+            let errorTitle = 'Login Error';
             let errorSuggestion = '';
             
             // Check if we have detailed error information from the backend
@@ -80,23 +80,19 @@ export default function LoginPage() {
                 const errorData = error.response.data;
                 errorMessage = errorData.message || errorMessage;
                 
-                // Set title based on error type
                 if (errorData.error_type) {
                     switch (errorData.error_type) {
-                        case 'validation_error':
-                            errorTitle = 'Validation Error';
+                        case 'invalid_credentials':
+                            errorTitle = 'Invalid Credentials';
                             break;
-                        case 'email_not_found':
-                            errorTitle = 'Email Not Found';
+                        case 'account_locked':
+                            errorTitle = 'Account Locked';
                             break;
-                        case 'invalid_password':
-                            errorTitle = 'Invalid Password';
+                        case 'email_not_verified':
+                            errorTitle = 'Email Not Verified';
                             break;
                         case 'account_suspended':
                             errorTitle = 'Account Suspended';
-                            break;
-                        case 'account_pending':
-                            errorTitle = 'Account Pending';
                             break;
                         case 'database_error':
                             errorTitle = 'Database Error';
@@ -163,272 +159,29 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleSignIn = async () => {
-        setLoading(true);
-        try {
-            // Check if Google OAuth is configured
-            if (!GOOGLE_OAUTH_CONFIG.clientId || GOOGLE_OAUTH_CONFIG.clientId === 'YOUR_GOOGLE_CLIENT_ID') {
-                Alert.alert(
-                    'Google OAuth Not Configured',
-                    'Please configure your Google OAuth credentials in the environment variables.',
-                    [{ text: 'OK' }]
-                );
-                return;
-            }
-
-            // Google OAuth configuration - use OAuth redirect page
-            const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html';
-            
-            console.log('Using redirect URI:', redirectUri);
-
-            console.log('Platform Detection:', {
-                PlatformOS: Platform.OS,
-                windowLocation: typeof window !== 'undefined' ? window.location.origin : 'undefined',
-                isWeb: Platform.OS === 'web'
-            });
-
-            console.log('Google OAuth Config:', {
-                clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                redirectUri,
-                platform: Platform.OS,
-                scopes: GOOGLE_OAUTH_CONFIG.scopes
-            });
-
-            const requestConfig = {
-                clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                scopes: GOOGLE_OAUTH_CONFIG.scopes,
-                redirectUri,
-                responseType: AuthSession.ResponseType.Code,
-                extraParams: {
-                    access_type: 'offline',
-                },
-            };
-
-            console.log('AuthRequest Config:', requestConfig);
-
-            const request = new AuthSession.AuthRequest(requestConfig);
-
-            console.log('OAuth Discovery Config:', GOOGLE_OAUTH_CONFIG.discovery);
-            
-            const result = await request.promptAsync(GOOGLE_OAUTH_CONFIG.discovery);
-
-            console.log('Google OAuth Result:', {
-                type: result.type,
-                params: (result as any).params,
-                error: (result as any).error,
-                errorCode: (result as any).errorCode
-            });
-
-            if (result.type === 'success') {
-                // Exchange authorization code for tokens
-                const tokenResponse = await AuthSession.exchangeCodeAsync(
-                    {
-                        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                        clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
-                        code: result.params.code,
-                        redirectUri,
-                        extraParams: {
-                            code_verifier: request.codeVerifier,
-                        },
-                    },
-                    GOOGLE_OAUTH_CONFIG.discovery
-                );
-
-                // Get user info from Google
-                const userInfoResponse = await fetch(
-                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
-                );
-                
-                if (!userInfoResponse.ok) {
-                    throw new Error(GOOGLE_AUTH_ERRORS.USER_INFO_FAILED);
-                }
-                
-                const userInfo = await userInfoResponse.json();
-
-                // Create a JWT-like token for your backend
-                const googleToken = {
-                    sub: userInfo.id,
-                    email: userInfo.email,
-                    name: userInfo.name,
-                    given_name: userInfo.given_name,
-                    family_name: userInfo.family_name,
-                    picture: userInfo.picture,
-                };
-
-                // Send to your backend
-                const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
-                
-                if (authState.success && authState.data.user) {
-                    const user = authState.data.user;
-                    
-                    if (user.user_type === 'admin') {
-                        router.replace('/admin-dashboard');
-                } else if (user.user_type === 'doctor') {
-                    if (user.status === 'pending') {
-                        Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
-                        await authService.signOut();
-                        return;
-                    }
-                    if (user.status === 'suspended') {
-                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
-                        await authService.signOut();
-                        return;
-                    }
-                    router.replace('/doctor-dashboard');
-                    } else if (user.user_type === 'patient') {
-                        router.replace('/patient-dashboard');
-                    } else {
-                        router.replace('/');
-                    }
-                } else {
-                    Alert.alert('Login Failed', 'Google authentication failed.');
-                    await authService.signOut();
-                }
-            } else if (result.type === 'error') {
-                // Handle OAuth errors
-                const errorResult = result as any;
-                console.error('Google OAuth Error Details:', {
-                    error: errorResult.error,
-                    errorCode: errorResult.errorCode,
-                    params: errorResult.params,
-                    fullResult: result
-                });
-                
-                let errorMessage = 'Google sign-in failed. Please try again.';
-                let errorTitle = 'Google Sign-In Error';
-                
-                // More specific error handling
-                if (errorResult.errorCode === '400') {
-                    errorMessage = `Invalid Google OAuth configuration. Error: ${errorResult.error || 'Unknown 400 error'}`;
-                    errorTitle = 'Configuration Error';
-                } else if (errorResult.errorCode === '403') {
-                    errorMessage = 'Google sign-in is not enabled or configured properly.';
-                    errorTitle = 'Access Denied';
-                } else if (errorResult.errorCode === 'redirect_uri_mismatch') {
-                    errorMessage = 'Redirect URI mismatch. Please check your Google Cloud Console redirect URIs.';
-                    errorTitle = 'Redirect URI Error';
-                } else if (errorResult.error === 'invalid_request') {
-                    errorMessage = `Invalid request: ${errorResult.errorCode || 'Unknown error'}`;
-                    errorTitle = 'Invalid Request';
-                } else if (errorResult.error === 'unauthorized_client') {
-                    errorMessage = 'Client not authorized for this request type.';
-                    errorTitle = 'Unauthorized Client';
-                }
-                
-                console.error('Final Error Message:', errorMessage);
-                Alert.alert(errorTitle, errorMessage);
-            } else {
-                // User cancelled the sign-in
-                console.log('Google sign-in was cancelled');
-            }
-        } catch (error: any) {
-            console.error('Google login error:', error);
-            
-            // Enhanced Google sign-in error handling
-            let errorMessage = 'Failed to sign in with Google. Please try again.';
-            let errorTitle = 'Google Login Failed';
-            let errorSuggestion = '';
-            
-            // Check if we have detailed error information from the backend
-            if (error.response?.data) {
-                const errorData = error.response.data;
-                errorMessage = errorData.message || errorMessage;
-                
-                if (errorData.error_type) {
-                    switch (errorData.error_type) {
-                        case 'user_not_registered':
-                            // Handle unregistered user - redirect to patient signup
-                            errorTitle = 'Account Not Found';
-                            errorMessage = errorData.message || 'This email is not registered.';
-                            errorSuggestion = errorData.suggestion || 'Please complete the patient registration process.';
-                            
-                            // Store Google user data for pre-filling signup form
-                            if (errorData.google_user_data) {
-                                try {
-                                    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                                        sessionStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
-                                    } else {
-                                        await AsyncStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
-                                    }
-                                } catch (storageError) {
-                                    console.warn('Could not store Google user data:', storageError);
-                                }
-                            }
-                            
-                            // Show alert and redirect to patient signup
-                            Alert.alert(
-                                errorTitle,
-                                `${errorMessage}\n\nSuggestion: ${errorSuggestion}`,
-                                [
-                                    {
-                                        text: 'Sign Up',
-                                        onPress: () => router.push('/patient-signup')
-                                    },
-                                    {
-                                        text: 'Cancel',
-                                        style: 'cancel'
-                                    }
-                                ]
-                            );
-                            return; // Exit early to avoid showing another alert
-                            
-                        case 'invalid_google_token':
-                            errorTitle = 'Invalid Google Token';
-                            break;
-                        case 'google_verification_failed':
-                            errorTitle = 'Google Verification Failed';
-                            break;
-                        case 'account_suspended':
-                            errorTitle = 'Account Suspended';
-                            break;
-                        case 'account_pending':
-                            errorTitle = 'Account Pending';
-                            break;
-                        default:
-                            errorTitle = 'Google Login Error';
-                    }
-                }
-                
-                if (errorData.suggestion) {
-                    errorSuggestion = errorData.suggestion;
-                }
-            } else if (error.message) {
-                // Fallback to message-based error handling
-                if (error.message.includes('Firebase configuration not available')) {
-                    errorMessage = 'Google authentication is not configured. Please contact support.';
-                    errorSuggestion = 'This is a configuration issue. Please contact our support team.';
-                } else if (error.message.includes('Google sign-in was cancelled')) {
-                    errorMessage = 'Google sign-in was cancelled.';
-                    errorSuggestion = 'You can try signing in again or use email/password login.';
-                } else if (error.message.includes('Firebase Auth not initialized')) {
-                    errorMessage = 'Authentication service is not ready. Please try again.';
-                    errorSuggestion = 'Please wait a moment and try again.';
-                } else if (error.message.includes('Google authentication failed')) {
-                    errorMessage = 'Google authentication failed. Please check your internet connection and try again.';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else if (error.message.includes('Network error')) {
-                    errorMessage = 'Network error during Google sign-in. Please check your internet connection.';
-                    errorTitle = 'Network Error';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else if (error.message.includes('Request timed out')) {
-                    errorMessage = 'Google sign-in request timed out. Please try again.';
-                    errorTitle = 'Timeout Error';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else {
-                    errorMessage = error.message;
-                }
-            }
-            
-            // Show error with suggestion if available
-            if (errorSuggestion) {
-                Alert.alert(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
-            } else {
-                Alert.alert(errorTitle, errorMessage);
-            }
-        } finally {
-            setLoading(false);
+    const handleGoogleSignIn = () => {
+        // Check if Google OAuth is configured
+        if (!GOOGLE_OAUTH_CONFIG.clientId || GOOGLE_OAUTH_CONFIG.clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+            Alert.alert(
+                'Google OAuth Not Configured',
+                'Please configure your Google OAuth credentials in the environment variables.',
+                [{ text: 'OK' }]
+            );
+            return;
         }
+
+        // Show WebView for Google OAuth
+        setShowWebView(true);
     };
+
+    if (showWebView) {
+        return (
+            <GoogleOAuthWebView
+                onClose={() => setShowWebView(false)}
+                onSuccess={() => setShowWebView(false)}
+            />
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -440,22 +193,21 @@ export default function LoginPage() {
                     <View style={styles.userTypeIndicator}>
                         <FontAwesome 
                             name={userType === 'doctor' ? 'user-md' : 'user'} 
-                            size={16} 
-                            color="#4CAF50" 
+                            size={16}
+                            color="#4CAF50"
                         />
                         <Text style={styles.userTypeText}>
-                            {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
+                            {userType === 'doctor' ? 'Doctor' : 'Patient'} Login
                         </Text>
                     </View>
                 )}
 
                 <View style={styles.form}>
                     <View style={styles.inputContainer}>
-                        <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
+                        <FontAwesome name="envelope" size={16} color="#666" style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="Email"
-                            placeholderTextColor="#000"
                             value={email}
                             onChangeText={setEmail}
                             keyboardType="email-address"
@@ -465,11 +217,10 @@ export default function LoginPage() {
                     </View>
 
                     <View style={styles.inputContainer}>
-                        <FontAwesome name="lock" size={20} color="#666" style={styles.inputIcon} />
+                        <FontAwesome name="lock" size={16} color="#666" style={styles.inputIcon} />
                         <TextInput
                             style={styles.input}
                             placeholder="Password"
-                            placeholderTextColor="#000"
                             value={password}
                             onChangeText={setPassword}
                             secureTextEntry
@@ -479,51 +230,48 @@ export default function LoginPage() {
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                        style={styles.forgotPassword}
+                        onPress={navigateToForgotPassword}
+                    >
+                        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.loginButton, loading && styles.disabledButton]}
                         onPress={handleLogin}
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color="#FFFFFF" />
+                            <ActivityIndicator color="#fff" />
                         ) : (
                             <Text style={styles.loginButtonText}>Sign In</Text>
                         )}
                     </TouchableOpacity>
 
-                    {/* Divider */}
-                    <View style={styles.dividerContainer}>
+                    <View style={styles.divider}>
                         <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>or</Text>
+                        <Text style={styles.dividerText}>OR</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
-                    {/* Google Sign-In Button */}
                     <TouchableOpacity
-                        style={styles.googleButton}
+                        style={[styles.googleButton, loading && styles.disabledButton]}
                         onPress={handleGoogleSignIn}
                         disabled={loading}
                     >
-                        <View style={styles.googleButtonContent}>
-                            <View style={styles.googleIcon}>
-                                <Text style={styles.googleIconText}>G</Text>
-                            </View>
-                            <Text style={styles.googleButtonText}>Continue with Google</Text>
-                        </View>
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <>
+                                <FontAwesome name="google" size={16} color="#fff" style={styles.googleIcon} />
+                                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                            </>
+                        )}
                     </TouchableOpacity>
 
-                    <View style={styles.linksContainer}>
-                        <TouchableOpacity
-                            onPress={() => navigateToForgotPassword({ userType })}
-                        >
-                            <Text style={styles.linkText}>Forgot Password?</Text>
-                        </TouchableOpacity>
-                    </View>
-
                     <View style={styles.signupContainer}>
-                        <Text style={styles.signupText}>Don&apos;t have an account? </Text>
-                        <TouchableOpacity
-                            onPress={() => navigateToSignup({ userType })}
-                        >
+                        <Text style={styles.signupText}>Don't have an account? </Text>
+                        <TouchableOpacity onPress={navigateToSignup}>
                             <Text style={styles.signupLink}>Sign Up</Text>
                         </TouchableOpacity>
                     </View>
@@ -536,16 +284,16 @@ export default function LoginPage() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#f0f2f5',
     },
     content: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 20,
+        padding: 20,
     },
     title: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#333',
         marginBottom: 8,
@@ -553,163 +301,115 @@ const styles = StyleSheet.create({
     subtitle: {
         fontSize: 16,
         color: '#666',
-        marginBottom: 40,
+        marginBottom: 30,
     },
     userTypeIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#e8f5e8',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
         borderRadius: 20,
-        paddingVertical: 8,
-        paddingHorizontal: 15,
         marginBottom: 20,
-        alignSelf: 'center',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
     },
     userTypeText: {
-        marginLeft: 8,
+        marginLeft: 6,
         fontSize: 14,
-        fontWeight: 'bold',
         color: '#4CAF50',
+        fontWeight: '600',
     },
     form: {
-        width: '100%',
-        alignItems: 'center',
+        width: Platform.OS === 'web' ? INPUT_WIDTH_WEB : INPUT_WIDTH_MOBILE,
+        maxWidth: 400,
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
-        borderRadius: 25,
+        backgroundColor: '#fff',
+        borderRadius: 8,
         marginBottom: 16,
-        paddingHorizontal: 20,
-        ...Platform.select({
-            web: {
-                width: INPUT_WIDTH_WEB,
-            },
-            default: {
-                width: INPUT_WIDTH_MOBILE,
-            }
-        }),
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
     },
     inputIcon: {
-        marginRight: 12,
+        marginRight: 10,
     },
     input: {
         flex: 1,
-        paddingVertical: 16,
+        height: 48,
         fontSize: 16,
         color: '#333',
     },
+    forgotPassword: {
+        alignSelf: 'flex-end',
+        marginBottom: 20,
+    },
+    forgotPasswordText: {
+        color: '#4CAF50',
+        fontSize: 14,
+        fontWeight: '500',
+    },
     loginButton: {
         backgroundColor: '#4CAF50',
-        paddingVertical: 16,
-        borderRadius: 25,
+        borderRadius: 8,
+        height: 48,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 8,
-        ...Platform.select({
-            web: {
-                width: INPUT_WIDTH_WEB,
-            },
-            default: {
-                width: INPUT_WIDTH_MOBILE,
-            }
-        }),
+        marginBottom: 20,
     },
-    loginButtonDisabled: {
-        backgroundColor: '#B0B0B0',
+    disabledButton: {
+        opacity: 0.6,
     },
     loginButtonText: {
-        color: '#FFFFFF',
+        color: '#fff',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '600',
     },
-    dividerContainer: {
+    divider: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 24,
-        ...Platform.select({
-            web: {
-                width: INPUT_WIDTH_WEB,
-            },
-            default: {
-                width: INPUT_WIDTH_MOBILE,
-            }
-        }),
+        marginBottom: 20,
     },
     dividerLine: {
         flex: 1,
         height: 1,
-        backgroundColor: '#E0E0E0',
+        backgroundColor: '#e0e0e0',
     },
     dividerText: {
         marginHorizontal: 16,
         color: '#666',
         fontSize: 14,
-        fontWeight: '500',
     },
     googleButton: {
-        backgroundColor: '#FFFFFF',
-        paddingVertical: 16,
-        borderRadius: 25,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
-        marginBottom: 8,
-        ...Platform.select({
-            web: {
-                width: INPUT_WIDTH_WEB,
-            },
-            default: {
-                width: INPUT_WIDTH_MOBILE,
-            }
-        }),
-    },
-    googleButtonContent: {
+        backgroundColor: '#4285F4',
+        borderRadius: 8,
+        height: 48,
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
     },
     googleIcon: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: '#4CAF50',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    googleIconText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: 'bold',
+        marginRight: 8,
     },
     googleButtonText: {
-        color: '#333',
+        color: '#fff',
         fontSize: 16,
-        fontWeight: '500',
-    },
-    linksContainer: {
-        marginTop: 20,
-        alignItems: 'center',
-    },
-    linkText: {
-        color: '#4CAF50',
-        fontSize: 16,
+        fontWeight: '600',
     },
     signupContainer: {
         flexDirection: 'row',
-        marginTop: 40,
+        justifyContent: 'center',
         alignItems: 'center',
     },
     signupText: {
         color: '#666',
-        fontSize: 16,
+        fontSize: 14,
     },
     signupLink: {
         color: '#4CAF50',
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 14,
+        fontWeight: '600',
     },
-}); 
+});
