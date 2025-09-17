@@ -398,7 +398,6 @@ export default function PatientDashboard() {
       }
     }, [user?.id, refreshSubscriptionData])
   );
-
   // Initialize location-based subscription plans
   useEffect(() => {
     const initializeLocationTracking = async () => {
