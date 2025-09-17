@@ -120,11 +120,12 @@ export class WebRTCChatService {
                 
                 // Store the message and trigger event for other participants' messages
                 await this.addMessage(data.message);
+                console.log('📨 [WebRTCChat] Triggering onMessage event for message:', data.message.id);
                 this.events.onMessage(data.message);
               }
             } else if (data.type === 'typing-indicator') {
-              console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping);
-              this.onTypingIndicator?.(data.isTyping);
+              console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
+              this.onTypingIndicator?.(data.isTyping, data.senderId);
             }
           } catch (error) {
             console.error('❌ Error parsing WebRTC chat message:', error);
