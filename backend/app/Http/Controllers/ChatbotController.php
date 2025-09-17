@@ -14,13 +14,17 @@ class ChatbotController extends Controller
 
     public function __construct()
     {
-        $this->openaiApiKey = env('OPENAI_API_KEY');
+        // Try multiple ways to get the API key
+        $this->openaiApiKey = env('OPENAI_API_KEY') ?: config('app.openai_api_key') ?: $_ENV['OPENAI_API_KEY'] ?? null;
         
         // Debug logging
         \Log::info('ChatbotController initialized', [
             'has_openai_key' => !empty($this->openaiApiKey),
             'key_length' => $this->openaiApiKey ? strlen($this->openaiApiKey) : 0,
-            'key_starts_with_sk' => $this->openaiApiKey ? str_starts_with($this->openaiApiKey, 'sk-') : false
+            'key_starts_with_sk' => $this->openaiApiKey ? str_starts_with($this->openaiApiKey, 'sk-') : false,
+            'env_method' => 'env()',
+            'config_method' => 'config()',
+            'server_method' => '$_ENV'
         ]);
     }
 
@@ -202,6 +206,21 @@ Remember: You are an assistant, not a replacement for professional medical care.
             ]);
             return $this->getFallbackResponse($userInput);
         }
+    }
+
+    /**
+     * Test method to check OpenAI API key configuration
+     */
+    public function testConfig(): JsonResponse
+    {
+        return response()->json([
+            'openai_key_exists' => !empty($this->openaiApiKey),
+            'openai_key_length' => $this->openaiApiKey ? strlen($this->openaiApiKey) : 0,
+            'openai_key_starts_with_sk' => $this->openaiApiKey ? str_starts_with($this->openaiApiKey, 'sk-') : false,
+            'openai_key_preview' => $this->openaiApiKey ? substr($this->openaiApiKey, 0, 10) . '...' : 'not set',
+            'env_openai_key' => env('OPENAI_API_KEY') ? substr(env('OPENAI_API_KEY'), 0, 10) . '...' : 'not set',
+            'server_env_openai_key' => isset($_ENV['OPENAI_API_KEY']) ? substr($_ENV['OPENAI_API_KEY'], 0, 10) . '...' : 'not set'
+        ]);
     }
 
     /**

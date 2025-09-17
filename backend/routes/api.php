@@ -891,6 +891,7 @@ Route::middleware(['auth:api'])->group(function () {
 // Public chatbot routes (no authentication required)
 Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
 Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
+Route::get('/chatbot/test-config', [App\Http\Controllers\ChatbotController::class, 'testConfig']);
 
 // Debug endpoint to check environment variables
 Route::get('/chatbot/debug', function () {
