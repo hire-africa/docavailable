@@ -84,6 +84,14 @@
 
             // Try to redirect back to the mobile app
             setTimeout(() => {
+                // Store the code in localStorage for the app to pick up
+                try {
+                    localStorage.setItem('google_oauth_code', code);
+                    localStorage.setItem('google_oauth_timestamp', Date.now().toString());
+                } catch (e) {
+                    console.log('Could not store OAuth code in localStorage:', e);
+                }
+
                 // Try multiple redirect methods
                 const redirectUrls = [
                     'com.docavailable.app://oauth2redirect?code=' + encodeURIComponent(code),
@@ -93,21 +101,35 @@
                 ];
 
                 // Try each redirect URL
+                let redirectAttempted = false;
                 for (let i = 0; i < redirectUrls.length; i++) {
                     try {
+                        // Create a hidden iframe to attempt the redirect
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = redirectUrls[i];
+                        document.body.appendChild(iframe);
+                        
+                        // Also try direct redirect
                         window.location.href = redirectUrls[i];
+                        redirectAttempted = true;
                         break;
                     } catch (e) {
                         console.log('Redirect attempt failed:', redirectUrls[i]);
                     }
                 }
 
-                // Fallback: show instructions
+                // Fallback: show instructions with code
                 setTimeout(() => {
                     detailsEl.innerHTML = `
+                        <p>Authentication successful!</p>
+                        <p><strong>Authorization Code:</strong> ${code.substring(0, 20)}...</p>
                         <p>Please return to the DocAvailable app on your mobile device.</p>
-                        <p>The authentication was successful, but automatic redirect failed.</p>
-                        <p>You can close this window now.</p>
+                        <p>The app should automatically detect the authentication.</p>
+                        <p>If not, you can close this window and try again.</p>
+                        <button onclick="navigator.clipboard.writeText('${code}')" style="padding: 10px; margin: 10px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                            Copy Code to Clipboard
+                        </button>
                     `;
                 }, 3000);
             }, 2000);
