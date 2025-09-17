@@ -171,11 +171,17 @@ Remember: You are an assistant, not a replacement for professional medical care.
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $this->openaiApiKey,
             'Content-Type' => 'application/json',
-        ])->post($this->openaiBaseUrl . '/chat/completions', [
+        ])->timeout(30)->post($this->openaiBaseUrl . '/chat/completions', [
             'model' => 'gpt-3.5-turbo',
             'messages' => $messages,
             'max_tokens' => 300,
             'temperature' => 0.7,
+        ]);
+
+        Log::info('OpenAI API request completed', [
+            'status_code' => $response->status(),
+            'successful' => $response->successful(),
+            'response_size' => strlen($response->body())
         ]);
 
         if ($response->successful()) {

@@ -892,6 +892,35 @@ Route::middleware(['auth:api'])->group(function () {
 Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
 Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
 Route::get('/chatbot/test-config', [App\Http\Controllers\ChatbotController::class, 'testConfig']);
+Route::get('/chatbot/test-openai', function () {
+    $apiKey = env('OPENAI_API_KEY');
+    
+    if (empty($apiKey)) {
+        return response()->json(['error' => 'No API key found']);
+    }
+    
+    try {
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
+            'model' => 'gpt-3.5-turbo',
+            'messages' => [
+                ['role' => 'user', 'content' => 'Say "Hello from OpenAI!" if you can hear me.']
+            ],
+            'max_tokens' => 50,
+        ]);
+        
+        return response()->json([
+            'status_code' => $response->status(),
+            'successful' => $response->successful(),
+            'response' => $response->json(),
+            'error' => $response->successful() ? null : $response->body()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()]);
+    }
+});
 
 // Debug endpoint to check environment variables
 Route::get('/chatbot/debug', function () {
