@@ -113,12 +113,6 @@ class VoiceRecordingService {
 
   async uploadVoiceMessage(appointmentId: number, uri: string): Promise<string | null> {
     try {
-      // Validate appointment ID
-      if (!appointmentId || isNaN(appointmentId) || appointmentId <= 0) {
-        console.error('❌ Invalid appointment ID:', appointmentId);
-        throw new Error('Invalid appointment ID');
-      }
-
       // Create form data
       const formData = new FormData();
       
@@ -137,18 +131,14 @@ class VoiceRecordingService {
       
       formData.append('file', fileObject as any);
       
-      // Ensure appointment_id is properly formatted as string and is a valid integer
-      const appointmentIdStr = String(Math.floor(Number(appointmentId)));
-      formData.append('appointment_id', appointmentIdStr);
+      formData.append('appointment_id', appointmentId.toString());
 
       console.log('📤 Uploading voice message:', {
         appointmentId,
-        appointmentIdStr,
         fileName,
         uri: uri.substring(0, 50) + '...', // Log partial URI for debugging
         formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({
           key,
-          value: typeof value === 'object' ? `[Object: ${Object.keys(value).join(', ')}]` : value,
           type: typeof value,
           hasUri: typeof value === 'object' && 'uri' in value,
         })),

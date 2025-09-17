@@ -1,4 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -45,8 +46,13 @@ export default function LoginPage() {
                 if (authState.data.user.user_type === 'admin') {
                     navigateToDashboard('admin', true);
                 } else if (authState.data.user.user_type === 'doctor') {
-                    if (authState.data.user.status !== 'approved') {
+                    if (authState.data.user.status === 'pending') {
                         Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                        await authService.signOut();
+                        return;
+                    }
+                    if (authState.data.user.status === 'suspended') {
+                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
                         await authService.signOut();
                         return;
                     }
@@ -170,21 +176,50 @@ export default function LoginPage() {
                 return;
             }
 
-            // Google OAuth configuration
-            const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app';
+            // Google OAuth configuration - use appropriate redirect URI based on platform
+            const redirectUri = Platform.OS === 'web' 
+                ? 'https://docavailable-3vbdv.ondigitalocean.app'
+                : 'com.docavailable.app://oauth2redirect';
+            
+            console.log('Using redirect URI:', redirectUri);
 
-            const request = new AuthSession.AuthRequest({
+            console.log('Platform Detection:', {
+                PlatformOS: Platform.OS,
+                windowLocation: typeof window !== 'undefined' ? window.location.origin : 'undefined',
+                isWeb: Platform.OS === 'web'
+            });
+
+            console.log('Google OAuth Config:', {
+                clientId: GOOGLE_OAUTH_CONFIG.clientId,
+                redirectUri,
+                platform: Platform.OS,
+                scopes: GOOGLE_OAUTH_CONFIG.scopes
+            });
+
+            const requestConfig = {
                 clientId: GOOGLE_OAUTH_CONFIG.clientId,
                 scopes: GOOGLE_OAUTH_CONFIG.scopes,
                 redirectUri,
                 responseType: AuthSession.ResponseType.Code,
-                additionalParameters: {},
                 extraParams: {
                     access_type: 'offline',
                 },
-            });
+            };
 
+            console.log('AuthRequest Config:', requestConfig);
+
+            const request = new AuthSession.AuthRequest(requestConfig);
+
+            console.log('OAuth Discovery Config:', GOOGLE_OAUTH_CONFIG.discovery);
+            
             const result = await request.promptAsync(GOOGLE_OAUTH_CONFIG.discovery);
+
+            console.log('Google OAuth Result:', {
+                type: result.type,
+                params: (result as any).params,
+                error: (result as any).error,
+                errorCode: (result as any).errorCode
+            });
 
             if (result.type === 'success') {
                 // Exchange authorization code for tokens
@@ -230,13 +265,18 @@ export default function LoginPage() {
                     
                     if (user.user_type === 'admin') {
                         router.replace('/admin-dashboard');
-                    } else if (user.user_type === 'doctor') {
-                        if (user.status !== 'approved') {
-                            Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
-                            await authService.signOut();
-                            return;
-                        }
-                        router.replace('/doctor-dashboard');
+                } else if (user.user_type === 'doctor') {
+                    if (user.status === 'pending') {
+                        Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                        await authService.signOut();
+                        return;
+                    }
+                    if (user.status === 'suspended') {
+                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                        await authService.signOut();
+                        return;
+                    }
+                    router.replace('/doctor-dashboard');
                     } else if (user.user_type === 'patient') {
                         router.replace('/patient-dashboard');
                     } else {
@@ -246,6 +286,39 @@ export default function LoginPage() {
                     Alert.alert('Login Failed', 'Google authentication failed.');
                     await authService.signOut();
                 }
+            } else if (result.type === 'error') {
+                // Handle OAuth errors
+                const errorResult = result as any;
+                console.error('Google OAuth Error Details:', {
+                    error: errorResult.error,
+                    errorCode: errorResult.errorCode,
+                    params: errorResult.params,
+                    fullResult: result
+                });
+                
+                let errorMessage = 'Google sign-in failed. Please try again.';
+                let errorTitle = 'Google Sign-In Error';
+                
+                // More specific error handling
+                if (errorResult.errorCode === '400') {
+                    errorMessage = `Invalid Google OAuth configuration. Error: ${errorResult.error || 'Unknown 400 error'}`;
+                    errorTitle = 'Configuration Error';
+                } else if (errorResult.errorCode === '403') {
+                    errorMessage = 'Google sign-in is not enabled or configured properly.';
+                    errorTitle = 'Access Denied';
+                } else if (errorResult.errorCode === 'redirect_uri_mismatch') {
+                    errorMessage = 'Redirect URI mismatch. Please check your Google Cloud Console redirect URIs.';
+                    errorTitle = 'Redirect URI Error';
+                } else if (errorResult.error === 'invalid_request') {
+                    errorMessage = `Invalid request: ${errorResult.errorCode || 'Unknown error'}`;
+                    errorTitle = 'Invalid Request';
+                } else if (errorResult.error === 'unauthorized_client') {
+                    errorMessage = 'Client not authorized for this request type.';
+                    errorTitle = 'Unauthorized Client';
+                }
+                
+                console.error('Final Error Message:', errorMessage);
+                Alert.alert(errorTitle, errorMessage);
             } else {
                 // User cancelled the sign-in
                 console.log('Google sign-in was cancelled');
@@ -265,6 +338,42 @@ export default function LoginPage() {
                 
                 if (errorData.error_type) {
                     switch (errorData.error_type) {
+                        case 'user_not_registered':
+                            // Handle unregistered user - redirect to patient signup
+                            errorTitle = 'Account Not Found';
+                            errorMessage = errorData.message || 'This email is not registered.';
+                            errorSuggestion = errorData.suggestion || 'Please complete the patient registration process.';
+                            
+                            // Store Google user data for pre-filling signup form
+                            if (errorData.google_user_data) {
+                                try {
+                                    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                                        sessionStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
+                                    } else {
+                                        await AsyncStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
+                                    }
+                                } catch (storageError) {
+                                    console.warn('Could not store Google user data:', storageError);
+                                }
+                            }
+                            
+                            // Show alert and redirect to patient signup
+                            Alert.alert(
+                                errorTitle,
+                                `${errorMessage}\n\nSuggestion: ${errorSuggestion}`,
+                                [
+                                    {
+                                        text: 'Sign Up',
+                                        onPress: () => router.push('/patient-signup')
+                                    },
+                                    {
+                                        text: 'Cancel',
+                                        style: 'cancel'
+                                    }
+                                ]
+                            );
+                            return; // Exit early to avoid showing another alert
+                            
                         case 'invalid_google_token':
                             errorTitle = 'Invalid Google Token';
                             break;

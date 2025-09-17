@@ -4,6 +4,7 @@ import {
     Animated,
     Dimensions,
     Image,
+    StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -29,66 +30,42 @@ export default function IncomingCallScreen({
   visible,
 }: IncomingCallScreenProps) {
   const slideAnim = useRef(new Animated.Value(height)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       // Vibrate on incoming call
       Vibration.vibrate([0, 1000, 500, 1000]);
       
-      // Slide in animation
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-
-      // Pulse animation for profile picture
-      const pulseAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimation.start();
-
-      // Rotate animation for call icon
-      const rotateAnimation = Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 2000,
+      // Simple slide in animation
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
           useNativeDriver: true,
-        })
-      );
-      rotateAnimation.start();
-
-      return () => {
-        pulseAnimation.stop();
-        rotateAnimation.stop();
-      };
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
     } else {
-      // Slide out animation
-      Animated.timing(slideAnim, {
-        toValue: height,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      // Simple slide out animation
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: height,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
   }, [visible]);
-
-  const rotateInterpolate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
 
   if (!visible) return null;
 
@@ -98,23 +75,24 @@ export default function IncomingCallScreen({
         styles.container,
         {
           transform: [{ translateY: slideAnim }],
+          opacity: fadeAnim,
         },
       ]}
     >
-      {/* Background gradient */}
+      <StatusBar backgroundColor="#000" barStyle="light-content" />
+      
+      {/* Simple Background */}
       <View style={styles.background} />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Incoming Call</Text>
+      </View>
       
       {/* Content */}
       <View style={styles.content}>
-        {/* Profile Picture */}
-        <Animated.View
-          style={[
-            styles.profileContainer,
-            {
-              transform: [{ scale: pulseAnim }],
-            },
-          ]}
-        >
+        {/* Profile Picture - Small and Simple */}
+        <View style={styles.profileContainer}>
           {callerProfilePicture ? (
             <Image
               source={{ uri: callerProfilePicture }}
@@ -122,47 +100,43 @@ export default function IncomingCallScreen({
             />
           ) : (
             <View style={styles.defaultProfilePicture}>
-              <Ionicons name="person" size={60} color="#fff" />
+              <Ionicons name="person" size={24} color="white" />
             </View>
           )}
-        </Animated.View>
-
-        {/* Caller Name */}
-        <Text style={styles.callerName}>{callerName}</Text>
-        
-        {/* Call Type */}
-        <Text style={styles.callType}>Audio Call</Text>
-
-        {/* Animated call icon */}
-        <Animated.View
-          style={[
-            styles.callIconContainer,
-            {
-              transform: [{ rotate: rotateInterpolate }],
-            },
-          ]}
-        >
-          <Ionicons name="call" size={40} color="#fff" />
-        </Animated.View>
-
-        {/* Action Buttons */}
-        <View style={styles.buttonContainer}>
-          {/* Decline Button */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.declineButton]}
-            onPress={onDecline}
-          >
-            <Ionicons name="call" size={30} color="#fff" />
-          </TouchableOpacity>
-
-          {/* Accept Button */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.acceptButton]}
-            onPress={onAccept}
-          >
-            <Ionicons name="call" size={30} color="#fff" />
-          </TouchableOpacity>
         </View>
+
+        {/* Caller Information */}
+        <View style={styles.callerInfo}>
+          <Text style={styles.callerName}>{callerName}</Text>
+          <Text style={styles.callType}>Audio Call</Text>
+        </View>
+      </View>
+
+      {/* Bottom Actions - Single Row */}
+      <View style={styles.controls}>
+        {/* Decline Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.declineButton]}
+          onPress={() => {
+            Vibration.vibrate([0, 100, 50, 100]);
+            onDecline();
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="call" size={20} color="white" />
+        </TouchableOpacity>
+
+        {/* Accept Button */}
+        <TouchableOpacity
+          style={[styles.actionButton, styles.acceptButton]}
+          onPress={() => {
+            Vibration.vibrate(50);
+            onAccept();
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="call" size={20} color="white" />
+        </TouchableOpacity>
       </View>
     </Animated.View>
   );
@@ -185,63 +159,72 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: '#000',
   },
+  header: {
+    paddingTop: 50,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+  },
   content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 30,
   },
   profileContainer: {
     marginBottom: 30,
   },
   profilePicture: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 4,
-    borderColor: '#fff',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   defaultProfilePicture: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#333',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#fff',
   },
-  callerName: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  callType: {
-    fontSize: 18,
-    color: '#ccc',
-    textAlign: 'center',
+  callerInfo: {
+    alignItems: 'center',
     marginBottom: 40,
   },
-  callIconContainer: {
-    marginBottom: 60,
+  callerName: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: 'white',
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  buttonContainer: {
+  callType: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  controls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    width: '100%',
+    alignItems: 'center',
     paddingHorizontal: 40,
+    paddingBottom: 40,
   },
   actionButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
   },
   declineButton: {
-    backgroundColor: '#ff4444',
+    backgroundColor: '#F44336',
   },
   acceptButton: {
     backgroundColor: '#4CAF50',

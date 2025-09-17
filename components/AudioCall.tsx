@@ -1,14 +1,16 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Animated,
     Dimensions,
+    Image,
     StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    Vibration,
+    View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 
@@ -45,12 +47,20 @@ export default function AudioCall({
     isConnected: false,
     isAudioEnabled: true,
     callDuration: 0,
-    connectionState: 'disconnected',
+    connectionState: isIncomingCall ? 'connecting' : 'disconnected',
   });
   
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(!isIncomingCall);
+  const [isRinging, setIsRinging] = useState(isIncomingCall);
+  const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
+  
+  // For outgoing calls, we should never show incoming call UI
+  const shouldShowIncomingUI = isIncomingCall && isRinging;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const ringAnim = useRef(new Animated.Value(0)).current;
+  const waveAnim = useRef(new Animated.Value(0)).current;
+  const connectingAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const setupCall = async () => {
@@ -65,9 +75,9 @@ export default function AudioCall({
         console.log('🚀 AudioCall: Initializing call (outgoing)');
         await initializeCall();
       } else {
-        console.log('📞 AudioCall: Setting up for incoming call');
-        // For incoming calls, set up event listeners and process offer
-        await setupEventListeners();
+        console.log('📞 AudioCall: Initializing for incoming call');
+        // For incoming calls, initialize the service and set up event listeners
+        await initializeIncomingCall();
       }
     };
     
@@ -82,78 +92,67 @@ export default function AudioCall({
   useEffect(() => {
     if (callState.connectionState === 'connected') {
       setIsInitializing(false);
+      setIsRinging(false);
+    } else if (callState.connectionState === 'connecting') {
+      setIsRinging(true);
+      startConnectingAnimation();
     }
   }, [callState.connectionState]);
 
-  const setupEventListeners = async () => {
-    console.log('📞 AudioCall: Setting up event listeners for incoming call');
-    
-    const events: AudioCallEvents = {
-      onStateChange: (state) => {
-        console.log('📊 Call state changed:', state);
-        setCallState(state);
-      },
-      onRemoteStream: (stream) => {
-        console.log('🎵 Remote audio stream received');
-      },
-      onCallEnded: () => {
-        console.log('📞 Call ended');
-        onEndCall();
-      },
-      onError: (error) => {
-        console.error('❌ Call error:', error);
-        Alert.alert('Call Error', error);
-      },
-      onCallAnswered: () => {
-        console.log('✅ Call answered');
-        onCallAnswered?.();
-      },
-      onCallRejected: () => {
-        console.log('❌ Call rejected');
-        onCallRejected?.();
-      },
-      onCallTimeout: () => {
-        console.log('⏰ Call timeout');
-        onCallTimeout?.();
-      },
-    };
-
-    // Set up event listeners
-    AudioCallService.getInstance().setEvents(events);
-    
-    // Wait for WebSocket connection to be fully established
-    const audioCallService = AudioCallService.getInstance();
-    
-    // Wait for connection to be ready with retry logic
-    let retryCount = 0;
-    const maxRetries = 50; // 5 seconds total
-    const retryInterval = 100; // 100ms
-    
-    console.log('⏳ Waiting for WebSocket connection to be established...');
-    while (retryCount < maxRetries) {
-      if (audioCallService.isConnectedToSignaling()) {
-        console.log('✅ WebSocket connection established, proceeding with offer processing');
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, retryInterval));
-      retryCount++;
-    }
-    
-    if (retryCount >= maxRetries) {
-      console.error('❌ WebSocket connection timeout after 5 seconds');
-      Alert.alert('Connection Error', 'Failed to establish connection. Please try again.');
-      onEndCall();
-      return;
-    }
-    
-    // Now process the pending offer
+  const initializeIncomingCall = async () => {
     try {
-      console.log('📞 AudioCall: Processing incoming offer...');
-      await audioCallService.processIncomingOffer();
-      console.log('✅ AudioCall: Incoming offer processed successfully');
+      console.log('📞 AudioCall: Initializing for incoming call');
+      
+      const events: AudioCallEvents = {
+        onStateChange: (state) => {
+          console.log('📊 Call state changed:', state);
+          setCallState(state);
+          
+          // Update ringing state based on connection state
+          if (state.connectionState === 'connected') {
+            setIsRinging(false);
+            setIsProcessingAnswer(false);
+          }
+        },
+        onRemoteStream: (stream) => {
+          console.log('🎵 Remote audio stream received');
+        },
+        onCallEnded: () => {
+          console.log('📞 Call ended');
+          onEndCall();
+        },
+        onError: (error) => {
+          console.error('❌ Call error:', error);
+          // Only show alert for critical errors, not during normal transitions
+          if (!error.includes('connection') && 
+              !error.includes('transition') && 
+              !error.includes('WebRTC') &&
+              !error.includes('signaling') &&
+              !error.includes('Failed to initialize call')) {
+            Alert.alert('Call Error', error);
+          }
+        },
+        onCallAnswered: () => {
+          console.log('✅ Call answered');
+          onCallAnswered?.();
+        },
+        onCallRejected: () => {
+          console.log('❌ Call rejected');
+          onCallRejected?.();
+        },
+        onCallTimeout: () => {
+          console.log('⏰ Call timeout');
+          onCallTimeout?.();
+        },
+      };
+
+      // Initialize the AudioCallService for incoming call
+      await AudioCallService.getInstance().initializeForIncomingCall(appointmentId, userId, events);
+      console.log('✅ AudioCall: Incoming call initialized successfully');
+      
     } catch (error) {
-      console.error('❌ AudioCall: Failed to process incoming offer:', error);
-      Alert.alert('Call Error', 'Failed to accept call. Please try again.');
+      console.error('❌ AudioCall: Failed to initialize incoming call:', error);
+      Alert.alert('Call Error', 'Failed to initialize call. Please try again.');
       onEndCall();
     }
   };
@@ -174,9 +173,17 @@ export default function AudioCall({
           onEndCall();
         },
         onError: (error) => {
-          Alert.alert('Call Error', error, [
-            { text: 'OK', onPress: onEndCall }
-          ]);
+          console.error('❌ Call error:', error);
+          // Only show alert for critical errors, not during normal transitions
+          if (!error.includes('connection') && 
+              !error.includes('transition') && 
+              !error.includes('WebRTC') &&
+              !error.includes('signaling') &&
+              !error.includes('Failed to initialize call')) {
+            Alert.alert('Call Error', error, [
+              { text: 'OK', onPress: onEndCall }
+            ]);
+          }
         },
         onCallAnswered: () => {
           console.log('✅ Call answered - session will be activated');
@@ -208,13 +215,13 @@ export default function AudioCall({
     const pulse = () => {
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 1000,
+          toValue: 1.15,
+          duration: 1200,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1,
-          duration: 1000,
+          duration: 1200,
           useNativeDriver: true,
         }),
       ]).start(pulse);
@@ -222,15 +229,58 @@ export default function AudioCall({
     pulse();
   };
 
+  const startConnectingAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(connectingAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(connectingAnim, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
+  const startRingingAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringAnim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.timing(waveAnim, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: true,
+      })
+    ).start();
+  };
+
   const toggleAudio = () => {
     const isEnabled = AudioCallService.getInstance().toggleAudio();
-    // Visual feedback
-    if (isEnabled) {
-      // Haptic feedback could be added here
-    }
+    // Haptic feedback
+    Vibration.vibrate(50);
   };
 
   const endCall = async () => {
+    // Haptic feedback for end call
+    Vibration.vibrate([0, 100, 50, 100]);
+    
     Alert.alert(
       'End Call',
       'Are you sure you want to end this call?',
@@ -255,9 +305,12 @@ export default function AudioCall({
   };
 
   const getStatusText = () => {
+    if (shouldShowIncomingUI) return 'Incoming Call';
+    if (isProcessingAnswer) return 'Answering...';
+    
     switch (callState.connectionState) {
       case 'connecting':
-        return 'Connecting...';
+        return isIncomingCall ? 'Connecting...' : 'Calling...';
       case 'connected':
         return 'Connected';
       case 'disconnected':
@@ -265,14 +318,14 @@ export default function AudioCall({
       case 'failed':
         return 'Connection Failed';
       default:
-        return 'Initializing...';
+        return isIncomingCall ? 'Initializing...' : 'Starting call...';
     }
   };
 
   const getStatusColor = () => {
     switch (callState.connectionState) {
       case 'connecting':
-        return '#FF9800';
+        return isRinging ? '#FF6B6B' : '#FF9800';
       case 'connected':
         return '#4CAF50';
       case 'disconnected':
@@ -284,34 +337,49 @@ export default function AudioCall({
     }
   };
 
+  const waveInterpolate = waveAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 100],
+  });
+
+  const connectingInterpolate = connectingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 360],
+  });
+
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#1a1a1a" barStyle="light-content" />
+      <StatusBar backgroundColor="#000" barStyle="light-content" />
       
-      {/* Background Gradient Effect */}
-      <View style={styles.backgroundGradient} />
+      {/* Dynamic Header based on call state */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+          <Ionicons name="arrow-back" size={24} color="white" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {shouldShowIncomingUI ? 'Incoming Call' : 'Audio Call'}
+        </Text>
+        <View style={styles.placeholder} />
+      </View>
       
-      {/* Main Call Interface */}
-      <View style={styles.callInterface}>
-        {/* Avatar Container */}
-        <View style={styles.avatarContainer}>
-          <Animated.View 
-            style={[
-              styles.avatar,
-              { transform: [{ scale: pulseAnim }] }
-            ]}
-          >
-            <View style={styles.avatarInner}>
-              <FontAwesome 
-                name={isDoctor ? "user-md" : "user"} 
-                size={60} 
-                color="#4CAF50" 
+      {/* Main Content - Simple Layout */}
+      <View style={styles.content}>
+        {/* Profile Picture - Small and Simple */}
+        <View style={styles.profileContainer}>
+          {otherParticipantProfilePictureUrl ? (
+            <Image
+              source={{ uri: otherParticipantProfilePictureUrl }}
+              style={styles.profilePicture}
+            />
+          ) : (
+            <View style={styles.defaultProfilePicture}>
+              <Ionicons 
+                name={isDoctor ? "medical" : "person"} 
+                size={24} 
+                color="white" 
               />
             </View>
-          </Animated.View>
-          
-          {/* Connection Status Indicator */}
-          <View style={[styles.statusIndicator, { backgroundColor: getStatusColor() }]} />
+          )}
         </View>
 
         {/* User Info */}
@@ -324,7 +392,7 @@ export default function AudioCall({
           </Text>
         </View>
 
-        {/* Call Status */}
+        {/* Status */}
         <View style={styles.statusContainer}>
           <Text style={[styles.statusText, { color: getStatusColor() }]}>
             {getStatusText()}
@@ -335,57 +403,78 @@ export default function AudioCall({
             </Text>
           )}
         </View>
+      </View>
 
-        {/* Loading Animation for Initialization */}
-        {isInitializing && (
-          <Animated.View 
-            style={[styles.loadingContainer, { opacity: fadeAnim }]}
-          >
-            <View style={styles.loadingDots}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
-            </View>
-          </Animated.View>
-        )}
-
-        {/* Controls */}
+          {/* Dynamic Controls based on call state */}
+          {shouldShowIncomingUI || isProcessingAnswer ? (
+        /* Incoming Call Controls - Accept/Decline */
         <View style={styles.controls}>
-          {/* Mute/Unmute Button */}
-          <TouchableOpacity 
+          {/* Decline Button */}
+          <TouchableOpacity
+            style={[styles.controlButton, styles.declineButton]}
+            onPress={onEndCall}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="call" size={20} color="white" />
+          </TouchableOpacity>
+
+          {/* Accept Button */}
+          <TouchableOpacity
             style={[
               styles.controlButton, 
+              styles.acceptButton,
+              isProcessingAnswer && styles.disabledButton
+            ]}
+            onPress={async () => {
+              if (isProcessingAnswer) return; // Prevent multiple taps
+              Vibration.vibrate(50);
+              console.log('📞 Accept button pressed - answering call');
+              
+              // Immediately update UI state
+              setIsRinging(false);
+              setIsProcessingAnswer(true);
+              
+              // Just trigger the callback - let the parent handle the logic
+              onCallAnswered?.();
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="call" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        /* Connected Call Controls - Speaker/Mute/End */
+        <View style={styles.controls}>
+          {/* Speaker Button */}
+          <TouchableOpacity style={styles.controlButton}>
+            <Ionicons name="volume-high" size={20} color="white" />
+          </TouchableOpacity>
+
+          {/* Mute/Unmute Button */}
+          <TouchableOpacity
+            style={[
+              styles.controlButton,
               !callState.isAudioEnabled && styles.disabledButton
             ]}
             onPress={toggleAudio}
             disabled={!callState.isConnected}
           >
-            <FontAwesome 
-              name={callState.isAudioEnabled ? "microphone" : "microphone-slash"} 
-              size={24} 
-              color="white" 
+            <Ionicons
+              name={callState.isAudioEnabled ? "mic" : "mic-off"}
+              size={20}
+              color="white"
             />
           </TouchableOpacity>
 
           {/* End Call Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.controlButton, styles.endCallButton]}
             onPress={endCall}
           >
-            <FontAwesome name="phone" size={24} color="white" />
+            <Ionicons name="call" size={20} color="white" />
           </TouchableOpacity>
         </View>
-
-        {/* Call Quality Indicator */}
-        {callState.isConnected && (
-          <View style={styles.qualityIndicator}>
-            <View style={styles.qualityBar} />
-            <View style={styles.qualityBar} />
-            <View style={styles.qualityBar} />
-            <View style={styles.qualityBar} />
-          </View>
-        )}
-      </View>
+      )}
     </View>
   );
 }
@@ -393,149 +482,113 @@ export default function AudioCall({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#000',
+    width: '100%',
+    height: '100%',
   },
-  backgroundGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#2d2d2d',
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
   },
-  callInterface: {
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: 'white',
+  },
+  placeholder: {
+    width: 40,
+  },
+  content: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 30,
   },
-  avatarContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-    position: 'relative',
-  },
-  avatar: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#333',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  avatarInner: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statusIndicator: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 3,
-    borderColor: '#1a1a1a',
-  },
-  userInfo: {
-    alignItems: 'center',
+  profileContainer: {
     marginBottom: 30,
   },
-  userName: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: 'white',
-    marginBottom: 8,
-  },
-  userRole: {
-    fontSize: 16,
-    color: '#ccc',
-    fontWeight: '500',
-  },
-  statusContainer: {
-    alignItems: 'center',
-    marginBottom: 50,
-  },
-  statusText: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  durationText: {
-    fontSize: 16,
-    color: '#4CAF50',
-    fontWeight: '500',
-  },
-  loadingContainer: {
-    marginBottom: 30,
-  },
-  loadingDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4CAF50',
-    marginHorizontal: 4,
-  },
-  dot1: {
-    opacity: 0.4,
-  },
-  dot2: {
-    opacity: 0.7,
-  },
-  dot3: {
-    opacity: 1,
-  },
-  controls: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    paddingHorizontal: 40,
-    marginBottom: 30,
-  },
-  controlButton: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: '#4CAF50',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  disabledButton: {
-    backgroundColor: '#666',
-  },
-  endCallButton: {
-    backgroundColor: '#F44336',
+  profilePicture: {
     width: 80,
     height: 80,
     borderRadius: 40,
   },
-  qualityIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  defaultProfilePicture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#333',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  qualityBar: {
-    width: 4,
-    height: 20,
+  userInfo: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  userRole: {
+    fontSize: 16,
+    color: '#999',
+    fontWeight: '500',
+  },
+  statusContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  statusText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  durationText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '500',
+  },
+  controls: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingBottom: 40,
+  },
+  controlButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    opacity: 0.5,
+  },
+  endCallButton: {
+    backgroundColor: '#F44336',
+  },
+  declineButton: {
+    backgroundColor: '#F44336',
+  },
+  acceptButton: {
     backgroundColor: '#4CAF50',
-    marginHorizontal: 2,
-    borderRadius: 2,
   },
 });

@@ -83,16 +83,25 @@ export default function AudioCallModal({
 
   if (showAudioCall) {
     return (
-      <AudioCall
-        appointmentId={appointmentId}
-        userId={userId}
-        isDoctor={isDoctor}
-        doctorName={doctorName}
-        patientName={patientName}
-        onEndCall={handleEndCall}
-        onCallTimeout={handleCallTimeout}
-        onCallRejected={handleCallRejected}
-      />
+      <Modal
+        visible={visible}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={handleEndCall}
+        statusBarTranslucent={true}
+      >
+        <AudioCall
+          appointmentId={appointmentId}
+          userId={userId}
+          isDoctor={isDoctor}
+          doctorName={doctorName}
+          patientName={patientName}
+          otherParticipantProfilePictureUrl={otherParticipantProfilePictureUrl}
+          onEndCall={handleEndCall}
+          onCallTimeout={handleCallTimeout}
+          onCallRejected={handleCallRejected}
+        />
+      </Modal>
     );
   }
 
