@@ -31,6 +31,14 @@ export default {
       favicon: "./assets/images/favicon.png"
     },
     scheme: "com.docavailable.app", // Enable for mobile OAuth redirects
+    linking: {
+      prefixes: ["com.docavailable.app://"],
+      config: {
+        screens: {
+          "oauth-callback": "oauth-callback"
+        }
+      }
+    },
     plugins: [
       "expo-router",
       [
