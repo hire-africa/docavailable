@@ -333,6 +333,41 @@ export default function PatientDashboard() {
     }
   }, [user]);
 
+  // Poll for subscription updates after payment (in case user doesn't get redirected properly)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pollForSubscriptionUpdates = () => {
+      console.log('PatientDashboard: Polling for subscription updates...');
+      
+      apiService.get('/subscription')
+        .then((response: any) => {
+          if (response.success && response.data) {
+            console.log('PatientDashboard: Polling found subscription update:', response.data);
+            setCurrentSubscription(response.data);
+          }
+        })
+        .catch(error => {
+          console.log('PatientDashboard: Polling subscription check failed:', error.message);
+        });
+    };
+
+    // Poll every 10 seconds for the first 2 minutes after component mount
+    // This helps catch subscription updates if the payment redirect didn't work properly
+    const pollInterval = setInterval(pollForSubscriptionUpdates, 10000);
+    
+    // Stop polling after 2 minutes
+    const stopPollingTimeout = setTimeout(() => {
+      clearInterval(pollInterval);
+      console.log('PatientDashboard: Stopped polling for subscription updates');
+    }, 120000); // 2 minutes
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(stopPollingTimeout);
+    };
+  }, [user?.id]);
+
   // Initialize location-based subscription plans
   useEffect(() => {
     const initializeLocationTracking = async () => {
