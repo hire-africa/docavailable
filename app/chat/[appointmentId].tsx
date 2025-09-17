@@ -2,19 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
@@ -135,6 +135,10 @@ export default function ChatPage() {
   // Typing indicator state
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [typingDotAnimation] = useState(() => {
+    const { Animated } = require('react-native');
+    return new Animated.Value(0);
+  });
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
@@ -224,17 +228,18 @@ export default function ChatPage() {
           webrtcConfig: config.webrtc
         }, {
           onMessage: (message) => {
-            console.log('📨 [ChatComponent] Message received:', message.id);
+            console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
             console.log('📨 [ChatComponent] Message details:', {
               id: message.id,
               sender_id: message.sender_id,
               currentUserId: currentUserId,
               message: message.message,
-              timestamp: message.created_at
+              timestamp: message.created_at,
+              isOwnMessage: String(message.sender_id) === String(currentUserId)
             });
             
             setMessages(prev => {
-              console.log('📨 [ChatComponent] Current messages count:', prev.length);
+              console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
               
               // Check if message already exists to prevent duplicates
               const existingMessage = prev.find(msg => msg.id === message.id);
@@ -245,7 +250,7 @@ export default function ChatPage() {
               
               console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
               const newMessages = [...prev, message];
-              console.log('📨 [ChatComponent] New messages count:', newMessages.length);
+              console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
               return newMessages;
             });
             scrollToBottom();
@@ -263,10 +268,31 @@ export default function ChatPage() {
         // Set up typing indicator listener
         chatService.setOnTypingIndicator(handleTypingIndicator);
         
+        // Set up WebRTC session service for typing indicators
+        if (webrtcSessionService) {
+          webrtcSessionService.setOnTypingIndicator(handleTypingIndicator);
+        }
+        
         // Load existing messages from storage
         const existingMessages = await chatService.getMessages();
         setMessages(existingMessages);
         console.log('✅ [WebRTCChat] Service initialized successfully with', existingMessages.length, 'messages');
+        
+        // Set up fallback polling for messages in case WebRTC fails
+        const fallbackInterval = setInterval(async () => {
+          try {
+            const currentMessages = await chatService.getMessages();
+            if (currentMessages.length > messages.length) {
+              console.log('🔄 [Fallback] New messages detected via polling:', currentMessages.length - messages.length);
+              setMessages(currentMessages);
+            }
+          } catch (error) {
+            console.error('❌ [Fallback] Error polling messages:', error);
+          }
+        }, 5000); // Poll every 5 seconds as fallback
+        
+        // Store interval for cleanup
+        (chatService as any).fallbackInterval = fallbackInterval;
       } catch (error) {
         console.error('❌ [WebRTCChat] Failed to initialize:', error);
         Alert.alert('Connection Error', 'Failed to connect to chat service. Please try again.');
@@ -278,6 +304,10 @@ export default function ChatPage() {
     return () => {
       if (webrtcChatService) {
         console.log('🔌 [WebRTCChat] Disconnecting service');
+        // Clear fallback interval
+        if ((webrtcChatService as any).fallbackInterval) {
+          clearInterval((webrtcChatService as any).fallbackInterval);
+        }
         webrtcChatService.disconnect();
         setIsWebRTCServiceActive(false);
       }
@@ -562,11 +592,39 @@ export default function ChatPage() {
   };
 
   // Handle typing indicator
-  const handleTypingIndicator = (isTyping: boolean) => {
-    console.log('⌨️ [Chat] Typing indicator received:', isTyping);
+  const handleTypingIndicator = (isTyping: boolean, senderId?: number) => {
+    console.log('⌨️ [Chat] Typing indicator received:', isTyping, 'from sender:', senderId, 'current user:', currentUserId);
+    
+    // Only show typing indicator if it's from the other user (not from current user)
+    if (senderId && senderId === currentUserId) {
+      console.log('⌨️ [Chat] Ignoring typing indicator from current user');
+      return;
+    }
     
     if (isTyping) {
       setIsOtherUserTyping(true);
+      
+      // Start dot animation
+      const animateDots = () => {
+        const { Animated } = require('react-native');
+        Animated.sequence([
+          Animated.timing(typingDotAnimation, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(typingDotAnimation, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          if (isOtherUserTyping) {
+            animateDots();
+          }
+        });
+      };
+      animateDots();
       
       // Clear existing timeout
       if (typingTimeout) {
@@ -576,11 +634,13 @@ export default function ChatPage() {
       // Set timeout to hide typing indicator after 3 seconds
       const timeout = setTimeout(() => {
         setIsOtherUserTyping(false);
+        typingDotAnimation.stopAnimation();
       }, 3000) as ReturnType<typeof setTimeout>;
       
       setTypingTimeout(timeout);
     } else {
       setIsOtherUserTyping(false);
+      typingDotAnimation.stopAnimation();
       if (typingTimeout) {
         clearTimeout(typingTimeout);
         setTypingTimeout(null);
@@ -1114,7 +1174,7 @@ export default function ChatPage() {
           )}
         </View>
         
-        {/* Name */}
+        {/* Name and Typing Indicator */}
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
             {isPatient 
@@ -1122,6 +1182,64 @@ export default function ChatPage() {
               : (chatInfo?.other_participant_name || 'Patient')
             }
           </Text>
+          {/* Typing Indicator in Header */}
+          {isOtherUserTyping && (
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              marginTop: 2,
+            }}>
+              <Text style={{
+                fontSize: 12,
+                color: '#4CAF50',
+                fontStyle: 'italic',
+                marginRight: 4,
+              }}>
+                typing
+              </Text>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}>
+                {(() => {
+                  const { Animated } = require('react-native');
+                  return (
+                    <>
+                      <Animated.View style={{
+                        width: 3,
+                        height: 3,
+                        borderRadius: 1.5,
+                        backgroundColor: '#4CAF50',
+                        marginRight: 2,
+                        opacity: typingDotAnimation,
+                      }} />
+                      <Animated.View style={{
+                        width: 3,
+                        height: 3,
+                        borderRadius: 1.5,
+                        backgroundColor: '#4CAF50',
+                        marginRight: 2,
+                        opacity: typingDotAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.5, 1]
+                        }),
+                      }} />
+                      <Animated.View style={{
+                        width: 3,
+                        height: 3,
+                        borderRadius: 1.5,
+                        backgroundColor: '#4CAF50',
+                        opacity: typingDotAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.3, 1]
+                        }),
+                      }} />
+                    </>
+                  );
+                })()}
+              </View>
+            </View>
+          )}
         </View>
         
         {/* Call Icons - Role-based calling */}
@@ -1402,66 +1520,6 @@ export default function ChatPage() {
           })}
         </ScrollView>
 
-        {/* Typing Indicator */}
-        {isOtherUserTyping && (
-          <View style={{
-            alignSelf: 'flex-start',
-            marginBottom: 12,
-            maxWidth: '80%',
-          }}>
-            <View
-              style={{
-                backgroundColor: '#F0F0F0',
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                borderRadius: 20,
-                borderBottomLeftRadius: 4,
-                borderBottomRightRadius: 20,
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  color: '#666',
-                  fontSize: 16,
-                  fontStyle: 'italic',
-                  marginRight: 8,
-                }}
-              >
-                typing
-              </Text>
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}>
-                <View style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: '#666',
-                  marginRight: 2,
-                  opacity: 0.7,
-                }} />
-                <View style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: '#666',
-                  marginRight: 2,
-                  opacity: 0.5,
-                }} />
-                <View style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: '#666',
-                  opacity: 0.3,
-                }} />
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* Input */}
         <View style={{ 
@@ -1537,8 +1595,8 @@ export default function ChatPage() {
             onChangeText={(text) => {
               setNewMessage(text);
               // Send typing indicator via WebRTC
-              if (isWebRTCConnected) {
-                webrtcSessionService.sendTypingIndicator(text.length > 0);
+              if (isWebRTCConnected && webrtcSessionService) {
+                webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
             placeholder={sessionEnded && !isPatient ? "Session ended" : "Type a message..."}

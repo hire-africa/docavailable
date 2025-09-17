@@ -109,8 +109,12 @@ const handleConnection = (ws, req, connectionType) => {
           break;
           
         case 'typing-indicator':
-          // Handle typing indicators
-          broadcastToOthers(ws, appointmentId, data);
+          // Handle typing indicators - add sender ID
+          const typingData = {
+            ...data,
+            senderId: data.senderId || getUserIdFromConnection(ws)
+          };
+          broadcastToOthers(ws, appointmentId, typingData);
           break;
           
         case 'message-read':
@@ -681,6 +685,13 @@ function broadcastToAll(appointmentId, data) {
       connection.send(JSON.stringify(data));
     }
   });
+}
+
+// Helper function to get user ID from connection
+function getUserIdFromConnection(ws) {
+  // Try to extract user ID from connection metadata or auth token
+  // This is a simplified implementation - you may need to enhance based on your auth system
+  return ws.userId || null;
 }
 
 // Helper function to broadcast to others (excluding sender)

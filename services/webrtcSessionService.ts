@@ -36,6 +36,7 @@ class WebRTCSessionService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private onTypingIndicator?: (isTyping: boolean, senderId?: number) => void;
 
   async initialize(appointmentId: string, events: WebRTCSessionEvents): Promise<void> {
     this.appointmentId = appointmentId;
@@ -75,7 +76,15 @@ class WebRTCSessionService {
         this.signalingChannel.onmessage = async (event) => {
           try {
             const message = JSON.parse(event.data);
-            await this.handleSignalingMessage(message);
+            console.log('📨 [WebRTCSession] Message received:', message.type);
+            
+            // Handle typing indicators
+            if (message.type === 'typing-indicator') {
+              console.log('⌨️ [WebRTCSession] Typing indicator received:', message.isTyping, 'from sender:', message.senderId);
+              this.onTypingIndicator?.(message.isTyping, message.senderId);
+            } else {
+              await this.handleSignalingMessage(message);
+            }
           } catch (error) {
             console.error('❌ Error handling signaling message:', error);
           }
@@ -203,13 +212,19 @@ class WebRTCSessionService {
   }
 
   // Send typing indicator
-  sendTypingIndicator(isTyping: boolean): void {
+  sendTypingIndicator(isTyping: boolean, senderId?: number): void {
     if (!this.isConnected || !this.signalingChannel) return;
 
     this.sendSignalingMessage({
       type: 'typing-indicator',
-      isTyping: isTyping
+      isTyping: isTyping,
+      senderId: senderId
     });
+  }
+
+  // Set typing indicator callback
+  setOnTypingIndicator(callback: (isTyping: boolean, senderId?: number) => void): void {
+    this.onTypingIndicator = callback;
   }
 
   // Send message read receipt

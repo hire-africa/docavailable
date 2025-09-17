@@ -11,13 +11,7 @@ interface TypingIndicatorProps {
   currentUserId: number;
 }
 
-// COMMENTED OUT ENTIRE COMPONENT TO SIMPLIFY MESSAGE SYSTEM
 const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, currentUserId }) => {
-  // Always return null - no typing indicators for simplified system
-  return null;
-  
-  // COMMENTED OUT ALL TYPING INDICATOR FUNCTIONALITY
-  /*
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const [dotAnimation] = useState(new Animated.Value(0));
   const [isOnline, setIsOnline] = useState(true);
@@ -162,7 +156,6 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ appointmentId, curren
       </View>
     </View>
   );
-  */
 };
 
 export default TypingIndicator; 
