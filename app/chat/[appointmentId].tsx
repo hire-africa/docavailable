@@ -1098,6 +1098,13 @@ export default function ChatPage() {
       console.log('📤 [SendVoice] Sending voice message...');
 
       // Upload voice message
+      console.log('📤 [SendVoice] Uploading with appointment ID:', {
+        parsedAppointmentId,
+        type: typeof parsedAppointmentId,
+        converted: Number(parsedAppointmentId),
+        isValid: !isNaN(Number(parsedAppointmentId)) && Number(parsedAppointmentId) > 0
+      });
+      
       const mediaUrl = await voiceRecordingService.uploadVoiceMessage(Number(parsedAppointmentId), recordingUri);
       
       if (!mediaUrl) {
