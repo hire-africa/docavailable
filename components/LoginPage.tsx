@@ -163,8 +163,125 @@ export default function LoginPage() {
         }
     };
 
+    const processOAuthCode = async (code: string) => {
+        try {
+            console.log('Processing OAuth code:', code.substring(0, 20) + '...');
+            
+            // Exchange authorization code for tokens
+            const tokenResponse = await AuthSession.exchangeCodeAsync(
+                {
+                    clientId: GOOGLE_OAUTH_CONFIG.clientId,
+                    clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
+                    code: code,
+                    redirectUri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html',
+                    extraParams: {
+                        access_type: 'offline',
+                    },
+                },
+                GOOGLE_OAUTH_CONFIG.discovery
+            );
+
+            // Get user info from Google
+            const userInfoResponse = await fetch(
+                `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
+            );
+            
+            if (!userInfoResponse.ok) {
+                throw new Error(GOOGLE_AUTH_ERRORS.USER_INFO_FAILED);
+            }
+            
+            const userInfo = await userInfoResponse.json();
+
+            // Create a JWT-like token for your backend
+            const googleToken = {
+                sub: userInfo.id,
+                email: userInfo.email,
+                name: userInfo.name,
+                given_name: userInfo.given_name,
+                family_name: userInfo.family_name,
+                picture: userInfo.picture,
+            };
+
+            // Send to your backend
+            const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
+            
+            if (authState.success && authState.data.user) {
+                const user = authState.data.user;
+                
+                if (user.user_type === 'admin') {
+                    router.replace('/admin-dashboard');
+                } else if (user.user_type === 'doctor') {
+                    if (user.status === 'pending') {
+                        Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                        await authService.signOut();
+                        return;
+                    }
+                    if (user.status === 'suspended') {
+                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                        await authService.signOut();
+                        return;
+                    }
+                    router.replace('/doctor-dashboard');
+                } else if (user.user_type === 'patient') {
+                    router.replace('/patient-dashboard');
+                } else {
+                    router.replace('/');
+                }
+            } else {
+                Alert.alert('Login Failed', 'Google authentication failed.');
+                await authService.signOut();
+            }
+        } catch (error: any) {
+            console.error('OAuth code processing error:', error);
+            Alert.alert('Authentication Error', 'Failed to process Google authentication. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleGoogleSignIn = async () => {
         setLoading(true);
+        
+        // Start polling for OAuth code from redirect page
+        const pollForOAuthCode = () => {
+            const pollInterval = setInterval(() => {
+                try {
+                    // Check if we're on web and can access localStorage
+                    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                        const storedCode = localStorage.getItem('google_oauth_code');
+                        const timestamp = localStorage.getItem('google_oauth_timestamp');
+                        
+                        if (storedCode && timestamp) {
+                            const codeAge = Date.now() - parseInt(timestamp);
+                            // Only use code if it's less than 5 minutes old
+                            if (codeAge < 300000) {
+                                console.log('Found OAuth code from redirect page:', storedCode.substring(0, 20) + '...');
+                                clearInterval(pollInterval);
+                                
+                                // Clear the stored code
+                                localStorage.removeItem('google_oauth_code');
+                                localStorage.removeItem('google_oauth_timestamp');
+                                
+                                // Process the OAuth code
+                                processOAuthCode(storedCode);
+                                return;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('Error polling for OAuth code:', e);
+                }
+            }, 1000); // Check every second
+            
+            // Stop polling after 30 seconds
+            setTimeout(() => {
+                clearInterval(pollInterval);
+            }, 30000);
+        };
+        
+        // Start polling
+        pollForOAuthCode();
+        
         try {
             // Check if Google OAuth is configured
             if (!GOOGLE_OAUTH_CONFIG.clientId || GOOGLE_OAUTH_CONFIG.clientId === 'YOUR_GOOGLE_CLIENT_ID') {
