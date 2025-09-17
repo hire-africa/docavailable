@@ -1,8 +1,9 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -191,7 +192,6 @@ const Step1: React.FC<Step1Props> = ({
                             value={firstName}
                             onChangeText={setFirstName}
                             numberOfLines={1}
-                            ellipsizeMode="tail"
                         />
                                                     {errors?.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                     </View>
@@ -204,7 +204,6 @@ const Step1: React.FC<Step1Props> = ({
                             value={surname}
                             onChangeText={setSurname}
                             numberOfLines={1}
-                            ellipsizeMode="tail"
                         />
                         {errors.surname && <Text style={styles.errorText}>{errors.surname}</Text>}
                     </View>
@@ -527,6 +526,54 @@ export default function PatientSignUp() {
         acceptPolicies: null,
         verificationCode: null,
     });
+
+    // Pre-fill form with Google user data if available
+    useEffect(() => {
+        const loadGoogleUserData = async () => {
+            try {
+                let googleUserData = null;
+                
+                if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    const stored = sessionStorage.getItem('google_user_data');
+                    if (stored) {
+                        googleUserData = JSON.parse(stored);
+                        // Clear the stored data after reading
+                        sessionStorage.removeItem('google_user_data');
+                    }
+                } else {
+                    const stored = await AsyncStorage.getItem('google_user_data');
+                    if (stored) {
+                        googleUserData = JSON.parse(stored);
+                        // Clear the stored data after reading
+                        await AsyncStorage.removeItem('google_user_data');
+                    }
+                }
+                
+                if (googleUserData) {
+                    console.log('Pre-filling form with Google user data:', googleUserData);
+                    setFirstName(googleUserData.first_name || '');
+                    setSurname(googleUserData.last_name || '');
+                    setEmail(googleUserData.email || '');
+                    
+                    // Set profile picture if available
+                    if (googleUserData.picture) {
+                        setProfilePicture(googleUserData.picture);
+                    }
+                    
+                    // Show a message to the user
+                    Alert.alert(
+                        'Google Account Detected',
+                        'We found your Google account information. Some fields have been pre-filled for you.',
+                        [{ text: 'OK' }]
+                    );
+                }
+            } catch (error) {
+                console.warn('Could not load Google user data:', error);
+            }
+        };
+        
+        loadGoogleUserData();
+    }, []);
 
     const validateStep1 = () => {
         const newErrors: any = {};
@@ -931,7 +978,7 @@ export default function PatientSignUp() {
                             onPress={() => setStep(step - 1)}
                             disabled={loading}
                         >
-                            <Text style={styles.arrowIcon}>←</Text>
+                            <Text style={styles.backButtonText}>←</Text>
                             <Text style={styles.backButtonText}>Back</Text>
                         </TouchableOpacity>
                     )}
@@ -952,7 +999,7 @@ export default function PatientSignUp() {
                                 <Text style={styles.continueButtonText}>
                                     {step === 2 ? 'Create Account' : 'Continue'}
                                 </Text>
-                                <Text style={styles.arrowIcon}>→</Text>
+                                <Text style={styles.continueButtonText}>→</Text>
                             </>
                         )}
                     </TouchableOpacity>

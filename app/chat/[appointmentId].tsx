@@ -20,7 +20,6 @@ import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
-import IncomingCallScreen from '../../components/IncomingCallScreen';
 import RatingModal from '../../components/RatingModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
@@ -30,7 +29,6 @@ import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import sessionService from '../../services/sessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
-import { imageService } from '../../services/imageService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
@@ -143,6 +141,14 @@ export default function ChatPage() {
   
   const scrollViewRef = useRef<ScrollView>(null);
   const currentUserId = user?.id || 0;
+  
+  // Debug current user ID
+  console.log('🔍 Current user ID debug:', {
+    userId: user?.id,
+    currentUserId,
+    userType: typeof currentUserId,
+    userObject: user
+  });
 
   // Auto-scroll functionality
   const scrollToBottom = () => {
@@ -539,8 +545,22 @@ export default function ChatPage() {
             // For regular appointments, fetch chat info
             const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
             if (infoResponse.success && infoResponse.data) {
-              // console.log('🔍 Chat Info Response:', infoResponse.data);
+              console.log('🔍 Chat Info Response:', infoResponse.data);
               const chatInfoData = infoResponse.data as ChatInfo;
+              
+              // Ensure other_participant_name is set properly
+              if (!chatInfoData.other_participant_name) {
+                console.log('⚠️ other_participant_name is missing, using fallback');
+                // Try to get the name from other fields or use a fallback
+                if (isPatient) {
+                  // If current user is patient, other participant is doctor
+                  chatInfoData.other_participant_name = 'Doctor';
+                } else {
+                  // If current user is doctor, other participant is patient
+                  chatInfoData.other_participant_name = 'Patient';
+                }
+              }
+              
               setChatInfo(chatInfoData);
               
               // Set appointment type for call button logic
@@ -701,17 +721,50 @@ export default function ChatPage() {
         
         // If we receive an offer, handle the incoming call
         if (message.type === 'offer') {
+          console.log('📞 Offer received - FULL MESSAGE:', JSON.stringify(message, null, 2));
           console.log('📞 Offer received - checking senderId filter:', {
             messageSenderId: message.senderId,
+            messageUserId: message.userId,
             currentUserId: currentUserId,
             currentUserIdString: currentUserId.toString(),
             userType: user?.user_type,
-            appointmentId: appointmentId
+            appointmentId: appointmentId,
+            userObject: user
           });
           
           // Check if this offer is from ourselves (ignore our own offers)
-          if (message.senderId && message.senderId === currentUserId.toString()) {
+          const messageSenderId = message.senderId || message.userId;
+          const currentUserIdStr = currentUserId.toString();
+          
+          console.log('📞 Comparing sender IDs:', {
+            messageSenderId,
+            currentUserIdStr,
+            areEqual: messageSenderId === currentUserIdStr,
+            messageKeys: Object.keys(message),
+            messageType: typeof messageSenderId,
+            currentType: typeof currentUserIdStr
+          });
+          
+          // Convert both to strings for comparison
+          const senderIdStr = String(messageSenderId || '');
+          const currentIdStr = String(currentUserIdStr || '');
+          
+          console.log('📞 Final comparison:', {
+            senderIdStr,
+            currentIdStr,
+            areEqual: senderIdStr === currentIdStr,
+            senderIdLength: senderIdStr.length,
+            currentIdLength: currentIdStr.length
+          });
+          
+          if (senderIdStr && currentIdStr && senderIdStr === currentIdStr) {
             console.log('📞 Ignoring own offer - not showing incoming call screen');
+            return;
+          }
+          
+          // Additional check: if currentUserId is 0 or invalid, don't show incoming call
+          if (!currentUserId || currentUserId === 0) {
+            console.log('📞 Invalid currentUserId, not showing incoming call screen');
             return;
           }
           
@@ -1088,60 +1141,8 @@ export default function ChatPage() {
   };
 
   const sendVoiceMessage = async () => {
-    if (!recordingUri) {
-      Alert.alert('Error', 'No voice message to send');
-      return;
-    }
-
-    try {
-      setSendingVoiceMessage(true);
-      console.log('📤 [SendVoice] Sending voice message...');
-
-      // Upload voice message
-      console.log('📤 [SendVoice] Uploading with appointment ID:', {
-        parsedAppointmentId,
-        type: typeof parsedAppointmentId,
-        converted: Number(parsedAppointmentId),
-        isValid: !isNaN(Number(parsedAppointmentId)) && Number(parsedAppointmentId) > 0
-      });
-      
-      const mediaUrl = await voiceRecordingService.uploadVoiceMessage(Number(parsedAppointmentId), recordingUri);
-      
-      if (!mediaUrl) {
-        Alert.alert('Error', 'Failed to upload voice message');
-        return;
-      }
-
-      console.log('📤 [SendVoice] Voice message uploaded successfully:', mediaUrl);
-
-      // Send message via WebRTC
-      if (webrtcChatService) {
-        const messageData = await webrtcChatService.sendMediaMessage(
-          'Voice message',
-          'voice',
-          mediaUrl
-        );
-        
-        if (messageData) {
-          // Add to local messages immediately
-          setMessages(prev => [...prev, messageData]);
-          scrollToBottom();
-          
-          // Clear recording
-          setRecordingUri(null);
-          setRecordingDuration(0);
-          
-          console.log('✅ [SendVoice] Voice message sent successfully');
-        }
-      } else {
-        Alert.alert('Error', 'Chat service not available');
-      }
-    } catch (error) {
-      console.error('❌ [SendVoice] Error sending voice message:', error);
-      Alert.alert('Error', 'Failed to send voice message');
-    } finally {
-      setSendingVoiceMessage(false);
-    }
+    console.log('📤 [SendVoice] Voice message sending is disabled');
+    Alert.alert('Disabled', 'Voice message sending has been disabled');
   };
 
   const formatDuration = (seconds: number): string => {
@@ -1152,77 +1153,13 @@ export default function ChatPage() {
 
   // Image handling functions
   const handleTakePhoto = async () => {
-    try {
-      setSendingCameraImage(true);
-      console.log('📤 [Camera] Taking photo...');
-
-      const imageUri = await imageService.takePhoto();
-      if (imageUri) {
-        await sendImageMessage(imageUri, 'camera');
-      }
-    } catch (error) {
-      console.error('❌ [Camera] Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
-    } finally {
-      setSendingCameraImage(false);
-    }
+    console.log('📤 [Camera] Image sending is disabled');
+    Alert.alert('Disabled', 'Image sending has been disabled');
   };
 
   const handlePickImage = async () => {
-    try {
-      setSendingGalleryImage(true);
-      console.log('📤 [Gallery] Picking image...');
-
-      const imageUri = await imageService.pickImage();
-      if (imageUri) {
-        await sendImageMessage(imageUri, 'gallery');
-      }
-    } catch (error) {
-      console.error('❌ [Gallery] Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image');
-    } finally {
-      setSendingGalleryImage(false);
-    }
-  };
-
-  const sendImageMessage = async (imageUri: string, source: 'camera' | 'gallery') => {
-    try {
-      console.log(`📤 [Image] Uploading ${source} image...`);
-
-      // Upload image
-      const uploadResult = await imageService.uploadImage(Number(parsedAppointmentId), imageUri);
-      
-      if (!uploadResult.success || !uploadResult.mediaUrl) {
-        Alert.alert('Error', uploadResult.error || 'Failed to upload image');
-        return;
-      }
-
-      const mediaUrl = uploadResult.mediaUrl;
-
-      console.log('📤 [Image] Image uploaded successfully:', mediaUrl);
-
-      // Send message via WebRTC
-      if (webrtcChatService) {
-        const messageData = await webrtcChatService.sendMediaMessage(
-          'Image',
-          'image',
-          mediaUrl
-        );
-        
-        if (messageData) {
-          // Add to local messages immediately
-          setMessages(prev => [...prev, messageData]);
-          scrollToBottom();
-          
-          console.log('✅ [Image] Image message sent successfully');
-        }
-      } else {
-        Alert.alert('Error', 'Chat service not available');
-      }
-    } catch (error) {
-      console.error('❌ [Image] Error sending image message:', error);
-      Alert.alert('Error', 'Failed to send image message');
-    }
+    console.log('📤 [Gallery] Image sending is disabled');
+    Alert.alert('Disabled', 'Image sending has been disabled');
   };
 
   // Debug modal state
@@ -1991,127 +1928,83 @@ export default function ChatPage() {
         sessionType={isTextSession ? 'instant' : 'appointment'}
       />
 
-      {/* Incoming Call Screen */}
-      <IncomingCallScreen
-        visible={showIncomingCall}
-        callerName={incomingCallerName}
-        callerProfilePicture={incomingCallerProfilePicture}
-        onAccept={async () => {
-          console.log('📞 Incoming call accepted - initializing AudioCallService...');
-          setShowIncomingCall(false);
-          setShowAudioCallModal(true);
-          setIsAnsweringCall(true);
-          
-          // Set flag to indicate this is an incoming call
-          (global as any).isIncomingCall = true;
-          
-          try {
-            // Initialize AudioCallService for incoming call
-            console.log('🔧 [Chat] Calling initializeForIncomingCall with:', {
-              appointmentId,
-              userId: currentUserId.toString(),
-              appointmentIdType: typeof appointmentId
-            });
+      {/* Incoming Call Screen - Now using unified AudioCall */}
+      {showIncomingCall && (
+        <Modal
+          visible={showIncomingCall}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowIncomingCall(false);
+            // Send call-rejected signal
             const audioCallService = AudioCallService.getInstance();
-            await audioCallService.initializeForIncomingCall(
-              appointmentId, 
-              currentUserId.toString(), 
-              {
-                onStateChange: (state) => {
-                  console.log('📊 Call state changed:', state);
-                },
-                onCallAnswered: () => {
-                  console.log('📞 Call answered successfully');
-                },
-                onCallEnded: () => {
-                  console.log('📞 Call ended');
-                  setShowAudioCallModal(false);
-                  setIsAnsweringCall(false);
-                },
-                onError: (error) => {
-                  console.error('❌ Call error:', error);
-                  setShowAudioCallModal(false);
-                  setIsAnsweringCall(false);
-                },
-                onRemoteStream: (stream) => {
-                  console.log('🎵 Remote stream received');
-                },
-                onCallRejected: () => {
-                  console.log('📞 Call rejected');
-                  setShowAudioCallModal(false);
-                  setIsAnsweringCall(false);
-                  setShowDoctorUnavailableModal(true);
-                },
-                onCallTimeout: () => {
-                  console.log('⏰ Call timeout');
-                  setShowAudioCallModal(false);
-                  setIsAnsweringCall(false);
-                }
+            audioCallService.sendMessage({
+              type: 'call-rejected',
+              appointmentId: appointmentId,
+              reason: 'Call declined by user',
+              timestamp: new Date().toISOString()
+            });
+          }}
+          statusBarTranslucent={true}
+        >
+          <AudioCall
+            appointmentId={appointmentId}
+            userId={currentUserId.toString()}
+            isDoctor={!isPatient}
+            doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
+            patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : (chatInfo?.other_participant_name || 'Patient')}
+            otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
+            onEndCall={async () => {
+              console.log('📞 Incoming call declined');
+              setShowIncomingCall(false);
+              
+              // Clear pending offer
+              (global as any).pendingOffer = null;
+              
+              // Send call-rejected signal to server
+              try {
+                const audioCallService = AudioCallService.getInstance();
+                const callRejectedMessage = {
+                  type: 'call-rejected',
+                  appointmentId: appointmentId,
+                  reason: 'doctor_on_another_call',
+                  timestamp: new Date().toISOString()
+                };
+                audioCallService.sendMessage(callRejectedMessage);
+                console.log('📤 Call-rejected signal sent to server:', callRejectedMessage);
+              } catch (error) {
+                console.error('❌ Error sending call-rejected signal:', error);
               }
-            );
-            
-            // Wait a moment for WebSocket to be fully established, then send call-answered signal
-            console.log('🔗 Waiting for WebSocket connection to be established...');
-            
-            // Retry sending call-answered signal with timeout
-            let retryCount = 0;
-            const maxRetries = 10;
-            const retryInterval = 100; // 100ms
-            
-            const sendCallAnsweredSignal = () => {
-              if (audioCallService.isConnectedToSignaling()) {
+            }}
+            onCallAnswered={async () => {
+              console.log('📞 Incoming call accepted - transitioning to connected state...');
+              
+              // Send call-answered signal
+              try {
+                const audioCallService = AudioCallService.getInstance();
                 const callAnsweredMessage = {
                   type: 'call-answered',
                   appointmentId: appointmentId,
+                  userId: currentUserId.toString(),
+                  senderId: currentUserId.toString(),
                   timestamp: new Date().toISOString()
                 };
                 audioCallService.sendMessage(callAnsweredMessage);
-                console.log('📤 Call-answered signal sent to server:', callAnsweredMessage);
-                return true;
-              } else if (retryCount < maxRetries) {
-                retryCount++;
-                console.log(`🔄 WebSocket not ready, retrying (${retryCount}/${maxRetries})...`);
-                setTimeout(sendCallAnsweredSignal, retryInterval);
-                return false;
-              } else {
-                console.error('❌ Failed to send call-answered signal after maximum retries:', {
-                  appointmentId: appointmentId,
-                  maxRetries: maxRetries
-                });
-                return false;
+                console.log('📤 Call-answered signal sent:', callAnsweredMessage);
+                
+                // Process the incoming call
+                await audioCallService.processIncomingCall();
+                console.log('✅ Incoming call processed successfully');
+                
+              } catch (error) {
+                console.error('❌ Error processing incoming call:', error);
+                Alert.alert('Error', 'Failed to answer call. Please try again.');
               }
-            };
-            
-            sendCallAnsweredSignal();
-          } catch (error) {
-            console.error('❌ Error accepting incoming call:', error);
-            setShowAudioCallModal(false);
-            setIsAnsweringCall(false);
-          }
-        }}
-        onDecline={async () => {
-          console.log('📞 Incoming call declined');
-          setShowIncomingCall(false);
-          
-          // Clear pending offer
-          (global as any).pendingOffer = null;
-          
-          // Send call-rejected signal to server
-          try {
-            const audioCallService = AudioCallService.getInstance();
-            const callRejectedMessage = {
-              type: 'call-rejected',
-              appointmentId: appointmentId,
-              reason: 'doctor_on_another_call',
-              timestamp: new Date().toISOString()
-            };
-            audioCallService.sendMessage(callRejectedMessage);
-            console.log('📤 Call-rejected signal sent to server:', callRejectedMessage);
-          } catch (error) {
-            console.error('❌ Error sending call-rejected signal:', error);
-          }
-        }}
-      />
+            }}
+            isIncomingCall={true}
+          />
+        </Modal>
+      )}
 
       {/* Audio Call Interface - Show when answering incoming call */}
       {showAudioCall && isAnsweringCall && (
@@ -2162,8 +2055,17 @@ export default function ChatPage() {
         appointmentId={appointmentId}
         userId={currentUserId.toString()}
         isDoctor={!isPatient}
-        doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
-        patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : chatInfo?.other_participant_name}
+        doctorName={(() => {
+          const name = isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`;
+          console.log('🔍 AudioCall doctorName:', { isPatient, name, chatInfo: chatInfo?.other_participant_name, user: user?.display_name });
+          return name;
+        })()}
+        patientName={(() => {
+          const name = isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : (chatInfo?.other_participant_name || 'Patient');
+          console.log('🔍 AudioCall patientName:', { isPatient, name, chatInfo: chatInfo?.other_participant_name, user: user?.display_name });
+          return name;
+        })()}
+        otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
         isIncomingCall={!!(global as any).isIncomingCall}
         onCallTimeout={() => setShowDoctorUnavailableModal(true)}
         onCallRejected={() => setShowDoctorUnavailableModal(true)}

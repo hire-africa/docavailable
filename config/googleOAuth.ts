@@ -1,10 +1,22 @@
 import Constants from 'expo-constants';
 
+// Debug environment variable loading
+console.log('Environment Debug:', {
+  processEnv: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+  constantsExtra: Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+  allConstants: Constants.expoConfig?.extra
+});
+
 // Google OAuth Configuration
 export const GOOGLE_OAUTH_CONFIG = {
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 'your_google_client_id_here',
-  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || 'your_google_client_secret_here',
+  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 
+            Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_ID || 
+            '584940778531-f1n0j5i8a7bd7hm8g57fbafk0falikbv.apps.googleusercontent.com',
+  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || 
+                Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || 
+                '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',
   scopes: ['openid', 'profile', 'email'],
+  // Use production domain for all platforms
   redirectUri: 'https://docavailable-3vbdv.ondigitalocean.app',
   discovery: {
     authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',

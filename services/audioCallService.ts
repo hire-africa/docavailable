@@ -1,11 +1,11 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
+    mediaDevices,
+    MediaStream,
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
 } from 'react-native-webrtc';
 
 export interface AudioCallState {
@@ -187,14 +187,13 @@ class AudioCallService {
 
       // Connect to signaling server
       await this.connectSignaling(appointmentId, userId);
+      console.log('📞 Signaling connected for incoming call - waiting for user to accept');
 
-      // Handle the pending offer
+      // Don't process the offer automatically - wait for user to accept
+      // The offer will be processed when the accept button is pressed
       const pendingOffer = (global as any).pendingOffer;
       if (pendingOffer) {
-        console.log('📞 Processing pending offer for incoming call...');
-        await this.handleIncomingOffer(pendingOffer);
-        // Clear the pending offer
-        (global as any).pendingOffer = null;
+        console.log('📞 Pending offer found - waiting for user acceptance');
       } else {
         console.warn('⚠️ No pending offer found for incoming call');
       }
@@ -558,16 +557,23 @@ class AudioCallService {
    * Handle incoming offer
    */
   private async handleOffer(offer: RTCSessionDescription): Promise<void> {
-    if (!this.peerConnection) return;
+    if (!this.peerConnection) {
+      console.error('❌ No peer connection available for offer handling');
+      return;
+    }
     
     try {
       // Check if we're in the right state to set remote description
       const currentState = this.peerConnection.signalingState;
-      console.log('📞 Current signaling state for offer:', currentState);
-      console.log('📞 Offer details:', {
+      console.log('📞 [handleOffer] Current signaling state:', currentState);
+      console.log('📞 [handleOffer] Offer details:', {
         type: offer.type,
         sdpLength: offer.sdp?.length,
         hasSdp: !!offer.sdp
+      });
+      console.log('📞 [handleOffer] Peer connection state:', {
+        connectionState: this.peerConnection.connectionState,
+        iceConnectionState: this.peerConnection.iceConnectionState
       });
       
       // Handle offer if we're in 'stable' state (incoming call)
@@ -589,8 +595,14 @@ class AudioCallService {
           type: 'answer',
           answer: answer,
           senderId: this.userId,
+          appointmentId: this.appointmentId,
+          userId: this.userId,
         });
         console.log('✅ Offer handled and answer sent successfully');
+        
+        // Mark call as answered
+        this.isCallAnswered = true;
+        console.log('📞 Call marked as answered');
       } else {
         console.warn('⚠️ Cannot handle offer in current state:', currentState);
         // Reset peer connection to stable state
@@ -713,40 +725,31 @@ class AudioCallService {
   }
 
   /**
-   * Handle incoming offer (for receiver)
+   * Process incoming call when user accepts (for receiver)
    */
-  async handleIncomingOffer(offer: any): Promise<void> {
-    if (!this.peerConnection) return;
-    
+  async processIncomingCall(): Promise<void> {
     try {
-      console.log('📞 [AudioCallService] Handling incoming offer...');
+      console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
       
-      // Set remote description
-      await this.peerConnection.setRemoteDescription(offer);
-      console.log('📞 Remote description set');
+      const pendingOffer = (global as any).pendingOffer;
+      if (!pendingOffer) {
+        throw new Error('No pending offer found');
+      }
       
-      // Create answer
-      const answer = await this.peerConnection.createAnswer();
-      await this.peerConnection.setLocalDescription(answer);
-      console.log('📞 Answer created and set as local description');
+      console.log('📞 [AudioCallService] Processing pending offer...');
+      await this.handleOffer(pendingOffer);
       
-      // Send answer
-      this.sendSignalingMessage({
-        type: 'answer',
-        answer: answer,
-        senderId: this.userId,
-      });
-      console.log('📞 Answer sent to caller');
-      
-      // Mark call as answered
-      this.isCallAnswered = true;
-      this.updateState({ connectionState: 'connected' });
+      // Clear the pending offer
+      (global as any).pendingOffer = null;
+      console.log('✅ [AudioCallService] Incoming call processed successfully');
       
     } catch (error) {
-      console.error('❌ Error handling incoming offer:', error);
-      this.events?.onError('Failed to handle incoming call');
+      console.error('❌ [AudioCallService] Failed to process incoming call:', error);
+      this.events?.onError(`Failed to process incoming call: ${error.message}`);
+      throw error;
     }
   }
+
 
   /**
    * Create and send offer (for caller)
@@ -762,6 +765,8 @@ class AudioCallService {
         type: 'offer',
         offer: offer,
         senderId: this.userId,
+        appointmentId: this.appointmentId,
+        userId: this.userId,
       });
     } catch (error) {
       console.error('❌ Error creating offer:', error);

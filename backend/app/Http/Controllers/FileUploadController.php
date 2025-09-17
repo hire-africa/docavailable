@@ -220,15 +220,12 @@ class FileUploadController extends Controller
             'files' => $request->allFiles(),
             'headers' => $request->headers->all(),
             'content_type' => $request->header('Content-Type'),
-            'appointment_id_raw' => $request->input('appointment_id'),
-            'appointment_id_type' => gettype($request->input('appointment_id')),
-            'appointment_id_is_numeric' => is_numeric($request->input('appointment_id')),
         ]);
         
         try {
             $request->validate([
                 'file' => 'required|file|mimes:m4a,mp3,wav,aac,mp4|max:10240', // max 10MB for audio files, added mp4
-                'appointment_id' => 'required|numeric|integer|min:1'
+                'appointment_id' => 'required|integer'
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::error('Voice message validation failed:', [

@@ -30,7 +30,7 @@ export default {
     web: {
       favicon: "./assets/images/favicon.png"
     },
-    // scheme: "docavailable", // Disabled for web app OAuth
+    scheme: "com.docavailable.app", // Enable for mobile OAuth redirects
     plugins: [
       "expo-router",
       [
@@ -51,8 +51,8 @@ export default {
       appVersion: process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0",
       
       // Google OAuth Configuration
-      EXPO_PUBLIC_GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-      EXPO_PUBLIC_GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,
+      EXPO_PUBLIC_GOOGLE_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "584940778531-f1n0j5i8a7bd7hm8g57fbafk0falikbv.apps.googleusercontent.com",
+      EXPO_PUBLIC_GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || "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",
       
       // WebRTC Configuration
       EXPO_PUBLIC_WEBRTC_SIGNALING_URL: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL,
