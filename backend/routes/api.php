@@ -886,10 +886,11 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
     
-    // Chatbot routes
-    Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
-    Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
 });
+
+// Public chatbot routes (no authentication required)
+Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
+Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
 
 // Admin routes (admin only)
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
