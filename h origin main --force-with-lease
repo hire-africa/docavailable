@@ -1,0 +1,5 @@
+[33m71aa8d5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Security fix: Replace hardcoded API keys with environment variables
+[33m80b366a[m Update payment system, WebRTC services, and UI components with latest improvements
+[33m1851b4a[m Remove Google OAuth debug component
+[33m5d21311[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix Google OAuth environment variable loading
+[33m85034d4[m Add Google OAuth debug component and fix environment variable reading

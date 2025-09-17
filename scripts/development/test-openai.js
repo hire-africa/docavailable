@@ -5,10 +5,10 @@ async function testOpenAI() {
   console.log('🤖 Testing OpenAI API Integration...\n');
   
   // Your API key (replace with your actual key)
-  const apiKey = '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';
+  const apiKey = process.env.OPENAI_API_KEY || 'your-api-key-here';
   
   if (!apiKey || apiKey === 'your-api-key-here') {
-    console.log('❌ No valid API key found. Please update the API key in the script.');
+    console.log('❌ No valid API key found. Please set OPENAI_API_KEY environment variable or update the API key in the script.');
     return;
   }
 
@@ -74,4 +74,4 @@ Important: You are NOT a doctor and cannot provide medical advice. Always recomm
 }
 
 // Run the test
-testOpenAI().catch(console.error); 
+testOpenAI().catch(console.error);
