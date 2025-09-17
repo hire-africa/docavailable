@@ -499,6 +499,12 @@ class PaymentController extends Controller
         .success { color: #28a745; }
         .error { color: #dc3545; }
         .loading { color: #007bff; }
+        .countdown { 
+            font-size: 24px; 
+            font-weight: bold; 
+            margin: 20px 0; 
+            color: #007bff;
+        }
     </style>
 </head>
 <body>
@@ -508,10 +514,43 @@ class PaymentController extends Controller
         </h2>
         <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
         <p>Status: ' . htmlspecialchars($transaction->status) . '</p>
+        <div class="countdown" id="countdown">Redirecting in 5 seconds...</div>
         <p>You can close this window and return to the app.</p>
     </div>
     <script>
-        // Notify the app that payment is complete
+        // Countdown and redirect
+        let count = 5;
+        const countdownEl = document.getElementById("countdown");
+        
+        const countdown = setInterval(() => {
+            count--;
+            if (count > 0) {
+                countdownEl.textContent = "Redirecting in " + count + " seconds...";
+            } else {
+                countdownEl.textContent = "Redirecting now...";
+                clearInterval(countdown);
+                
+                // Notify the app that payment is complete
+                if (window.ReactNativeWebView) {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: "payment_complete",
+                        status: "' . $transaction->status . '",
+                        tx_ref: "' . $txRef . '"
+                    }));
+                }
+                
+                // Try to close the window or go back
+                setTimeout(() => {
+                    if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: "close_window"
+                        }));
+                    }
+                }, 1000);
+            }
+        }, 1000);
+        
+        // Also send immediate notification
         if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: "payment_complete",
