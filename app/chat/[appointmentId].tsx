@@ -30,6 +30,7 @@ import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import sessionService from '../../services/sessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
+import { imageService } from '../../services/imageService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
@@ -1087,8 +1088,53 @@ export default function ChatPage() {
   };
 
   const sendVoiceMessage = async () => {
-    console.log('📤 [SendVoice] Voice message sending is disabled');
-    Alert.alert('Disabled', 'Voice message sending has been disabled');
+    if (!recordingUri) {
+      Alert.alert('Error', 'No voice message to send');
+      return;
+    }
+
+    try {
+      setSendingVoiceMessage(true);
+      console.log('📤 [SendVoice] Sending voice message...');
+
+      // Upload voice message
+      const mediaUrl = await voiceRecordingService.uploadVoiceMessage(Number(parsedAppointmentId), recordingUri);
+      
+      if (!mediaUrl) {
+        Alert.alert('Error', 'Failed to upload voice message');
+        return;
+      }
+
+      console.log('📤 [SendVoice] Voice message uploaded successfully:', mediaUrl);
+
+      // Send message via WebRTC
+      if (webrtcChatService) {
+        const messageData = await webrtcChatService.sendMediaMessage(
+          'Voice message',
+          'voice',
+          mediaUrl
+        );
+        
+        if (messageData) {
+          // Add to local messages immediately
+          setMessages(prev => [...prev, messageData]);
+          scrollToBottom();
+          
+          // Clear recording
+          setRecordingUri(null);
+          setRecordingDuration(0);
+          
+          console.log('✅ [SendVoice] Voice message sent successfully');
+        }
+      } else {
+        Alert.alert('Error', 'Chat service not available');
+      }
+    } catch (error) {
+      console.error('❌ [SendVoice] Error sending voice message:', error);
+      Alert.alert('Error', 'Failed to send voice message');
+    } finally {
+      setSendingVoiceMessage(false);
+    }
   };
 
   const formatDuration = (seconds: number): string => {
@@ -1099,13 +1145,77 @@ export default function ChatPage() {
 
   // Image handling functions
   const handleTakePhoto = async () => {
-    console.log('📤 [Camera] Image sending is disabled');
-    Alert.alert('Disabled', 'Image sending has been disabled');
+    try {
+      setSendingCameraImage(true);
+      console.log('📤 [Camera] Taking photo...');
+
+      const imageUri = await imageService.takePhoto();
+      if (imageUri) {
+        await sendImageMessage(imageUri, 'camera');
+      }
+    } catch (error) {
+      console.error('❌ [Camera] Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo');
+    } finally {
+      setSendingCameraImage(false);
+    }
   };
 
   const handlePickImage = async () => {
-    console.log('📤 [Gallery] Image sending is disabled');
-    Alert.alert('Disabled', 'Image sending has been disabled');
+    try {
+      setSendingGalleryImage(true);
+      console.log('📤 [Gallery] Picking image...');
+
+      const imageUri = await imageService.pickImage();
+      if (imageUri) {
+        await sendImageMessage(imageUri, 'gallery');
+      }
+    } catch (error) {
+      console.error('❌ [Gallery] Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    } finally {
+      setSendingGalleryImage(false);
+    }
+  };
+
+  const sendImageMessage = async (imageUri: string, source: 'camera' | 'gallery') => {
+    try {
+      console.log(`📤 [Image] Uploading ${source} image...`);
+
+      // Upload image
+      const uploadResult = await imageService.uploadImage(Number(parsedAppointmentId), imageUri);
+      
+      if (!uploadResult.success || !uploadResult.mediaUrl) {
+        Alert.alert('Error', uploadResult.error || 'Failed to upload image');
+        return;
+      }
+
+      const mediaUrl = uploadResult.mediaUrl;
+
+      console.log('📤 [Image] Image uploaded successfully:', mediaUrl);
+
+      // Send message via WebRTC
+      if (webrtcChatService) {
+        const messageData = await webrtcChatService.sendMediaMessage(
+          'Image',
+          'image',
+          mediaUrl
+        );
+        
+        if (messageData) {
+          // Add to local messages immediately
+          setMessages(prev => [...prev, messageData]);
+          scrollToBottom();
+          
+          console.log('✅ [Image] Image message sent successfully');
+        }
+      } else {
+        Alert.alert('Error', 'Chat service not available');
+      }
+    } catch (error) {
+      console.error('❌ [Image] Error sending image message:', error);
+      Alert.alert('Error', 'Failed to send image message');
+    }
   };
 
   // Debug modal state
