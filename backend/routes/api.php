@@ -885,6 +885,10 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-sessions/{sessionId}/check-response', [TextSessionController::class, 'checkResponse']);
     Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
+    
+    // Chatbot routes
+    Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
+    Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
 });
 
 // Admin routes (admin only)
