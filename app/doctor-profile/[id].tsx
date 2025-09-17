@@ -116,29 +116,17 @@ export default function DoctorProfileScreen() {
 
       if (response.ok) {
         setActiveSession(data.data);
-        Alert.alert(
-          'Session Started!',
-          `You are now connected with Dr. ${doctor.first_name} ${doctor.last_name}. Response time: ${data.data.doctor.response_time} minutes.`,
-          [
-            {
-              text: 'Go to Chat',
-              onPress: () => {
-                const chatId = `text_session_${data.data.session_id}`;
-                router.push(`/chat/${chatId}`);
-              },
-            },
-            {
-              text: 'Stay Here',
-              style: 'cancel',
-            },
-          ]
-        );
+        console.log(`Session Started: You are now connected with Dr. ${doctor.first_name} ${doctor.last_name}. Response time: ${data.data.doctor.response_time} minutes.`);
+        // Navigate directly to chat without showing alert
+        const chatId = `text_session_${data.data.session_id}`;
+        router.push(`/chat/${chatId}`);
       } else {
-        Alert.alert('Error', data.message || 'Failed to start session');
+        console.error('Error:', data.message || 'Failed to start session');
+        // Session start error logged to console only - no modal shown
       }
     } catch (error) {
       console.error('Error starting session:', error);
-      Alert.alert('Error', 'Failed to start session. Please try again.');
+      // Session start error logged to console only - no modal shown
     } finally {
       setStartingSession(false);
     }

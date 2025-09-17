@@ -15,3 +15,4 @@ console.log('GOOGLE_CLIENT_SECRET:', appConfig.default.expo.extra.EXPO_PUBLIC_GO
 console.log('\n=== Expected Values ===');
 console.log('Expected Client ID: 584940778531-f1n0j5i8a7bd7hm8g57fbafk0falikbv.apps.googleusercontent.com');
 console.log('Expected Client Secret: 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');
+

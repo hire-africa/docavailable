@@ -3392,7 +3392,7 @@ export default function PatientDashboard() {
         />
         <Tab
           icon="userMd"
-          label="DocAva"
+          label="Doc AI"
           isActive={activeTab === 'docbot'}
           onPress={() => setActiveTab('docbot')}
         />

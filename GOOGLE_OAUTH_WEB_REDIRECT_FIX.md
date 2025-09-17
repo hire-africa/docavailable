@@ -119,3 +119,4 @@ http://localhost:19006
 3. **Test again** - should work on web now!
 
 The key is using the correct redirect URI format for each platform! 🚀
+

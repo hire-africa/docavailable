@@ -155,3 +155,4 @@ If you're still getting the 400 error after trying these steps:
 4. **Try creating a new OAuth client** with the correct settings
 
 The enhanced error logging will now show you the exact error details, which will help us identify the specific issue.
+

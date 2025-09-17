@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import Icon from '../components/Icon';
 
 
@@ -84,16 +84,14 @@ interface BlogProps {
 export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('date');
   const [refreshing, setRefreshing] = useState(false);
   const [bookmarkedArticles, setBookmarkedArticles] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [pressedSortChip, setPressedSortChip] = useState<string | null>(null);
 
   // Combine all blogs for search
   const allBlogs = [...featuredBlogs, ...articles];
 
-  // Filter and sort blogs
+  // Filter blogs by search query
   const getFilteredBlogs = () => {
     let filteredBlogs = allBlogs;
     
@@ -109,25 +107,8 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       });
     }
 
-    // Sort blogs based on selected criteria
-    switch (sortBy) {
-      case 'date':
-        return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      case 'title':
-        return filteredBlogs.sort((a, b) => a.title.localeCompare(b.title));
-      case 'category':
-        return filteredBlogs.sort((a, b) => a.category.localeCompare(b.category));
-      case 'readTime':
-        return filteredBlogs.sort((a, b) => {
-          const aTime = parseInt(a.readTime) || 0;
-          const bTime = parseInt(b.readTime) || 0;
-          return aTime - bTime;
-        });
-      case 'author':
-        return filteredBlogs.sort((a, b) => a.author.localeCompare(b.author));
-      default:
+    // Sort by date (newest first) by default
     return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }
   };
 
   // Handle refresh
@@ -207,129 +188,6 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       </View>
 
 
-      {/* Sort Options */}
-      <View style={styles.sortContainer}>
-        <Text style={styles.sortTitle}>Sort by</Text>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortContent}
-          decelerationRate="fast"
-          snapToInterval={90}
-          snapToAlignment="start"
-        >
-          <Pressable
-            style={({ pressed }) => [
-              styles.sortChip,
-              sortBy === 'date' && styles.selectedSortChip,
-              pressed && styles.sortChipPressed
-            ]}
-            onPress={() => setSortBy('date')}
-            onPressIn={() => setPressedSortChip('date')}
-            onPressOut={() => setPressedSortChip(null)}
-          >
-            <Text 
-              style={[
-                styles.sortChipText,
-                sortBy === 'date' && styles.selectedSortChipText
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              Latest
-            </Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.sortChip,
-              sortBy === 'title' && styles.selectedSortChip,
-              pressed && styles.sortChipPressed
-            ]}
-            onPress={() => setSortBy('title')}
-            onPressIn={() => setPressedSortChip('title')}
-            onPressOut={() => setPressedSortChip(null)}
-          >
-            <Text 
-              style={[
-                styles.sortChipText,
-                sortBy === 'title' && styles.selectedSortChipText
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              Title A-Z
-            </Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.sortChip,
-              sortBy === 'category' && styles.selectedSortChip,
-              pressed && styles.sortChipPressed
-            ]}
-            onPress={() => setSortBy('category')}
-            onPressIn={() => setPressedSortChip('category')}
-            onPressOut={() => setPressedSortChip(null)}
-          >
-            <Text 
-              style={[
-                styles.sortChipText,
-                sortBy === 'category' && styles.selectedSortChipText
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              Category
-            </Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.sortChip,
-              sortBy === 'readTime' && styles.selectedSortChip,
-              pressed && styles.sortChipPressed
-            ]}
-            onPress={() => setSortBy('readTime')}
-            onPressIn={() => setPressedSortChip('readTime')}
-            onPressOut={() => setPressedSortChip(null)}
-          >
-            <Text 
-              style={[
-                styles.sortChipText,
-                sortBy === 'readTime' && styles.selectedSortChipText
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              Read Time
-            </Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.sortChip,
-              sortBy === 'author' && styles.selectedSortChip,
-              pressed && styles.sortChipPressed
-            ]}
-            onPress={() => setSortBy('author')}
-            onPressIn={() => setPressedSortChip('author')}
-            onPressOut={() => setPressedSortChip(null)}
-          >
-            <Text 
-              style={[
-                styles.sortChipText,
-                sortBy === 'author' && styles.selectedSortChipText
-              ]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.8}
-            >
-              Author
-            </Text>
-          </Pressable>
-        </ScrollView>
-      </View>
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
@@ -556,64 +414,6 @@ const styles = StyleSheet.create({
   clearButton: {
     marginLeft: 8,
     padding: 4,
-  },
-  sortContainer: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-  },
-  sortTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  sortContent: {
-    paddingRight: 16,
-    paddingLeft: 4,
-  },
-  sortChip: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    marginRight: 8,
-    borderWidth: 1.5,
-    borderColor: '#E8F5E8',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-    minWidth: 80,
-    maxWidth: 140,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  selectedSortChip: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  sortChipText: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  selectedSortChipText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  sortChipPressed: {
-    transform: [{ scale: 0.95 }],
-    opacity: 0.8,
   },
   sectionTitle: {
     fontSize: 20,
