@@ -15,6 +15,13 @@ class ChatbotController extends Controller
     public function __construct()
     {
         $this->openaiApiKey = env('OPENAI_API_KEY');
+        
+        // Debug logging
+        \Log::info('ChatbotController initialized', [
+            'has_openai_key' => !empty($this->openaiApiKey),
+            'key_length' => $this->openaiApiKey ? strlen($this->openaiApiKey) : 0,
+            'key_starts_with_sk' => $this->openaiApiKey ? str_starts_with($this->openaiApiKey, 'sk-') : false
+        ]);
     }
 
     /**
@@ -36,12 +43,20 @@ class ChatbotController extends Controller
 
             // Check if OpenAI API key is configured
             if (empty($this->openaiApiKey)) {
-                Log::warning('OpenAI API key not configured, using fallback response');
+                Log::warning('OpenAI API key not configured, using fallback response', [
+                    'user_input' => $userInput,
+                    'api_key_empty' => empty($this->openaiApiKey)
+                ]);
                 return response()->json([
                     'success' => true,
                     'data' => $this->getFallbackResponse($userInput)
                 ]);
             }
+
+            Log::info('OpenAI API key found, proceeding with AI response', [
+                'user_input' => $userInput,
+                'key_length' => strlen($this->openaiApiKey)
+            ]);
 
             // Get AI response from OpenAI
             $response = $this->getOpenAIResponse($userInput, $userContext, $userId);
@@ -113,6 +128,12 @@ class ChatbotController extends Controller
      */
     private function getOpenAIResponse(string $userInput, array $userContext = [], string $userId = 'default'): array
     {
+        Log::info('Attempting OpenAI API call', [
+            'user_input' => $userInput,
+            'api_key_length' => strlen($this->openaiApiKey),
+            'api_key_starts_with_sk' => str_starts_with($this->openaiApiKey, 'sk-')
+        ]);
+
         $systemPrompt = "You are DocBot, a helpful AI health assistant for DocAvailable, a telemedicine platform. Your role is to:
 
 1. Provide general health information and guidance
@@ -157,6 +178,11 @@ Remember: You are an assistant, not a replacement for professional medical care.
             $data = $response->json();
             $aiResponse = $data['choices'][0]['message']['content'] ?? 'I apologize, but I could not generate a response.';
 
+            Log::info('OpenAI API call successful', [
+                'response_length' => strlen($aiResponse),
+                'response_preview' => substr($aiResponse, 0, 100) . '...'
+            ]);
+
             // Analyze response for booking recommendation and urgency
             $shouldBookAppointment = $this->shouldRecommendBooking($userInput, $aiResponse);
             $urgency = $this->determineUrgency($userInput);
@@ -169,7 +195,11 @@ Remember: You are an assistant, not a replacement for professional medical care.
                 'suggestions' => $this->generateSuggestions($userInput, $aiResponse)
             ];
         } else {
-            Log::error('OpenAI API error: ' . $response->body());
+            Log::error('OpenAI API error', [
+                'status_code' => $response->status(),
+                'response_body' => $response->body(),
+                'user_input' => $userInput
+            ]);
             return $this->getFallbackResponse($userInput);
         }
     }
@@ -288,3 +318,4 @@ Remember: You are an assistant, not a replacement for professional medical care.
         return array_slice($suggestions, 0, 3);
     }
 }
+
