@@ -454,6 +454,7 @@ class PaymentController extends Controller
             $status = $request->query('status');
             
             if (!$txRef) {
+                Log::warning('Return handler missing tx_ref parameter');
                 return response()->json(['error' => 'Missing tx_ref parameter'], 400);
             }
             
@@ -474,12 +475,55 @@ class PaymentController extends Controller
                 $transaction->update(['status' => 'failed']);
             }
             
-            return response()->json([
-                'success' => true,
-                'message' => 'Return handler processed',
-                'transaction_id' => $transaction->id,
-                'status' => $transaction->status
-            ]);
+            // Return a simple HTML page that the WebView can handle
+            $html = '<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Complete</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: #f5f5f5;
+        }
+        .container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .loading { color: #007bff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="' . ($status === 'success' ? 'success' : 'error') . '">
+            ' . ($status === 'success' ? 'Payment Successful!' : 'Payment Failed') . '
+        </h2>
+        <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
+        <p>Status: ' . htmlspecialchars($transaction->status) . '</p>
+        <p>You can close this window and return to the app.</p>
+    </div>
+    <script>
+        // Notify the app that payment is complete
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: "payment_complete",
+                status: "' . $transaction->status . '",
+                tx_ref: "' . $txRef . '"
+            }));
+        }
+    </script>
+</body>
+</html>';
+            
+            return response($html)->header('Content-Type', 'text/html');
             
         } catch (\Exception $e) {
             Log::error('PayChangu return handler error', [

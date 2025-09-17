@@ -38,7 +38,7 @@ class PayChanguService
 
         // Prepare payload according to PayChangu API specification
         $apiPayload = [
-            'amount' => (string) $payload['amount'], // Must be string
+            'amount' => (string) $payload['amount'], // Must be string as per docs
             'currency' => $payload['currency'],
             'callback_url' => $payload['callback_url'],
             'return_url' => $payload['return_url'],
@@ -88,6 +88,12 @@ class PayChanguService
         // Extract checkout URL from response according to PayChangu documentation
         $checkoutUrl = $responseData['data']['checkout_url'] ?? null;
         $txRef = $responseData['data']['data']['tx_ref'] ?? null;
+
+        Log::info('PayChangu checkout URL extracted', [
+            'checkout_url' => $checkoutUrl,
+            'tx_ref' => $txRef,
+            'full_response' => $responseData
+        ]);
 
         return [
             'ok' => true,

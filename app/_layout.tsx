@@ -50,7 +50,10 @@ export default function RootLayout() {
         <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
         <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
         <Stack.Screen name="help-support" options={{ headerShown: false }} />
-        <Stack.Screen name="payments/checkout" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="payments/checkout" options={{ 
+          headerShown: false,
+          gestureEnabled: true
+        }} />
         <Stack.Screen name="test-webview" options={{ headerShown: false }} />
         <Stack.Screen name="+not-found" options={{ headerShown: false }} />
       </Stack>

@@ -147,6 +147,7 @@ export default function PatientDashboard() {
   const [showOnlyOnline, setShowOnlyOnline] = useState(false);
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [availableSpecializations, setAvailableSpecializations] = useState<string[]>([]);
+  const [isPurchasing, setIsPurchasing] = useState(false);
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [endedSessions, setEndedSessions] = useState<EndedSessionMetadata[]>([]);
@@ -987,6 +988,7 @@ export default function PatientDashboard() {
 
   const handlePurchaseSubscription = async (plan: SubscriptionPlan) => {
     try {
+      setIsPurchasing(true);
       setSelectedPlanId(plan.id);
       console.log('Initiating payment for plan:', plan);
       // Initiate hosted checkout via backend
@@ -1022,6 +1024,8 @@ export default function PatientDashboard() {
     } catch (e: any) {
       console.error('Purchase initiate error:', e);
       showError('Payment Error', 'Could not start payment. Please try again.');
+    } finally {
+      setIsPurchasing(false);
     }
   };
 
@@ -2096,6 +2100,11 @@ export default function PatientDashboard() {
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Network Test</Text>
           <Icon name="chevronRight" size={20} color="#666" />
           </TouchableOpacity>
+        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6B6B', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/test-webview')}>
+          <Icon name="globe" size={20} color="#fff" />
+          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#fff', flex: 1}}>🧪 Test WebView Module</Text>
+          <Icon name="chevronRight" size={20} color="#fff" />
+          </TouchableOpacity>
         <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => setShowCacheManagement(true)}>
           <Icon name="image" size={20} color="#666" />
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Image Cache</Text>
@@ -2848,11 +2857,20 @@ export default function PatientDashboard() {
                   paddingVertical: 12,
                   alignItems: 'center',
                   marginBottom: 18,
+                  opacity: isPurchasing ? 0.7 : 1,
                 }}
                 onPress={() => handlePurchaseSubscription(activePlan)}
                 activeOpacity={0.85}
+                disabled={isPurchasing}
               >
-                <Text style={{ fontWeight: 'bold', fontSize: 17, color: '#fff' }}>Renew</Text>
+                {isPurchasing ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
+                    <Text style={{ fontWeight: 'bold', fontSize: 17, color: '#fff' }}>Processing...</Text>
+                  </View>
+                ) : (
+                  <Text style={{ fontWeight: 'bold', fontSize: 17, color: '#fff' }}>Renew</Text>
+                )}
               </TouchableOpacity>
               {/* Session Details */}
               <View style={{ marginBottom: 12 }}>
@@ -3185,7 +3203,7 @@ export default function PatientDashboard() {
         <View style={{ position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center', justifyContent: 'center' }}>
           <TouchableOpacity
             style={{
-              backgroundColor: selectedPlanId ? '#4CAF50' : '#B7EFC5',
+              backgroundColor: selectedPlanId && !isPurchasing ? '#4CAF50' : '#B7EFC5',
               borderRadius: 32,
               paddingVertical: 16,
               width: '90%',
@@ -3195,15 +3213,25 @@ export default function PatientDashboard() {
               shadowOpacity: 0.08,
               shadowRadius: 6,
               elevation: 2,
+              opacity: isPurchasing ? 0.7 : 1,
             }}
-            disabled={!selectedPlanId}
+            disabled={!selectedPlanId || isPurchasing}
             onPress={() => {
               if (selectedPlan) handlePurchaseSubscription(selectedPlan);
             }}
           >
-            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20 }}>
-              {currentSubscription ? 'Add Sessions' : 'Buy Now'}
-            </Text>
+            {isPurchasing ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="white" style={{ marginRight: 10 }} />
+                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20 }}>
+                  Processing...
+                </Text>
+              </View>
+            ) : (
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 20 }}>
+                {currentSubscription ? 'Add Sessions' : 'Buy Now'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
