@@ -82,56 +82,37 @@
                 <p>If you don't see the app open, please check your mobile device.</p>
             `;
 
-            // Try to redirect back to the mobile app
+            // Redirect back to the mobile app
             setTimeout(() => {
-                // Store the code in localStorage for the app to pick up
+                // Try to redirect back to the mobile app
+                const redirectUrl = 'com.docavailable.app://oauth2redirect?code=' + encodeURIComponent(code);
+                
                 try {
-                    localStorage.setItem('google_oauth_code', code);
-                    localStorage.setItem('google_oauth_timestamp', Date.now().toString());
+                    // Try direct redirect first
+                    window.location.href = redirectUrl;
                 } catch (e) {
-                    console.log('Could not store OAuth code in localStorage:', e);
-                }
-
-                // Try multiple redirect methods
-                const redirectUrls = [
-                    'com.docavailable.app://oauth2redirect?code=' + encodeURIComponent(code),
-                    'docavailable://oauth2redirect?code=' + encodeURIComponent(code),
-                    'com.docavailable.app://auth?code=' + encodeURIComponent(code),
-                    'docavailable://auth?code=' + encodeURIComponent(code)
-                ];
-
-                // Try each redirect URL
-                let redirectAttempted = false;
-                for (let i = 0; i < redirectUrls.length; i++) {
+                    console.log('Direct redirect failed:', e);
+                    
+                    // Try creating a link and clicking it
                     try {
-                        // Create a hidden iframe to attempt the redirect
-                        const iframe = document.createElement('iframe');
-                        iframe.style.display = 'none';
-                        iframe.src = redirectUrls[i];
-                        document.body.appendChild(iframe);
+                        const link = document.createElement('a');
+                        link.href = redirectUrl;
+                        link.style.display = 'none';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch (e2) {
+                        console.log('Link redirect failed:', e2);
                         
-                        // Also try direct redirect
-                        window.location.href = redirectUrls[i];
-                        redirectAttempted = true;
-                        break;
-                    } catch (e) {
-                        console.log('Redirect attempt failed:', redirectUrls[i]);
+                        // Final fallback: show instructions
+                        detailsEl.innerHTML = `
+                            <p>Authentication successful!</p>
+                            <p>Please return to the DocAvailable app on your mobile device.</p>
+                            <p>If the app doesn't open automatically, please close this window and try again.</p>
+                            <p>You can also try refreshing the app.</p>
+                        `;
                     }
                 }
-
-                // Fallback: show instructions with code
-                setTimeout(() => {
-                    detailsEl.innerHTML = `
-                        <p>Authentication successful!</p>
-                        <p><strong>Authorization Code:</strong> ${code.substring(0, 20)}...</p>
-                        <p>Please return to the DocAvailable app on your mobile device.</p>
-                        <p>The app should automatically detect the authentication.</p>
-                        <p>If not, you can close this window and try again.</p>
-                        <button onclick="navigator.clipboard.writeText('${code}')" style="padding: 10px; margin: 10px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                            Copy Code to Clipboard
-                        </button>
-                    `;
-                }, 3000);
             }, 2000);
         } else {
             // No OAuth parameters
