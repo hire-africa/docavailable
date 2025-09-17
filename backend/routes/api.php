@@ -899,6 +899,23 @@ Route::get('/chatbot/test-openai', function () {
         return response()->json(['error' => 'No API key found']);
     }
     
+    // Clean the API key - remove any whitespace or hidden characters
+    $apiKey = trim($apiKey);
+    
+    return response()->json([
+        'api_key_length' => strlen($apiKey),
+        'api_key_starts_with_sk' => str_starts_with($apiKey, 'sk-'),
+        'api_key_ends_with' => substr($apiKey, -10),
+        'api_key_has_spaces' => str_contains($apiKey, ' '),
+        'api_key_has_newlines' => str_contains($apiKey, "\n"),
+        'api_key_has_tabs' => str_contains($apiKey, "\t"),
+        'raw_length' => strlen(env('OPENAI_API_KEY')),
+    ]);
+});
+
+Route::get('/chatbot/test-simple-openai', function () {
+    $apiKey = trim(env('OPENAI_API_KEY'));
+    
     try {
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
@@ -906,16 +923,16 @@ Route::get('/chatbot/test-openai', function () {
         ])->timeout(30)->post('https://api.openai.com/v1/chat/completions', [
             'model' => 'gpt-3.5-turbo',
             'messages' => [
-                ['role' => 'user', 'content' => 'Say "Hello from OpenAI!" if you can hear me.']
+                ['role' => 'user', 'content' => 'Hello']
             ],
-            'max_tokens' => 50,
+            'max_tokens' => 10,
         ]);
         
         return response()->json([
-            'status_code' => $response->status(),
-            'successful' => $response->successful(),
-            'response' => $response->json(),
-            'error' => $response->successful() ? null : $response->body()
+            'status' => $response->status(),
+            'success' => $response->successful(),
+            'body' => $response->body(),
+            'headers' => $response->headers(),
         ]);
     } catch (\Exception $e) {
         return response()->json(['error' => $e->getMessage()]);
