@@ -153,7 +153,7 @@ export default function AudioCall({
       
     } catch (error) {
       console.error('❌ AudioCall: Failed to initialize incoming call:', error);
-      Alert.alert('Call Error', 'Failed to initialize call. Please try again.');
+      // Call initialization error logged to console only - no modal shown
       onEndCall();
     }
   };

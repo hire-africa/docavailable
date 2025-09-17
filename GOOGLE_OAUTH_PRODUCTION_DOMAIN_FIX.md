@@ -79,3 +79,4 @@ Authorized redirect URIs:
 - **Consistent**: Same behavior across all platforms
 
 The authorization error should now be resolved! 🎉
+

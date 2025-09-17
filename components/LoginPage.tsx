@@ -176,10 +176,8 @@ export default function LoginPage() {
                 return;
             }
 
-            // Google OAuth configuration - use appropriate redirect URI based on platform
-            const redirectUri = Platform.OS === 'web' 
-                ? 'https://docavailable-3vbdv.ondigitalocean.app'
-                : 'com.docavailable.app://oauth2redirect';
+            // Google OAuth configuration - use OAuth redirect page
+            const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html';
             
             console.log('Using redirect URI:', redirectUri);
 

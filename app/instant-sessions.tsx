@@ -139,32 +139,18 @@ export default function InstantSessionsScreen() {
         const chatId = `text_session_${data.data.session_id}`;
         router.push(`/chat/${chatId}`);
       } else {
-        // Handle specific error cases
+        // Handle specific error cases - all logged to console only
         if (response.status === 400 && data.message?.includes('already have an active session')) {
-          Alert.alert(
-            'Active Session Found', 
-            'You already have an active text session. Please check your messages or wait for the current session to end before starting a new one.',
-            [
-              {
-                text: 'View Messages',
-                onPress: () => {
-                  // Navigate to messages tab
-                  router.push('/patient-dashboard?tab=messages');
-                }
-              },
-              {
-                text: 'Stay Here',
-                style: 'cancel'
-              }
-            ]
-          );
+          console.log('Active Session Found: You already have an active text session. Please check your messages or wait for the current session to end before starting a new one.');
+          // Navigate to messages tab
+          router.push('/patient-dashboard?tab=messages');
         } else {
-          Alert.alert('Error', data.message || 'Failed to start session');
+          console.error('Error:', data.message || 'Failed to start session');
         }
       }
     } catch (error) {
       console.error('Error starting session:', error);
-      Alert.alert('Error', 'Failed to start session. Please try again.');
+      // Session start error logged to console only - no modal shown
     } finally {
       setStartingSession(false);
     }

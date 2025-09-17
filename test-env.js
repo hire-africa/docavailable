@@ -18,3 +18,4 @@ if (fs.existsSync('.env')) {
 } else {
     console.log('\n=== .env file not found ===');
 }
+

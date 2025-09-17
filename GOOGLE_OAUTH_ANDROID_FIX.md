@@ -107,3 +107,4 @@ Just make sure to add the same URI to Google Cloud Console.
 3. **Test again**
 
 The authorization error should be resolved! 🚀
+

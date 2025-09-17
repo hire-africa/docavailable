@@ -264,7 +264,7 @@ export default function ChatPage() {
           },
           onError: (error) => {
             console.error('❌ [WebRTCChat] Error:', error);
-            Alert.alert('Chat Error', error);
+            // Error logged to console only - no modal shown
           }
         });
 
@@ -302,7 +302,7 @@ export default function ChatPage() {
         (chatService as any).fallbackInterval = fallbackInterval;
       } catch (error) {
         console.error('❌ [WebRTCChat] Failed to initialize:', error);
-        Alert.alert('Connection Error', 'Failed to connect to chat service. Please try again.');
+        // Connection error logged to console only - no modal shown
       }
     };
 
@@ -336,18 +336,9 @@ export default function ChatPage() {
           
           onSessionExpired: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
             console.log('⏰ Session expired via WebRTC:', sessionId, reason, sessionType);
-            Alert.alert(
-              'Session Expired',
-              reason,
-              [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    handleStoreAndClose();
-                  }
-                }
-              ]
-            );
+            // Session expired - logged to console only, no modal shown
+            // Store messages locally and close chat
+            handleStoreAndClose();
           },
           
           onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
@@ -361,13 +352,9 @@ export default function ChatPage() {
             console.log('💰 Session deduction via WebRTC:', deductionData, sessionType);
             setSessionDeductionInfo(deductionData);
             
-            // Show deduction notification for instant sessions only
+            // Session deduction logged to console only for instant sessions
             if (sessionType === 'instant') {
-              Alert.alert(
-                'Session Deduction',
-                `${deductionData.sessionsDeducted} session(s) deducted. ${deductionData.remainingSessions} remaining.`,
-                [{ text: 'OK' }]
-              );
+              console.log(`📊 Session Deduction: ${deductionData.sessionsDeducted} session(s) deducted. ${deductionData.remainingSessions} remaining.`);
             }
           },
           
@@ -400,7 +387,7 @@ export default function ChatPage() {
           
           onError: (error: string) => {
             console.error('❌ WebRTC session error:', error);
-            Alert.alert('Session Error', error);
+            // Session error logged to console only - no modal shown
           }
         });
 
@@ -413,7 +400,7 @@ export default function ChatPage() {
 
       } catch (error) {
         console.error('❌ Failed to initialize WebRTC session:', error);
-        Alert.alert('Connection Error', 'Failed to connect to session service. Please try again.');
+        // Connection error logged to console only - no modal shown
       }
     };
 
@@ -606,7 +593,7 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message. Please try again.');
+      // Message sending error logged to console only - no modal shown
     } finally {
       setSending(false);
     }
@@ -959,28 +946,22 @@ export default function ChatPage() {
         setShowEndSessionModal(false);
         setShowRatingModal(true);
       } else {
-        Alert.alert('Error', 'Failed to end session. Please try again.');
+        console.error('Failed to end session. Please try again.');
+        // Session ending error logged to console only - no modal shown
       }
       }
     } catch (error: any) {
       console.error('Error ending session:', error);
       
-      // Handle specific error cases
+      // Handle specific error cases - all logged to console only
       if (error?.response?.status === 404) {
-        Alert.alert(
-          'Session Not Found', 
-          'This session may have already been ended or no longer exists. You can safely close this chat.',
-          [
-            { text: 'OK', onPress: () => {
-              // Store messages locally anyway and close
-              handleStoreAndClose();
-            }}
-          ]
-        );
+        console.error('Session Not Found: This session may have already been ended or no longer exists. You can safely close this chat.');
+        // Store messages locally anyway and close
+        handleStoreAndClose();
       } else if (error?.response?.status === 403) {
-        Alert.alert('Unauthorized', 'You are not authorized to end this session.');
+        console.error('Unauthorized: You are not authorized to end this session.');
       } else {
-        Alert.alert('Error', 'Failed to end session. Please try again.');
+        console.error('Failed to end session. Please try again.');
       }
     } finally {
       setEndingSession(false);
@@ -1067,7 +1048,7 @@ export default function ChatPage() {
       );
     } catch (error) {
       console.error('Error submitting rating:', error);
-      Alert.alert('Error', 'Failed to submit rating. Please try again.');
+      // Rating submission error logged to console only - no modal shown
     } finally {
       setSubmittingRating(false);
     }
@@ -1096,11 +1077,12 @@ export default function ChatPage() {
         // Store interval reference for cleanup
         (window as any).recordingInterval = interval;
       } else {
-        Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
+        console.error('Failed to start recording. Please check microphone permissions.');
+        // Recording error logged to console only - no modal shown
       }
     } catch (error: any) {
       console.error('Error starting recording:', error);
-      Alert.alert('Error', 'Failed to start recording.');
+      // Recording error logged to console only - no modal shown
     }
   };
 
@@ -1142,7 +1124,7 @@ export default function ChatPage() {
 
   const sendVoiceMessage = async () => {
     console.log('📤 [SendVoice] Voice message sending is disabled');
-    Alert.alert('Disabled', 'Voice message sending has been disabled');
+    // Voice message sending disabled - logged to console only
   };
 
   const formatDuration = (seconds: number): string => {
@@ -1154,12 +1136,12 @@ export default function ChatPage() {
   // Image handling functions
   const handleTakePhoto = async () => {
     console.log('📤 [Camera] Image sending is disabled');
-    Alert.alert('Disabled', 'Image sending has been disabled');
+    // Image sending disabled - logged to console only
   };
 
   const handlePickImage = async () => {
     console.log('📤 [Gallery] Image sending is disabled');
-    Alert.alert('Disabled', 'Image sending has been disabled');
+    // Image sending disabled - logged to console only
   };
 
   // Debug modal state
@@ -1305,7 +1287,8 @@ export default function ChatPage() {
             }}
             onPress={() => {
               // TODO: Implement video call functionality
-              Alert.alert('Video Call', 'Video call feature coming soon!');
+              console.log('Video call feature coming soon!');
+              // Video call feature coming soon - logged to console only
             }}
           >
             <Icon name="video" size={24} color="#4CAF50" />
@@ -1337,14 +1320,15 @@ export default function ChatPage() {
                   
                   setShowAudioCallModal(true);
                 } else if (!webrtcReady) {
-                  Alert.alert('Call Not Ready', 'WebRTC is not ready yet. Please wait a moment.');
+                  console.log('Call Not Ready: WebRTC is not ready yet. Please wait a moment.');
+                  // Call not ready - logged to console only
                 } else {
-                  Alert.alert(
-                    'Call Not Available',
+                  console.log(
                     isTextSession 
-                      ? 'Call feature is not available for this session type.'
-                      : 'Call feature is only available for audio appointments.'
+                      ? 'Call Not Available: Call feature is not available for this session type.'
+                      : 'Call Not Available: Call feature is only available for audio appointments.'
                   );
+                  // Call not available - logged to console only
                 }
               }}
               disabled={!isCallEnabled() || !webrtcReady || showIncomingCall}
@@ -1998,7 +1982,7 @@ export default function ChatPage() {
                 
               } catch (error) {
                 console.error('❌ Error processing incoming call:', error);
-                Alert.alert('Error', 'Failed to answer call. Please try again.');
+                // Call processing error logged to console only - no modal shown
               }
             }}
             isIncomingCall={true}

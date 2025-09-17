@@ -14,8 +14,8 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { OpenAIService } from '../services/openaiService';
-import DocAvaHistory from './DocAvaHistory';
+import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
+import DocAIHistory from './DocAvaHistory';
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,11 +34,11 @@ interface ChatSession {
   timestamp: Date;
 }
 
-interface DocAvaChatProps {
+interface DocAIChatProps {
   onBottomHiddenChange?: (hidden: boolean) => void;
 }
 
-export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
+export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -47,6 +47,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
   const [isBottomHidden, setIsBottomHidden] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Animation value for history panel
@@ -264,46 +265,108 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
   }, [showHistoryPage]);
 
   const generateBotResponse = async (userMessage: string): Promise<{ text: string; type: Message['type'] }> => {
-    console.log('🤖 Calling OpenAI service with:', userMessage);
+    // Prevent multiple simultaneous calls
+    if (isGeneratingResponse) {
+      console.log('⚠️ Already generating response, skipping duplicate call');
+      return { text: '', type: 'general' };
+    }
     
-    try {
-      console.log('📡 Making OpenAI API call...');
-      const response = await OpenAIService.getResponse(userMessage);
-      console.log('✅ OpenAI response received:', response);
-      
-      // Determine message type based on urgency and content
+    setIsGeneratingResponse(true);
+    console.log('🤖 Calling OpenAI service with streaming:', userMessage);
+    
+    return new Promise((resolve) => {
+      let finalText = '';
       let messageType: Message['type'] = 'general';
-      if (response.urgency === 'high') {
-        messageType = 'emergency';
-      } else if (response.shouldBookAppointment) {
-        messageType = 'booking';
-      } else if (userMessage.toLowerCase().includes('pain') || userMessage.toLowerCase().includes('symptom')) {
-        messageType = 'symptom';
-      } else if (userMessage.toLowerCase().includes('advice') || userMessage.toLowerCase().includes('tip')) {
-        messageType = 'advice';
-      }
+      let isFirstChunk = true;
       
-      console.log('📝 Final response:', response.text);
-      console.log('🏷️  Message type:', messageType);
-      
-      return {
-        text: response.text,
-        type: messageType
-      };
-    } catch (error) {
-      console.error('❌ Error generating bot response:', error);
-      console.error('Error details:', error.message);
-      
-      // Fallback to basic response
-      return {
-        text: 'Sorry, I encountered an error. Please try again later.',
+      // Create a temporary bot message for streaming
+      const tempBotMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: '',
+        isUser: false,
+        timestamp: new Date(),
         type: 'general'
       };
-    }
+      
+      setMessages(prev => [...prev, tempBotMessage]);
+      
+      BackendChatbotService.getStreamingResponse(
+        userMessage,
+        (chunk: BackendStreamingResponse) => {
+          // Hide typing indicator on first chunk
+          if (isFirstChunk) {
+            setIsTyping(false);
+            isFirstChunk = false;
+          }
+          
+          // Accumulate text for final response
+          if (chunk.text) {
+            finalText += chunk.text;
+          }
+          
+          // Update the temporary message with accumulated text
+          setMessages(prev => prev.map(msg => 
+            msg.id === tempBotMessage.id 
+              ? { ...msg, text: finalText }
+              : msg
+          ));
+          
+          // Determine message type from final chunk
+          if (chunk.isComplete) {
+            // Determine message type based on content analysis
+            const lowerMessage = userMessage.toLowerCase();
+            const lowerResponse = finalText.toLowerCase();
+            
+            if (lowerMessage.includes('emergency') || lowerMessage.includes('urgent') || 
+                lowerResponse.includes('emergency') || lowerResponse.includes('urgent') ||
+                lowerResponse.includes('call 911') || lowerResponse.includes('immediately')) {
+              messageType = 'emergency';
+            } else if (lowerResponse.includes('book') || lowerResponse.includes('appointment') || 
+                       lowerResponse.includes('schedule') || lowerResponse.includes('consultation')) {
+              messageType = 'booking';
+            } else if (lowerMessage.includes('pain') || lowerMessage.includes('symptom') ||
+                       lowerMessage.includes('hurt') || lowerMessage.includes('ache')) {
+              messageType = 'symptom';
+            } else if (lowerMessage.includes('advice') || lowerMessage.includes('tip') ||
+                       lowerMessage.includes('recommend') || lowerMessage.includes('suggest')) {
+              messageType = 'advice';
+            }
+            
+            // Update the final message with correct type
+            setMessages(prev => prev.map(msg => 
+              msg.id === tempBotMessage.id 
+                ? { ...msg, type: messageType }
+                : msg
+            ));
+            
+            console.log('📝 Streaming complete:', finalText);
+            console.log('🏷️  Message type:', messageType);
+            
+            resolve({
+              text: finalText,
+              type: messageType
+            });
+          }
+        }
+      ).catch((error) => {
+        console.error('❌ Error generating streaming bot response:', error);
+        console.error('Error details:', error.message);
+        
+        // Remove the temporary message and add error message
+        setMessages(prev => prev.filter(msg => msg.id !== tempBotMessage.id));
+        
+        resolve({
+          text: 'Sorry, I encountered an error. Please try again later.',
+          type: 'general'
+        });
+      }).finally(() => {
+        setIsGeneratingResponse(false);
+      });
+    });
   };
 
   const sendMessage = async () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || isGeneratingResponse) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -323,18 +386,10 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
     setInputText('');
     setIsTyping(true);
 
-    // Simulate bot thinking time
+    // Generate bot response with streaming
     setTimeout(async () => {
-      const botResponse = await generateBotResponse(userMessage.text);
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: botResponse.text,
-        isUser: false,
-        timestamp: new Date(),
-        type: botResponse.type
-      };
-      setMessages(prev => [...prev, botMessage]);
-      setIsTyping(false);
+      await generateBotResponse(userMessage.text);
+      // Note: generateBotResponse now handles message creation internally
     }, 1000 + Math.random() * 2000);
   };
 
@@ -388,7 +443,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
           
           <View style={styles.headerText}>
             <View style={styles.botNameContainer}>
-              <Text style={styles.botName}>DocAva</Text>
+              <Text style={styles.botName}>Doc AI</Text>
               <FontAwesome name="check-circle" size={16} color="#4CAF50" style={styles.verifiedBadge} />
             </View>
           </View>
@@ -479,7 +534,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
                     textAlign: 'center',
                     marginBottom: 8,
                   }}>
-                    Hi, I'm DocAva! 👋
+                    Hi, I'm Doc AI! 👋
                   </Text>
                   <Text style={{
                     fontSize: 16,
@@ -572,7 +627,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Ask DocAva about your health..."
+                  placeholder="Ask Doc AI about your health..."
                   placeholderTextColor="#999"
                   value={inputText}
                   onChangeText={setInputText}
@@ -600,7 +655,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
               <View style={styles.inputWrapper}>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Ask DocAva about your health..."
+                  placeholder="Ask Doc AI about your health..."
                   placeholderTextColor="#999"
                   value={inputText}
                   onChangeText={setInputText}
@@ -709,7 +764,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
 
     </View>
 
-    {/* DocAva History Page - Full Screen with Slide Animation - Outside main container */}
+    {/* Doc AI History Page - Full Screen with Slide Animation - Outside main container */}
     {showHistoryPage && (
       <Animated.View 
         style={[
@@ -721,7 +776,7 @@ export default function DocAvaChat({ onBottomHiddenChange }: DocAvaChatProps) {
           }
         ]}
       >
-        <DocAvaHistory
+        <DocAIHistory
           onClose={() => setShowHistoryPage(false)}
           onLoadChat={loadChatFromHistoryPage}
         />

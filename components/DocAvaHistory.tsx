@@ -29,12 +29,12 @@ interface ChatSession {
   timestamp: Date;
 }
 
-interface DocAvaHistoryProps {
+interface DocAIHistoryProps {
   onClose: () => void;
   onLoadChat: (chatSession: ChatSession) => void;
 }
 
-export default function DocAvaHistory({ onClose, onLoadChat }: DocAvaHistoryProps) {
+export default function DocAIHistory({ onClose, onLoadChat }: DocAIHistoryProps) {
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export default function DocAvaHistory({ onClose, onLoadChat }: DocAvaHistoryProp
   const clearAllHistory = () => {
     Alert.alert(
       'Clear All History',
-      'Are you sure you want to delete all your DocAva conversations? This action cannot be undone.',
+      'Are you sure you want to delete all your Doc AI conversations? This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -189,7 +189,7 @@ export default function DocAvaHistory({ onClose, onLoadChat }: DocAvaHistoryProp
           </TouchableOpacity>
           
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>DocAva History</Text>
+            <Text style={styles.headerTitle}>Doc AI History</Text>
             <Text style={styles.headerSubtitle}>
               {chatHistory.length} conversation{chatHistory.length !== 1 ? 's' : ''}
             </Text>
@@ -226,7 +226,7 @@ export default function DocAvaHistory({ onClose, onLoadChat }: DocAvaHistoryProp
             </View>
             <Text style={styles.emptyTitle}>No Conversations Yet</Text>
             <Text style={styles.emptySubtitle}>
-              Your DocAva conversations will appear here once you start chatting
+              Your Doc AI conversations will appear here once you start chatting
             </Text>
             <TouchableOpacity 
               style={styles.startChatButton}

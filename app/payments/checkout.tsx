@@ -18,7 +18,6 @@ export default function PayChanguCheckout() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [paymentCheckTimer, setPaymentCheckTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [hasDetectedPayment, setHasDetectedPayment] = useState(false);
-  const [countdownTimeout, setCountdownTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   console.log('🎯 PayChanguCheckout component rendered');
   console.log('🎯 Received params:', params);
@@ -160,28 +159,6 @@ export default function PayChanguCheckout() {
       }, 3000); // Check every 3 seconds
       
       setPaymentCheckTimer(timer);
-      
-      // Add a countdown timeout - if we haven't detected payment after 10 seconds,
-      // assume the countdown froze and trigger success
-      const countdownTimer = setTimeout(async () => {
-        if (!hasDetectedPayment) {
-          console.log('⏰ Countdown timeout - assuming payment successful (countdown may have frozen)');
-          setHasDetectedPayment(true);
-          
-          // Refresh user data
-          await handlePaymentSuccess();
-          
-          Alert.alert(
-            'Payment Completed',
-            'Your payment has been processed. Please check your subscription status.',
-            [
-              { text: 'OK', onPress: () => router.back() }
-            ]
-          );
-        }
-      }, 10000); // 10 seconds timeout
-      
-      setCountdownTimeout(countdownTimer);
     }
   }, [loadingTimeout, txRef, hasDetectedPayment, checkPaymentStatus, handlePaymentSuccess]);
 
@@ -277,11 +254,8 @@ export default function PayChanguCheckout() {
       if (paymentCheckTimer) {
         clearInterval(paymentCheckTimer);
       }
-      if (countdownTimeout) {
-        clearTimeout(countdownTimeout);
-      }
     };
-  }, [loadingTimeout, paymentCheckTimer, countdownTimeout]);
+  }, [loadingTimeout, paymentCheckTimer]);
 
   // If no URL, show error
   if (!checkoutUrl) {
@@ -350,24 +324,6 @@ export default function PayChanguCheckout() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Minimal Back Button */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          top: 50,
-          left: 15,
-          zIndex: 1000,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          borderRadius: 20,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
-          borderWidth: 1,
-          borderColor: 'rgba(0, 0, 0, 0.1)',
-        }}
-        onPress={() => router.back()}
-      >
-        <Text style={{ color: '#007AFF', fontSize: 14, fontWeight: '500' }}>←</Text>
-      </TouchableOpacity>
 
       {/* Loading Indicator */}
       {isLoading && (
@@ -547,47 +503,11 @@ export default function PayChanguCheckout() {
             } else if (message.type === 'close_window') {
               console.log('🔄 Close window message received, going back to app');
               router.back();
-            } else if (message.type === 'page_loaded') {
-              // Check if the page contains success indicators
-              const pageContent = message.content || '';
-              if (pageContent.includes('success') || pageContent.includes('completed') || 
-                  pageContent.includes('thank you') || pageContent.includes('payment successful')) {
-                console.log('✅ Success indicators found in page content');
-                if (!hasDetectedPayment) {
-                  setHasDetectedPayment(true);
-                  handlePaymentSuccess().then(() => {
-                    console.log('✅ User data refreshed after success page detection');
-                  });
-                  Alert.alert(
-                    'Payment Successful!',
-                    'Your payment has been completed successfully.',
-                    [
-                      { text: 'OK', onPress: () => router.back() }
-                    ]
-                  );
-                }
-              }
             }
           } catch (error) {
             console.log('📨 Non-JSON WebView message:', event.nativeEvent.data);
           }
         }}
-        injectedJavaScript={`
-          // Inject script to detect success pages
-          setTimeout(() => {
-            const pageContent = document.body.innerText.toLowerCase();
-            if (pageContent.includes('success') || pageContent.includes('completed') || 
-                pageContent.includes('thank you') || pageContent.includes('payment successful') ||
-                pageContent.includes('redirecting') || pageContent.includes('countdown')) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'page_loaded',
-                content: pageContent,
-                url: window.location.href
-              }));
-            }
-          }, 2000);
-          true;
-        `}
       />
     </View>
   );
