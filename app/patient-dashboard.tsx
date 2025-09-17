@@ -150,6 +150,26 @@ export default function PatientDashboard() {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
+
+  // Function to refresh subscription data
+  const refreshSubscriptionData = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      console.log('PatientDashboard: Refreshing subscription data...');
+      const response = await apiService.get('/subscription');
+      
+      if (response.success && response.data) {
+        console.log('PatientDashboard: Subscription data refreshed:', response.data);
+        setCurrentSubscription(response.data);
+      } else {
+        console.log('PatientDashboard: No subscription data found');
+        setCurrentSubscription(null);
+      }
+    } catch (error) {
+      console.error('PatientDashboard: Error refreshing subscription:', error);
+    }
+  }, [user?.id]);
   const [endedSessions, setEndedSessions] = useState<EndedSessionMetadata[]>([]);
   const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
   const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
@@ -333,6 +353,51 @@ export default function PatientDashboard() {
       console.log('PatientDashboard: No user or user.id, skipping subscription load');
     }
   }, [user]);
+
+  // Poll for subscription updates after payment (in case user doesn't get redirected properly)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const pollForSubscriptionUpdates = () => {
+      console.log('PatientDashboard: Polling for subscription updates...');
+      
+      apiService.get('/subscription')
+        .then((response: any) => {
+          if (response.success && response.data) {
+            console.log('PatientDashboard: Polling found subscription update:', response.data);
+            setCurrentSubscription(response.data);
+          }
+        })
+        .catch(error => {
+          console.log('PatientDashboard: Polling subscription check failed:', error.message);
+        });
+    };
+
+    // Poll every 10 seconds for the first 2 minutes after component mount
+    // This helps catch subscription updates if the payment redirect didn't work properly
+    const pollInterval = setInterval(pollForSubscriptionUpdates, 10000);
+    
+    // Stop polling after 2 minutes
+    const stopPollingTimeout = setTimeout(() => {
+      clearInterval(pollInterval);
+      console.log('PatientDashboard: Stopped polling for subscription updates');
+    }, 120000); // 2 minutes
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(stopPollingTimeout);
+    };
+  }, [user?.id]);
+
+  // Refresh subscription data when user returns to dashboard (e.g., after payment)
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.id) {
+        console.log('PatientDashboard: Screen focused, refreshing subscription data...');
+        refreshSubscriptionData();
+      }
+    }, [user?.id, refreshSubscriptionData])
+  );
 
   // Initialize location-based subscription plans
   useEffect(() => {
