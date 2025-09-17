@@ -207,6 +207,60 @@ export class WebRTCChatService {
     }
   }
 
+  async sendMediaMessage(message: string, messageType: 'voice' | 'image', mediaUrl: string): Promise<ChatMessage | null> {
+    if (!this.isConnected || !this.websocket) {
+      throw new Error('WebRTC chat not connected');
+    }
+
+    // Generate a more unique message ID
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Get auth token for API calls
+    const authToken = await this.getAuthToken();
+    
+    const messageData = {
+      type: 'chat-message',
+      message: {
+        id: messageId,
+        sender_id: this.config.userId,
+        sender_name: this.config.userName,
+        message: message,
+        message_type: messageType,
+        media_url: mediaUrl,
+        created_at: new Date().toISOString(),
+        delivery_status: 'sending'
+      },
+      authToken: authToken
+    };
+
+    try {
+      console.log('📤 [WebRTCChat] Sending media message:', messageId, 'type:', messageType, 'to WebSocket with auth token');
+      this.websocket.send(JSON.stringify(messageData));
+      
+      // Ensure processedMessageHashes is initialized
+      if (!this.processedMessageHashes) {
+        this.processedMessageHashes = new Set();
+      }
+      
+      // Mark message as processed to prevent duplicates (by hash)
+      const messageHash = this.createMessageHash(messageData.message);
+      this.processedMessageHashes.add(messageHash);
+      
+      // Store the sent message locally and save to AsyncStorage
+      await this.addMessage(messageData.message);
+      
+      // Trigger the onMessage event so the sender can see their own message immediately
+      console.log('📤 [WebRTCChat] Triggering onMessage event for sent media message:', messageId);
+      this.events.onMessage(messageData.message);
+      
+      console.log('📤 [WebRTCChat] Media message sent successfully:', messageId);
+      return messageData.message;
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send media message:', error);
+      throw error;
+    }
+  }
+
   async getMessages(): Promise<ChatMessage[]> {
     return this.messages;
   }
