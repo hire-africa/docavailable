@@ -202,6 +202,22 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
+     * Get user's subscriptions (all of them).
+     */
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class)->orderBy('is_active', 'desc')->orderBy('created_at', 'desc');
+    }
+
+    /**
+     * Get user's active subscription.
+     */
+    public function activeSubscription()
+    {
+        return $this->hasOne(Subscription::class)->where('is_active', true);
+    }
+
+    /**
      * Get doctor's wallet.
      */
     public function wallet()

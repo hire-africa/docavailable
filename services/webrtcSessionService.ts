@@ -1,5 +1,5 @@
-import Constants from 'expo-constants';
 import { apiService } from './apiService';
+import configService from './configService';
 
 export interface SessionStatus {
   sessionId: string;
@@ -47,20 +47,16 @@ class WebRTCSessionService {
 
   private async connectSignaling(): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Try multiple ways to get the WebRTC signaling URL
-      const signalingUrl = 
-        process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 
-        Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
-        Constants.expoConfig?.extra?.webRtcSignalingUrl ||
-        'ws://46.101.123.123:8080/audio-signaling'; // Use production URL as fallback
+      // Use config service to get WebRTC signaling URL
+      const config = configService.getWebRTCConfig();
+      const signalingUrl = config.signalingUrl;
       const wsUrl = `${signalingUrl}/${this.appointmentId}`;
       
-      console.log('🔧 [WebRTC] Environment check:', {
-        processEnv: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL,
-        constantsExtra: Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL,
-        allConstantsExtra: Constants.expoConfig?.extra,
+      console.log('🔧 [WebRTC] Configuration check:', {
         signalingUrl,
-        wsUrl
+        wsUrl,
+        appointmentId: this.appointmentId,
+        config: config
       });
       
       try {

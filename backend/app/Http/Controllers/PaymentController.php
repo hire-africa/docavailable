@@ -761,7 +761,7 @@ class PaymentController extends Controller
                 
                 return $existingSubscription;
             } else {
-                // Create new subscription
+                // Create new subscription - Handle potential constraint issues
                 $subscriptionData = [
                     'user_id' => $userId,
                     'plan_id' => $planId,
@@ -783,15 +783,55 @@ class PaymentController extends Controller
                     'activated_at' => now()
                 ];
                 
-                $subscription = Subscription::create($subscriptionData);
+                // First, deactivate any existing inactive subscriptions for this user
+                Subscription::where('user_id', $userId)
+                    ->where('is_active', false)
+                    ->update(['is_active' => false]);
                 
-                Log::info('Created new subscription', [
-                    'subscription_id' => $subscription->id,
-                    'user_id' => $userId,
-                    'plan_id' => $planId
-                ]);
-                
-                return $subscription;
+                // Try to create the subscription
+                try {
+                    $subscription = Subscription::create($subscriptionData);
+                    
+                    Log::info('Created new subscription', [
+                        'subscription_id' => $subscription->id,
+                        'user_id' => $userId,
+                        'plan_id' => $planId
+                    ]);
+                    
+                    return $subscription;
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // Handle potential unique constraint violations
+                    if (strpos($e->getMessage(), 'duplicate key') !== false || 
+                        strpos($e->getMessage(), 'unique constraint') !== false ||
+                        strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
+                        
+                        Log::warning('Unique constraint violation, attempting to find existing subscription', [
+                            'user_id' => $userId,
+                            'plan_id' => $planId,
+                            'error' => $e->getMessage()
+                        ]);
+                        
+                        // Try to find and update existing subscription
+                        $existingSubscription = Subscription::where('user_id', $userId)
+                            ->where('plan_id', $planId)
+                            ->first();
+                            
+                        if ($existingSubscription) {
+                            $existingSubscription->update($subscriptionData);
+                            
+                            Log::info('Updated existing subscription after constraint violation', [
+                                'subscription_id' => $existingSubscription->id,
+                                'user_id' => $userId,
+                                'plan_id' => $planId
+                            ]);
+                            
+                            return $existingSubscription;
+                        }
+                    }
+                    
+                    // Re-throw if it's not a constraint issue
+                    throw $e;
+                }
             }
         } catch (\Exception $e) {
             Log::error('Failed to activate plan for user: ' . $e->getMessage(), [

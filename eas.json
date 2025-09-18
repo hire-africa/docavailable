@@ -16,14 +16,26 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true"
+        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true",
+        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "ws://46.101.123.123/audio-signaling",
+        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "ws://46.101.123.123/chat-signaling",
+        "EXPO_PUBLIC_WEBRTC_STUN_SERVERS": "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302",
+        "EXPO_PUBLIC_ENABLE_AUDIO_CALLS": "true",
+        "EXPO_PUBLIC_ENABLE_VIDEO_CALLS": "false",
+        "EXPO_PUBLIC_ENABLE_CALL_RECORDING": "false"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true"
+        "EXPO_IGNORE_TYPESCRIPT_ERRORS": "true",
+        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "ws://46.101.123.123/audio-signaling",
+        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "ws://46.101.123.123/chat-signaling",
+        "EXPO_PUBLIC_WEBRTC_STUN_SERVERS": "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302",
+        "EXPO_PUBLIC_ENABLE_AUDIO_CALLS": "true",
+        "EXPO_PUBLIC_ENABLE_VIDEO_CALLS": "false",
+        "EXPO_PUBLIC_ENABLE_CALL_RECORDING": "false"
       }
     }
   },

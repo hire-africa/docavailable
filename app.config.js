@@ -63,11 +63,23 @@ export default {
       EXPO_PUBLIC_GOOGLE_CLIENT_SECRET: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || "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",
       
       // WebRTC Configuration
-      EXPO_PUBLIC_WEBRTC_SIGNALING_URL: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL,
-      EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL: process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL,
-      EXPO_PUBLIC_WEBRTC_STUN_SERVERS: process.env.EXPO_PUBLIC_WEBRTC_STUN_SERVERS,
-      EXPO_PUBLIC_ENABLE_AUDIO_CALLS: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS,
-      EXPO_PUBLIC_ENABLE_VIDEO_CALLS: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS,
+      webrtc: {
+        signalingUrl: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123/audio-signaling',
+        chatSignalingUrl: process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'ws://46.101.123.123/chat-signaling',
+        stunServers: process.env.EXPO_PUBLIC_WEBRTC_STUN_SERVERS ? 
+          process.env.EXPO_PUBLIC_WEBRTC_STUN_SERVERS.split(',') : [
+            'stun:stun.l.google.com:19302',
+            'stun:stun1.l.google.com:19302'
+          ],
+        enableAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'false',
+        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
+        enableCallRecording: process.env.EXPO_PUBLIC_ENABLE_CALL_RECORDING === 'true',
+      },
+      features: {
+        enableAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'false',
+        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
+        enableChat: true,
+      },
       
       // Feature Flags - Set to false for minimal build
       useBackendChat: false,
