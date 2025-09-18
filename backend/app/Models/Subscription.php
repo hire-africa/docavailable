@@ -84,4 +84,36 @@ class Subscription extends Model
         
         return max(0, Carbon::now()->diffInDays($this->end_date, false));
     }
+
+    /**
+     * Scope to get active subscriptions
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Scope to get subscriptions for a specific user
+     */
+    public function scopeForUser($query, $userId)
+    {
+        return $query->where('user_id', $userId);
+    }
+
+    /**
+     * Deactivate this subscription
+     */
+    public function deactivate()
+    {
+        $this->update(['is_active' => false]);
+    }
+
+    /**
+     * Activate this subscription
+     */
+    public function activate()
+    {
+        $this->update(['is_active' => true]);
+    }
 }

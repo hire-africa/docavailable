@@ -28,25 +28,46 @@ class ConfigService {
   private loadConfig(): AppConfig {
     const extra = Constants.expoConfig?.extra || {};
     
+    // For EAS builds, environment variables are available directly
+    // For development, they come from .env file and are in extra
+    const getEnvVar = (key: string, fallback?: string) => {
+      // First try process.env (works in EAS builds)
+      if (process.env[key]) {
+        return process.env[key];
+      }
+      // Then try Constants.expoConfig.extra (works in development)
+      if (extra[key]) {
+        return extra[key];
+      }
+      // Finally try nested structure in extra
+      if (extra.webrtc?.[key]) {
+        return extra.webrtc[key];
+      }
+      if (extra.features?.[key]) {
+        return extra.features[key];
+      }
+      return fallback;
+    };
+    
     return {
-      apiUrl: extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
+      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
       webrtc: {
-        signalingUrl: extra.webrtc?.signalingUrl || 'ws://46.101.123.123:8080/audio-signaling',
-        chatSignalingUrl: extra.webrtc?.chatSignalingUrl || 'ws://46.101.123.123:8081/chat-signaling',
+        signalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL') || extra.webrtc?.signalingUrl || 'ws://46.101.123.123/audio-signaling',
+        chatSignalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL') || extra.webrtc?.chatSignalingUrl || 'ws://46.101.123.123/chat-signaling',
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',
         turnPassword: extra.webrtc?.turnPassword || '',
-        stunServers: extra.webrtc?.stunServers || [
+        stunServers: getEnvVar('EXPO_PUBLIC_WEBRTC_STUN_SERVERS')?.split(',') || extra.webrtc?.stunServers || [
           'stun:stun.l.google.com:19302',
           'stun:stun1.l.google.com:19302'
         ],
-        enableAudioCalls: extra.webrtc?.enableAudioCalls !== false,
-        enableVideoCalls: extra.webrtc?.enableVideoCalls === true,
-        enableCallRecording: extra.webrtc?.enableCallRecording === true,
+        enableAudioCalls: getEnvVar('EXPO_PUBLIC_ENABLE_AUDIO_CALLS') !== 'false' && extra.webrtc?.enableAudioCalls !== false,
+        enableVideoCalls: getEnvVar('EXPO_PUBLIC_ENABLE_VIDEO_CALLS') === 'true' || extra.webrtc?.enableVideoCalls === true,
+        enableCallRecording: getEnvVar('EXPO_PUBLIC_ENABLE_CALL_RECORDING') === 'true' || extra.webrtc?.enableCallRecording === true,
       },
       features: {
-        enableAudioCalls: extra.features?.enableAudioCalls !== false,
-        enableVideoCalls: extra.features?.enableVideoCalls === true,
+        enableAudioCalls: getEnvVar('EXPO_PUBLIC_ENABLE_AUDIO_CALLS') !== 'false' && extra.features?.enableAudioCalls !== false,
+        enableVideoCalls: getEnvVar('EXPO_PUBLIC_ENABLE_VIDEO_CALLS') === 'true' || extra.features?.enableVideoCalls === true,
         enableChat: extra.features?.enableChat !== false,
       }
     };
