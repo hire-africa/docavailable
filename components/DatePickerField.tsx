@@ -178,6 +178,7 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
 }) => {
     const [show, setShow] = useState(false);
     const [tempDate, setTempDate] = useState<Date>(new Date());
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // Parse the current value
     const dateObj = parseDate(value) || new Date(2000, 0, 1);
@@ -235,8 +236,22 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
 
     // For native platforms
     const handleDateChange = (event: any, selectedDate?: Date) => {
+        if (isProcessing) return; // Prevent multiple rapid calls
+        
+        if (Platform.OS === 'android') {
+            // On Android, the picker closes automatically after selection
+            setShow(false);
+        }
+        
         if (selectedDate && event.type !== 'dismissed') {
+            setIsProcessing(true);
             setTempDate(selectedDate);
+            // On Android, automatically save the date when selected
+            if (Platform.OS === 'android') {
+                onChange(formatDate(selectedDate, outputFormat));
+            }
+            // Reset processing flag after a short delay
+            setTimeout(() => setIsProcessing(false), 100);
         }
     };
 
@@ -259,6 +274,7 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
                     (error || (!isValidValue && value)) && { borderColor: '#D32F2F' },
                 ]}
                 onPress={() => {
+                    if (isProcessing) return; // Prevent opening while processing
                     setTempDate(dateObj);
                     setShow(true);
                 }}
@@ -273,6 +289,11 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
             </TouchableOpacity>
             {show && (
                 <View style={styles.datePickerContainer}>
+                    <TouchableOpacity 
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}
+                        activeOpacity={1}
+                        onPress={() => setShow(false)}
+                    />
                     <View style={styles.datePickerModal}>
                         <View style={styles.datePickerContent}>
                             <DateTimePicker
@@ -282,14 +303,16 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
                                 minimumDate={minimumDate}
                                 onChange={handleDateChange}
                             />
-                            <View style={styles.datePickerButtons}>
-                                <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-                                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-                                    <Text style={styles.saveButtonText}>Save</Text>
-                                </TouchableOpacity>
-                            </View>
+                            {Platform.OS !== 'android' && (
+                                <View style={styles.datePickerButtons}>
+                                    <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+                                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+                                        <Text style={styles.saveButtonText}>Save</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </View>
                     </View>
                 </View>
