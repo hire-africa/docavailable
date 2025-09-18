@@ -768,7 +768,7 @@ class PaymentController extends Controller
                     'plan_name' => $plan->name,
                     'plan_price' => $plan->price,
                     'plan_currency' => $plan->currency,
-                    'status' => 'active',
+                    'status' => 1, // Use integer 1 for active status
                     'start_date' => now(),
                     'end_date' => now()->addDays($plan->duration),
                     'is_active' => true,
