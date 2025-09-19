@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { apiService } from '../app/services/apiService';
 
@@ -171,8 +172,44 @@ class VoiceRecordingService {
     senderId: number,
     senderName: string
   ): Promise<boolean> {
-    console.log('📤 [VoiceService] Voice message sending is disabled');
-    return false;
+    try {
+      console.log('📤 [VoiceService] Sending voice message via backend API');
+      
+      // Upload the voice file first
+      const mediaUrl = await this.uploadVoiceMessage(appointmentId, audioUri);
+      
+      if (!mediaUrl) {
+        console.error('❌ [VoiceService] Failed to upload voice message');
+        return false;
+      }
+
+      // Send message via API
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/chat/${appointmentId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await AsyncStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify({
+          message: 'Voice message',
+          message_type: 'voice',
+          media_url: mediaUrl,
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ [VoiceService] Voice message sent successfully');
+        return true;
+      } else {
+        console.error('❌ [VoiceService] API returned error:', result);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ [VoiceService] Error sending voice message:', error);
+      return false;
+    }
   }
 
   getRecordingDuration(): number {

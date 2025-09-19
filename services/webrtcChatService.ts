@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatConfig, ChatEvents, ChatMessage } from '../types/chat';
+import { imageService } from './imageService';
+import { voiceRecordingService } from './voiceRecordingService';
 
 export class WebRTCChatService {
   private config: ChatConfig;
@@ -203,6 +205,118 @@ export class WebRTCChatService {
       return messageData.message;
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send message:', error);
+      throw error;
+    }
+  }
+
+  async sendVoiceMessage(audioUri: string, appointmentId: number | string): Promise<ChatMessage | null> {
+    if (!this.isConnected || !this.websocket) {
+      throw new Error('WebRTC chat not connected');
+    }
+
+    try {
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (typeof appointmentId === 'string' && appointmentId.startsWith('text_session_')) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      // Upload the voice file first
+      const mediaUrl = await voiceRecordingService.uploadVoiceMessage(numericAppointmentId, audioUri);
+      
+      if (!mediaUrl) {
+        throw new Error('Failed to upload voice message');
+      }
+
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const authToken = await this.getAuthToken();
+      
+      const messageData = {
+        type: 'chat-message',
+        message: {
+          id: messageId,
+          sender_id: this.config.userId,
+          sender_name: this.config.userName,
+          message: 'Voice message', // Placeholder text
+          message_type: 'voice',
+          media_url: mediaUrl,
+          created_at: new Date().toISOString(),
+          delivery_status: 'sending'
+        },
+        authToken: authToken
+      };
+
+      console.log('📤 [WebRTCChat] Sending voice message:', messageId);
+      this.websocket.send(JSON.stringify(messageData));
+      
+      const messageHash = this.createMessageHash(messageData.message);
+      this.processedMessageHashes.add(messageHash);
+      
+      await this.addMessage(messageData.message);
+      this.events.onMessage(messageData.message);
+      
+      console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
+      return messageData.message;
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send voice message:', error);
+      throw error;
+    }
+  }
+
+  async sendImageMessage(imageUri: string, appointmentId: number | string): Promise<ChatMessage | null> {
+    if (!this.isConnected || !this.websocket) {
+      throw new Error('WebRTC chat not connected');
+    }
+
+    try {
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (typeof appointmentId === 'string' && appointmentId.startsWith('text_session_')) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      // Upload the image first
+      const uploadResult = await imageService.uploadImage(numericAppointmentId, imageUri);
+      
+      if (!uploadResult.success || !uploadResult.url) {
+        throw new Error('Failed to upload image');
+      }
+
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const authToken = await this.getAuthToken();
+      
+      const messageData = {
+        type: 'chat-message',
+        message: {
+          id: messageId,
+          sender_id: this.config.userId,
+          sender_name: this.config.userName,
+          message: 'Image', // Placeholder text
+          message_type: 'image',
+          media_url: uploadResult.url,
+          created_at: new Date().toISOString(),
+          delivery_status: 'sending'
+        },
+        authToken: authToken
+      };
+
+      console.log('📤 [WebRTCChat] Sending image message:', messageId);
+      this.websocket.send(JSON.stringify(messageData));
+      
+      const messageHash = this.createMessageHash(messageData.message);
+      this.processedMessageHashes.add(messageHash);
+      
+      await this.addMessage(messageData.message);
+      this.events.onMessage(messageData.message);
+      
+      console.log('📤 [WebRTCChat] Image message sent successfully:', messageId);
+      return messageData.message;
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send image message:', error);
       throw error;
     }
   }

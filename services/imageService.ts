@@ -184,8 +184,17 @@ class ImageService {
     senderId: number,
     senderName: string
   ): Promise<boolean> {
-    console.log('📤 [ImageService] Image sending is disabled');
-    return false;
+    try {
+      const uploadResult = await this.uploadImage(appointmentId, imageUri);
+      if (uploadResult.success) {
+        console.log('📤 [ImageService] Image uploaded successfully for WebRTC');
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('❌ [ImageService] Error uploading image for WebRTC:', error);
+      return false;
+    }
   }
 }
 

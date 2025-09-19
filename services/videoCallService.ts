@@ -43,6 +43,7 @@ class VideoCallService {
   private processedMessages: Set<string> = new Set();
   private isProcessingIncomingCall: boolean = false;
   private isFrontCamera: boolean = true;
+  private isSpeakerOn: boolean = true; // Default to speaker for video calls
 
   private state: VideoCallState = {
     isConnected: false,
@@ -169,6 +170,14 @@ class VideoCallService {
       this.localStream = await mediaDevices.getUserMedia({
         video: true,
         audio: true,
+      });
+      
+      console.log('📹 [VideoCallService] Local stream captured:', {
+        streamId: this.localStream.id,
+        videoTracks: this.localStream.getVideoTracks().length,
+        audioTracks: this.localStream.getAudioTracks().length,
+        videoTrackLabel: this.localStream.getVideoTracks()[0]?.label,
+        audioTrackLabel: this.localStream.getAudioTracks()[0]?.label
       });
 
       // Configure audio routing for phone calls
@@ -471,6 +480,29 @@ class VideoCallService {
   }
 
   /**
+   * Toggle between speaker and earpiece
+   */
+  async toggleSpeaker(): Promise<void> {
+    try {
+      // Toggle the audio routing between speaker and earpiece
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: !this.isSpeakerOn, // Toggle between speaker and earpiece
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
+      
+      this.isSpeakerOn = !this.isSpeakerOn;
+      console.log(`🔊 Audio output switched to ${this.isSpeakerOn ? 'speaker' : 'earpiece'}`);
+    } catch (error) {
+      console.error('❌ Error toggling speaker:', error);
+    }
+  }
+
+  /**
    * Toggle video on/off
    */
   toggleVideo(): void {
@@ -639,11 +671,28 @@ class VideoCallService {
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: true,
+        playThroughEarpieceAndroid: false, // Use loudspeaker for video calls
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
-      console.log('🔊 Audio routing configured for video calls');
+      
+      // Try to set audio output to loudspeaker for video calls
+      try {
+        // For Android, we can try to set the audio output to speaker
+        if (Constants.platform?.android) {
+          // This will be handled by the playThroughEarpieceAndroid: false setting
+          console.log('🔊 Android: Audio configured for loudspeaker');
+        }
+        
+        // For iOS, we might need additional configuration
+        if (Constants.platform?.ios) {
+          console.log('🔊 iOS: Audio configured for loudspeaker');
+        }
+      } catch (audioOutputError) {
+        console.log('⚠️ Could not set specific audio output, using default routing');
+      }
+      
+      console.log('🔊 Audio routing configured for video calls (loudspeaker)');
     } catch (error) {
       console.error('❌ Error configuring audio routing:', error);
     }
@@ -689,6 +738,12 @@ class VideoCallService {
    * Get local stream
    */
   getLocalStream(): MediaStream | null {
+    console.log('📹 [VideoCallService] getLocalStream called:', {
+      hasLocalStream: !!this.localStream,
+      streamId: this.localStream?.id,
+      videoTracks: this.localStream?.getVideoTracks().length || 0,
+      audioTracks: this.localStream?.getAudioTracks().length || 0
+    });
     return this.localStream;
   }
 
