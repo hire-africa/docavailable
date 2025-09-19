@@ -17,7 +17,7 @@ class PayChanguService
     {
         $this->secretKey  = (string) config('services.paychangu.secret_key');
         $this->paymentUrl = (string) config('services.paychangu.payment_url', 'https://api.paychangu.com/payment');
-        $this->verifyUrl  = (string) config('services.paychangu.verify_url',  'https://api.paychangu.com/payment/verify');
+        $this->verifyUrl  = (string) config('services.paychangu.verify_url',  'https://api.paychangu.com/verify-payment');
         $this->callbackUrl = config('services.paychangu.callback_url');
         $this->returnUrl   = config('services.paychangu.return_url');
     }
