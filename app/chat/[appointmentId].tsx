@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
+import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -1305,8 +1306,39 @@ export default function ChatPage() {
   };
 
   const sendVoiceMessage = async () => {
-    console.log('📤 [SendVoice] Voice message sending is disabled');
-    // Voice message sending disabled - logged to console only
+    if (!recordingUri || !webrtcChatService) return;
+    
+    try {
+      setSendingVoiceMessage(true);
+      
+      if (webrtcChatService) {
+        // Use WebRTC for voice messages
+        console.log('📤 [SendVoice] Sending voice message via WebRTC');
+        const message = await webrtcChatService.sendVoiceMessage(recordingUri, appointmentId);
+        if (message) {
+          setRecordingUri(null);
+          setRecordingDuration(0);
+          console.log('✅ Voice message sent via WebRTC:', message.id);
+        }
+      } else {
+        // Fallback to backend API
+        console.log('📤 [SendVoice] WebRTC not available, using backend API fallback');
+        await sendVoiceMessageViaBackendAPI();
+      }
+    } catch (error) {
+      console.error('❌ Error sending voice message:', error);
+      // Try backend API fallback if WebRTC fails
+      if (webrtcChatService) {
+        console.log('🔄 WebRTC failed, trying backend API fallback');
+        try {
+          await sendVoiceMessageViaBackendAPI();
+        } catch (fallbackError) {
+          console.error('❌ Backend API fallback also failed:', fallbackError);
+        }
+      }
+    } finally {
+      setSendingVoiceMessage(false);
+    }
   };
 
   const formatDuration = (seconds: number): string => {
@@ -1317,13 +1349,140 @@ export default function ChatPage() {
 
   // Image handling functions
   const handleTakePhoto = async () => {
-    console.log('📤 [Camera] Image sending is disabled');
-    // Image sending disabled - logged to console only
+    try {
+      setSendingCameraImage(true);
+      
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Camera permission is required to take photos.');
+        return;
+      }
+
+      // Take photo
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        console.log('📤 [Camera] Photo taken, sending via WebRTC');
+        
+        if (webrtcChatService) {
+          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+          if (message) {
+            console.log('✅ Camera image sent via WebRTC:', message.id);
+          }
+        } else {
+          console.log('📤 [Camera] WebRTC not available, using backend API fallback');
+          await sendImageMessageViaBackendAPI(imageUri);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error taking photo:', error);
+    } finally {
+      setSendingCameraImage(false);
+    }
   };
 
   const handlePickImage = async () => {
-    console.log('📤 [Gallery] Image sending is disabled');
-    // Image sending disabled - logged to console only
+    try {
+      setSendingGalleryImage(true);
+      
+      // Request media library permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Media library permission is required to select photos.');
+        return;
+      }
+
+      // Pick image from gallery
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        console.log('📤 [Gallery] Image selected, sending via WebRTC');
+        
+        if (webrtcChatService) {
+          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+          if (message) {
+            console.log('✅ Gallery image sent via WebRTC:', message.id);
+          }
+        } else {
+          console.log('📤 [Gallery] WebRTC not available, using backend API fallback');
+          await sendImageMessageViaBackendAPI(imageUri);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error picking image:', error);
+    } finally {
+      setSendingGalleryImage(false);
+    }
+  };
+
+  // Fallback functions for when WebRTC is not available
+  const sendVoiceMessageViaBackendAPI = async () => {
+    if (!recordingUri) return;
+    
+    try {
+      const { voiceRecordingService } = await import('../../services/voiceRecordingService');
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (isTextSession) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      const success = await voiceRecordingService.sendVoiceMessage(
+        numericAppointmentId,
+        recordingUri,
+        user?.id || 0,
+        user?.display_name || 'User'
+      );
+      
+      if (success) {
+        setRecordingUri(null);
+        setRecordingDuration(0);
+        console.log('✅ Voice message sent via backend API');
+      }
+    } catch (error) {
+      console.error('❌ Error sending voice message via backend API:', error);
+    }
+  };
+
+  const sendImageMessageViaBackendAPI = async (imageUri: string) => {
+    try {
+      const { imageService } = await import('../../services/imageService');
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (isTextSession) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      const success = await imageService.sendImageMessage(
+        numericAppointmentId,
+        imageUri,
+        user?.id || 0,
+        user?.display_name || 'User'
+      );
+      
+      if (success) {
+        console.log('✅ Image message sent via backend API');
+      }
+    } catch (error) {
+      console.error('❌ Error sending image message via backend API:', error);
+    }
   };
 
   // Debug modal state

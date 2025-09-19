@@ -106,6 +106,30 @@ export default function VideoCallModal({
     }
   }, [callState.connectionState]);
 
+  // Monitor local stream availability
+  useEffect(() => {
+    if (videoCallService.current && !localStream) {
+      const checkLocalStream = () => {
+        const stream = videoCallService.current?.getLocalStream();
+        if (stream) {
+          console.log('📹 [VideoCallModal] Local stream became available:', {
+            streamId: stream.id,
+            videoTracks: stream.getVideoTracks().length,
+            audioTracks: stream.getAudioTracks().length
+          });
+          setLocalStream(stream);
+        }
+      };
+      
+      // Check immediately
+      checkLocalStream();
+      
+      // Also check after a short delay in case it's still being set up
+      const timeout = setTimeout(checkLocalStream, 1000);
+      return () => clearTimeout(timeout);
+    }
+  }, [videoCallService.current, localStream]);
+
   const initializeIncomingCall = async () => {
     try {
       console.log('📞 VideoCallModal: Initializing for incoming call');
@@ -182,6 +206,13 @@ export default function VideoCallModal({
       
       // Get local stream for display
       const localStream = videoCallService.current.getLocalStream();
+      console.log('📹 [VideoCallModal] Local stream retrieved:', {
+        hasLocalStream: !!localStream,
+        streamId: localStream?.id,
+        videoTracks: localStream?.getVideoTracks().length || 0,
+        audioTracks: localStream?.getAudioTracks().length || 0,
+        streamURL: localStream?.toURL()
+      });
       setLocalStream(localStream);
       setIsInitialized(true);
       
@@ -326,6 +357,21 @@ export default function VideoCallModal({
     }
   };
 
+  const getConnectionIndicatorColor = () => {
+    switch (callState.connectionState) {
+      case 'connecting':
+        return '#FF9800'; // Orange for connecting
+      case 'connected':
+        return '#4CAF50'; // Green for connected
+      case 'disconnected':
+        return '#9E9E9E'; // Gray for disconnected
+      case 'failed':
+        return '#F44336'; // Red for failed
+      default:
+        return '#2196F3'; // Blue for default
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
@@ -340,68 +386,106 @@ export default function VideoCallModal({
       )}
       
       {/* Local Video (Picture-in-Picture) */}
-      {localStream && (
+      {localStream ? (
         <RTCView
           style={styles.localVideo}
           streamURL={localStream.toURL()}
           objectFit="cover"
           mirror={callState.isFrontCamera}
+          zOrder={1}
+          onLoad={() => console.log('📹 [RTCView] Local video loaded successfully')}
+          onError={(error) => console.error('❌ [RTCView] Local video error:', error)}
         />
+      ) : (
+        <View style={styles.localVideoPlaceholder}>
+          <Text style={styles.localVideoPlaceholderText}>No Camera</Text>
+        </View>
       )}
       
-      {/* Dynamic Header based on call state */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}
-        </Text>
-        <View style={styles.placeholder} />
-      </View>
       
-      {/* Main Content - Simple Layout */}
-      <View style={styles.content}>
-        {/* Profile Picture - Small and Simple */}
-        <View style={styles.profileContainer}>
-          {otherParticipantProfilePictureUrl ? (
-            <Image
-              source={{ uri: otherParticipantProfilePictureUrl }}
-              style={styles.profilePicture}
-            />
-          ) : (
-            <View style={styles.defaultProfilePicture}>
-              <Ionicons 
-                name={isDoctor ? "medical" : "person"} 
-                size={24} 
-                color="white" 
-              />
-            </View>
-          )}
+      {/* Dynamic Header based on call state */}
+      {shouldShowIncomingUI ? (
+        // Incoming call header
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Incoming Video Call</Text>
+          <View style={styles.placeholder} />
         </View>
-
-        {/* User Info */}
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            {isDoctor ? patientName : doctorName}
-          </Text>
-          <Text style={styles.userRole}>
-            {isDoctor ? 'Patient' : 'Doctor'}
-          </Text>
-        </View>
-
-        {/* Status */}
-        <View style={styles.statusContainer}>
-          <Text style={[styles.statusText, { color: getStatusColor() }]}>
-            {getStatusText()}
-          </Text>
-          {callState.isConnected && (
-            <Text style={styles.durationText}>
+      ) : (
+        // Connected call header - horizontal layout
+        <View style={styles.connectedHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          
+          <View style={styles.connectedHeaderCenter}>
+            <Text style={styles.connectedUserName}>
+              {isDoctor ? patientName : doctorName}
+            </Text>
+            <Text style={styles.connectedUserRole}>
+              {isDoctor ? 'Patient' : 'Doctor'}
+            </Text>
+          </View>
+          
+          <View style={styles.connectedHeaderRight}>
+            <Text style={styles.callDuration}>
               {formatDuration(callState.callDuration)}
             </Text>
-          )}
+            <View style={[styles.connectionIndicator, { backgroundColor: getConnectionIndicatorColor() }]} />
+          </View>
         </View>
-      </View>
+      )}
+      
+      {/* Main Content - Streamlined for connected calls */}
+      {shouldShowIncomingUI ? (
+        <View style={styles.content}>
+          {/* Profile Picture - Small and Simple */}
+          <View style={styles.profileContainer}>
+            {otherParticipantProfilePictureUrl ? (
+              <Image
+                source={{ uri: otherParticipantProfilePictureUrl }}
+                style={styles.profilePicture}
+              />
+            ) : (
+              <View style={styles.defaultProfilePicture}>
+                <Ionicons 
+                  name={isDoctor ? "medical" : "person"} 
+                  size={24} 
+                  color="white" 
+                />
+              </View>
+            )}
+          </View>
+
+          {/* User Info */}
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>
+              {isDoctor ? patientName : doctorName}
+            </Text>
+            <Text style={styles.userRole}>
+              {isDoctor ? 'Patient' : 'Doctor'}
+            </Text>
+          </View>
+
+          {/* Status */}
+          <View style={styles.statusContainer}>
+            <Text style={[styles.statusText, { color: getStatusColor() }]}>
+              {getStatusText()}
+            </Text>
+          </View>
+        </View>
+      ) : (
+        // Connected call - minimal content to give more space to video
+        <View style={styles.connectedContent}>
+          {/* Connection status indicator */}
+          <View style={styles.connectionStatus}>
+            <View style={[styles.connectionDot, { backgroundColor: getConnectionIndicatorColor() }]} />
+            <Text style={styles.connectionText}>Connected</Text>
+          </View>
+        </View>
+      )}
 
       {/* Dynamic Controls based on call state */}
       {shouldShowIncomingUI || isProcessingAnswer ? (
@@ -515,6 +599,51 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: 20,
   },
+  connectedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 50,
+    paddingBottom: 8,
+    marginHorizontal: 20,
+    marginTop: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  connectedHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  connectedUserName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: 'white',
+    textAlign: 'center',
+  },
+  connectedUserRole: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    marginTop: 1,
+  },
+  connectedHeaderRight: {
+    alignItems: 'flex-end',
+  },
+  callDuration: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 3,
+  },
+  connectionIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -536,6 +665,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30,
+  },
+  connectedContent: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: 20,
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  connectionText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
   profileContainer: {
     marginBottom: 30,
@@ -631,5 +785,23 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 2,
     borderColor: '#4CAF50',
+  },
+  localVideoPlaceholder: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 120,
+    height: 160,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#FF6B6B',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  localVideoPlaceholderText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
