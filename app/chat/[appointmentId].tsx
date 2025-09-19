@@ -22,6 +22,7 @@ import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import RatingModal from '../../components/RatingModal';
+import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../../services/apiService';
@@ -117,6 +118,12 @@ export default function ChatPage() {
   const [incomingCallerName, setIncomingCallerName] = useState<string>('');
   const [incomingCallerProfilePicture, setIncomingCallerProfilePicture] = useState<string | null>(null);
   const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
+  
+  // Video call modal state
+  const [showVideoCallModal, setShowVideoCallModal] = useState(false);
+  const [showIncomingVideoCall, setShowIncomingVideoCall] = useState(false);
+  const [isAnsweringVideoCall, setIsAnsweringVideoCall] = useState(false);
+  const [showVideoCall, setShowVideoCall] = useState(false);
   const [appointmentType, setAppointmentType] = useState<string | null>(null);
   
   // WebRTC session management state
@@ -881,7 +888,8 @@ export default function ChatPage() {
             currentUserIdString: currentUserId.toString(),
             userType: user?.user_type,
             appointmentId: appointmentId,
-            userObject: user
+            userObject: user,
+            callType: message.callType || 'audio' // Check if it's video or audio call
           });
           
           // Check if this offer is from ourselves (ignore our own offers)
@@ -923,11 +931,13 @@ export default function ChatPage() {
           console.log('📞 Incoming call detected! Showing incoming call screen...', {
             from: user?.user_type,
             messageType: message.type,
+            callType: message.callType || 'audio',
             isReceivingCall: true,
             senderId: message.senderId,
             currentUserId
           });
-          // Store the offer for the AudioCallService to use
+          
+          // Store the offer for the appropriate service to use
           (global as any).pendingOffer = message.offer;
           
           // Set caller information for the incoming call screen
@@ -937,8 +947,15 @@ export default function ChatPage() {
           setIncomingCallerName(callerName);
           setIncomingCallerProfilePicture(chatInfo?.other_participant_profile_picture);
           
-          // Show Instagram-style incoming call screen (only for receiver)
-          setShowIncomingCall(true);
+          // Determine call type and show appropriate incoming call screen
+          const callType = message.callType || 'audio';
+          if (callType === 'video') {
+            console.log('📹 Showing incoming video call screen');
+            setShowIncomingVideoCall(true);
+          } else {
+            console.log('📞 Showing incoming audio call screen');
+            setShowIncomingCall(true);
+          }
         }
       } catch (error) {
         console.error('❌ Error handling incoming call message:', error);
@@ -1449,11 +1466,19 @@ export default function ChatPage() {
             style={{ 
               padding: 8, 
               marginRight: 1,
+              opacity: isCallButtonEnabled() ? 1 : 0.3
             }}
             onPress={() => {
-              // TODO: Implement video call functionality
-              console.log('Video call feature coming soon!');
-              // Video call feature coming soon - logged to console only
+              if (isCallButtonEnabled()) {
+                console.log('Starting video call...');
+                setShowVideoCallModal(true);
+              } else {
+                Alert.alert(
+                  'Call Not Available',
+                  'Video calls are only available during active sessions or when the doctor is online.',
+                  [{ text: 'OK' }]
+                );
+              }
             }}
           >
             <Icon name="video" size={24} color="#4CAF50" />
@@ -2301,6 +2326,95 @@ export default function ChatPage() {
           </View>
         </View>
       </Modal>
+
+      {/* Video Call Modal */}
+      {showVideoCallModal && (
+        <Modal
+          visible={true}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowVideoCallModal(false);
+            setShowVideoCall(false);
+          }}
+          statusBarTranslucent={true}
+        >
+          <VideoCallModal
+            appointmentId={appointmentId}
+            userId={currentUserId.toString()}
+            isDoctor={user?.user_type === 'doctor'}
+            doctorName={chatInfo?.other_participant_name || 'Doctor'}
+            patientName={user?.display_name || 'Patient'}
+            otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
+            onEndCall={() => {
+              setShowVideoCallModal(false);
+              setShowVideoCall(false);
+            }}
+            onCallTimeout={() => {
+              setShowVideoCallModal(false);
+              setShowVideoCall(false);
+            }}
+            onCallRejected={() => {
+              setShowVideoCallModal(false);
+              setShowVideoCall(false);
+            }}
+            onCallAnswered={() => {
+              console.log('Video call answered');
+            }}
+            isIncomingCall={false}
+          />
+        </Modal>
+      )}
+
+      {/* Incoming Video Call Modal */}
+      {showIncomingVideoCall && (
+        <Modal
+          visible={true}
+          transparent={false}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowIncomingVideoCall(false);
+            setShowVideoCall(false);
+          }}
+          statusBarTranslucent={true}
+        >
+          <VideoCallModal
+            appointmentId={appointmentId}
+            userId={currentUserId.toString()}
+            isDoctor={user?.user_type === 'doctor'}
+            doctorName={incomingCallerName || 'Doctor'}
+            patientName={user?.display_name || 'Patient'}
+            otherParticipantProfilePictureUrl={incomingCallerProfilePicture}
+            onEndCall={() => {
+              setShowIncomingVideoCall(false);
+              setShowVideoCall(false);
+            }}
+            onCallTimeout={() => {
+              setShowIncomingVideoCall(false);
+              setShowVideoCall(false);
+            }}
+            onCallRejected={() => {
+              setShowIncomingVideoCall(false);
+              setShowVideoCall(false);
+            }}
+            onCallAnswered={() => {
+              // Don't create a new modal, just transition the existing one
+              console.log('📞 Video call answered - transitioning to connected state');
+            }}
+            isIncomingCall={true}
+            onAcceptCall={() => {
+              // Don't create a new modal, just transition the existing one
+              console.log('📞 Video call accepted - transitioning to connected state');
+            }}
+            onRejectCall={() => {
+              setShowIncomingVideoCall(false);
+              setIsAnsweringVideoCall(false);
+            }}
+          />
+        </Modal>
+      )}
+
+      {/* Note: Video call state transitions are handled internally by VideoCallModal */}
     </SafeAreaView>
   );
 } 

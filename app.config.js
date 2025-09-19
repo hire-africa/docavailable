@@ -72,12 +72,12 @@ export default {
             'stun:stun1.l.google.com:19302'
           ],
         enableAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'false',
-        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
+        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS !== 'false',
         enableCallRecording: process.env.EXPO_PUBLIC_ENABLE_CALL_RECORDING === 'true',
       },
       features: {
         enableAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'false',
-        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS === 'true',
+        enableVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS !== 'false',
         enableChat: true,
       },
       
