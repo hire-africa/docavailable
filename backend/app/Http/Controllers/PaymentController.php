@@ -44,24 +44,26 @@ class PaymentController extends Controller
                 return response()->json(['error' => 'Unauthorized - missing signature or secret'], 200);
             }
             
-            // Compute HMAC using webhook secret first
-            $computedSignature = $webhookSecret ? hash_hmac('sha256', $payload, $webhookSecret) : null;
-            $verified = $computedSignature && hash_equals($computedSignature, $signature);
+            // Compute HMAC using API secret first (PayChangu confirmed this is correct)
+            $computedWithApiSecret = $apiSecret ? hash_hmac('sha256', $payload, $apiSecret) : null;
+            $verified = $computedWithApiSecret && hash_equals($computedWithApiSecret, $signature);
 
-            // If it doesn't match and we have API secret, try that as some providers sign with API secret
-            if (!$verified && $apiSecret) {
-                $computedWithApiSecret = hash_hmac('sha256', $payload, $apiSecret);
-                if (hash_equals($computedWithApiSecret, $signature)) {
+            // If it doesn't match and we have webhook secret, try that as fallback
+            if (!$verified && $webhookSecret && $webhookSecret !== 'whsec_your_webhook_secret_here') {
+                $computedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+                if (hash_equals($computedSignature, $signature)) {
                     $verified = true;
-                    Log::warning('Webhook signature matched using API secret instead of webhook secret');
+                    Log::info('Webhook signature matched using webhook secret (fallback)');
                 }
             }
 
             if (!$verified) {
                 Log::error('Invalid webhook signature', [
-                    'computed_with_webhook' => $computedSignature,
+                    'computed_with_api_secret' => $computedWithApiSecret,
+                    'computed_with_webhook_secret' => $computedSignature ?? 'not_tried',
                     'received' => $signature,
-                    'used_api_fallback' => !empty($apiSecret)
+                    'api_secret_present' => !empty($apiSecret),
+                    'webhook_secret_present' => !empty($webhookSecret)
                 ]);
                 return response()->json(['error' => 'Invalid signature'], 200);
             }
