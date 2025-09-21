@@ -1,18 +1,18 @@
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import DirectBookingModal from '../components/DirectBookingModal';
+import SessionTypeSelectionModal, { SessionType } from '../components/SessionTypeSelectionModal';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
-import DirectBookingModal from '../components/DirectBookingModal';
 
 interface Doctor {
   id: number;
@@ -63,8 +63,10 @@ export default function InstantSessionsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeSession, setActiveSession] = useState<SessionInfo | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  const [showSessionTypeModal, setShowSessionTypeModal] = useState(false);
   const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
 
   const fetchAvailableDoctors = async () => {
     try {
@@ -110,15 +112,30 @@ export default function InstantSessionsScreen() {
 
   const handleStartSession = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
+    setShowSessionTypeModal(true);
+  };
+
+  const handleSessionTypeSelect = (sessionType: SessionType) => {
+    setSelectedSessionType(sessionType);
+    setShowSessionTypeModal(false);
     setShowDirectBookingModal(true);
   };
 
-  const startSession = async (reason: string) => {
+  const startSession = async (reason: string, sessionType: SessionType) => {
     if (!selectedDoctor) return;
     
     setStartingSession(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/start`, {
+      let endpoint = '';
+      if (sessionType === 'text') {
+        endpoint = '/api/text-sessions/start';
+      } else if (sessionType === 'audio') {
+        endpoint = '/api/audio-sessions/start';
+      } else if (sessionType === 'video') {
+        endpoint = '/api/video-sessions/start';
+      }
+
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -135,13 +152,30 @@ export default function InstantSessionsScreen() {
       if (response.ok) {
         setActiveSession(data.data);
         setShowDirectBookingModal(false);
-        // Navigate directly to chat without showing alert
-        const chatId = `text_session_${data.data.session_id}`;
-        router.push(`/chat/${chatId}`);
+        
+        // Navigate to appropriate screen based on session type
+        if (sessionType === 'text') {
+          // Navigate directly to chat without showing alert
+          const chatId = `text_session_${data.data.session_id}`;
+          router.push(`/chat/${chatId}`);
+        } else {
+          // For audio/video calls, navigate to call screen
+          router.push({
+            pathname: '/call',
+            params: {
+              sessionId: data.data.session_id,
+              doctorId: selectedDoctor.id,
+              doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
+              doctorSpecialization: selectedDoctor.specialization,
+              callType: sessionType,
+              isDirectSession: 'true'
+            }
+          });
+        }
       } else {
         // Handle specific error cases - all logged to console only
         if (response.status === 400 && data.message?.includes('already have an active session')) {
-          console.log('Active Session Found: You already have an active text session. Please check your messages or wait for the current session to end before starting a new one.');
+          console.log('Active Session Found: You already have an active session. Please check your messages or wait for the current session to end before starting a new one.');
           // Navigate to messages tab
           router.push('/patient-dashboard?tab=messages');
         } else {
@@ -294,11 +328,19 @@ export default function InstantSessionsScreen() {
         </View>
       </ScrollView>
 
+      <SessionTypeSelectionModal
+        visible={showSessionTypeModal}
+        onClose={() => setShowSessionTypeModal(false)}
+        onSelectSessionType={handleSessionTypeSelect}
+        doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
+      />
+
       <DirectBookingModal
         visible={showDirectBookingModal}
         onClose={() => setShowDirectBookingModal(false)}
         onConfirm={startSession}
         doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
+        sessionType={selectedSessionType}
         loading={startingSession}
       />
     </>
