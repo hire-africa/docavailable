@@ -2,7 +2,6 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
     Dimensions,
     Platform,
@@ -15,8 +14,9 @@ import {
 } from 'react-native';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
+import SessionTypeSelectionModal, { SessionType } from '../../../components/SessionTypeSelectionModal';
+import { DoctorProfileSkeleton } from '../../../components/skeleton';
 import SubscriptionModal from '../../../components/SubscriptionModal';
-import { Colors } from '../../../constants/Colors';
 import { useAuth } from '../../../contexts/AuthContext';
 import { apiService } from '../../../services/apiService';
 
@@ -53,7 +53,9 @@ export default function DoctorProfilePage() {
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [showSessionTypeModal, setShowSessionTypeModal] = useState(false);
   const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
+  const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
   const [currentSubscription, setCurrentSubscription] = useState<any>(null);
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export default function DoctorProfilePage() {
   const fetchDoctorProfile = async () => {
     try {
       setLoading(true);
-      const response = await apiService.get<DoctorProfile>(`/doctors/${uid}`);
+      const response = await apiService.get(`/doctors/${uid}`);
       
       if (response.success && response.data) {
         setDoctor(response.data);
@@ -124,41 +126,88 @@ export default function DoctorProfilePage() {
   const handleDirectBooking = async () => {
     if (!doctor || !userData) return;
     
-    // Check if user has subscription with text sessions
-    if (!currentSubscription || (currentSubscription.textSessionsRemaining || 0) <= 0) {
+    // Check if user has subscription with text sessions (only for text sessions)
+    if (selectedSessionType === 'text' && (!currentSubscription || (currentSubscription.textSessionsRemaining || 0) <= 0)) {
       setShowSubscriptionModal(true);
       return;
     }
     
-    // Show the direct booking modal instead of directly calling the API
+    // Show the session type selection modal
+    setShowSessionTypeModal(true);
+  };
+
+  const handleSessionTypeSelect = (sessionType: SessionType) => {
+    setSelectedSessionType(sessionType);
+    setShowSessionTypeModal(false);
+    
+    // Check subscription for text sessions only
+    if (sessionType === 'text' && (!currentSubscription || (currentSubscription.textSessionsRemaining || 0) <= 0)) {
+      setShowSubscriptionModal(true);
+      return;
+    }
+    
+    // Show the booking modal with selected session type
     setShowDirectBookingModal(true);
   };
 
-  const handleDirectBookingConfirm = async (reason: string) => {
+  const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
     if (!doctor || !userData) return;
     
     try {
-      // Start text session with reason
-      const response = await apiService.post('/text-sessions/start', {
-        doctor_id: doctor.id,
-        reason: reason
-      });
+      let response;
       
-      if (response.success && response.data) {
+      if (sessionType === 'text') {
+        // Start text session with reason
+        response = await apiService.post('/text-sessions/start', {
+          doctor_id: doctor.id,
+          reason: reason
+        });
+      } else if (sessionType === 'audio') {
+        // Start audio call session
+        response = await apiService.post('/audio-sessions/start', {
+          doctor_id: doctor.id,
+          reason: reason
+        });
+      } else if (sessionType === 'video') {
+        // Start video call session
+        response = await apiService.post('/video-sessions/start', {
+          doctor_id: doctor.id,
+          reason: reason
+        });
+      }
+      
+      if (response && response.success && response.data) {
         const sessionData = response.data as any;
         
         // Close the modal
         setShowDirectBookingModal(false);
         
-        // Navigate directly to chat
-        const chatId = `text_session_${sessionData.session_id}`;
-        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+        // Navigate to the appropriate screen based on session type
+        if (sessionType === 'text') {
+          // Navigate directly to chat
+          const chatId = `text_session_${sessionData.session_id}`;
+          router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+        } else {
+          // For audio/video calls, navigate to call screen
+          router.push({
+            pathname: '/call',
+            params: {
+              sessionId: sessionData.session_id,
+              doctorId: doctor.id,
+              doctorName: `${doctor.first_name} ${doctor.last_name}`,
+              doctorSpecialization: doctor.specialization,
+              doctorProfilePicture: doctor.profile_picture_url || doctor.profile_picture,
+              callType: sessionType,
+              isDirectSession: 'true'
+            }
+          });
+        }
       } else {
-        Alert.alert('Error', response.message || 'Failed to start direct booking');
+        Alert.alert('Error', response?.message || 'Failed to start session');
       }
     } catch (error) {
-      console.error('Error starting direct booking:', error);
-      Alert.alert('Error', 'Failed to start direct booking. Please try again.');
+      console.error('Error starting session:', error);
+      Alert.alert('Error', 'Failed to start session. Please try again.');
     }
   };
 
@@ -192,10 +241,7 @@ export default function DoctorProfilePage() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.light.tint} />
-          <Text style={styles.loadingText}>Loading doctor profile...</Text>
-        </View>
+        <DoctorProfileSkeleton />
       </SafeAreaView>
     );
   }
@@ -355,12 +401,21 @@ export default function DoctorProfilePage() {
         onBuySessions={handleBuySessions}
       />
 
+      {/* Session Type Selection Modal */}
+      <SessionTypeSelectionModal
+        visible={showSessionTypeModal}
+        onClose={() => setShowSessionTypeModal(false)}
+        onSelectSessionType={handleSessionTypeSelect}
+        doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+      />
+
       {/* Direct Booking Modal */}
       <DirectBookingModal
         visible={showDirectBookingModal}
         onClose={() => setShowDirectBookingModal(false)}
         onConfirm={handleDirectBookingConfirm}
         doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+        sessionType={selectedSessionType}
       />
     </SafeAreaView>
   );
