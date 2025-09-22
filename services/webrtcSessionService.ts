@@ -90,8 +90,13 @@ class WebRTCSessionService {
 
         this.signalingChannel.onerror = (error) => {
           console.error('❌ Session signaling WebSocket error:', error);
-          this.events?.onError('Connection error');
-          reject(error);
+          // Don't reject on error if we're already connected - just log it
+          if (!this.isConnected) {
+            this.events?.onError('Connection error');
+            reject(error);
+          } else {
+            console.log('⚠️ [WebRTC Session] Connection error but already connected, continuing...');
+          }
         };
 
         this.signalingChannel.onclose = () => {
@@ -198,21 +203,33 @@ class WebRTCSessionService {
   async endSession(reason: string = 'manual_end'): Promise<void> {
     if (!this.isConnected || !this.signalingChannel) {
       console.log('❌ [WebRTC Session] Cannot end session - not connected');
-      return;
+      throw new Error('WebRTC session service not connected');
+    }
+
+    // Check if the connection is still open
+    if (this.signalingChannel.readyState !== WebSocket.OPEN) {
+      console.log('❌ [WebRTC Session] Cannot end session - connection not open, state:', this.signalingChannel.readyState);
+      throw new Error('WebRTC connection not open');
     }
 
     const authToken = await apiService.getAuthToken();
     console.log('🔚 [WebRTC Session] Sending session end request:', {
       reason,
       hasAuthToken: !!authToken,
-      appointmentId: this.appointmentId
+      appointmentId: this.appointmentId,
+      connectionState: this.signalingChannel.readyState
     });
     
-    this.sendSignalingMessage({
-      type: 'session-end-request',
-      reason: reason,
-      authToken: authToken
-    });
+    try {
+      this.sendSignalingMessage({
+        type: 'session-end-request',
+        reason: reason,
+        authToken: authToken
+      });
+    } catch (error) {
+      console.error('❌ [WebRTC Session] Failed to send session end request:', error);
+      throw error;
+    }
   }
 
   // Start appointment session
