@@ -649,6 +649,89 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Process auto-deduction for a text session
+     */
+    public function processAutoDeduction(Request $request, $sessionId): JsonResponse
+    {
+        try {
+            $session = TextSession::find($sessionId);
+            
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Session not found'
+                ], 404);
+            }
+            
+            if ($session->status !== TextSession::STATUS_ACTIVE) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Session is not active'
+                ], 400);
+            }
+            
+            $elapsedMinutes = $session->getElapsedMinutes();
+            $expectedDeductions = floor($elapsedMinutes / 10);
+            $alreadyProcessed = $session->auto_deductions_processed ?? 0;
+            $newDeductions = $expectedDeductions - $alreadyProcessed;
+            
+            if ($newDeductions > 0) {
+                $paymentService = new DoctorPaymentService();
+                $success = $paymentService->processAutoDeduction($session);
+                
+                if ($success) {
+                    $session->update([
+                        'auto_deductions_processed' => $expectedDeductions,
+                        'sessions_used' => $session->sessions_used + $newDeductions
+                    ]);
+                    
+                    Log::info("Auto-deduction processed via API", [
+                        'session_id' => $sessionId,
+                        'deductions_processed' => $newDeductions,
+                        'total_deductions' => $expectedDeductions,
+                        'triggered_by' => $request->input('triggered_by', 'api')
+                    ]);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Auto-deduction processed successfully',
+                        'data' => [
+                            'deductions_processed' => $newDeductions,
+                            'total_deductions' => $expectedDeductions
+                        ]
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to process payment for auto-deduction'
+                    ], 500);
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'No new deductions needed',
+                'data' => [
+                    'deductions_processed' => 0,
+                    'total_deductions' => $expectedDeductions
+                ]
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error processing auto-deduction:', [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process auto-deduction: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get available doctors for text sessions.
      */
     public function availableDoctors(Request $request): JsonResponse

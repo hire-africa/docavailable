@@ -884,6 +884,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
     Route::get('/text-sessions/{sessionId}/check-response', [TextSessionController::class, 'checkResponse']);
     Route::put('/text-sessions/{sessionId}/status', [TextSessionController::class, 'updateStatus']);
+    Route::post('/text-sessions/{sessionId}/auto-deduction', [TextSessionController::class, 'processAutoDeduction']);
     Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
     
