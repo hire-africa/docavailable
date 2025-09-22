@@ -560,6 +560,22 @@ export default function ChatPage() {
             setShowRatingModal(true);
           },
           
+          onSessionEndSuccess: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+            console.log('✅ Session end success via WebRTC:', sessionId, reason, sessionType);
+            setEndingSession(false);
+            setShowEndSessionModal(false);
+            setSessionEnded(true);
+            // Show rating modal
+            setShowRatingModal(true);
+          },
+          
+          onSessionEndError: (error: string) => {
+            console.log('❌ Session end error via WebRTC:', error);
+            setEndingSession(false);
+            // Show error alert
+            Alert.alert('Error', `Failed to end session: ${error}`);
+          },
+          
           onSessionDeduction: (sessionId: string, deductionData: any, sessionType: 'instant' | 'appointment') => {
             console.log('💰 Session deduction via WebRTC:', deductionData, sessionType);
             setSessionDeductionInfo(deductionData);

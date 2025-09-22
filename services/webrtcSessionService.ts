@@ -21,6 +21,8 @@ export interface WebRTCSessionEvents {
   onSessionActivated: (sessionId: string, sessionType: 'instant' | 'appointment') => void;
   onSessionExpired: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => void;
   onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => void;
+  onSessionEndSuccess?: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => void;
+  onSessionEndError?: (error: string) => void;
   onSessionDeduction: (sessionId: string, deductionData: any, sessionType: 'instant' | 'appointment') => void;
   onDoctorResponseTimerStarted: (sessionId: string, timeRemaining: number) => void;
   onAppointmentStarted: (sessionId: string) => void;
@@ -120,6 +122,16 @@ class WebRTCSessionService {
       case 'session-ended':
         console.log('🏁 Session ended:', message.sessionId, message.reason, message.sessionType);
         this.events?.onSessionEnded(message.sessionId, message.reason, message.sessionType);
+        break;
+        
+      case 'session-end-success':
+        console.log('✅ Session end success:', message.sessionId, message.reason, message.sessionType);
+        this.events?.onSessionEndSuccess?.(message.sessionId, message.reason, message.sessionType);
+        break;
+        
+      case 'session-end-error':
+        console.log('❌ Session end error:', message.message);
+        this.events?.onSessionEndError?.(message.message);
         break;
         
       case 'session-deduction':
