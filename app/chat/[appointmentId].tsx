@@ -1363,8 +1363,9 @@ export default function ChatPage() {
         });
         
         try {
+          console.log('🔌 [End Session] About to call webrtcSessionService.endSession...');
           await webrtcSessionService.endSession('manual_end');
-          console.log('🔌 [End Session] WebRTC end session request sent');
+          console.log('🔌 [End Session] WebRTC end session request sent successfully');
           
           // Set a timeout to fallback to direct API call if WebRTC doesn't respond
           const timeoutId = setTimeout(async () => {
@@ -1437,13 +1438,18 @@ export default function ChatPage() {
               setEndingSession(false);
               Alert.alert('Error', 'Failed to end session. Please try again.');
             }
-          }, 5000); // 5 second timeout
+          }, 3000); // Reduced to 3 seconds for faster testing
           
           // Store timeout ID to clear it if WebRTC succeeds
           (window as any).endSessionTimeoutId = timeoutId;
           
         } catch (error) {
           console.error('❌ [End Session] WebRTC end session failed:', error);
+          console.error('❌ [End Session] Error details:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+          });
           setEndingSession(false);
           Alert.alert('Error', 'Failed to end session. Please try again.');
           return;
