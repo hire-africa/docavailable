@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInpu
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
-import { apiService } from '../services/apiService';
+import { apiService } from './services/apiService';
 
 const MyAppointments = () => {
   const { user } = useAuth();

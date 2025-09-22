@@ -8,7 +8,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { apiService } from '../../services/apiService';
+import { apiService } from '../services/apiService';
 
 const AppointmentDetails = () => {
   const router = router;
