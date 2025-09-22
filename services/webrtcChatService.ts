@@ -84,6 +84,20 @@ export class WebRTCChatService {
             console.log('📨 [WebRTCChat] Message received:', data.type);
             console.log('📨 [WebRTCChat] Message data:', JSON.stringify(data, null, 2));
             
+            // Ignore session-related messages - these should be handled by the session service
+            if (data.type === 'session-end-request' || 
+                data.type === 'session-end-success' || 
+                data.type === 'session-end-error' ||
+                data.type === 'session-ended' ||
+                data.type === 'session-activated' ||
+                data.type === 'session-expired' ||
+                data.type === 'session-deduction' ||
+                data.type === 'session-status-request' ||
+                data.type === 'session-status') {
+              console.log('📨 [WebRTCChat] Ignoring session-related message:', data.type);
+              return;
+            }
+            
             if (data.type === 'chat-message' && data.message) {
               const messageId = data.message.id;
               const messageHash = this.createMessageHash(data.message);
