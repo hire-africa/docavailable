@@ -430,29 +430,39 @@ export default function ChatPage() {
           webrtcConfig: config.webrtc
         }, {
           onMessage: (message) => {
-            console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
-            console.log('📨 [ChatComponent] Message details:', {
-              id: message.id,
-              sender_id: message.sender_id,
-              currentUserId: currentUserId,
-              message: message.message,
-              timestamp: message.created_at,
-              isOwnMessage: String(message.sender_id) === String(currentUserId)
-            });
+            if (__DEV__) {
+              console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
+              console.log('📨 [ChatComponent] Message details:', {
+                id: message.id,
+                sender_id: message.sender_id,
+                currentUserId: currentUserId,
+                message: message.message,
+                timestamp: message.created_at,
+                isOwnMessage: String(message.sender_id) === String(currentUserId)
+              });
+            }
             
             setMessages(prev => {
-              console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
+              if (__DEV__) {
+                console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
+              }
               
               // Check if message already exists to prevent duplicates
               const existingMessage = prev.find(msg => msg.id === message.id);
               if (existingMessage) {
-                console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
+                if (__DEV__) {
+                  console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
+                }
                 return prev;
               }
               
-              console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
+              if (__DEV__) {
+                console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
+              }
               const newMessages = [...prev, message];
-              console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
+              if (__DEV__) {
+                console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
+              }
               return newMessages;
             });
             scrollToBottom();
@@ -2136,172 +2146,6 @@ export default function ChatPage() {
               </View>
             );
           })}
-          
-          {/* Debug Info for Instant Sessions */}
-          {__DEV__ && isInstantSession && (
-            <View style={{
-              backgroundColor: '#F5F5F5',
-              padding: 12,
-              margin: 16,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: '#E0E0E0',
-            }}>
-              <Text style={{
-                fontSize: 14,
-                fontWeight: 'bold',
-                color: '#333',
-                marginBottom: 8,
-              }}>
-                Instant Session Debug:
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Connected: {instantSessionConnected ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Patient Sent: {hasPatientSentMessage ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Doctor Responded: {hasDoctorResponded ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Session Activated: {isSessionActivated ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Timer Active: {isTimerActive ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Time Remaining: {timeRemaining}s
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Show UI: {showInstantSessionUI ? 'Yes' : 'No'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Session ID: {sessionId}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Patient ID: {currentUserId}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
-                Doctor ID: {finalDoctorId} (final: {finalDoctorId}, chat: {chatInfo?.doctor_id}, text: {textSessionInfo?.doctor_id})
-              </Text>
-              
-              {/* Manual Test Button */}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#4CAF50',
-                  padding: 8,
-                  borderRadius: 4,
-                  marginTop: 8,
-                  alignItems: 'center'
-                }}
-                onPress={() => {
-                  console.log('🧪 [Test] Manual trigger - simulating patient message');
-                  // This will help us test if the detector is working
-                  console.log('🧪 [Test] Current detector state:', {
-                    isConnected: instantSessionConnected,
-                    hasPatientSentMessage,
-                    hasDoctorResponded,
-                    isSessionActivated,
-                    isTimerActive,
-                    timeRemaining
-                  });
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-                  Test Detector State
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Manual Doctor ID Test */}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#FF9800',
-                  padding: 8,
-                  borderRadius: 4,
-                  marginTop: 4,
-                  alignItems: 'center'
-                }}
-                onPress={() => {
-                  console.log('🧪 [Test] Manual doctor ID test');
-                  console.log('🧪 [Test] Raw data:', {
-                    chatInfo,
-                    textSessionInfo,
-                    appointmentId,
-                    sessionId,
-                    isInstantSession
-                  });
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-                  Test Doctor ID
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Manual Message Test */}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#9C27B0',
-                  padding: 8,
-                  borderRadius: 4,
-                  marginTop: 4,
-                  alignItems: 'center'
-                }}
-                onPress={() => {
-                  console.log('🧪 [Test] Manual message detection test');
-                  console.log('🧪 [Test] Simulating patient message detection');
-                  // This will help us test if the detector can detect messages
-                  console.log('🧪 [Test] Current detector state:', {
-                    isConnected: instantSessionConnected,
-                    hasPatientSentMessage,
-                    hasDoctorResponded,
-                    isSessionActivated,
-                    isTimerActive,
-                    timeRemaining,
-                    finalDoctorId,
-                    currentUserId
-                  });
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-                  Test Message Detection
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Manual Trigger Timer Test */}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: '#E91E63',
-                  padding: 8,
-                  borderRadius: 4,
-                  marginTop: 4,
-                  alignItems: 'center'
-                }}
-                onPress={() => {
-                  console.log('🧪 [Test] Manual timer trigger test');
-                  // Simulate what should happen when a patient message is detected
-                  console.log('🧪 [Test] This should trigger the timer if working correctly');
-                  
-                  // Check if we can manually trigger the timer logic
-                  if (isInstantSession && !hasPatientSentMessage) {
-                    console.log('🧪 [Test] Would start timer for first patient message');
-                  } else if (isInstantSession && hasPatientSentMessage && !hasDoctorResponded) {
-                    console.log('🧪 [Test] Timer should already be running');
-                  } else {
-                    console.log('🧪 [Test] Timer state:', {
-                      hasPatientSentMessage,
-                      hasDoctorResponded,
-                      isSessionActivated
-                    });
-                  }
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
-                  Test Timer Trigger
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
 
 

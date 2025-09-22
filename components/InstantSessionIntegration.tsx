@@ -223,27 +223,6 @@ export default function InstantSessionIntegration({
          </View>
        )}
 
-      {/* Debug info - remove in production */}
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugTitle}>Debug Info:</Text>
-          <Text style={styles.debugText}>Connected: {isConnected ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Patient Sent: {hasPatientSentMessage ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Doctor Responded: {hasDoctorResponded ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Session Activated: {isSessionActivated ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Timer Active: {isTimerActive ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Time Remaining: {timeRemaining}s</Text>
-          
-          <View style={styles.debugButtons}>
-            <TouchableOpacity style={styles.debugButton} onPress={handleDisconnect}>
-              <Text style={styles.debugButtonText}>Disconnect</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.debugButton} onPress={handleClearState}>
-              <Text style={styles.debugButtonText}>Clear State</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -312,39 +291,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  debugContainer: {
-    backgroundColor: Colors.lightGray,
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: Colors.text,
-    marginBottom: 4,
-  },
-  debugButtons: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  debugButton: {
-    backgroundColor: Colors.gray,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-   debugButtonText: {
-     color: 'white',
-     fontSize: 12,
-     fontWeight: '600',
-   },
    inputContainer: {
      flexDirection: 'row',
      padding: 16,
