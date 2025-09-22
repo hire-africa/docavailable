@@ -586,6 +586,69 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Update session status.
+     */
+    public function updateStatus(Request $request, $sessionId): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|string|in:waiting_for_doctor,active,ended'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $session = TextSession::find($sessionId);
+            
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Session not found'
+                ], 404);
+            }
+
+            $status = $request->input('status');
+            
+            // Update session status
+            $session->update([
+                'status' => $status,
+                'updated_at' => now()
+            ]);
+
+            Log::info("Session status updated", [
+                'session_id' => $sessionId,
+                'new_status' => $status,
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Session status updated successfully',
+                'data' => [
+                    'session_id' => $sessionId,
+                    'status' => $status
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Failed to update session status", [
+                'session_id' => $sessionId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update session status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get available doctors for text sessions.
      */
     public function availableDoctors(Request $request): JsonResponse
