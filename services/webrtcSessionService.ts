@@ -1,4 +1,4 @@
-import { apiService } from './apiService';
+import { apiService } from '../app/services/apiService';
 import configService from './configService';
 
 export interface SessionStatus {

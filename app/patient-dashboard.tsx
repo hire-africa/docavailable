@@ -37,7 +37,7 @@ import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
-import { apiService } from '../services/apiService';
+import { apiService } from './services/apiService';
 import { APPOINTMENT_STATUS, appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 

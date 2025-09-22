@@ -28,7 +28,7 @@ import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
-import { apiService } from '../../services/apiService';
+import { apiService } from '../services/apiService';
 import { AudioCallService } from '../../services/audioCallService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';

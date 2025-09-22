@@ -14,7 +14,7 @@ import {
 import DoctorProfilePicture from '../../components/DoctorProfilePicture';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiService } from '../../services/apiService';
+import { apiService } from '../services/apiService';
 import { stripDoctorPrefix, withDoctorPrefix } from '../../utils/name';
 
 const { width } = Dimensions.get('window');
