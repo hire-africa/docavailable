@@ -1369,6 +1369,12 @@ export default function ChatPage() {
           // Set a timeout to fallback to direct API call if WebRTC doesn't respond
           const timeoutId = setTimeout(async () => {
             console.log('⏰ [End Session] WebRTC timeout - falling back to direct API call');
+            console.log('⏰ [End Session] Current state before fallback:', {
+              endingSession,
+              showEndSessionModal,
+              sessionEnded,
+              showRatingModal
+            });
             
             try {
               // Fallback to direct API call
@@ -1409,12 +1415,18 @@ export default function ChatPage() {
                 }
                 
                 // Update UI - this is the key part that was missing
+                console.log('🔄 [End Session] Updating UI state...');
                 setEndingSession(false);
                 setShowEndSessionModal(false);
                 setSessionEnded(true);
                 setShowRatingModal(true);
                 
-                console.log('✅ [End Session] UI updated successfully via fallback');
+                console.log('✅ [End Session] UI updated successfully via fallback', {
+                  endingSession: false,
+                  showEndSessionModal: false,
+                  sessionEnded: true,
+                  showRatingModal: true
+                });
               } else {
                 console.error('❌ [End Session] Fallback API call failed:', result);
                 setEndingSession(false);
@@ -1847,7 +1859,9 @@ export default function ChatPage() {
 
   // Debug modal state
   // console.log('🔍 showEndSessionModal state:', showEndSessionModal);
-  // console.log('🔍 showRatingModal state:', showRatingModal);
+  console.log('🔍 showRatingModal state:', showRatingModal);
+  console.log('🔍 sessionEnded state:', sessionEnded);
+  console.log('🔍 endingSession state:', endingSession);
   // console.log('🔍 endingSession state:', endingSession);
 
   if (loading) {
