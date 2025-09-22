@@ -28,7 +28,6 @@ import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
-import { apiService } from '../services/apiService';
 import { AudioCallService } from '../../services/audioCallService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
@@ -38,6 +37,7 @@ import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
+import { apiService } from '../services/apiService';
 
 interface ChatInfo {
   appointment_id: number;
@@ -431,37 +431,37 @@ export default function ChatPage() {
         }, {
           onMessage: (message) => {
             if (__DEV__) {
-              console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
-              console.log('📨 [ChatComponent] Message details:', {
-                id: message.id,
-                sender_id: message.sender_id,
-                currentUserId: currentUserId,
-                message: message.message,
-                timestamp: message.created_at,
-                isOwnMessage: String(message.sender_id) === String(currentUserId)
-              });
+            console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
+            console.log('📨 [ChatComponent] Message details:', {
+              id: message.id,
+              sender_id: message.sender_id,
+              currentUserId: currentUserId,
+              message: message.message,
+              timestamp: message.created_at,
+              isOwnMessage: String(message.sender_id) === String(currentUserId)
+            });
             }
             
             setMessages(prev => {
               if (__DEV__) {
-                console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
+              console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
               }
               
               // Check if message already exists to prevent duplicates
               const existingMessage = prev.find(msg => msg.id === message.id);
               if (existingMessage) {
                 if (__DEV__) {
-                  console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
+                console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
                 }
                 return prev;
               }
               
               if (__DEV__) {
-                console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
+              console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
               }
               const newMessages = [...prev, message];
               if (__DEV__) {
-                console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
+              console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
               }
               return newMessages;
             });
@@ -2144,27 +2144,27 @@ export default function ChatPage() {
                 }}
               >
                 {message.message_type === 'voice' && message.media_url ? (
-                  <VoiceMessagePlayer
-                    audioUri={message.media_url}
-                    isOwnMessage={message.sender_id === currentUserId}
-                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    profilePictureUrl={
-                      message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                    }
-                  />
+                      <VoiceMessagePlayer
+                        audioUri={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                      />
                 ) : message.message_type === 'image' && message.media_url ? (
-                  <ImageMessage
-                    imageUrl={message.media_url}
-                    isOwnMessage={message.sender_id === currentUserId}
-                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    profilePictureUrl={
-                      message.sender_id === currentUserId
-                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                    }
-                  />
+                      <ImageMessage
+                        imageUrl={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                      />
                 ) : (
                   // Regular text messages with bubble
                   <View

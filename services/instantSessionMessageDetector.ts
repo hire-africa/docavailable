@@ -133,6 +133,14 @@ export class InstantSessionMessageDetector {
           console.log('📨 [InstantSessionDetector] Ignoring own session status request');
           break;
           
+        case 'session-end-request':
+        case 'session-end-success':
+        case 'session-end-error':
+        case 'session-ended':
+          // Ignore session end messages - these should be handled by WebRTC session service
+          console.log('📨 [InstantSessionDetector] Ignoring session end message:', data.type);
+          break;
+          
         case 'test-message':
           console.log('🧪 [InstantSessionDetector] Test message received!');
           break;
