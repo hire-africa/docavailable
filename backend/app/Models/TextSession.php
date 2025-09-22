@@ -293,7 +293,7 @@ class TextSession extends Model
      */
     public function endManually($reason = 'manual_end'): bool
     {
-        return \Illuminate\Support\Facades\DB::transaction(function () {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($reason) {
             $session = self::lockForUpdate()->find($this->id);
             
             if (!$session || $session->status !== self::STATUS_ACTIVE) {
