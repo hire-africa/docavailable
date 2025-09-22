@@ -751,6 +751,15 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
         // Clean up timers
         cleanupSessionTimers(appointmentId);
         
+        // Send success response to the client
+        ws.send(JSON.stringify({
+          type: 'session-end-success',
+          sessionId: sessionId,
+          sessionType: 'instant',
+          reason: data.reason || 'manual_end',
+          endedAt: new Date().toISOString()
+        }));
+        
         // Notify all participants
         broadcastToAll(appointmentId, {
           type: 'session-ended',
@@ -759,6 +768,12 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           reason: data.reason || 'manual_end',
           endedAt: new Date().toISOString()
         });
+      } else {
+        // Send error response if API call failed
+        ws.send(JSON.stringify({
+          type: 'session-end-error',
+          message: response.data.message || 'Failed to end session'
+        }));
       }
     } else {
       // Handle appointment ending
@@ -772,6 +787,15 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
       });
 
       if (response.data.success) {
+        // Send success response to the client
+        ws.send(JSON.stringify({
+          type: 'session-end-success',
+          sessionId: appointmentId,
+          sessionType: 'appointment',
+          reason: data.reason || 'manual_end',
+          endedAt: new Date().toISOString()
+        }));
+        
         // Notify all participants
         broadcastToAll(appointmentId, {
           type: 'session-ended',
@@ -780,6 +804,12 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           reason: data.reason || 'manual_end',
           endedAt: new Date().toISOString()
         });
+      } else {
+        // Send error response if API call failed
+        ws.send(JSON.stringify({
+          type: 'session-end-error',
+          message: response.data.message || 'Failed to end session'
+        }));
       }
     }
   } catch (error) {
