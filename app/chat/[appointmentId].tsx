@@ -1369,13 +1369,14 @@ export default function ChatPage() {
           // Set a timeout to fallback to direct API call if WebRTC doesn't respond
           const timeoutId = setTimeout(async () => {
             console.log('⏰ [End Session] WebRTC timeout - falling back to direct API call');
-            setEndingSession(false);
             
             try {
               // Fallback to direct API call
               const result = await sessionService.endSession(sessionId, sessionType);
               
               if (result.status === 'success') {
+                console.log('✅ [End Session] Fallback API call succeeded - updating UI');
+                
                 // Handle success locally
                 const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
                 const cleanedMessages = archiveMessages.map(m => {
@@ -1407,15 +1408,21 @@ export default function ChatPage() {
                   await webrtcChatService.clearMessages();
                 }
                 
-                // Update UI
+                // Update UI - this is the key part that was missing
+                setEndingSession(false);
                 setShowEndSessionModal(false);
                 setSessionEnded(true);
                 setShowRatingModal(true);
+                
+                console.log('✅ [End Session] UI updated successfully via fallback');
               } else {
+                console.error('❌ [End Session] Fallback API call failed:', result);
+                setEndingSession(false);
                 Alert.alert('Error', 'Failed to end session. Please try again.');
               }
             } catch (fallbackError) {
               console.error('❌ [End Session] Fallback API call failed:', fallbackError);
+              setEndingSession(false);
               Alert.alert('Error', 'Failed to end session. Please try again.');
             }
           }, 5000); // 5 second timeout

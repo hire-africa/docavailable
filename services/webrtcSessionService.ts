@@ -102,6 +102,13 @@ class WebRTCSessionService {
         this.signalingChannel.onclose = () => {
           console.log('🔌 Session signaling connection closed');
           this.isConnected = false;
+          
+          // If we were in the middle of ending a session, check if it actually ended
+          if ((window as any).endSessionTimeoutId) {
+            console.log('🔍 [WebRTC Session] Connection closed during session end - checking if session actually ended');
+            this.checkSessionEndStatus();
+          }
+          
           this.attemptReconnect();
         };
 
@@ -242,6 +249,32 @@ class WebRTCSessionService {
       type: 'appointment-start-request',
       authToken: authToken
     });
+  }
+
+  // Check if session was ended after connection closed
+  private async checkSessionEndStatus(): Promise<void> {
+    try {
+      if (!this.appointmentId || !this.appointmentId.startsWith('text_session_')) {
+        return;
+      }
+
+      const sessionId = this.appointmentId.replace('text_session_', '');
+      console.log('🔍 [WebRTC Session] Checking if session ended:', sessionId);
+      
+      // Import apiService dynamically to avoid circular imports
+      const { apiService } = await import('../app/services/apiService');
+      
+      const response = await apiService.get(`/text-sessions/${sessionId}/status`);
+      
+      if (response.data?.success && response.data?.data?.status === 'ended') {
+        console.log('✅ [WebRTC Session] Session was ended - triggering UI update');
+        this.events?.onSessionEndSuccess?.(sessionId, 'manual_end', 'instant');
+      } else {
+        console.log('ℹ️ [WebRTC Session] Session is still active or status unknown');
+      }
+    } catch (error) {
+      console.error('❌ [WebRTC Session] Failed to check session status:', error);
+    }
   }
 
   // Send typing indicator
