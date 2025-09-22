@@ -65,7 +65,7 @@ export class WebRTCChatService {
         // Load existing messages first
         await this.loadMessages();
         
-        const wsUrl = `${this.config.webrtcConfig?.chatSignalingUrl || 'ws://46.101.123.123:8080/chat-signaling'}/${this.config.appointmentId}`;
+        const wsUrl = `${this.config.webrtcConfig?.chatSignalingUrl || 'ws://46.101.123.123:8081/chat-signaling'}/${this.config.appointmentId}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
         

@@ -56,6 +56,9 @@ const handleConnection = (ws, req, connectionType) => {
   }
   connections.get(appointmentId).push(ws);
   
+  // Store auth token in connection metadata for later use
+  ws.authToken = urlParts.query.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
+  
   // Send connection confirmation
   ws.send(JSON.stringify({
     type: 'connection-established',
@@ -95,6 +98,7 @@ const handleConnection = (ws, req, connectionType) => {
           
         case 'session-status-request':
           // Handle session status requests
+          console.log(`🔍 [Backend] Received session-status-request for appointment: ${appointmentId}`);
           handleSessionStatusRequest(appointmentId, ws);
           break;
           
@@ -370,6 +374,27 @@ async function handleChatMessage(appointmentId, data, senderWs) {
         type: 'chat-message',
         message: response.data.data
       });
+      
+      // Also broadcast to all connections for instant session detection
+      console.log(`📤 [Backend] Broadcasting message to all connections for instant session detection`);
+      console.log(`📤 [Backend] Total connections for appointment ${appointmentId}: ${connections.get(appointmentId)?.length || 0}`);
+      
+      // Broadcast to all connections for instant session detection
+      const allConnections = connections.get(appointmentId) || [];
+      let sentCount = 0;
+      allConnections.forEach((connection, index) => {
+        if (connection.readyState === WebSocket.OPEN) {
+          connection.send(JSON.stringify({
+            type: 'chat-message',
+            message: response.data.data
+          }));
+          sentCount++;
+          console.log(`📤 [Backend] Sent to connection ${index + 1}`);
+        } else {
+          console.log(`📤 [Backend] Skipped closed connection ${index + 1}`);
+        }
+      });
+      console.log(`📤 [Backend] Sent to ${sentCount} connections total for instant session detection`);
     } else {
       console.error('❌ [Backend] API returned error:', response.data);
     }
@@ -400,13 +425,22 @@ async function checkSessionActivation(appointmentId, message, messageData) {
       if (sessionResponse.data.success) {
         const sessionData = sessionResponse.data.data;
         
+        console.log(`🔍 [SessionActivation] Checking session ${sessionId}:`, {
+          status: sessionData.status,
+          senderId: messageData.sender_id,
+          patientId: sessionData.patient_id,
+          doctorId: sessionData.doctor_id
+        });
+        
         // If session is waiting for doctor and doctor sent message, activate
         if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.doctor_id) {
+          console.log(`👨‍⚕️ [SessionActivation] Doctor message detected, activating session ${sessionId}`);
           await activateTextSession(sessionId, appointmentId);
         }
         
         // If session is waiting and patient sent message, start 90-second timer
         if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.patient_id) {
+          console.log(`👤 [SessionActivation] Patient message detected, starting 90-second timer for session ${sessionId}`);
           await startDoctorResponseTimer(sessionId, appointmentId);
         }
       }
@@ -420,6 +454,8 @@ async function checkSessionActivation(appointmentId, message, messageData) {
 // Activate text session when doctor sends first message
 async function activateTextSession(sessionId, appointmentId) {
   try {
+    console.log(`🔄 [SessionActivation] Activating text session ${sessionId}`);
+    
     const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/activate`, {}, {
       headers: {
         'Content-Type': 'application/json'
@@ -427,7 +463,10 @@ async function activateTextSession(sessionId, appointmentId) {
     });
 
     if (response.data.success) {
-      console.log(`✅ Text session ${sessionId} activated`);
+      console.log(`✅ [SessionActivation] Text session ${sessionId} activated successfully`);
+      
+      // Stop the 90-second timer since doctor responded
+      stopDoctorResponseTimer(sessionId, appointmentId);
       
       // Start auto-deduction timer (every 10 minutes)
       startAutoDeductionTimer(sessionId, appointmentId);
@@ -437,8 +476,13 @@ async function activateTextSession(sessionId, appointmentId) {
         type: 'session-activated',
         sessionId: sessionId,
         sessionType: 'instant',
-        activatedAt: new Date().toISOString()
+        activatedAt: new Date().toISOString(),
+        activatedBy: 'doctor_response'
       });
+      
+      console.log(`📢 [SessionActivation] Participants notified of session activation for ${sessionId}`);
+    } else {
+      console.error(`❌ [SessionActivation] Failed to activate session ${sessionId}:`, response.data);
     }
   } catch (error) {
     console.error('❌ Error activating text session:', error);
@@ -450,44 +494,102 @@ async function startDoctorResponseTimer(sessionId, appointmentId) {
   // Clear existing timer if any
   if (sessionTimers.has(`response_${sessionId}`)) {
     clearTimeout(sessionTimers.get(`response_${sessionId}`));
+    console.log(`⏰ [Timer] Cleared existing timer for session ${sessionId}`);
   }
 
+  console.log(`⏰ [Timer] Starting 90-second timer for session ${sessionId}`);
+  
   // Set new timer
   const timer = setTimeout(async () => {
+    console.log(`⏰ [Timer] 90-second timer expired for session ${sessionId}`);
     await checkDoctorResponse(sessionId, appointmentId);
   }, 90000); // 90 seconds
 
   sessionTimers.set(`response_${sessionId}`, timer);
+  
+  // Store timer start time for tracking
+  sessionStates.set(`response_${sessionId}`, {
+    startTime: Date.now(),
+    endTime: Date.now() + 90000,
+    isActive: true
+  });
   
   // Notify participants about timer start
   broadcastToAll(appointmentId, {
     type: 'doctor-response-timer-started',
     sessionId: sessionId,
     sessionType: 'instant',
-    timeRemaining: 90
+    timeRemaining: 90,
+    startTime: Date.now(),
+    endTime: Date.now() + 90000
   });
+  
+  console.log(`✅ [Timer] Timer started and participants notified for session ${sessionId}`);
 }
 
 // Check if doctor responded within 90 seconds
 async function checkDoctorResponse(sessionId, appointmentId) {
   try {
+    console.log(`🔍 [Timer] Checking doctor response for session ${sessionId}`);
+    
     const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/check-response`);
     
     if (response.data.success) {
       const sessionData = response.data.data;
       
+      console.log(`🔍 [Timer] Session ${sessionId} status:`, sessionData.status);
+      
       if (sessionData.status === 'expired') {
         // Session expired, notify participants
+        console.log(`❌ [Timer] Session ${sessionId} expired - doctor did not respond`);
         broadcastToAll(appointmentId, {
           type: 'session-expired',
           sessionId: sessionId,
           sessionType: 'instant',
-          reason: 'Doctor did not respond within 90 seconds'
+          reason: 'Doctor did not respond within 90 seconds',
+          expiredAt: new Date().toISOString()
         });
+        
+        // Clean up timer state
+        sessionStates.delete(`response_${sessionId}`);
+      } else if (sessionData.status === 'active') {
+        console.log(`✅ [Timer] Session ${sessionId} is active - doctor responded`);
+        // Timer was stopped by doctor response, clean up
+        sessionStates.delete(`response_${sessionId}`);
       }
     }
   } catch (error) {
     console.error('❌ Error checking doctor response:', error);
+  }
+}
+
+// Stop doctor response timer when doctor responds
+function stopDoctorResponseTimer(sessionId, appointmentId) {
+  console.log(`⏹️ [Timer] Stopping timer for session ${sessionId}`);
+  
+  // Clear the timer
+  if (sessionTimers.has(`response_${sessionId}`)) {
+    clearTimeout(sessionTimers.get(`response_${sessionId}`));
+    sessionTimers.delete(`response_${sessionId}`);
+  }
+  
+  // Clear timer state
+  if (sessionStates.has(`response_${sessionId}`)) {
+    const state = sessionStates.get(`response_${sessionId}`);
+    const timeRemaining = Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000));
+    
+    sessionStates.delete(`response_${sessionId}`);
+    
+    console.log(`✅ [Timer] Timer stopped for session ${sessionId}, was ${timeRemaining} seconds remaining`);
+    
+    // Notify participants that timer was stopped
+    broadcastToAll(appointmentId, {
+      type: 'doctor-response-timer-stopped',
+      sessionId: sessionId,
+      sessionType: 'instant',
+      reason: 'Doctor responded',
+      stoppedAt: new Date().toISOString()
+    });
   }
 }
 
@@ -536,22 +638,62 @@ async function processAutoDeduction(sessionId, appointmentId) {
 // Handle session status requests
 async function handleSessionStatusRequest(appointmentId, ws) {
   try {
+    console.log(`🔍 [Backend] Session status request received for appointment: ${appointmentId}`);
+    // Get auth token from connection metadata
+    const authToken = ws.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
+    console.log(`🔑 [Backend] Auth token for session status request:`, authToken ? 'Present' : 'Missing');
+    
     if (appointmentId.startsWith('text_session_')) {
       // Handle text session status
       const sessionId = appointmentId.replace('text_session_', '');
       
-      const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`);
+      const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
       
       if (response.data.success) {
-        ws.send(JSON.stringify({
-          type: 'session-status',
+        console.log(`✅ [Backend] Text session status API response successful for session ${sessionId}`);
+        // Also check for existing messages to determine if patient has sent a message
+        const messagesResponse = await axios.get(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        console.log(`📨 [Backend] Messages API response for ${appointmentId}:`, messagesResponse.data.success ? 'Success' : 'Failed');
+        
+        const hasPatientMessage = messagesResponse.data.success && 
+          messagesResponse.data.data.some(msg => msg.sender_id !== response.data.data.doctor.id);
+        const hasDoctorResponse = messagesResponse.data.success && 
+          messagesResponse.data.data.some(msg => msg.sender_id === response.data.data.doctor.id);
+        
+        console.log(`👤 [Backend] Message analysis: hasPatientMessage=${hasPatientMessage}, hasDoctorResponse=${hasDoctorResponse}`);
+        
+        const responseData = {
+          type: 'session-status-response',
           sessionType: 'instant',
-          sessionData: response.data.data
-        }));
+          sessionData: response.data.data,
+          hasPatientMessage: hasPatientMessage,
+          hasDoctorResponse: hasDoctorResponse
+        };
+        
+        console.log(`📤 [Backend] Sending session status response:`, responseData);
+        ws.send(JSON.stringify(responseData));
+        console.log(`✅ [Backend] Session status response sent successfully`);
+      } else {
+        console.log(`❌ [Backend] Text session status API response failed for session ${sessionId}`);
       }
     } else {
       // Handle appointment status
-      const response = await axios.get(`${API_BASE_URL}/api/appointments/${appointmentId}/status`);
+      const response = await axios.get(`${API_BASE_URL}/api/appointments/${appointmentId}/status`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
       
       if (response.data.success) {
         ws.send(JSON.stringify({
@@ -680,11 +822,19 @@ function cleanupSessionTimers(appointmentId) {
 // Helper function to broadcast to all participants
 function broadcastToAll(appointmentId, data) {
   const appointmentConnections = connections.get(appointmentId) || [];
-  appointmentConnections.forEach(connection => {
+  console.log(`📤 [BroadcastToAll] Broadcasting to ${appointmentConnections.length} connections for appointment ${appointmentId}`);
+  
+  let sentCount = 0;
+  appointmentConnections.forEach((connection, index) => {
     if (connection.readyState === WebSocket.OPEN) {
       connection.send(JSON.stringify(data));
+      sentCount++;
+      console.log(`📤 [BroadcastToAll] Sent to connection ${index + 1}`);
+    } else {
+      console.log(`📤 [BroadcastToAll] Skipped closed connection ${index + 1}`);
     }
   });
+  console.log(`📤 [BroadcastToAll] Sent to ${sentCount} connections total`);
 }
 
 // Helper function to get user ID from connection

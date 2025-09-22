@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,10 +22,12 @@ import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
+import InstantSessionTimer from '../../components/InstantSessionTimer';
 import RatingModal from '../../components/RatingModal';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { apiService } from '../../services/apiService';
 import { AudioCallService } from '../../services/audioCallService';
 import configService from '../../services/configService';
@@ -77,7 +79,7 @@ export default function ChatPage() {
   const params = useLocalSearchParams();
   const appointmentId = params.appointmentId as string;
   const router = useRouter();
-  const { user, loading: authLoading, refreshUserData } = useAuth();
+  const { user, token, loading: authLoading, refreshUserData } = useAuth();
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -148,8 +150,143 @@ export default function ChatPage() {
     return new Animated.Value(0);
   });
   
-  const scrollViewRef = useRef<ScrollView>(null);
+  // Instant session detection state
+  const [showInstantSessionUI, setShowInstantSessionUI] = useState(false);
+  
+  // Check if this is an instant session
+  const isInstantSession = appointmentId.startsWith('text_session_');
+  
+  // Extract session ID for instant sessions
+  const sessionId = isInstantSession ? appointmentId.replace('text_session_', '') : '';
+  
+  // Get current user ID
   const currentUserId = user?.id || 0;
+  
+  // Get doctor ID from chat info or text session info
+  const doctorId = chatInfo?.doctor_id || textSessionInfo?.doctor_id || 0;
+  
+  // For instant sessions, also try to get doctor ID from the session data
+  const instantSessionDoctorId = isInstantSession && textSessionInfo?.doctor_id ? textSessionInfo.doctor_id : 0;
+  const finalDoctorId = doctorId || instantSessionDoctorId;
+  
+  // Debug logging for IDs
+  console.log('🔍 [InstantSession] IDs Debug:', {
+    currentUserId,
+    doctorId,
+    finalDoctorId,
+    instantSessionDoctorId,
+    chatInfoDoctorId: chatInfo?.doctor_id,
+    textSessionDoctorId: textSessionInfo?.doctor_id,
+    isInstantSession,
+    sessionId,
+    appointmentId,
+    chatInfoLoaded: !!chatInfo,
+    textSessionInfoLoaded: !!textSessionInfo,
+    loading: loading
+  });
+  
+  // Instant session detector hook
+  const {
+    isConnected: instantSessionConnected,
+    timerState,
+    hasPatientSentMessage,
+    hasDoctorResponded,
+    isSessionActivated,
+    isTimerActive,
+    timeRemaining
+  } = useInstantSessionDetector({
+    sessionId,
+    appointmentId,
+    patientId: chatInfo?.patient_id || textSessionInfo?.patient_id || (messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0),
+    doctorId: finalDoctorId,
+    authToken: token || '',
+    enabled: isInstantSession && finalDoctorId > 0 && (chatInfo?.patient_id || textSessionInfo?.patient_id || (messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0)) > 0 && !!token // Only enable if we have valid IDs AND auth token
+  });
+
+  // Debug auth token
+  useEffect(() => {
+    console.log('🔑 [InstantSession] Auth token debug:', {
+      token: token ? 'Present' : 'Missing',
+      tokenLength: token?.length || 0,
+      authTokenPassed: (token || '') ? 'Present' : 'Missing',
+      userObject: user ? 'Present' : 'Missing',
+      userType: user?.user_type
+    });
+  }, [token, user]);
+
+  // Debug instant session detector configuration
+  useEffect(() => {
+    const patientIdFromMessages = messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0;
+    console.log('🔍 [InstantSession] Detector Config Debug:', {
+      sessionId,
+      appointmentId,
+      patientId: chatInfo?.patient_id || textSessionInfo?.patient_id || patientIdFromMessages,
+      doctorId: finalDoctorId,
+      chatInfoPatientId: chatInfo?.patient_id,
+      textSessionPatientId: textSessionInfo?.patient_id,
+      patientIdFromMessages,
+      isInstantSession,
+      enabled: isInstantSession && finalDoctorId > 0 && (chatInfo?.patient_id || textSessionInfo?.patient_id || patientIdFromMessages) > 0
+    });
+    
+    console.log('🔍 [InstantSession] Full chatInfo object:', chatInfo);
+    console.log('🔍 [InstantSession] Full textSessionInfo object:', textSessionInfo);
+  }, [sessionId, appointmentId, chatInfo?.patient_id, textSessionInfo?.patient_id, finalDoctorId, isInstantSession, messages]);
+  
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Show instant session UI when patient sends first message or when timer is active
+  useEffect(() => {
+    if (isInstantSession && (hasPatientSentMessage || isTimerActive) && !hasDoctorResponded) {
+      setShowInstantSessionUI(true);
+    } else if (isInstantSession && (hasDoctorResponded || isSessionActivated)) {
+      setShowInstantSessionUI(false);
+    }
+  }, [isInstantSession, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
+
+  // Log when doctor ID becomes available
+  useEffect(() => {
+    if (isInstantSession && finalDoctorId > 0) {
+      console.log('✅ [InstantSession] Doctor ID now available:', finalDoctorId);
+      console.log('✅ [InstantSession] Detector should now be enabled');
+    }
+  }, [isInstantSession, finalDoctorId]);
+
+  // Log when chat info loads
+  useEffect(() => {
+    if (isInstantSession) {
+      console.log('📊 [InstantSession] Chat info loaded:', {
+        chatInfo: chatInfo ? 'loaded' : 'not loaded',
+        textSessionInfo: textSessionInfo ? 'loaded' : 'not loaded',
+        doctorId,
+        finalDoctorId,
+        currentUserId
+      });
+    }
+  }, [isInstantSession, chatInfo, textSessionInfo, doctorId, finalDoctorId, currentUserId]);
+
+  // Watch for new messages and trigger instant session detection
+  useEffect(() => {
+    if (isInstantSession && messages.length > 0) {
+      // Check if there are any patient messages
+      const patientMessages = messages.filter(msg => msg.sender_id === currentUserId);
+      const doctorMessages = messages.filter(msg => msg.sender_id === finalDoctorId);
+      
+      console.log('📊 [InstantSession] Messages loaded, checking for patient messages:', {
+        totalMessages: messages.length,
+        patientMessages: patientMessages.length,
+        doctorMessages: doctorMessages.length,
+        hasPatientSentMessage,
+        hasDoctorResponded
+      });
+      
+      // If patient has sent messages but detector hasn't detected it, log for debugging
+      if (patientMessages.length > 0 && !hasPatientSentMessage) {
+        console.log('👤 [InstantSession] Patient messages found but detector not triggered - WebRTC detection issue');
+        console.log('👤 [InstantSession] This should be handled by the WebRTC server broadcasting chat-message events');
+      }
+    }
+  }, [isInstantSession, messages, currentUserId, finalDoctorId, hasPatientSentMessage, hasDoctorResponded]);
   
   // Debug current user ID
   console.log('🔍 Current user ID debug:', {
@@ -160,11 +297,11 @@ export default function ChatPage() {
   });
 
   // Auto-scroll functionality
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  };
+  }, []);
   
   // Check if current user is a patient
   const isPatient = user?.user_type === 'patient';
@@ -565,12 +702,62 @@ export default function ChatPage() {
           if (isTextSession) {
             // For text sessions, fetch session info
             const sessionId = appointmentId.replace('text_session_', '');
+            console.log('📊 [InstantSession] Making API call to:', `/text-sessions/${sessionId}`);
             const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+            console.log('📊 [InstantSession] Text session API response:', {
+              success: sessionResponse.success,
+              data: sessionResponse.data,
+              sessionId: sessionId,
+              error: sessionResponse.error || 'No error'
+            });
+            
             if (sessionResponse.success && sessionResponse.data) {
               const sessionData = sessionResponse.data as TextSessionInfo;
-              setTextSessionInfo(sessionData);
               
-              // Create chat info from text session data
+              // Extract doctor and patient IDs from the nested objects
+              const actualDoctorId = sessionData.doctor?.id || 0;
+              const actualPatientId = sessionData.patient?.id || 0;
+              
+              console.log('📊 [InstantSession] Text session data loaded:', {
+                doctorId: actualDoctorId,
+                patientId: actualPatientId,
+                sessionId: sessionData.id,
+                status: sessionData.status,
+                doctorName: sessionData.doctor?.display_name,
+                patientName: sessionData.patient?.display_name
+              });
+              
+              console.log('📊 [InstantSession] Patient ID extraction debug:', {
+                sessionDataPatient: sessionData.patient,
+                sessionDataPatientId: sessionData.patient?.id,
+                actualPatientId: actualPatientId,
+                type: typeof actualPatientId
+              });
+              
+              // Create a modified session data with the correct IDs
+              const modifiedSessionData = {
+                ...sessionData,
+                doctor_id: actualDoctorId,
+                patient_id: actualPatientId
+              };
+              
+              setTextSessionInfo(modifiedSessionData);
+            } else {
+              console.error('❌ [InstantSession] Failed to load text session data:', {
+                success: sessionResponse.success,
+                error: sessionResponse.error,
+                sessionId: sessionId
+              });
+            }
+            
+            // Create chat info from text session data (only if we have the data)
+            if (sessionResponse.success && sessionResponse.data) {
+              const sessionData = sessionResponse.data as TextSessionInfo;
+              
+              // Extract the correct IDs
+              const actualDoctorId = sessionData.doctor?.id || 0;
+              const actualPatientId = sessionData.patient?.id || 0;
+              
               const doctorName = sessionData.doctor?.display_name || 
                 `${sessionData.doctor?.first_name} ${sessionData.doctor?.last_name}`;
               const patientName = sessionData.patient?.display_name || 
@@ -578,7 +765,8 @@ export default function ChatPage() {
               
               const chatInfoData: ChatInfo = {
                 appointment_id: parseInt(sessionId, 10),
-                doctor_id: sessionData.doctor_id,
+                doctor_id: actualDoctorId,
+                patient_id: actualPatientId,
                 other_participant_name: isPatient ? doctorName : patientName,
                 other_participant_profile_picture_url: isPatient ? sessionData.doctor?.profile_picture_url : sessionData.patient?.profile_picture_url,
                 other_participant_profile_picture: isPatient ? sessionData.doctor?.profile_picture : sessionData.patient?.profile_picture,
@@ -587,6 +775,16 @@ export default function ChatPage() {
                 status: sessionData.status,
               };
               setChatInfo(chatInfoData);
+              
+              // Debug logging for instant sessions
+              if (isInstantSession) {
+                console.log('✅ [InstantSession] Chat info loaded for text session:', {
+                  doctorId: actualDoctorId,
+                  patientId: actualPatientId,
+                  sessionId: sessionId,
+                  appointmentId: appointmentId
+                });
+              }
               
               // Check if session has ended
               if (sessionData.status === 'ended') {
@@ -672,6 +870,25 @@ export default function ChatPage() {
     try {
       setSending(true);
       
+      // Check if this is the first patient message in an instant session
+      if (isInstantSession && !hasPatientSentMessage) {
+        console.log('👤 [InstantSession] First patient message detected - timer will start');
+        console.log('👤 [InstantSession] Current state:', {
+          hasPatientSentMessage,
+          hasDoctorResponded,
+          isSessionActivated,
+          isTimerActive,
+          timeRemaining
+        });
+        console.log('👤 [InstantSession] Detector state:', {
+          isConnected: instantSessionConnected,
+          finalDoctorId,
+          currentUserId,
+          sessionId,
+          appointmentId
+        });
+      }
+      
       if (webrtcChatService) {
         // Use WebRTC chat service if available
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
@@ -679,6 +896,24 @@ export default function ChatPage() {
         if (message) {
           setNewMessage('');
           console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
+          
+          // Debug instant session state after message sent
+          if (isInstantSession) {
+            console.log('👤 [InstantSession] Message sent, checking detector state:', {
+              hasPatientSentMessage,
+              hasDoctorResponded,
+              isSessionActivated,
+              isTimerActive,
+              timeRemaining,
+              messageId: message.id,
+              senderId: message.sender_id
+            });
+            
+            // The WebRTC detection should now work properly
+            if (!hasPatientSentMessage) {
+              console.log('👤 [InstantSession] First patient message sent - WebRTC detection should trigger timer');
+            }
+          }
         } else {
           console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
         }
@@ -1826,18 +2061,24 @@ export default function ChatPage() {
             </Text>
           </View>
           
+          {/* Instant Session Timer */}
+          {isInstantSession && showInstantSessionUI && (
+            <InstantSessionTimer
+              isActive={isTimerActive}
+              timeRemaining={timeRemaining}
+              hasPatientSentMessage={hasPatientSentMessage}
+              hasDoctorResponded={hasDoctorResponded}
+              isSessionActivated={isSessionActivated}
+              onTimerExpired={() => {
+                console.log('⏰ [InstantSession] Timer expired');
+                // Handle timer expiration
+              }}
+            />
+          )}
+          
           {messages.map((message, index) => {
-            // Create a unique key that combines multiple identifiers to prevent duplicates
-            const uniqueKey = `${message.id}_${message.temp_id || 'no_temp'}_${message.created_at}_${message.sender_id}_${index}`;
-            
-            // Debug logging for duplicate detection
-            if (index > 0) {
-              const prevMessage = messages[index - 1];
-              const prevKey = `${prevMessage.id}_${prevMessage.temp_id || 'no_temp'}_${prevMessage.created_at}_${prevMessage.sender_id}_${index - 1}`;
-              if (uniqueKey === prevKey) {
-                console.warn('⚠️ Duplicate key detected:', uniqueKey);
-              }
-            }
+            // Create a stable unique key using message ID and timestamp
+            const uniqueKey = message.id ? `msg_${message.id}` : `temp_${message.temp_id || index}_${message.created_at}`;
             
             return (
               <View
@@ -1849,47 +2090,27 @@ export default function ChatPage() {
                 }}
               >
                 {message.message_type === 'voice' && message.media_url ? (
-                  // Debug: Log voice message details
-                  (() => {
-                    console.log('🎵 Rendering voice message:', {
-                      messageId: message.id,
-                      mediaUrl: message.media_url,
-                      messageType: message.message_type
-                    });
-                    return (
-                      <VoiceMessagePlayer
-                        audioUri={message.media_url}
-                        isOwnMessage={message.sender_id === currentUserId}
-                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        profilePictureUrl={
-                          message.sender_id === currentUserId
-                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                        }
-                      />
-                    );
-                  })()
+                  <VoiceMessagePlayer
+                    audioUri={message.media_url}
+                    isOwnMessage={message.sender_id === currentUserId}
+                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    profilePictureUrl={
+                      message.sender_id === currentUserId
+                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                    }
+                  />
                 ) : message.message_type === 'image' && message.media_url ? (
-                  // Debug: Log image message details
-                  (() => {
-                    console.log('🖼️ Rendering image message:', {
-                      messageId: message.id,
-                      mediaUrl: message.media_url,
-                      messageType: message.message_type
-                    });
-                    return (
-                      <ImageMessage
-                        imageUrl={message.media_url}
-                        isOwnMessage={message.sender_id === currentUserId}
-                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        profilePictureUrl={
-                          message.sender_id === currentUserId
-                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                        }
-                      />
-                    );
-                  })()
+                  <ImageMessage
+                    imageUrl={message.media_url}
+                    isOwnMessage={message.sender_id === currentUserId}
+                    timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    profilePictureUrl={
+                      message.sender_id === currentUserId
+                        ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                        : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                    }
+                  />
                 ) : (
                   // Regular text messages with bubble
                   <View
@@ -1915,6 +2136,172 @@ export default function ChatPage() {
               </View>
             );
           })}
+          
+          {/* Debug Info for Instant Sessions */}
+          {__DEV__ && isInstantSession && (
+            <View style={{
+              backgroundColor: '#F5F5F5',
+              padding: 12,
+              margin: 16,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: '#E0E0E0',
+            }}>
+              <Text style={{
+                fontSize: 14,
+                fontWeight: 'bold',
+                color: '#333',
+                marginBottom: 8,
+              }}>
+                Instant Session Debug:
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Connected: {instantSessionConnected ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Patient Sent: {hasPatientSentMessage ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Doctor Responded: {hasDoctorResponded ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Session Activated: {isSessionActivated ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Timer Active: {isTimerActive ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Time Remaining: {timeRemaining}s
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Show UI: {showInstantSessionUI ? 'Yes' : 'No'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Session ID: {sessionId}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Patient ID: {currentUserId}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#666', marginBottom: 2 }}>
+                Doctor ID: {finalDoctorId} (final: {finalDoctorId}, chat: {chatInfo?.doctor_id}, text: {textSessionInfo?.doctor_id})
+              </Text>
+              
+              {/* Manual Test Button */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#4CAF50',
+                  padding: 8,
+                  borderRadius: 4,
+                  marginTop: 8,
+                  alignItems: 'center'
+                }}
+                onPress={() => {
+                  console.log('🧪 [Test] Manual trigger - simulating patient message');
+                  // This will help us test if the detector is working
+                  console.log('🧪 [Test] Current detector state:', {
+                    isConnected: instantSessionConnected,
+                    hasPatientSentMessage,
+                    hasDoctorResponded,
+                    isSessionActivated,
+                    isTimerActive,
+                    timeRemaining
+                  });
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                  Test Detector State
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Manual Doctor ID Test */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FF9800',
+                  padding: 8,
+                  borderRadius: 4,
+                  marginTop: 4,
+                  alignItems: 'center'
+                }}
+                onPress={() => {
+                  console.log('🧪 [Test] Manual doctor ID test');
+                  console.log('🧪 [Test] Raw data:', {
+                    chatInfo,
+                    textSessionInfo,
+                    appointmentId,
+                    sessionId,
+                    isInstantSession
+                  });
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                  Test Doctor ID
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Manual Message Test */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#9C27B0',
+                  padding: 8,
+                  borderRadius: 4,
+                  marginTop: 4,
+                  alignItems: 'center'
+                }}
+                onPress={() => {
+                  console.log('🧪 [Test] Manual message detection test');
+                  console.log('🧪 [Test] Simulating patient message detection');
+                  // This will help us test if the detector can detect messages
+                  console.log('🧪 [Test] Current detector state:', {
+                    isConnected: instantSessionConnected,
+                    hasPatientSentMessage,
+                    hasDoctorResponded,
+                    isSessionActivated,
+                    isTimerActive,
+                    timeRemaining,
+                    finalDoctorId,
+                    currentUserId
+                  });
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                  Test Message Detection
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Manual Trigger Timer Test */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#E91E63',
+                  padding: 8,
+                  borderRadius: 4,
+                  marginTop: 4,
+                  alignItems: 'center'
+                }}
+                onPress={() => {
+                  console.log('🧪 [Test] Manual timer trigger test');
+                  // Simulate what should happen when a patient message is detected
+                  console.log('🧪 [Test] This should trigger the timer if working correctly');
+                  
+                  // Check if we can manually trigger the timer logic
+                  if (isInstantSession && !hasPatientSentMessage) {
+                    console.log('🧪 [Test] Would start timer for first patient message');
+                  } else if (isInstantSession && hasPatientSentMessage && !hasDoctorResponded) {
+                    console.log('🧪 [Test] Timer should already be running');
+                  } else {
+                    console.log('🧪 [Test] Timer state:', {
+                      hasPatientSentMessage,
+                      hasDoctorResponded,
+                      isSessionActivated
+                    });
+                  }
+                }}
+              >
+                <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>
+                  Test Timer Trigger
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </ScrollView>
 
 
@@ -1956,11 +2343,11 @@ export default function ChatPage() {
           {/* Image Button */}
           <TouchableOpacity
             onPress={handlePickImage}
-            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded}
+            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded) ? 0.5 : 1,
+              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)) ? 0.5 : 1,
             }}
           >
             {sendingGalleryImage ? (
@@ -1973,11 +2360,11 @@ export default function ChatPage() {
           {/* Camera Button */}
           <TouchableOpacity
             onPress={handleTakePhoto}
-            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded}
+            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded) ? 0.5 : 1,
+              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)) ? 0.5 : 1,
             }}
           >
             {sendingCameraImage ? (
@@ -1996,7 +2383,17 @@ export default function ChatPage() {
                 webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
-            placeholder={sessionEnded && !isPatient ? "Session ended" : "Type a message..."}
+            placeholder={
+              sessionEnded && !isPatient 
+                ? "Session ended" 
+                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && isTimerActive && isPatient
+                ? "Waiting for doctor to respond..."
+                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isTimerActive && isPatient
+                ? "Session expired - doctor did not respond"
+                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isPatient
+                ? "Patient is waiting for your response..."
+                : "Type a message..."
+            }
             style={{
               flex: 1,
               borderWidth: 1,
@@ -2006,23 +2403,32 @@ export default function ChatPage() {
               paddingVertical: 12,
               fontSize: 16,
               marginRight: 8,
-              opacity: sessionEnded && !isPatient ? 0.5 : 1,
+              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? 0.5 : 1,
+              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
             }}
             multiline
             maxLength={1000}
-            editable={!(sessionEnded && !isPatient)}
+            editable={
+              !(sessionEnded && !isPatient) && 
+              !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
+            }
           />
           
           <TouchableOpacity
             onPress={newMessage.trim() ? sendMessage : startRecording}
-            disabled={sending || isRecording || sessionEnded}
+            disabled={
+              sending || 
+              isRecording || 
+              sessionEnded || 
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
+            }
             style={{
               backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',
               borderRadius: 20,
               padding: 12,
               minWidth: 44,
               alignItems: 'center',
-              opacity: sessionEnded && !isPatient ? 0.5 : 1,
+              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) ? 0.5 : 1,
             }}
           >
             {sending ? (
