@@ -177,19 +177,6 @@ export default function InstantSessionChatIntegration({
         </TouchableOpacity>
       </View>
 
-      {/* Debug Info */}
-      {__DEV__ && (
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugTitle}>Debug Info:</Text>
-          <Text style={styles.debugText}>Connected: {isConnected ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Patient Sent: {hasPatientSentMessage ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Doctor Responded: {hasDoctorResponded ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Session Activated: {isSessionActivated ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Timer Active: {isTimerActive ? 'Yes' : 'No'}</Text>
-          <Text style={styles.debugText}>Time Remaining: {timeRemaining}s</Text>
-          <Text style={styles.debugText}>Can Send: {canSendMessage() ? 'Yes' : 'No'}</Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -297,22 +284,5 @@ const styles = StyleSheet.create({
   sendButtonText: {
     color: 'white',
     fontWeight: '600',
-  },
-  debugContainer: {
-    backgroundColor: Colors.lightGray,
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
-  },
-  debugTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: Colors.text,
-    marginBottom: 8,
-  },
-  debugText: {
-    fontSize: 12,
-    color: Colors.text,
-    marginBottom: 2,
   },
 });
