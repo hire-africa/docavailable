@@ -1862,6 +1862,12 @@ export default function ChatPage() {
   console.log('🔍 showRatingModal state:', showRatingModal);
   console.log('🔍 sessionEnded state:', sessionEnded);
   console.log('🔍 endingSession state:', endingSession);
+
+  // Test function to show rating modal
+  const testShowRatingModal = () => {
+    console.log('🧪 [Test] Showing rating modal...');
+    setShowRatingModal(true);
+  };
   // console.log('🔍 endingSession state:', endingSession);
 
   if (loading) {
@@ -2635,6 +2641,28 @@ export default function ChatPage() {
                     End Session
                   </Text>
                 )}
+              </TouchableOpacity>
+              
+              {/* Test button - remove this after debugging */}
+              <TouchableOpacity
+                onPress={testShowRatingModal}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  borderRadius: 8,
+                  backgroundColor: '#FF6B6B',
+                  marginTop: 10,
+                }}
+              >
+                <Text style={{
+                  fontSize: 16,
+                  color: '#fff',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                }}>
+                  Test Rating Modal
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
