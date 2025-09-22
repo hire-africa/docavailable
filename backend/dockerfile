@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     libxml2-dev \
     libzip-dev \
-    zip \a
+    zip \
     unzip \
     libpq-dev \
     && apt-get clean \
