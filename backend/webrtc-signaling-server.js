@@ -611,27 +611,39 @@ function startAutoDeductionTimer(sessionId, appointmentId) {
 // Process auto-deduction for text sessions
 async function processAutoDeduction(sessionId, appointmentId) {
   try {
-    const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/auto-deduct`, {}, {
+    console.log(`🔄 [Auto-Deduction] Processing for session: ${sessionId}`);
+    
+    const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/auto-deduction`, {
+      triggered_by: 'webrtc_server'
+    }, {
       headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN}`,
         'Content-Type': 'application/json'
       }
     });
 
     if (response.data.success) {
-      const deductionData = response.data.data;
-      
-      // Notify participants about deduction
-      broadcastToAll(appointmentId, {
-        type: 'session-deduction',
-        sessionId: sessionId,
-        sessionType: 'instant',
-        sessionsDeducted: deductionData.sessionsDeducted,
-        totalSessionsUsed: deductionData.totalSessionsUsed,
-        remainingSessions: deductionData.remainingSessions
+      console.log(`✅ [Auto-Deduction] Success for session: ${sessionId}`, {
+        deductions_processed: response.data.data?.deductions_processed || 0,
+        total_deductions: response.data.data?.total_deductions || 0
       });
+      
+      // Notify participants about deduction if any were processed
+      if (response.data.data?.deductions_processed > 0) {
+        broadcastToAll(appointmentId, {
+          type: 'session-deduction',
+          sessionId: sessionId,
+          sessionType: 'instant',
+          sessionsDeducted: response.data.data.deductions_processed,
+          totalSessionsUsed: response.data.data.total_deductions,
+          remainingSessions: 0 // This would need to be fetched separately
+        });
+      }
+    } else {
+      console.log(`⚠️ [Auto-Deduction] Failed for session: ${sessionId}`, response.data);
     }
   } catch (error) {
-    console.error('❌ Error processing auto-deduction:', error);
+    console.error(`❌ [Auto-Deduction] Error for session: ${sessionId}:`, error.message);
   }
 }
 
@@ -656,6 +668,13 @@ async function handleSessionStatusRequest(appointmentId, ws) {
       
       if (response.data.success) {
         console.log(`✅ [Backend] Text session status API response successful for session ${sessionId}`);
+        
+        // Trigger auto-deduction as fallback if session is active
+        if (response.data.data?.status === 'active') {
+          console.log(`🔄 [Backend] Triggering auto-deduction fallback for active session ${sessionId}`);
+          processAutoDeduction(sessionId, appointmentId);
+        }
+        
         // Also check for existing messages to determine if patient has sent a message
         const messagesResponse = await axios.get(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
           headers: {

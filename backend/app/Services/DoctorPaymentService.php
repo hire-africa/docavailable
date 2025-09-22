@@ -592,8 +592,16 @@ class DoctorPaymentService
     {
         try {
             $patient = $session->patient;
-            if (!$patient || !$patient->subscription) {
-                \Log::warning('No subscription found for manual end deduction', [
+            if (!$patient) {
+                \Log::error('Patient not found for manual end deduction', [
+                    'session_id' => $session->id,
+                    'patient_id' => $session->patient_id,
+                ]);
+                return false;
+            }
+            
+            if (!$patient->subscription) {
+                \Log::error('No subscription found for manual end deduction', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                 ]);
@@ -602,21 +610,20 @@ class DoctorPaymentService
             
             $subscription = $patient->subscription;
             if (!$subscription->isActive) {
-                \Log::warning('Inactive subscription for manual end deduction', [
+                \Log::warning('Inactive subscription for manual end deduction - allowing end anyway', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                 ]);
-                return false;
+                // Continue with deduction even if subscription is inactive
             }
             
-            // SAFETY CHECK: Prevent negative sessions
-            if ($subscription->text_sessions_remaining <= 0) {
-                \Log::warning('No sessions remaining for manual end deduction', [
+            // More flexible safety check - allow ending even with 0 sessions
+            if ($subscription->text_sessions_remaining < 0) {
+                \Log::warning('Negative sessions remaining - allowing manual end', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                     'sessions_remaining' => $subscription->text_sessions_remaining,
                 ]);
-                return false;
             }
             
             // Deduct 1 session for manual end
