@@ -196,9 +196,17 @@ class WebRTCSessionService {
 
   // End session manually
   async endSession(reason: string = 'manual_end'): Promise<void> {
-    if (!this.isConnected || !this.signalingChannel) return;
+    if (!this.isConnected || !this.signalingChannel) {
+      console.log('❌ [WebRTC Session] Cannot end session - not connected');
+      return;
+    }
 
     const authToken = await apiService.getAuthToken();
+    console.log('🔚 [WebRTC Session] Sending session end request:', {
+      reason,
+      hasAuthToken: !!authToken,
+      appointmentId: this.appointmentId
+    });
     
     this.sendSignalingMessage({
       type: 'session-end-request',

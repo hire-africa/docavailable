@@ -560,8 +560,50 @@ export default function ChatPage() {
             setShowRatingModal(true);
           },
           
-          onSessionEndSuccess: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+          onSessionEndSuccess: async (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
             console.log('✅ Session end success via WebRTC:', sessionId, reason, sessionType);
+            
+            try {
+              // Capture messages for local archive
+              const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
+              const cleanedMessages = archiveMessages.map(m => {
+                const { temp_id, ...rest } = m as any;
+                return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+              });
+
+              // Build ended session payload for local storage
+              const endedSession: EndedSession = {
+                appointment_id: getNumericAppointmentId(),
+                doctor_id: chatInfo?.doctor_id,
+                doctor_name: chatInfo?.other_participant_name,
+                doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+                doctor_profile_picture: chatInfo?.other_participant_profile_picture,
+                patient_id: user?.id || 0,
+                patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+                appointment_date: chatInfo?.appointment_date,
+                appointment_time: chatInfo?.appointment_time,
+                ended_at: new Date().toISOString(),
+                session_duration: undefined,
+                session_summary: undefined,
+                reason: reason,
+                messages: cleanedMessages,
+                message_count: cleanedMessages.length,
+              };
+
+              // Store for both patient and doctor
+              await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+              
+              // Clear messages from WebRTC chat service after archiving
+              if (webrtcChatService) {
+                await webrtcChatService.clearMessages();
+              }
+              
+              console.log('✅ [WebRTC] Session archived successfully');
+            } catch (e) {
+              console.error('❌ [WebRTC] Failed to store ended session locally:', e);
+            }
+            
+            // Update UI state
             setEndingSession(false);
             setShowEndSessionModal(false);
             setSessionEnded(true);
@@ -1306,43 +1348,29 @@ export default function ChatPage() {
       
       if (isWebRTCConnected) {
         // Use WebRTC session service for real-time ending
-        await webrtcSessionService.endSession('manual_end');
-        
-        // Capture messages for local archive
-        const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
-        const cleanedMessages = archiveMessages.map(m => {
-          const { temp_id, ...rest } = m as any;
-          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+        // The response will be handled by the WebRTC event handlers
+        console.log('🔌 [End Session] Using WebRTC to end session', {
+          isWebRTCConnected,
+          appointmentId,
+          sessionId,
+          sessionType
         });
-
-        // Build ended session payload for local storage
-        const endedSession: EndedSession = {
-          appointment_id: getNumericAppointmentId(),
-          doctor_id: chatInfo?.doctor_id,
-          doctor_name: chatInfo?.other_participant_name,
-          doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-          doctor_profile_picture: chatInfo?.other_participant_profile_picture,
-          patient_id: user?.id || 0,
-          patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
-          appointment_date: chatInfo?.appointment_date,
-          appointment_time: chatInfo?.appointment_time,
-          ended_at: new Date().toISOString(),
-          session_duration: undefined,
-          session_summary: undefined,
-          reason: textSessionInfo?.reason,
-          messages: cleanedMessages,
-          message_count: cleanedMessages.length,
-        };
-
+        
         try {
-          await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
-          // Clear messages from WebRTC chat service after archiving
-          if (webrtcChatService) {
-            await webrtcChatService.clearMessages();
-          }
-        } catch (e) {
-          console.error('Failed to store ended session locally:', e);
+          await webrtcSessionService.endSession('manual_end');
+          console.log('🔌 [End Session] WebRTC end session request sent');
+        } catch (error) {
+          console.error('❌ [End Session] WebRTC end session failed:', error);
+          setEndingSession(false);
+          Alert.alert('Error', 'Failed to end session. Please try again.');
+          return;
         }
+        
+        // Note: The actual session ending logic (closing modal, showing rating)
+        // will be handled by the onSessionEndSuccess event handler
+        // We don't need to do anything else here as the WebRTC service
+        // will handle the response and trigger the appropriate UI updates
+        return; // Exit early, let WebRTC handlers manage the rest
       } else {
         // Fallback to API calls
         // Before ending on server, capture current messages for local archive

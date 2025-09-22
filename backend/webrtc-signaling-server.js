@@ -734,6 +734,12 @@ async function handleSessionStatusRequest(appointmentId, ws) {
 // Handle manual session ending
 async function handleSessionEndRequest(appointmentId, data, ws) {
   try {
+    console.log('🔚 [Backend] Handling session end request:', {
+      appointmentId,
+      reason: data.reason,
+      hasAuthToken: !!data.authToken
+    });
+    
     if (appointmentId.startsWith('text_session_')) {
       // Handle text session ending
       const sessionId = appointmentId.replace('text_session_', '');
