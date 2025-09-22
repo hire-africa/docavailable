@@ -563,6 +563,12 @@ export default function ChatPage() {
           onSessionEndSuccess: async (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
             console.log('✅ Session end success via WebRTC:', sessionId, reason, sessionType);
             
+            // Clear the timeout since WebRTC succeeded
+            if ((window as any).endSessionTimeoutId) {
+              clearTimeout((window as any).endSessionTimeoutId);
+              (window as any).endSessionTimeoutId = null;
+            }
+            
             try {
               // Capture messages for local archive
               const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
@@ -1359,6 +1365,64 @@ export default function ChatPage() {
         try {
           await webrtcSessionService.endSession('manual_end');
           console.log('🔌 [End Session] WebRTC end session request sent');
+          
+          // Set a timeout to fallback to direct API call if WebRTC doesn't respond
+          const timeoutId = setTimeout(async () => {
+            console.log('⏰ [End Session] WebRTC timeout - falling back to direct API call');
+            setEndingSession(false);
+            
+            try {
+              // Fallback to direct API call
+              const result = await sessionService.endSession(sessionId, sessionType);
+              
+              if (result.status === 'success') {
+                // Handle success locally
+                const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
+                const cleanedMessages = archiveMessages.map(m => {
+                  const { temp_id, ...rest } = m as any;
+                  return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+                });
+
+                const endedSession: EndedSession = {
+                  appointment_id: getNumericAppointmentId(),
+                  doctor_id: chatInfo?.doctor_id,
+                  doctor_name: chatInfo?.other_participant_name,
+                  doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+                  doctor_profile_picture: chatInfo?.other_participant_profile_picture,
+                  patient_id: user?.id || 0,
+                  patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+                  appointment_date: chatInfo?.appointment_date,
+                  appointment_time: chatInfo?.appointment_time,
+                  ended_at: new Date().toISOString(),
+                  session_duration: undefined,
+                  session_summary: undefined,
+                  reason: 'manual_end',
+                  messages: cleanedMessages,
+                  message_count: cleanedMessages.length,
+                };
+
+                await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+                
+                if (webrtcChatService) {
+                  await webrtcChatService.clearMessages();
+                }
+                
+                // Update UI
+                setShowEndSessionModal(false);
+                setSessionEnded(true);
+                setShowRatingModal(true);
+              } else {
+                Alert.alert('Error', 'Failed to end session. Please try again.');
+              }
+            } catch (fallbackError) {
+              console.error('❌ [End Session] Fallback API call failed:', fallbackError);
+              Alert.alert('Error', 'Failed to end session. Please try again.');
+            }
+          }, 5000); // 5 second timeout
+          
+          // Store timeout ID to clear it if WebRTC succeeds
+          (window as any).endSessionTimeoutId = timeoutId;
+          
         } catch (error) {
           console.error('❌ [End Session] WebRTC end session failed:', error);
           setEndingSession(false);
