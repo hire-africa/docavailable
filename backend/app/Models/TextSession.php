@@ -300,27 +300,20 @@ class TextSession extends Model
                 return false;
             }
 
-            // Process final deduction for manual end
-            $paymentService = new \App\Services\DoctorPaymentService();
-            $deductionResult = $paymentService->processManualEndDeduction($session);
+            // Update session status first
+            $session->update([
+                'status' => self::STATUS_ENDED,
+                'ended_at' => now(),
+                'reason' => $reason,
+                'sessions_used' => $session->sessions_used + 1 // +1 for manual end
+            ]);
 
-            if ($deductionResult) {
-                $session->update([
-                    'status' => self::STATUS_ENDED,
-                    'ended_at' => now(),
-                    'reason' => $reason,
-                    'sessions_used' => $session->sessions_used + 1 // +1 for manual end
-                ]);
+            \Illuminate\Support\Facades\Log::info("Session ended manually", [
+                'session_id' => $this->id,
+                'reason' => $reason
+            ]);
 
-                \Illuminate\Support\Facades\Log::info("Session ended manually", [
-                    'session_id' => $this->id,
-                    'reason' => $reason
-                ]);
-
-                return true;
-            }
-
-            return false;
+            return true;
         });
     }
 } 

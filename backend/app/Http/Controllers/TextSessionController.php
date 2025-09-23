@@ -508,6 +508,39 @@ class TextSessionController extends Controller
                 ], 400);
             }
 
+            // Process payment after session is ended (outside transaction)
+            try {
+                \Log::info('Processing payment for manual session end', [
+                    'session_id' => $sessionId,
+                    'user_id' => $userId,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id,
+                ]);
+                
+                $paymentService = new \App\Services\DoctorPaymentService();
+                $paymentResult = $paymentService->processManualEndDeduction($session);
+                
+                if ($paymentResult) {
+                    \Log::info('Payment processing successful for manual end', [
+                        'session_id' => $sessionId,
+                        'user_id' => $userId,
+                    ]);
+                } else {
+                    \Log::warning('Payment processing failed for manual end, but session was ended', [
+                        'session_id' => $sessionId,
+                        'user_id' => $userId,
+                    ]);
+                }
+            } catch (\Exception $paymentError) {
+                \Log::error('Payment processing error for manual end', [
+                    'session_id' => $sessionId,
+                    'user_id' => $userId,
+                    'error' => $paymentError->getMessage(),
+                    'trace' => $paymentError->getTraceAsString(),
+                ]);
+                // Don't fail the session end if payment processing fails
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Session ended successfully',
