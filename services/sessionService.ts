@@ -117,6 +117,14 @@ class SessionService {
             status: 'success',
             sessionsUsed: 1
           };
+        } else if ((response.data as any) && (response.data as any).already_ended === true) {
+          // Handle case where session is already ended
+          console.log('🔍 Text session already ended:', response.data);
+          return {
+            status: 'success',
+            sessionsUsed: 1,
+            sessionData: (response.data as any).session
+          };
         } else if ((response.data as any) && (response.data as any).message) {
           // Handle cases where session is not found or already ended
           console.log('🔍 Text session response:', (response.data as any).message);

@@ -1311,15 +1311,14 @@ export default function ChatPage() {
 
   // Handle session ending
   const handleEndSession = async () => {
-    setEndingSession(true);
+    console.log('🛑 [End Session] Starting session end process...');
+    
     try {
       let sessionId;
       
       if (isTextSession) {
-        // For text sessions, remove the prefix
         sessionId = appointmentId.replace('text_session_', '');
       } else {
-        // For regular appointments, use the appointment ID directly
         sessionId = appointmentId;
       }
       
@@ -1327,155 +1326,34 @@ export default function ChatPage() {
       const appointmentStatus = String(chatInfo?.status || '');
       const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
       
-      console.log('🔍 Ending session:', {
-        originalAppointmentId: appointmentId,
-        isTextSession,
-        extractedSessionId: sessionId,
-        sessionType: isTextSession ? 'text' : 'appointment',
-        appointmentStatus: chatInfo?.status,
-        appointmentStatusType: typeof chatInfo?.status,
-        appointmentStatusString: appointmentStatus,
-        isConfirmedAppointment: isConfirmedAppointment,
-        chatInfoKeys: Object.keys(chatInfo || {})
-      });
-      
       if (!isTextSession && isConfirmedAppointment) {
         Alert.alert(
           'Cannot End Session',
           'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
-          [
-            { text: 'OK', onPress: () => setEndingSession(false) }
-          ]
+          [{ text: 'OK' }]
         );
         return;
       }
       
       const sessionType = isTextSession ? 'text' : 'appointment';
       
-      if (isWebRTCConnected) {
-        // Use WebRTC session service for real-time ending
-        // The response will be handled by the WebRTC event handlers
-        console.log('🔌 [End Session] Using WebRTC to end session', {
-          isWebRTCConnected,
-          appointmentId,
-          sessionId,
-          sessionType
-        });
+      // Call backend to end session
+      const result = await sessionService.endSession(sessionId, sessionType);
+      
+      console.log('🔍 [End Session] Backend response:', result);
+      
+      if (result.status === 'success') {
+        console.log('✅ [End Session] Session ended successfully');
         
-        try {
-          console.log('🔌 [End Session] About to call webrtcSessionService.endSession...');
-          await webrtcSessionService.endSession('manual_end');
-          console.log('🔌 [End Session] WebRTC end session request sent successfully');
-          
-          // Set a timeout to fallback to direct API call if WebRTC doesn't respond
-          const timeoutId = setTimeout(async () => {
-            console.log('⏰ [End Session] WebRTC timeout - falling back to direct API call');
-            console.log('⏰ [End Session] Current state before fallback:', {
-              endingSession,
-              showEndSessionModal,
-              sessionEnded,
-              showRatingModal
-            });
-            
-            try {
-              // Fallback to direct API call
-              const result = await sessionService.endSession(sessionId, sessionType);
-              
-              if (result.status === 'success') {
-                console.log('✅ [End Session] Fallback API call succeeded - updating UI');
-                
-                // Handle success locally
-                const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
-                const cleanedMessages = archiveMessages.map(m => {
-                  const { temp_id, ...rest } = m as any;
-                  return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-                });
-
-                const endedSession: EndedSession = {
-                  appointment_id: getNumericAppointmentId(),
-                  doctor_id: chatInfo?.doctor_id,
-                  doctor_name: chatInfo?.other_participant_name,
-                  doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-                  doctor_profile_picture: chatInfo?.other_participant_profile_picture,
-                  patient_id: user?.id || 0,
-                  patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
-                  appointment_date: chatInfo?.appointment_date,
-                  appointment_time: chatInfo?.appointment_time,
-                  ended_at: new Date().toISOString(),
-                  session_duration: undefined,
-                  session_summary: undefined,
-                  reason: 'manual_end',
-                  messages: cleanedMessages,
-                  message_count: cleanedMessages.length,
-                };
-
-                await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
-                
-                if (webrtcChatService) {
-                  await webrtcChatService.clearMessages();
-                }
-                
-                // Update UI - this is the key part that was missing
-                console.log('🔄 [End Session] Updating UI state...');
-                setEndingSession(false);
-                setShowEndSessionModal(false);
-                setSessionEnded(true);
-                setShowRatingModal(true);
-                
-                console.log('✅ [End Session] UI updated successfully via fallback', {
-                  endingSession: false,
-                  showEndSessionModal: false,
-                  sessionEnded: true,
-                  showRatingModal: true
-                });
-              } else {
-                console.error('❌ [End Session] Fallback API call failed:', result);
-                setEndingSession(false);
-                Alert.alert('Error', 'Failed to end session. Please try again.');
-              }
-            } catch (fallbackError) {
-              console.error('❌ [End Session] Fallback API call failed:', fallbackError);
-              setEndingSession(false);
-              Alert.alert('Error', 'Failed to end session. Please try again.');
-            }
-          }, 3000); // Reduced to 3 seconds for faster testing
-          
-          // Store timeout ID to clear it if WebRTC succeeds
-          (window as any).endSessionTimeoutId = timeoutId;
-          
-        } catch (error) {
-          console.error('❌ [End Session] WebRTC end session failed:', error);
-          console.error('❌ [End Session] Error details:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-          });
-          setEndingSession(false);
-          Alert.alert('Error', 'Failed to end session. Please try again.');
-          return;
-        }
-        
-        // Note: The actual session ending logic (closing modal, showing rating)
-        // will be handled by the onSessionEndSuccess event handler
-        // We don't need to do anything else here as the WebRTC service
-        // will handle the response and trigger the appropriate UI updates
-        return; // Exit early, let WebRTC handlers manage the rest
-      } else {
-        // Fallback to API calls
-        // Before ending on server, capture current messages for local archive
+        // Archive messages before clearing
         const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
-        // Strip temp_id and ensure minimal consistency
         const cleanedMessages = archiveMessages.map(m => {
           const { temp_id, ...rest } = m as any;
           return { ...rest, delivery_status: rest.delivery_status || 'sent' };
         });
 
-        const result = await sessionService.endSession(sessionId, sessionType);
-       
-       if (result.status === 'success') {
-         // Build ended session payload for local storage
-         const endedSession: EndedSession = {
-           appointment_id: getNumericAppointmentId(),
+        const endedSession: EndedSession = {
+          appointment_id: getNumericAppointmentId(),
           doctor_id: chatInfo?.doctor_id,
           doctor_name: chatInfo?.other_participant_name,
           doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
@@ -1487,15 +1365,13 @@ export default function ChatPage() {
           ended_at: new Date().toISOString(),
           session_duration: undefined,
           session_summary: undefined,
-          reason: textSessionInfo?.reason,
+          reason: textSessionInfo?.reason || 'manual_end',
           messages: cleanedMessages,
           message_count: cleanedMessages.length,
         };
 
         try {
-          // Store for both patient and doctor
           await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
-          // Clear messages from WebRTC chat service after archiving
           if (webrtcChatService) {
             await webrtcChatService.clearMessages();
           }
@@ -1503,29 +1379,32 @@ export default function ChatPage() {
           console.error('Failed to store ended session locally:', e);
         }
 
-        // Show rating modal instead of success alert
+        // Update UI - same as test button
         setShowEndSessionModal(false);
+        setSessionEnded(true);
         setShowRatingModal(true);
+        
+        console.log('✅ [End Session] UI updated - showing rating modal');
       } else {
-        console.error('Failed to end session. Please try again.');
-        // Session ending error logged to console only - no modal shown
-      }
+        console.error('❌ [End Session] Failed to end session:', result);
+        Alert.alert('Error', 'Failed to end session. Please try again.');
       }
     } catch (error: any) {
-      console.error('Error ending session:', error);
+      console.error('❌ [End Session] Error ending session:', error);
       
-      // Handle specific error cases - all logged to console only
       if (error?.response?.status === 404) {
-        console.error('Session Not Found: This session may have already been ended or no longer exists. You can safely close this chat.');
-        // Store messages locally anyway and close
-        handleStoreAndClose();
+        console.error('Session Not Found: This session may have already been ended or no longer exists.');
+        // Store messages locally anyway and show rating modal
+        setShowEndSessionModal(false);
+        setSessionEnded(true);
+        setShowRatingModal(true);
       } else if (error?.response?.status === 403) {
         console.error('Unauthorized: You are not authorized to end this session.');
+        Alert.alert('Error', 'You are not authorized to end this session.');
       } else {
         console.error('Failed to end session. Please try again.');
+        Alert.alert('Error', 'Failed to end session. Please try again.');
       }
-    } finally {
-      setEndingSession(false);
     }
   };
 
@@ -1869,11 +1748,6 @@ export default function ChatPage() {
   console.log('🔍 sessionEnded state:', sessionEnded);
   console.log('🔍 endingSession state:', endingSession);
 
-  // Test function to show rating modal
-  const testShowRatingModal = () => {
-    console.log('🧪 [Test] Showing rating modal...');
-    setShowRatingModal(true);
-  };
   // console.log('🔍 endingSession state:', endingSession);
 
   if (loading) {
@@ -2647,28 +2521,6 @@ export default function ChatPage() {
                     End Session
                   </Text>
                 )}
-              </TouchableOpacity>
-              
-              {/* Test button - remove this after debugging */}
-              <TouchableOpacity
-                onPress={testShowRatingModal}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 8,
-                  backgroundColor: '#FF6B6B',
-                  marginTop: 10,
-                }}
-              >
-                <Text style={{
-                  fontSize: 16,
-                  color: '#fff',
-                  textAlign: 'center',
-                  fontWeight: '500',
-                }}>
-                  Test Rating Modal
-                </Text>
               </TouchableOpacity>
             </View>
           </View>

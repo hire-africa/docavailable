@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Exception;
 
 class DoctorWallet extends Model
 {
@@ -38,12 +39,8 @@ class DoctorWallet extends Model
      */
     public function credit(float $amount, string $description, ?string $sessionType = null, ?int $sessionId = null, ?string $sessionTable = null, ?array $metadata = null): WalletTransaction
     {
-        // Reset any aborted transactions first
-        try {
-            DB::statement('ROLLBACK');
-        } catch (Exception $e) {
-            // Ignore rollback errors
-        }
+        // Use a transaction to ensure atomicity
+        return DB::transaction(function () use ($amount, $description, $sessionType, $sessionId, $sessionTable, $metadata) {
 
         // Extract payment transaction ID and gateway from metadata
         $paymentTransactionId = $metadata['payment_transaction_id'] ?? null;
@@ -81,11 +78,12 @@ class DoctorWallet extends Model
             WHERE id = ?
         ", [$amount, $amount, now(), $this->id]);
 
-        // Refresh the model
-        $this->refresh();
+            // Refresh the model
+            $this->refresh();
 
-        // Return the transaction
-        return WalletTransaction::find($transactionId);
+            // Return the transaction
+            return WalletTransaction::find($transactionId);
+        });
     }
 
     /**
