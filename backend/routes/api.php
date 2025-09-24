@@ -285,6 +285,10 @@ Route::prefix('auth')->group(function () {
     Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
 });
 
+// Backward compatibility routes for mobile app
+Route::post('/login', [AuthenticationController::class, 'login']);
+Route::post('/register', [AuthenticationController::class, 'register']);
+
 // Test endpoint for debugging
 Route::get('/test-email-verification', function () {
     return response()->json([
