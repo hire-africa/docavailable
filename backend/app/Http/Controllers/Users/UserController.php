@@ -256,9 +256,8 @@ class UserController extends Controller
             $search = $request->get('search');
             $specialty = $request->get('specialty');
             
-            $query = User::with(['doctorAvailability'])
-                ->where('user_type', 'doctor')
-                ->where('status', 'approved');
+            $query = User::where('user_type', 'doctor')
+                ->whereIn('status', ['active', 'approved']);
             
             // Apply search filter
             if ($search) {
@@ -293,7 +292,7 @@ class UserController extends Controller
             ->orderBy('id', 'desc')
             ->paginate($perPage);
             
-            // Add profile picture URLs and availability info to each doctor
+            // Add profile picture URLs to each doctor
             $doctors->getCollection()->transform(function ($doctor) {
                 $doctorData = $doctor->toArray();
                 
@@ -302,12 +301,10 @@ class UserController extends Controller
                     $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
                 }
                 
-                // Add availability info
-                if ($doctor->doctorAvailability) {
-                    $doctorData['is_online'] = $doctor->doctorAvailability->is_online;
-                    $doctorData['working_hours'] = json_decode($doctor->doctorAvailability->working_hours, true);
-                    $doctorData['max_patients_per_day'] = $doctor->doctorAvailability->max_patients_per_day;
-                }
+                // Set default availability info
+                $doctorData['is_online'] = true;
+                $doctorData['working_hours'] = null;
+                $doctorData['max_patients_per_day'] = 10;
                 
                 return $doctorData;
             });
