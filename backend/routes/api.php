@@ -277,9 +277,13 @@ Route::get('/debug/chat-endpoints', function () {
 Route::post('/create-first-admin', [AuthenticationController::class, 'createFirstAdmin'])->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class]);
 
 // Authentication routes (no auth required)
-Route::post('/register', [AuthenticationController::class, 'register']);
-Route::post('/login', [AuthenticationController::class, 'login']);
-Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
+Route::prefix('auth')->group(function () {
+    Route::post('/register', [AuthenticationController::class, 'register']);
+    Route::post('/login', [AuthenticationController::class, 'login']);
+    Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
+    Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']);
+    Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
+});
 
 // Test endpoint for debugging
 Route::get('/test-email-verification', function () {
@@ -354,9 +358,7 @@ Route::post('/test-verification-email', function (Request $request) {
     }
 });
 
-// Email verification routes (no auth required) - Production ready - Moved to top
-Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']);
-Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
+// Email verification routes moved to auth prefix group above
 
 // Chat routes (removed queue middleware)
 Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
