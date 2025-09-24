@@ -1022,6 +1022,7 @@ Route::get('/doctors/{id}/reviews', [ReviewController::class, 'doctor_reviews'])
 
 // Doctor routes
 Route::prefix('doctors')->group(function () {
+    Route::get('/', [UserController::class, 'getActiveDoctors']); // List all doctors
     Route::get('specializations', [DoctorController::class, 'getSpecializations']);
     Route::get('by-specialization', [DoctorController::class, 'getDoctorsBySpecialization']);
     Route::get('{id}', [DoctorController::class, 'getDoctorDetails']);
