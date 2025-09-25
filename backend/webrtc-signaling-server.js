@@ -71,6 +71,14 @@ const handleConnection = (ws, req, connectionType) => {
   // Store auth token in connection metadata for later use
   ws.authToken = urlParts.query.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
   
+  console.log(`🔑 [WebRTC] Auth token stored:`, {
+    hasToken: !!ws.authToken,
+    tokenLength: ws.authToken ? ws.authToken.length : 0,
+    tokenStart: ws.authToken ? ws.authToken.substring(0, 20) + '...' : 'None',
+    fromQuery: !!urlParts.query.authToken,
+    fromEnv: !!process.env.API_AUTH_TOKEN
+  });
+  
   // Send connection confirmation
   ws.send(JSON.stringify({
     type: 'connection-established',
@@ -370,7 +378,9 @@ async function handleChatMessage(appointmentId, data, senderWs) {
     console.log(`📤 [Backend] Sending to API:`, {
       url: `${API_BASE_URL}/api/chat/${appointmentId}/messages`,
       data: requestData,
-      authToken: authToken ? 'Present' : 'Missing'
+      authToken: authToken ? 'Present' : 'Missing',
+      authTokenLength: authToken ? authToken.length : 0,
+      authTokenStart: authToken ? authToken.substring(0, 20) + '...' : 'None'
     });
     
     const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, requestData, {
