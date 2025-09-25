@@ -595,6 +595,9 @@ export class InstantSessionMessageDetector {
    * Get WebRTC signaling URL
    */
   private getWebRTCSignalingUrl(): string {
-    return process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123:8082';
+    // Get the base WebRTC URL without the /audio-signaling path
+    const baseUrl = process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123:8082/audio-signaling';
+    // Remove /audio-signaling from the end if it exists
+    return baseUrl.replace(/\/audio-signaling$/, '');
   }
 }
