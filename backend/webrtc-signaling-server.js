@@ -359,13 +359,21 @@ async function handleChatMessage(appointmentId, data, senderWs) {
 
     // First, send to your existing API to store in database
     const authToken = senderWs.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
-    const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
+    const requestData = {
       message: data.message.message,
       message_type: data.message.message_type,
       media_url: data.message.media_url,
       temp_id: data.message.temp_id,
       message_id: data.message.id // Include the message ID from WebRTC
-    }, {
+    };
+    
+    console.log(`📤 [Backend] Sending to API:`, {
+      url: `${API_BASE_URL}/api/chat/${appointmentId}/messages`,
+      data: requestData,
+      authToken: authToken ? 'Present' : 'Missing'
+    });
+    
+    const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, requestData, {
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
@@ -416,9 +424,21 @@ async function handleChatMessage(appointmentId, data, senderWs) {
     }
   } catch (error) {
     console.error('❌ [Backend] Error handling chat message:', error);
+    console.error('❌ [Backend] Error details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        headers: error.config?.headers
+      }
+    });
     senderWs.send(JSON.stringify({
       type: 'error',
-      message: 'Failed to send message'
+      message: 'Failed to send message',
+      details: error.message
     }));
   }
 }
