@@ -316,7 +316,7 @@ class AudioCallService {
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 
         Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         Constants.expoConfig?.extra?.webRtcSignalingUrl ||
-        'ws://46.101.123.123:8080/audio-signaling'; // Use production URL as fallback
+        'ws://46.101.123.123:8081/audio-signaling'; // Use production URL as fallback
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       
       console.log('🔧 [AudioCallService] WebSocket URL:', wsUrl);

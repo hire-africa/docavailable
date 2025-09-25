@@ -254,7 +254,7 @@ class VideoCallService {
       const signalingUrl = 
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         (Constants as any).expoConfig?.extra?.webrtc?.signalingUrl ||
-        'ws://46.101.123.123/audio-signaling';
+        'ws://46.101.123.123:8081/audio-signaling';
       
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       console.log('🔌 [VideoCallService] Connecting to signaling server:', wsUrl);
