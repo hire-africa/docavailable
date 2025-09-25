@@ -208,6 +208,48 @@ class AudioCallService {
   }
 
   /**
+   * Check if user has remaining voice calls
+   */
+  private async checkCallAvailability(): Promise<boolean> {
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/call-sessions/check-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'voice'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.can_make_call) {
+        console.log('✅ Voice call availability confirmed:', data.remaining_calls, 'calls remaining');
+        return true;
+      } else {
+        console.log('❌ Voice call not available:', data.message);
+        this.events?.onError(data.message || 'No remaining voice calls in your subscription');
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error checking call availability:', error);
+      this.events?.onError('Failed to check call availability');
+      return false;
+    }
+  }
+
+  /**
+   * Get authentication token
+   */
+  private async getAuthToken(): Promise<string> {
+    // This should be implemented based on your auth system
+    // For now, return a placeholder
+    return 'your-auth-token';
+  }
+
+  /**
    * Initialize audio call service
    */
   async initialize(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
@@ -217,6 +259,13 @@ class AudioCallService {
       this.userId = userId;
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
+
+      // Check call availability before proceeding
+      const canMakeCall = await this.checkCallAvailability();
+      if (!canMakeCall) {
+        this.updateState({ connectionState: 'failed' });
+        return;
+      }
 
       // Get user media (audio only)
       this.localStream = await mediaDevices.getUserMedia({
@@ -316,7 +365,7 @@ class AudioCallService {
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 
         Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         Constants.expoConfig?.extra?.webRtcSignalingUrl ||
-        'ws://46.101.123.123:8081/audio-signaling'; // Use production URL as fallback
+        'ws://46.101.123.123:8082/audio-signaling'; // Use production URL as fallback
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       
       console.log('🔧 [AudioCallService] WebSocket URL:', wsUrl);
@@ -810,6 +859,15 @@ class AudioCallService {
     this.isCallAnswered = true;
     this.clearCallTimeout();
     this.updateState({ connectionState: 'connected' });
+    
+    // Send call-answered message with call type
+    this.sendSignalingMessage({
+      type: 'call-answered',
+      callType: 'voice',
+      userId: this.userId,
+      appointmentId: this.appointmentId
+    });
+    
     this.events?.onCallAnswered();
   }
 
@@ -949,6 +1007,10 @@ class AudioCallService {
         isCallAnswered: this.isCallAnswered
       });
       
+      // Calculate session duration
+      const sessionDuration = this.state.callDuration;
+      const wasConnected = this.state.isConnected && this.isCallAnswered;
+      
       // Clear call timeout
       this.clearCallTimeout();
       
@@ -970,9 +1032,14 @@ class AudioCallService {
         this.peerConnection = null;
       }
       
-      // Send call ended message
+      // Send call ended message with session info
       this.sendSignalingMessage({
-        type: 'call-ended'
+        type: 'call-ended',
+        callType: 'voice',
+        userId: this.userId,
+        appointmentId: this.appointmentId,
+        sessionDuration: sessionDuration,
+        wasConnected: wasConnected
       });
       
       // Close signaling connection
