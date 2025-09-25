@@ -64,8 +64,8 @@ export default {
       
       // WebRTC Configuration
       webrtc: {
-        signalingUrl: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123/audio-signaling',
-        chatSignalingUrl: process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'ws://46.101.123.123/chat-signaling',
+        signalingUrl: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123:8082/audio-signaling',
+        chatSignalingUrl: process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'ws://46.101.123.123:8082/chat-signaling',
         stunServers: process.env.EXPO_PUBLIC_WEBRTC_STUN_SERVERS ? 
           process.env.EXPO_PUBLIC_WEBRTC_STUN_SERVERS.split(',') : [
             'stun:stun.l.google.com:19302',

@@ -52,8 +52,8 @@ class ConfigService {
     return {
       apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
       webrtc: {
-        signalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL') || extra.webrtc?.signalingUrl || 'ws://46.101.123.123:8081/audio-signaling',
-        chatSignalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL') || extra.webrtc?.chatSignalingUrl || 'ws://46.101.123.123:8081/chat-signaling',
+        signalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL') || extra.webrtc?.signalingUrl || 'ws://46.101.123.123:8082/audio-signaling',
+        chatSignalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL') || extra.webrtc?.chatSignalingUrl || 'ws://46.101.123.123:8082/chat-signaling',
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',
         turnPassword: extra.webrtc?.turnPassword || '',

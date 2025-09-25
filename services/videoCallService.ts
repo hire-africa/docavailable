@@ -156,6 +156,48 @@ class VideoCallService {
   }
 
   /**
+   * Check if user has remaining video calls
+   */
+  private async checkCallAvailability(): Promise<boolean> {
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/call-sessions/check-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'video'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.can_make_call) {
+        console.log('✅ Video call availability confirmed:', data.remaining_calls, 'calls remaining');
+        return true;
+      } else {
+        console.log('❌ Video call not available:', data.message);
+        this.events?.onCallRejected();
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Error checking call availability:', error);
+      this.events?.onCallRejected();
+      return false;
+    }
+  }
+
+  /**
+   * Get authentication token
+   */
+  private async getAuthToken(): Promise<string> {
+    // This should be implemented based on your auth system
+    // For now, return a placeholder
+    return 'your-auth-token';
+  }
+
+  /**
    * Initialize video call service
    */
   async initialize(appointmentId: string, userId: string, events: VideoCallEvents): Promise<void> {
@@ -165,6 +207,13 @@ class VideoCallService {
       this.userId = userId;
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
+
+      // Check call availability before proceeding
+      const canMakeCall = await this.checkCallAvailability();
+      if (!canMakeCall) {
+        this.updateState({ connectionState: 'failed' });
+        return;
+      }
 
       // Get user media (audio + video)
       this.localStream = await mediaDevices.getUserMedia({
@@ -254,7 +303,7 @@ class VideoCallService {
       const signalingUrl = 
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         (Constants as any).expoConfig?.extra?.webrtc?.signalingUrl ||
-        'ws://46.101.123.123:8081/audio-signaling';
+        'ws://46.101.123.123:8082/audio-signaling';
       
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       console.log('🔌 [VideoCallService] Connecting to signaling server:', wsUrl);
@@ -570,9 +619,17 @@ class VideoCallService {
   endCall(): void {
     console.log('📞 Ending video call...');
     
+    // Calculate session duration
+    const sessionDuration = this.state.callDuration;
+    const wasConnected = this.state.isConnected && this.isCallAnswered;
+    
     this.sendSignalingMessage({
       type: 'call-ended',
-      senderId: this.userId,
+      callType: 'video',
+      userId: this.userId,
+      appointmentId: this.appointmentId,
+      sessionDuration: sessionDuration,
+      wasConnected: wasConnected
     });
     
     this.cleanup();
@@ -586,6 +643,14 @@ class VideoCallService {
     console.log('📞 Video call answered');
     this.isCallAnswered = true;
     this.clearCallTimeout();
+    
+    // Send call-answered message with call type
+    this.sendSignalingMessage({
+      type: 'call-answered',
+      callType: 'video',
+      userId: this.userId,
+      appointmentId: this.appointmentId
+    });
   }
 
   /**
