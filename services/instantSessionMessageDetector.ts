@@ -595,6 +595,6 @@ export class InstantSessionMessageDetector {
    * Get WebRTC signaling URL
    */
   private getWebRTCSignalingUrl(): string {
-    return process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123';
+    return process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123:8082';
   }
 }
