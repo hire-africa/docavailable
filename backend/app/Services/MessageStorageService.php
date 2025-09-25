@@ -15,13 +15,13 @@ class MessageStorageService
     /**
      * Store a message in server cache
      */
-    public function storeMessage(int $appointmentId, array $messageData): array
+    public function storeMessage(int $appointmentId, array $messageData, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
             
             // Get existing messages
-            $messages = $this->getMessages($appointmentId);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             
             // Check for duplicate messages by temp_id or content
             $isDuplicate = false;
@@ -165,10 +165,10 @@ class MessageStorageService
     /**
      * Get messages for an appointment from server cache
      */
-    public function getMessages(int $appointmentId): array
+    public function getMessages(int $appointmentId, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
             $messages = Cache::get($cacheKey, []);
             
             // Debug: Log media URLs in retrieved messages
@@ -1068,9 +1068,11 @@ class MessageStorageService
     /**
      * Get cache key for appointment
      */
-    private function getCacheKey(int $appointmentId): string
+    private function getCacheKey(int $appointmentId, string $sessionType = 'appointment'): string
     {
-        return self::CACHE_PREFIX . $appointmentId;
+        // Include session type in cache key to prevent conflicts between text sessions and appointments
+        // This ensures text_session_3 and appointment_3 have different cache keys
+        return self::CACHE_PREFIX . $sessionType . '_' . $appointmentId;
     }
 
     /**
@@ -1114,11 +1116,11 @@ class MessageStorageService
     /**
      * Update chat room keys list
      */
-    public function updateChatRoomKeys(int $appointmentId): void
+    public function updateChatRoomKeys(int $appointmentId, string $sessionType = 'appointment'): void
     {
         try {
             $keys = Cache::get('chat_room_keys', []);
-            $key = $this->getCacheKey($appointmentId);
+            $key = $this->getCacheKey($appointmentId, $sessionType);
             
             if (!in_array($key, $keys)) {
                 $keys[] = $key;

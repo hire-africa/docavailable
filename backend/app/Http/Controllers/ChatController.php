@@ -143,7 +143,7 @@ class ChatController extends Controller
                 }
                 
                 // Get messages from cache storage
-                $messages = $this->messageStorageService->getMessages($appointmentId);
+                $messages = $this->messageStorageService->getMessages($actualId, 'text_session');
                     
                 return response()->json([
                     'success' => true,
@@ -166,7 +166,7 @@ class ChatController extends Controller
         }
         
         // Get messages from cache storage
-        $messages = $this->messageStorageService->getMessages($appointmentId);
+        $messages = $this->messageStorageService->getMessages($actualId, 'appointment');
             
         return response()->json([
             'success' => true,
@@ -310,11 +310,12 @@ class ChatController extends Controller
         
         // Store message in cache
         // Use numeric ID for MessageStorageService methods
-        $message = $this->messageStorageService->storeMessage($actualId, $messageData);
+        $sessionType = (!$appointment && strpos($appointmentId, 'text_session_') === 0) ? 'text_session' : 'appointment';
+        $message = $this->messageStorageService->storeMessage($actualId, $messageData, $sessionType);
         
         // Update chat room keys for tracking
         // Use numeric ID for MessageStorageService methods
-        $this->messageStorageService->updateChatRoomKeys($actualId);
+        $this->messageStorageService->updateChatRoomKeys($actualId, $sessionType);
         
         // Handle text session logic
         if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {

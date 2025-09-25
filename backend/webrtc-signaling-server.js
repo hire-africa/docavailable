@@ -25,8 +25,11 @@ const connections = new Map();
 const sessionTimers = new Map();
 const sessionStates = new Map();
 
+// Store call session states
+const callSessions = new Map();
+
 // API base URL
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://docavailable-3vbdv.ondigitalocean.app';
 
 // Handle WebSocket connections for both audio and chat
 const handleConnection = (ws, req, connectionType) => {
@@ -40,6 +43,15 @@ const handleConnection = (ws, req, connectionType) => {
   // If no appointment ID in path, try query parameter
   if (!appointmentId || appointmentId === 'audio-signaling' || appointmentId === 'chat-signaling') {
     appointmentId = urlParts.query.appointmentId;
+  }
+  
+  // Handle dynamic paths like /chat-signaling/text_session_2
+  if (appointmentId === 'audio-signaling' || appointmentId === 'chat-signaling') {
+    // If the path is exactly /audio-signaling or /chat-signaling, try to get appointment ID from query
+    appointmentId = urlParts.query.appointmentId;
+  } else if (pathParts.length > 2) {
+    // If path has more than 2 parts, the appointment ID is the last part
+    appointmentId = pathParts[pathParts.length - 1];
   }
   
   if (!appointmentId) {
@@ -86,6 +98,8 @@ const handleConnection = (ws, req, connectionType) => {
             handleCallAnswered(appointmentId, data, ws);
           } else if (data.type === 'call-rejected' || data.type === 'call-timeout') {
             handleCallRejected(appointmentId, data, ws);
+          } else if (data.type === 'call-ended') {
+            handleCallEnded(appointmentId, data, ws);
           }
           // Broadcast to others
           broadcastToOthers(ws, appointmentId, data);
@@ -154,6 +168,7 @@ const handleConnection = (ws, req, connectionType) => {
   // If no more connections for this appointment, clean up
   if (appointmentConnections.length === 0) {
     cleanupSessionTimers(appointmentId);
+    cleanupCallSessionTimers(appointmentId);
     connections.delete(appointmentId);
     console.log(`🧹 Cleaned up connections for appointment ${appointmentId}`);
   } else {
@@ -415,7 +430,7 @@ async function checkSessionActivation(appointmentId, message, messageData) {
       const sessionId = appointmentId.replace('text_session_', '');
       
       // Get session status from your API
-      const sessionResponse = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`, {
+      const sessionResponse = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${message.authToken}`,
           'Content-Type': 'application/json'
@@ -428,18 +443,18 @@ async function checkSessionActivation(appointmentId, message, messageData) {
         console.log(`🔍 [SessionActivation] Checking session ${sessionId}:`, {
           status: sessionData.status,
           senderId: messageData.sender_id,
-          patientId: sessionData.patient_id,
-          doctorId: sessionData.doctor_id
+          patientId: sessionData.patient.id,
+          doctorId: sessionData.doctor.id
         });
         
         // If session is waiting for doctor and doctor sent message, activate
-        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.doctor_id) {
+        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.doctor.id) {
           console.log(`👨‍⚕️ [SessionActivation] Doctor message detected, activating session ${sessionId}`);
           await activateTextSession(sessionId, appointmentId);
         }
         
         // If session is waiting and patient sent message, start 90-second timer
-        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.patient_id) {
+        if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.patient.id) {
           console.log(`👤 [SessionActivation] Patient message detected, starting 90-second timer for session ${sessionId}`);
           await startDoctorResponseTimer(sessionId, appointmentId);
         }
@@ -659,7 +674,7 @@ async function handleSessionStatusRequest(appointmentId, ws) {
       // Handle text session status
       const sessionId = appointmentId.replace('text_session_', '');
       
-      const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}/status`, {
+      const response = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -676,18 +691,26 @@ async function handleSessionStatusRequest(appointmentId, ws) {
         }
         
         // Also check for existing messages to determine if patient has sent a message
-        const messagesResponse = await axios.get(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        console.log(`📨 [Backend] Messages API response for ${appointmentId}:`, messagesResponse.data.success ? 'Success' : 'Failed');
+        let hasPatientMessage = false;
+        let hasDoctorResponse = false;
         
-        const hasPatientMessage = messagesResponse.data.success && 
-          messagesResponse.data.data.some(msg => msg.sender_id !== response.data.data.doctor.id);
-        const hasDoctorResponse = messagesResponse.data.success && 
-          messagesResponse.data.data.some(msg => msg.sender_id === response.data.data.doctor.id);
+        try {
+          const messagesResponse = await axios.get(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          console.log(`📨 [Backend] Messages API response for ${appointmentId}:`, messagesResponse.data.success ? 'Success' : 'Failed');
+          
+          if (messagesResponse.data.success) {
+            hasPatientMessage = messagesResponse.data.data.some(msg => msg.sender_id !== response.data.data.doctor.id);
+            hasDoctorResponse = messagesResponse.data.data.some(msg => msg.sender_id === response.data.data.doctor.id);
+          }
+        } catch (messagesError) {
+          console.error(`❌ [Backend] Error fetching messages for ${appointmentId}:`, messagesError.message);
+          // Continue without message analysis - this is not critical for session status
+        }
         
         console.log(`👤 [Backend] Message analysis: hasPatientMessage=${hasPatientMessage}, hasDoctorResponse=${hasDoctorResponse}`);
         
@@ -724,9 +747,18 @@ async function handleSessionStatusRequest(appointmentId, ws) {
     }
   } catch (error) {
     console.error('❌ Error getting session status:', error);
+    console.error('❌ Error details:', {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    
+    // Send a more informative error response
     ws.send(JSON.stringify({
       type: 'error',
-      message: 'Failed to get session status'
+      message: 'Failed to get session status',
+      error: error.message,
+      appointmentId: appointmentId
     }));
   }
 }
@@ -923,10 +955,22 @@ function broadcastToOthers(senderWs, appointmentId, data) {
 // CALL-BASED SESSION MANAGEMENT FUNCTIONS
 // ========================================
 
-// Handle call answered - activate session
+// Handle call answered - activate session and start call session
 async function handleCallAnswered(appointmentId, data, ws) {
   try {
     console.log(`📞 Call answered for appointment: ${appointmentId}`);
+    
+    // Extract call type and user info from the data
+    const callType = data.callType || 'voice'; // Default to voice if not specified
+    const userId = data.userId || data.senderId;
+    
+    if (!userId) {
+      console.error('❌ No user ID provided for call session');
+      return;
+    }
+    
+    // Start call session
+    await startCallSession(appointmentId, userId, callType);
     
     if (appointmentId.startsWith('text_session_')) {
       // Handle instant session activation
@@ -938,6 +982,29 @@ async function handleCallAnswered(appointmentId, data, ws) {
     }
   } catch (error) {
     console.error('❌ Error handling call answered:', error);
+  }
+}
+
+// Handle call ended - process final deduction
+async function handleCallEnded(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call ended for appointment: ${appointmentId}`);
+    
+    const callType = data.callType || 'voice';
+    const userId = data.userId || data.senderId;
+    const sessionDuration = data.sessionDuration || 0;
+    const wasConnected = data.wasConnected || false;
+    
+    if (!userId) {
+      console.error('❌ No user ID provided for call session end');
+      return;
+    }
+    
+    // End call session and process final deduction
+    await endCallSession(appointmentId, userId, callType, sessionDuration, wasConnected);
+    
+  } catch (error) {
+    console.error('❌ Error handling call ended:', error);
   }
 }
 
@@ -1068,4 +1135,225 @@ process.on('SIGTERM', () => {
   });
 });
 
-module.exports = { server, wss };
+// ========================================
+// CALL SESSION MANAGEMENT FUNCTIONS
+// ========================================
+
+// Start a call session and deduct initial call
+async function startCallSession(appointmentId, userId, callType) {
+  try {
+    console.log(`📞 Starting call session for user ${userId}, type: ${callType}`);
+    
+    const response = await axios.post(`${API_BASE_URL}/api/call-sessions/start`, {
+      call_type: callType,
+      appointment_id: appointmentId
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      console.log(`✅ Call session started successfully for user ${userId}`);
+      
+      // Store call session state
+      callSessions.set(`${appointmentId}_${userId}`, {
+        callType: callType,
+        startTime: Date.now(),
+        isConnected: true,
+        deductionsProcessed: 0,
+        lastDeductionTime: Date.now()
+      });
+      
+      // Start 10-minute deduction timer
+      startCallDeductionTimer(appointmentId, userId, callType);
+      
+      // Notify participants about call session start
+      broadcastToAll(appointmentId, {
+        type: 'call-session-started',
+        callType: callType,
+        userId: userId,
+        startedAt: new Date().toISOString()
+      });
+      
+    } else {
+      console.error(`❌ Failed to start call session for user ${userId}:`, response.data.message);
+      
+      // Notify participants about call session failure
+      broadcastToAll(appointmentId, {
+        type: 'call-session-failed',
+        callType: callType,
+        userId: userId,
+        reason: response.data.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error(`❌ Error starting call session for user ${userId}:`, error.message);
+  }
+}
+
+// Start 10-minute deduction timer for call sessions
+function startCallDeductionTimer(appointmentId, userId, callType) {
+  const sessionKey = `${appointmentId}_${userId}`;
+  
+  // Clear existing timer if any
+  if (sessionTimers.has(`call_deduction_${sessionKey}`)) {
+    clearInterval(sessionTimers.get(`call_deduction_${sessionKey}`));
+  }
+
+  // Set interval for every 10 minutes
+  const timer = setInterval(async () => {
+    await processCallDeduction(appointmentId, userId, callType);
+  }, 10 * 60 * 1000); // 10 minutes
+
+  sessionTimers.set(`call_deduction_${sessionKey}`, timer);
+  
+  console.log(`⏰ Call deduction timer started for user ${userId}, type: ${callType}`);
+}
+
+// Process call deduction every 10 minutes
+async function processCallDeduction(appointmentId, userId, callType) {
+  try {
+    const sessionKey = `${appointmentId}_${userId}`;
+    const session = callSessions.get(sessionKey);
+    
+    if (!session) {
+      console.log(`⚠️ No call session found for ${sessionKey}`);
+      return;
+    }
+    
+    const sessionDuration = Math.floor((Date.now() - session.startTime) / 1000 / 60); // in minutes
+    
+    console.log(`🔄 Processing call deduction for user ${userId}, duration: ${sessionDuration} minutes`);
+    
+    const response = await axios.post(`${API_BASE_URL}/api/call-sessions/deduction`, {
+      call_type: callType,
+      appointment_id: appointmentId,
+      session_duration: sessionDuration
+    }, {
+      headers: {
+        'Authorization': `Bearer ${process.env.API_AUTH_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.data.success) {
+      const deductionsProcessed = response.data.data.deductions_processed;
+      
+      if (deductionsProcessed > 0) {
+        // Update session state
+        session.deductionsProcessed += deductionsProcessed;
+        session.lastDeductionTime = Date.now();
+        callSessions.set(sessionKey, session);
+        
+        console.log(`✅ Call deduction processed for user ${userId}: ${deductionsProcessed} deductions`);
+        
+        // Notify participants about deduction
+        broadcastToAll(appointmentId, {
+          type: 'call-deduction-processed',
+          callType: callType,
+          userId: userId,
+          deductionsProcessed: deductionsProcessed,
+          totalDeductions: session.deductionsProcessed,
+          remainingCalls: response.data.data.remaining_calls,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } else {
+      console.log(`⚠️ Call deduction failed for user ${userId}:`, response.data.message);
+      
+      // If insufficient calls, end the session
+      if (response.data.message.includes('Insufficient remaining calls')) {
+        await endCallSession(appointmentId, userId, callType, sessionDuration, true);
+      }
+    }
+  } catch (error) {
+    console.error(`❌ Error processing call deduction for user ${userId}:`, error.message);
+  }
+}
+
+// End call session and process final deduction
+async function endCallSession(appointmentId, userId, callType, sessionDuration = 0, wasConnected = false) {
+  try {
+    const sessionKey = `${appointmentId}_${userId}`;
+    const session = callSessions.get(sessionKey);
+    
+    if (session) {
+      // Calculate actual session duration if not provided
+      if (sessionDuration === 0) {
+        sessionDuration = Math.floor((Date.now() - session.startTime) / 1000); // in seconds
+      }
+      
+      console.log(`📞 Ending call session for user ${userId}, duration: ${sessionDuration} seconds`);
+      
+      // Clear deduction timer
+      if (sessionTimers.has(`call_deduction_${sessionKey}`)) {
+        clearInterval(sessionTimers.get(`call_deduction_${sessionKey}`));
+        sessionTimers.delete(`call_deduction_${sessionKey}`);
+      }
+      
+      const response = await axios.post(`${API_BASE_URL}/api/call-sessions/end`, {
+        call_type: callType,
+        appointment_id: appointmentId,
+        session_duration: sessionDuration,
+        was_connected: wasConnected
+      }, {
+        headers: {
+          'Authorization': `Bearer ${process.env.API_AUTH_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.data.success) {
+        const finalDeduction = response.data.data.final_deduction;
+        
+        if (finalDeduction > 0) {
+          console.log(`✅ Final call deduction processed for user ${userId}: ${finalDeduction} deduction`);
+        }
+        
+        // Notify participants about call session end
+        broadcastToAll(appointmentId, {
+          type: 'call-session-ended',
+          callType: callType,
+          userId: userId,
+          sessionDuration: sessionDuration,
+          wasConnected: wasConnected,
+          finalDeduction: finalDeduction,
+          totalDeductions: session.deductionsProcessed + finalDeduction,
+          remainingCalls: response.data.data.remaining_calls,
+          endedAt: new Date().toISOString()
+        });
+      }
+      
+      // Remove session from memory
+      callSessions.delete(sessionKey);
+      
+    } else {
+      console.log(`⚠️ No call session found to end for ${sessionKey}`);
+    }
+  } catch (error) {
+    console.error(`❌ Error ending call session for user ${userId}:`, error.message);
+  }
+}
+
+// Clean up call session timers
+function cleanupCallSessionTimers(appointmentId) {
+  // Clean up all call session timers for this appointment
+  for (const [key, timer] of sessionTimers.entries()) {
+    if (key.startsWith(`call_deduction_${appointmentId}_`)) {
+      clearInterval(timer);
+      sessionTimers.delete(key);
+    }
+  }
+  
+  // Clean up call session states
+  for (const [key, session] of callSessions.entries()) {
+    if (key.startsWith(`${appointmentId}_`)) {
+      callSessions.delete(key);
+    }
+  }
+}
+
+module.exports = { server, audioWss, chatWss };
