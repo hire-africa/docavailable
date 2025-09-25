@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\TextSession;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Services\MessageStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +14,13 @@ use Illuminate\Support\Facades\Log; // Added Log facade
 
 class TextSessionController extends Controller
 {
+    protected $messageStorageService;
+
+    public function __construct(MessageStorageService $messageStorageService)
+    {
+        $this->messageStorageService = $messageStorageService;
+    }
+
     /**
      * Start a new text session.
      */
@@ -126,6 +134,23 @@ class TextSessionController extends Controller
                 INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
                 VALUES (?, ?, ?, ?, ?)
             ", [$chatRoom, $doctorId, 'member', now(), now()]);
+
+            // Clear any existing message cache for this text session to prevent old messages from showing
+            // This ensures each new text session starts with a clean chat history
+            try {
+                $this->messageStorageService->clearMessages($textSessionId);
+                Log::info("Cleared message cache for new text session", [
+                    'text_session_id' => $textSessionId,
+                    'patient_id' => $patientId,
+                    'doctor_id' => $doctorId
+                ]);
+            } catch (\Exception $e) {
+                Log::warning("Failed to clear message cache for new text session", [
+                    'text_session_id' => $textSessionId,
+                    'error' => $e->getMessage()
+                ]);
+                // Don't fail the session creation if cache clearing fails
+            }
 
             // Get the created session to calculate remaining time
             $session = TextSession::find($textSessionId);
