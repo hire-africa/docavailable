@@ -482,6 +482,7 @@ export class InstantSessionMessageDetector {
   private async saveSessionState(): Promise<void> {
     try {
       const state = {
+        sessionId: this.config.sessionId, // Include session ID to prevent cross-session contamination
         hasPatientMessageSent: this.hasPatientMessageSent,
         hasDoctorResponded: this.hasDoctorResponded,
         sessionActivated: this.sessionActivated,
@@ -490,7 +491,7 @@ export class InstantSessionMessageDetector {
       };
       
       await AsyncStorage.setItem(`instant_session_state_${this.config.sessionId}`, JSON.stringify(state));
-      console.log('💾 [InstantSessionDetector] Session state saved');
+      console.log('💾 [InstantSessionDetector] Session state saved for session:', this.config.sessionId);
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error saving session state:', error);
     }
@@ -505,16 +506,17 @@ export class InstantSessionMessageDetector {
       if (stored) {
         const state = JSON.parse(stored);
         
-        // Only restore if state is recent (within last hour)
+        // Only restore if state is recent (within last hour) AND for the same session
         const isRecent = Date.now() - state.timestamp < 3600000;
+        const isSameSession = state.sessionId === this.config.sessionId;
         
-        if (isRecent) {
+        if (isRecent && isSameSession) {
           this.hasPatientMessageSent = state.hasPatientMessageSent || false;
           this.hasDoctorResponded = state.hasDoctorResponded || false;
           this.sessionActivated = state.sessionActivated || false;
           this.timerState = state.timerState || this.timerState;
           
-          console.log('📱 [InstantSessionDetector] Session state restored:', {
+          console.log('📱 [InstantSessionDetector] Session state restored for session:', this.config.sessionId, {
             hasPatientMessageSent: this.hasPatientMessageSent,
             hasDoctorResponded: this.hasDoctorResponded,
             sessionActivated: this.sessionActivated,
@@ -525,7 +527,16 @@ export class InstantSessionMessageDetector {
           if (this.timerState.isActive && this.timerState.timeRemaining > 0) {
             this.start90SecondTimer();
           }
+        } else {
+          console.log('📱 [InstantSessionDetector] Not restoring state - different session or too old:', {
+            isRecent,
+            isSameSession,
+            storedSessionId: state.sessionId,
+            currentSessionId: this.config.sessionId
+          });
         }
+      } else {
+        console.log('📱 [InstantSessionDetector] No stored state found for session:', this.config.sessionId);
       }
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error loading session state:', error);
@@ -547,9 +558,37 @@ export class InstantSessionMessageDetector {
         startTime: 0,
         endTime: 0
       };
-      console.log('🗑️ [InstantSessionDetector] Session state cleared');
+      console.log('🗑️ [InstantSessionDetector] Session state cleared for session:', this.config.sessionId);
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error clearing session state:', error);
+    }
+  }
+
+  /**
+   * Clear all old session states (cleanup method)
+   */
+  static async clearAllOldSessionStates(): Promise<void> {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const instantSessionKeys = keys.filter(key => key.startsWith('instant_session_state_'));
+      
+      for (const key of instantSessionKeys) {
+        try {
+          const stored = await AsyncStorage.getItem(key);
+          if (stored) {
+            const state = JSON.parse(stored);
+            // Remove states older than 1 hour
+            if (Date.now() - state.timestamp > 3600000) {
+              await AsyncStorage.removeItem(key);
+              console.log('🗑️ [InstantSessionDetector] Cleared old session state:', key);
+            }
+          }
+        } catch (error) {
+          console.error('❌ [InstantSessionDetector] Error clearing old session state:', key, error);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [InstantSessionDetector] Error clearing old session states:', error);
     }
   }
 
