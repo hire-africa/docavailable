@@ -353,11 +353,12 @@ async function handleChatMessage(appointmentId, data, senderWs) {
     console.log(`📨 [Backend] Handling chat message for appointment ${appointmentId}:`, {
       messageId: data.message.id,
       senderId: data.message.sender_id,
-      hasAuthToken: !!data.authToken,
+      hasAuthToken: !!senderWs.authToken,
       message: data.message.message
     });
 
     // First, send to your existing API to store in database
+    const authToken = senderWs.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
     const response = await axios.post(`${API_BASE_URL}/api/chat/${appointmentId}/messages`, {
       message: data.message.message,
       message_type: data.message.message_type,
@@ -366,7 +367,7 @@ async function handleChatMessage(appointmentId, data, senderWs) {
       message_id: data.message.id // Include the message ID from WebRTC
     }, {
       headers: {
-        'Authorization': `Bearer ${data.authToken}`,
+        'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       }
     });
