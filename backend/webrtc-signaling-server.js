@@ -378,7 +378,7 @@ async function handleChatMessage(appointmentId, data, senderWs) {
 
     if (response.data.success) {
       // Check if this message triggers session activation
-      await checkSessionActivation(appointmentId, data.message, response.data.data);
+      await checkSessionActivation(appointmentId, data.message, response.data.data, senderWs);
       
       // Send push notification to the recipient
       await sendPushNotification(appointmentId, data.message, response.data.data);
@@ -423,16 +423,18 @@ async function handleChatMessage(appointmentId, data, senderWs) {
 }
 
 // Check if message triggers session activation
-async function checkSessionActivation(appointmentId, message, messageData) {
+async function checkSessionActivation(appointmentId, message, messageData, senderWs) {
   try {
     // Check if this is a text session (instant session)
     if (appointmentId.startsWith('text_session_')) {
       const sessionId = appointmentId.replace('text_session_', '');
       
       // Get session status from your API
+      // Get auth token from the WebSocket connection that sent the message
+      const authToken = senderWs.authToken || process.env.API_AUTH_TOKEN || 'your-api-token';
       const sessionResponse = await axios.get(`${API_BASE_URL}/api/text-sessions/${sessionId}`, {
         headers: {
-          'Authorization': `Bearer ${message.authToken}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
         }
       });
