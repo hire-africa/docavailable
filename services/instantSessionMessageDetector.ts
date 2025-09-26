@@ -45,6 +45,8 @@ export class InstantSessionMessageDetector {
   private reconnectDelay: number = 1000;
   // Track whether server reports an active timer to avoid local restarts
   private serverTimerActive: boolean = false;
+  // Prevent starting a fresh 90s timer while waiting for server status during initial hydration
+  private awaitingServerStatus: boolean = false;
 
   constructor(config: InstantSessionConfig, events: MessageDetectionEvents) {
     this.config = config;
@@ -199,8 +201,19 @@ export class InstantSessionMessageDetector {
   private handlePatientMessage(message: any): void {
     console.log('👤 [InstantSessionDetector] Patient message detected:', message.id);
     
-    if (!this.hasPatientMessageSent && !this.serverTimerActive && !this.timerState.isActive) {
+    // Remember that a patient message exists
+    if (!this.hasPatientMessageSent) {
       this.hasPatientMessageSent = true;
+    }
+
+    // If we’re still waiting for server status, don’t start a fresh 90s timer yet
+    if (this.awaitingServerStatus) {
+      console.log('⏳ [InstantSessionDetector] Awaiting server status; not starting fresh timer on patient message');
+      this.events.onPatientMessageDetected(message);
+      return;
+    }
+
+    if (!this.serverTimerActive && !this.timerState.isActive) {
       this.start90SecondTimer();
       this.events.onPatientMessageDetected(message);
     }
@@ -445,8 +458,17 @@ export class InstantSessionMessageDetector {
     this.loadSessionState();
     // Ask server for authoritative status (including timer remaining)
     try {
+      // Enter awaiting status mode to avoid starting a fresh 90s from historical messages
+      this.awaitingServerStatus = true;
       this.websocket?.send(JSON.stringify({ type: 'session-status-request' }));
     } catch {}
+    // Failsafe: clear awaiting flag after 6s even if server doesn't respond
+    setTimeout(() => {
+      if (this.awaitingServerStatus) {
+        console.log('⏳ [InstantSessionDetector] No server status response within timeout, lifting awaiting flag');
+        this.awaitingServerStatus = false;
+      }
+    }, 6000);
     // Check for existing patient messages when connecting
     this.checkForExistingPatientMessages();
   }
@@ -456,6 +478,8 @@ export class InstantSessionMessageDetector {
    */
   private handleSessionStatusResponse(data: any): void {
     console.log('📊 [InstantSessionDetector] Session status response received:', data);
+    // Clear awaiting flag now that we have an authoritative response
+    this.awaitingServerStatus = false;
     console.log('📊 [InstantSessionDetector] Current state:', {
       hasPatientMessageSent: this.hasPatientMessageSent,
       hasDoctorResponded: this.hasDoctorResponded,
