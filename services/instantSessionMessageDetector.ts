@@ -583,7 +583,10 @@ export class InstantSessionMessageDetector {
       this.websocket = null;
     }
     this.isConnected = false;
-    this.stopTimer();
+    // Do NOT stop the timer on disconnect; preserve countdown across navigation/app background
+    try {
+      await this.saveSessionState();
+    } catch {}
   }
 
   /**
