@@ -294,10 +294,12 @@ export default function ChatPage() {
         hasDoctorResponded
       });
       
-      // If patient has sent messages but detector hasn't detected it, log for debugging
+      // If patient has sent messages but detector hasn't been triggered, trigger it manually
       if (patientMessages.length > 0 && !hasPatientSentMessage) {
-        console.log('👤 [InstantSession] Patient messages found but detector not triggered - WebRTC detection issue');
-        console.log('👤 [InstantSession] This should be handled by the WebRTC server broadcasting chat-message events');
+        console.log('👤 [InstantSession] Patient messages found but detector not triggered - triggering manually');
+        const firstPatientMessage = patientMessages[0];
+        console.log('👤 [InstantSession] Triggering detection for existing patient message:', firstPatientMessage.id);
+        triggerPatientMessageDetection(firstPatientMessage);
       }
     }
   }, [isInstantSession, messages, currentUserId, finalDoctorId, hasPatientSentMessage, hasDoctorResponded]);
