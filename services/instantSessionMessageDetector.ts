@@ -47,6 +47,8 @@ export class InstantSessionMessageDetector {
   private serverTimerActive: boolean = false;
   // Prevent starting a fresh 90s timer while waiting for server status during initial hydration
   private awaitingServerStatus: boolean = false;
+  // Bootstrap loop to fetch remaining time after patient message if server event is missing
+  private timerBootstrapActive: boolean = false;
 
   constructor(config: InstantSessionConfig, events: MessageDetectionEvents) {
     this.config = config;
@@ -216,8 +218,13 @@ export class InstantSessionMessageDetector {
     // Never start a local 90s timer from client messages; rely on server events or backend remaining time
     if (!this.serverTimerActive && !this.timerState.isActive) {
       console.log('⏱️ [InstantSessionDetector] Local start suppressed; waiting for server timer or backend remaining time');
-      // Try to fetch authoritative remaining time once (non-blocking)
-      this.fetchAndResumeRemainingFromBackend().catch(() => {});
+      // Try to fetch authoritative remaining time (start a short bootstrap loop if needed)
+      if (!this.timerBootstrapActive) {
+        this.timerBootstrapActive = true;
+        this.bootstrapTimerFromBackend().finally(() => {
+          this.timerBootstrapActive = false;
+        });
+      }
     }
     this.events.onPatientMessageDetected(message);
   }
@@ -357,12 +364,39 @@ export class InstantSessionMessageDetector {
   /**
    * Handle timer expiration
    */
-  private handleTimerExpired(): void {
-    console.log('⏰ [InstantSessionDetector] 90-second timer expired');
+  private async handleTimerExpired(): Promise<void> {
+    try {
+      console.log('⏰ [InstantSessionDetector] Local 90-second timer reached zero - verifying with server');
+      // Verify with backend to avoid premature expiry due to drift or hydration delays
+      const url = `${this.getApiBaseUrl()}/api/text-sessions/${this.config.sessionId}/check-response`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${this.config.authToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.status === 'expired') {
+          console.log('❌ [InstantSessionDetector] Server confirms session expired');
+          this.timerState.isActive = false;
+          this.timerState.timeRemaining = 0;
+          await this.saveSessionState();
+          this.events.onTimerExpired();
+          return;
+        }
+        if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
+          console.log('⏰ [InstantSessionDetector] Server indicates time remaining, resuming with:', data.timeRemaining);
+          this.startTimer(Math.floor(data.timeRemaining));
+          return;
+        }
+      } else {
+        console.warn('⚠️ [InstantSessionDetector] check-response returned non-OK status:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [InstantSessionDetector] Error verifying expiry with server:', error);
+    }
+    // Fallback: if no server info, do not hard-expire; keep inactive with 0 remaining until status arrives
     this.timerState.isActive = false;
     this.timerState.timeRemaining = 0;
-    
-    this.saveSessionState();
+    await this.saveSessionState();
     this.events.onTimerExpired();
   }
 
@@ -573,6 +607,28 @@ export class InstantSessionMessageDetector {
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error fetching remaining time from backend:', error);
     }
+  }
+
+  /**
+   * Bootstrap timer by polling backend a few times to obtain remaining time
+   */
+  private async bootstrapTimerFromBackend(): Promise<void> {
+    const maxAttempts = 6;
+    const delayMs = 1000;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (this.timerState.isActive || this.serverTimerActive) {
+        return;
+      }
+      try {
+        await this.fetchAndResumeRemainingFromBackend();
+        if (this.timerState.isActive) {
+          console.log('⏰ [InstantSessionDetector] Timer bootstrapped from backend on attempt', attempt);
+          return;
+        }
+      } catch {}
+      await new Promise(res => setTimeout(res, delayMs));
+    }
+    console.log('⏳ [InstantSessionDetector] Backend did not provide remaining time during bootstrap window');
   }
 
   /**
