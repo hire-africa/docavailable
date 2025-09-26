@@ -153,6 +153,40 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     }
   };
 
+  // On initial mount/when enabled, fetch authoritative remaining time and resume
+  useEffect(() => {
+    let cancelled = false;
+    const rehydrate = async () => {
+      try {
+        if (!enabled || !sessionId) return;
+        // Avoid racing before detector exists
+        if (!detectorRef.current) return;
+
+        // Import lazily to avoid cycles
+        const { default: sessionService } = await import('../services/sessionService');
+        const result = await sessionService.checkDoctorResponse(sessionId);
+        if (cancelled) return;
+
+        if ((result as any)?.status === 'waiting' && typeof (result as any)?.timeRemaining === 'number') {
+          const remaining = Math.max(0, Math.floor((result as any).timeRemaining));
+          if (remaining > 0) {
+            console.log('⏰ [Hook] Rehydrating timer from backend with remaining:', remaining);
+            // Ask detector to resume timer in-place
+            detectorRef.current.resumeTimerWithRemaining(remaining);
+            // Reflect immediately in hook state
+            setTimerState(detectorRef.current.getTimerState());
+            setHasPatientSentMessage(true);
+          }
+        }
+      } catch (e) {
+        console.error('❌ [Hook] Failed to rehydrate timer from backend:', e);
+      }
+    };
+
+    rehydrate();
+    return () => { cancelled = true; };
+  }, [enabled, sessionId]);
+
   const disconnect = async (): Promise<void> => {
     if (detectorRef.current) {
       await detectorRef.current.disconnect();
