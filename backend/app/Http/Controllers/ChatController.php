@@ -609,7 +609,7 @@ class ChatController extends Controller
                 }
                 
                 // Get messages for local storage
-                $data = $this->messageStorageService->getMessagesForLocalStorage($actualId);
+                $data = $this->messageStorageService->getMessagesForLocalStorage($actualId, 'text_session');
                 
                 return response()->json([
                     'success' => true,
@@ -632,7 +632,7 @@ class ChatController extends Controller
         }
         
         // Get messages for local storage
-        $data = $this->messageStorageService->getMessagesForLocalStorage($actualId);
+        $data = $this->messageStorageService->getMessagesForLocalStorage($actualId, 'appointment');
         
         return response()->json([
             'success' => true,
@@ -1062,7 +1062,7 @@ class ChatController extends Controller
         }
         
         // Get the original message to reply to
-        $originalMessage = $this->messageStorageService->getMessage($accessResult['actualId'], $messageId);
+        $originalMessage = $this->messageStorageService->getMessage($accessResult['actualId'], $messageId, $accessResult['type']);
         if (!$originalMessage) {
             return response()->json([
                 'success' => false,
