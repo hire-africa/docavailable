@@ -113,6 +113,10 @@ export default function ChatPage() {
   // Text session info state
   const [textSessionInfo, setTextSessionInfo] = useState<TextSessionInfo | null>(null);
   
+  // Session validity state
+  const [sessionValid, setSessionValid] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  
   // Audio call modal state
   const [showAudioCallModal, setShowAudioCallModal] = useState(false);
   const [showIncomingCall, setShowIncomingCall] = useState(false);
@@ -826,6 +830,15 @@ export default function ChatPage() {
                 error: sessionResponse.error,
                 sessionId: sessionId
               });
+              
+              // If text session doesn't exist, show error and prevent further actions
+              if (sessionResponse.error?.includes('not found') || sessionResponse.error?.includes('404')) {
+                console.error('❌ [InstantSession] Text session not found - marking session as invalid');
+                setSessionValid(false);
+                setSessionError('This text session is no longer available. It may have been ended or expired.');
+                setLoading(false);
+                return; // Exit early to prevent loading messages
+              }
             }
             
             // Create chat info from text session data (only if we have the data)
@@ -944,6 +957,12 @@ export default function ChatPage() {
   // Send message via WebRTC or fallback to backend API
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
+    
+    // Check if session is valid before sending message
+    if (!sessionValid) {
+      console.error('❌ [ChatComponent] Cannot send message - session is invalid');
+      return;
+    }
     
     try {
       setSending(true);
@@ -1974,6 +1993,56 @@ export default function ChatPage() {
 
       </View>
 
+      {/* Session Error Message */}
+      {!sessionValid && sessionError && (
+        <View style={{
+          backgroundColor: '#FFEBEE',
+          padding: 16,
+          marginHorizontal: 16,
+          marginTop: 8,
+          borderRadius: 8,
+          borderLeftWidth: 4,
+          borderLeftColor: '#F44336',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Ionicons name="warning" size={20} color="#F44336" />
+            <Text style={{
+              fontSize: 16,
+              fontWeight: '600',
+              color: '#D32F2F',
+              marginLeft: 8,
+            }}>
+              Session Unavailable
+            </Text>
+          </View>
+          <Text style={{
+            fontSize: 14,
+            color: '#D32F2F',
+            lineHeight: 20,
+          }}>
+            {sessionError}
+          </Text>
+          <TouchableOpacity
+            style={{
+              marginTop: 12,
+              padding: 8,
+              backgroundColor: '#F44336',
+              borderRadius: 6,
+              alignSelf: 'flex-start',
+            }}
+            onPress={() => router.back()}
+          >
+            <Text style={{
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: '500',
+            }}>
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* WebRTC Session Status */}
       {isWebRTCConnected && (
         <View style={{
@@ -2246,8 +2315,14 @@ export default function ChatPage() {
                 webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
+            editable={sessionValid}
+            style={{
+              opacity: sessionValid ? 1 : 0.5
+            }}
             placeholder={
-              sessionEnded && !isPatient 
+              !sessionValid
+                ? "Session unavailable - cannot send messages"
+                : sessionEnded && !isPatient 
                 ? "Session ended" 
                 : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && isTimerActive && isPatient
                 ? "Waiting for doctor to respond..."
@@ -2283,6 +2358,7 @@ export default function ChatPage() {
               sending || 
               isRecording || 
               sessionEnded || 
+              !sessionValid ||
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
             }
             style={{
