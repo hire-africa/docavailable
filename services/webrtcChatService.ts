@@ -19,7 +19,9 @@ export class WebRTCChatService {
   constructor(config: ChatConfig, events: ChatEvents) {
     this.config = config;
     this.events = events;
-    this.storageKey = `webrtc_messages_${config.appointmentId}`;
+    // Include session type in storage key to prevent conflicts between text sessions and appointments
+    const sessionType = config.sessionType || 'appointment';
+    this.storageKey = `webrtc_messages_${sessionType}_${config.appointmentId}`;
     this.processedMessageHashes = new Set();
   }
 

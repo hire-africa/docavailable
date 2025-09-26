@@ -421,12 +421,16 @@ export default function ChatPage() {
           }
         });
         
+        // Determine session type from appointmentId
+        const sessionType = appointmentId.startsWith('text_session_') ? 'text_session' : 'appointment';
+        
         const chatService = new WebRTCChatService({
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
           userId: currentUserId,
           userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
           apiKey: (user as any)?.api_key || '',
+          sessionType: sessionType,
           webrtcConfig: config.webrtc
         }, {
           onMessage: (message) => {

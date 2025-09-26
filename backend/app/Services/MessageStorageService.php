@@ -895,10 +895,10 @@ class MessageStorageService
     /**
      * Get a specific message by ID
      */
-    public function getMessage(int $appointmentId, string $messageId): ?array
+    public function getMessage(int $appointmentId, string $messageId, string $sessionType = 'appointment'): ?array
     {
         try {
-            $messages = $this->getMessages($appointmentId);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             foreach ($messages as $message) {
                 if ($message['id'] === $messageId) {
                     return $message;
@@ -994,10 +994,10 @@ class MessageStorageService
     /**
      * Get messages for local storage (optimized format)
      */
-    public function getMessagesForLocalStorage(int $appointmentId): array
+    public function getMessagesForLocalStorage(int $appointmentId, string $sessionType = 'appointment'): array
     {
         try {
-            $messages = $this->getMessages($appointmentId);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             
             // Return optimized format for local storage
             return [
