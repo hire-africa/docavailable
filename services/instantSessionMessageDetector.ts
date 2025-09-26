@@ -213,10 +213,13 @@ export class InstantSessionMessageDetector {
       return;
     }
 
+    // Never start a local 90s timer from client messages; rely on server events or backend remaining time
     if (!this.serverTimerActive && !this.timerState.isActive) {
-      this.start90SecondTimer();
-      this.events.onPatientMessageDetected(message);
+      console.log('⏱️ [InstantSessionDetector] Local start suppressed; waiting for server timer or backend remaining time');
+      // Try to fetch authoritative remaining time once (non-blocking)
+      this.fetchAndResumeRemainingFromBackend().catch(() => {});
     }
+    this.events.onPatientMessageDetected(message);
   }
 
   /**
