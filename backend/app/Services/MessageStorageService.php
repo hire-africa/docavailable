@@ -212,10 +212,10 @@ class MessageStorageService
     /**
      * Sync messages from local storage to server
      */
-    public function syncFromLocalStorage(int $appointmentId, array $localMessages): array
+    public function syncFromLocalStorage(int $appointmentId, array $localMessages, string $sessionType = 'appointment'): array
     {
         try {
-            $serverMessages = $this->getMessages($appointmentId);
+            $serverMessages = $this->getMessages($appointmentId, $sessionType);
             $syncedCount = 0;
             $errors = [];
             
@@ -268,7 +268,7 @@ class MessageStorageService
             }
             
             // Store updated messages
-            $cacheKey = $this->getCacheKey($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
             Cache::put($cacheKey, $serverMessages, self::CACHE_TTL);
             
             Log::info("Messages synced from local storage", [
@@ -424,11 +424,11 @@ class MessageStorageService
     /**
      * Add a reaction to a message
      */
-    public function addReaction(int $appointmentId, string $messageId, int $userId, string $reaction): array
+    public function addReaction(int $appointmentId, string $messageId, int $userId, string $reaction, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
-            $messages = $this->getMessages($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             
             // Find the message
             $messageIndex = null;
@@ -516,11 +516,11 @@ class MessageStorageService
     /**
      * Remove a reaction from a message
      */
-    public function removeReaction(int $appointmentId, string $messageId, int $userId, string $reaction): array
+    public function removeReaction(int $appointmentId, string $messageId, int $userId, string $reaction, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
-            $messages = $this->getMessages($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             
             // Find the message
             $messageIndex = null;
@@ -579,11 +579,11 @@ class MessageStorageService
     /**
      * Mark messages as read for an appointment
      */
-    public function markMessagesAsRead(int $appointmentId, int $userId, string $timestamp): array
+    public function markMessagesAsRead(int $appointmentId, int $userId, string $timestamp, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
-            $messages = $this->getMessages($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             $markedCount = 0;
             
             // If no messages, return early
@@ -699,11 +699,11 @@ class MessageStorageService
     /**
      * Force fix delivery status for messages with read entries
      */
-    public function fixDeliveryStatus(int $appointmentId): array
+    public function fixDeliveryStatus(int $appointmentId, string $sessionType = 'appointment'): array
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
-            $messages = $this->getMessages($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
+            $messages = $this->getMessages($appointmentId, $sessionType);
             $fixedCount = 0;
             
             // If no messages, return early
@@ -1024,10 +1024,10 @@ class MessageStorageService
     /**
      * Clear messages for an appointment (when appointment ends)
      */
-    public function clearMessages(int $appointmentId): bool
+    public function clearMessages(int $appointmentId, string $sessionType = 'appointment'): bool
     {
         try {
-            $cacheKey = $this->getCacheKey($appointmentId);
+            $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
             
             // Clear the main messages cache
             Cache::forget($cacheKey);
@@ -1046,10 +1046,11 @@ class MessageStorageService
             }
             
             // Update chat room keys list to remove this appointment
-            $this->removeFromChatRoomKeys($appointmentId);
+            $this->removeFromChatRoomKeys($appointmentId, $sessionType);
             
             Log::info("Messages and related data cleared for appointment", [
                 'appointment_id' => $appointmentId,
+                'session_type' => $sessionType,
                 'cache_key' => $cacheKey,
                 'related_keys_cleared' => $relatedKeys
             ]);
@@ -1138,11 +1139,11 @@ class MessageStorageService
     /**
      * Remove appointment from chat room keys list
      */
-    private function removeFromChatRoomKeys(int $appointmentId): void
+    private function removeFromChatRoomKeys(int $appointmentId, string $sessionType = 'appointment'): void
     {
         try {
             $keys = Cache::get('chat_room_keys', []);
-            $key = $this->getCacheKey($appointmentId);
+            $key = $this->getCacheKey($appointmentId, $sessionType);
             
             // Remove this appointment's key from the list
             $keys = array_filter($keys, function($k) use ($key) {
@@ -1153,6 +1154,7 @@ class MessageStorageService
             
             Log::info("Removed appointment from chat room keys", [
                 'appointment_id' => $appointmentId,
+                'session_type' => $sessionType,
                 'key' => $key
             ]);
             
