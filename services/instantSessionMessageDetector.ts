@@ -199,6 +199,14 @@ export class InstantSessionMessageDetector {
   }
 
   /**
+   * Manually trigger patient message detection (for integration with WebRTCChatService)
+   */
+  public triggerPatientMessageDetection(message: any): void {
+    console.log('👤 [InstantSessionDetector] Manually triggering patient message detection:', message.id);
+    this.handlePatientMessage(message);
+  }
+
+  /**
    * Handle doctor message - activate session and stop timer
    */
   private handleDoctorMessage(message: any): void {

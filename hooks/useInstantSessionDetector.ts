@@ -21,6 +21,7 @@ export interface UseInstantSessionDetectorReturn {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   clearState: () => Promise<void>;
+  triggerPatientMessageDetection: (message: any) => void;
 }
 
 export function useInstantSessionDetector(options: UseInstantSessionDetectorOptions): UseInstantSessionDetectorReturn {
@@ -187,6 +188,12 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     return () => clearInterval(interval);
   }, [timerState.isActive]);
 
+  const triggerPatientMessageDetection = (message: any): void => {
+    if (detectorRef.current) {
+      detectorRef.current.triggerPatientMessageDetection(message);
+    }
+  };
+
   return {
     isConnected,
     timerState,
@@ -197,6 +204,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     timeRemaining: timerState.timeRemaining,
     connect,
     disconnect,
-    clearState
+    clearState,
+    triggerPatientMessageDetection
   };
 }
