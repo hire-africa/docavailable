@@ -22,6 +22,7 @@ export interface UseInstantSessionDetectorReturn {
   disconnect: () => Promise<void>;
   clearState: () => Promise<void>;
   triggerPatientMessageDetection: (message: any) => void;
+  updateAuthToken: (newAuthToken: string) => void;
 }
 
 export function useInstantSessionDetector(options: UseInstantSessionDetectorOptions): UseInstantSessionDetectorReturn {
@@ -118,16 +119,16 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     };
   }, [sessionId, appointmentId, patientId, doctorId, authToken, enabled]);
 
-  // Connect when enabled
+  // Connect when enabled or when auth token changes
   useEffect(() => {
-    console.log('🔌 [Hook] Connect effect triggered:', { enabled, hasDetector: !!detectorRef.current });
+    console.log('🔌 [Hook] Connect effect triggered:', { enabled, hasDetector: !!detectorRef.current, hasAuthToken: !!authToken });
     if (enabled && detectorRef.current) {
       console.log('🔌 [Hook] Attempting to connect instant session detector');
       connect();
     } else {
       console.log('🔌 [Hook] Not connecting:', { enabled, hasDetector: !!detectorRef.current });
     }
-  }, [enabled]);
+  }, [enabled, authToken]);
 
   const connect = async (): Promise<void> => {
     if (!detectorRef.current) {
@@ -194,6 +195,12 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     }
   };
 
+  const updateAuthToken = (newAuthToken: string): void => {
+    if (detectorRef.current) {
+      detectorRef.current.updateAuthToken(newAuthToken);
+    }
+  };
+
   return {
     isConnected,
     timerState,
@@ -205,6 +212,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     connect,
     disconnect,
     clearState,
-    triggerPatientMessageDetection
+    triggerPatientMessageDetection,
+    updateAuthToken
   };
 }
