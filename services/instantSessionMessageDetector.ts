@@ -207,6 +207,21 @@ export class InstantSessionMessageDetector {
   }
 
   /**
+   * Update auth token and reconnect if needed
+   */
+  public updateAuthToken(newAuthToken: string): void {
+    if (this.config.authToken !== newAuthToken) {
+      console.log('🔑 [InstantSessionDetector] Auth token updated, reconnecting...');
+      this.config.authToken = newAuthToken;
+      if (this.isConnected) {
+        this.disconnect().then(() => {
+          this.connect();
+        });
+      }
+    }
+  }
+
+  /**
    * Handle doctor message - activate session and stop timer
    */
   private handleDoctorMessage(message: any): void {
@@ -224,29 +239,36 @@ export class InstantSessionMessageDetector {
    * Start the 90-second timer
    */
   private start90SecondTimer(): void {
+    this.startTimer(90);
+  }
+
+  /**
+   * Start timer with specified remaining time (for resuming)
+   */
+  private startTimer(timeRemaining: number): void {
     if (this.timer) {
       clearTimeout(this.timer);
     }
 
-    console.log('⏰ [InstantSessionDetector] Starting 90-second timer');
+    console.log('⏰ [InstantSessionDetector] Starting timer with remaining time:', timeRemaining);
     
     this.timerState = {
       isActive: true,
-      timeRemaining: 90,
-      startTime: Date.now(),
-      endTime: Date.now() + 90000
+      timeRemaining: timeRemaining,
+      startTime: Date.now() - ((90 - timeRemaining) * 1000), // Calculate original start time
+      endTime: Date.now() + (timeRemaining * 1000)
     };
 
     // Start countdown updates every second
     this.startCountdown();
     
-    // Set timeout for 90 seconds
+    // Set timeout for remaining time
     this.timer = setTimeout(() => {
       this.handleTimerExpired();
-    }, 90000) as any;
+    }, timeRemaining * 1000) as any;
 
     this.saveSessionState();
-    this.events.onTimerStarted(90);
+    this.events.onTimerStarted(timeRemaining);
   }
 
   /**
@@ -397,9 +419,17 @@ export class InstantSessionMessageDetector {
     });
     
     if (data.hasPatientMessage && !this.hasPatientMessageSent) {
-      console.log('👤 [InstantSessionDetector] Found existing patient message - starting timer');
+      console.log('👤 [InstantSessionDetector] Found existing patient message - checking if timer should start');
       this.hasPatientMessageSent = true;
-      this.start90SecondTimer();
+      
+      // Only start timer if doctor hasn't responded yet
+      if (!data.hasDoctorResponse) {
+        console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - starting timer');
+        this.start90SecondTimer();
+      } else {
+        console.log('👤 [InstantSessionDetector] Doctor already responded - not starting timer');
+      }
+      
       this.events.onPatientMessageDetected({ id: 'existing', message: 'Patient message detected' });
     } else if (data.hasPatientMessage) {
       console.log('👤 [InstantSessionDetector] Patient message already detected, skipping');
@@ -533,7 +563,8 @@ export class InstantSessionMessageDetector {
           
           // If timer was active, restart it with remaining time
           if (this.timerState.isActive && this.timerState.timeRemaining > 0) {
-            this.start90SecondTimer();
+            console.log('⏰ [InstantSessionDetector] Resuming timer with remaining time:', this.timerState.timeRemaining);
+            this.startTimer(this.timerState.timeRemaining);
           }
         } else {
           console.log('📱 [InstantSessionDetector] Not restoring state - different session or too old:', {
@@ -613,7 +644,8 @@ export class InstantSessionMessageDetector {
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const requestData = {
           type: 'session-status-request',
-          appointmentId: this.config.appointmentId
+          appointmentId: this.config.appointmentId,
+          authToken: this.config.authToken
         };
         console.log('📡 [InstantSessionDetector] Sending session status request:', requestData);
         this.websocket.send(JSON.stringify(requestData));

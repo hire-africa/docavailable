@@ -198,7 +198,8 @@ export default function ChatPage() {
     isSessionActivated,
     isTimerActive,
     timeRemaining,
-    triggerPatientMessageDetection
+    triggerPatientMessageDetection,
+    updateAuthToken
   } = useInstantSessionDetector({
     sessionId,
     appointmentId,
@@ -218,6 +219,14 @@ export default function ChatPage() {
       userType: user?.user_type
     });
   }, [token, user]);
+
+  // Update auth token in detector when it changes
+  useEffect(() => {
+    if (token && updateAuthToken) {
+      console.log('🔑 [InstantSession] Updating auth token in detector');
+      updateAuthToken(token);
+    }
+  }, [token, updateAuthToken]);
 
   // Debug instant session detector configuration
   useEffect(() => {
