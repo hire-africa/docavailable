@@ -42,6 +42,8 @@ export class InstantSessionMessageDetector {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 1000;
+  // Track whether server reports an active timer to avoid local restarts
+  private serverTimerActive: boolean = false;
 
   constructor(config: InstantSessionConfig, events: MessageDetectionEvents) {
     this.config = config;
@@ -110,6 +112,11 @@ export class InstantSessionMessageDetector {
           
         case 'doctor-response-timer-started':
           this.handleTimerStarted(data);
+          break;
+        case 'doctor-response-timer-stopped':
+          console.log('⏹️ [InstantSessionDetector] Server timer stopped');
+          this.serverTimerActive = false;
+          this.stopTimer();
           break;
           
         case 'session-activated':
@@ -191,7 +198,7 @@ export class InstantSessionMessageDetector {
   private handlePatientMessage(message: any): void {
     console.log('👤 [InstantSessionDetector] Patient message detected:', message.id);
     
-    if (!this.hasPatientMessageSent) {
+    if (!this.hasPatientMessageSent && !this.serverTimerActive && !this.timerState.isActive) {
       this.hasPatientMessageSent = true;
       this.start90SecondTimer();
       this.events.onPatientMessageDetected(message);
@@ -328,6 +335,19 @@ export class InstantSessionMessageDetector {
    */
   private handleTimerStarted(data: any): void {
     console.log('⏰ [InstantSessionDetector] Server timer started event received');
+    this.serverTimerActive = true;
+    // Use server-provided endTime/timeRemaining if available to avoid restarting a fresh 90s
+    if (typeof data?.endTime === 'number') {
+      const remaining = Math.max(0, Math.ceil((data.endTime - Date.now()) / 1000));
+      if (remaining > 0) {
+        this.startTimer(remaining);
+        return;
+      }
+    }
+    if (typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
+      this.startTimer(data.timeRemaining);
+      return;
+    }
     if (!this.timerState.isActive) {
       this.start90SecondTimer();
     }
@@ -403,6 +423,10 @@ export class InstantSessionMessageDetector {
   private handleConnectionEstablished(): void {
     console.log('🔌 [InstantSessionDetector] Connection established');
     this.loadSessionState();
+    // Ask server for authoritative status (including timer remaining)
+    try {
+      this.websocket?.send(JSON.stringify({ type: 'session-status-request' }));
+    } catch {}
     // Check for existing patient messages when connecting
     this.checkForExistingPatientMessages();
   }
@@ -418,6 +442,20 @@ export class InstantSessionMessageDetector {
       sessionActivated: this.sessionActivated
     });
     
+    // If the server reports an active timer, resume with remaining time
+    if (data.timerActive && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
+      console.log('⏰ [InstantSessionDetector] Resuming server timer with remaining:', data.timeRemaining);
+      this.serverTimerActive = true;
+      this.startTimer(data.timeRemaining);
+      this.hasPatientMessageSent = true;
+      return;
+    }
+    if (!data.timerActive && this.timerState.isActive) {
+      console.log('⏹️ [InstantSessionDetector] Server has no active timer, stopping local timer');
+      this.serverTimerActive = false;
+      this.stopTimer();
+    }
+
     if (data.hasPatientMessage && !this.hasPatientMessageSent) {
       console.log('👤 [InstantSessionDetector] Found existing patient message - checking if timer should start');
       this.hasPatientMessageSent = true;
@@ -425,7 +463,10 @@ export class InstantSessionMessageDetector {
       // Only start timer if doctor hasn't responded yet
       if (!data.hasDoctorResponse) {
         console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - starting timer');
-        this.start90SecondTimer();
+        // If server didn't report active timer, start fresh 90s local display
+        if (!this.serverTimerActive && !this.timerState.isActive) {
+          this.start90SecondTimer();
+        }
       } else {
         console.log('👤 [InstantSessionDetector] Doctor already responded - not starting timer');
       }
@@ -441,12 +482,32 @@ export class InstantSessionMessageDetector {
       console.log('👨‍⚕️ [InstantSessionDetector] Found existing doctor response - session activated');
       this.hasDoctorResponded = true;
       this.sessionActivated = true;
+      this.serverTimerActive = false;
       this.stopTimer();
       this.events.onSessionActivated();
     } else if (data.hasDoctorResponse) {
       console.log('👨‍⚕️ [InstantSessionDetector] Doctor response already detected, skipping');
     } else {
       console.log('👨‍⚕️ [InstantSessionDetector] No existing doctor response found');
+    }
+  }
+
+  /**
+   * Resume timer with a specific remaining duration (public API for hooks)
+   */
+  public resumeTimerWithRemaining(remainingSeconds: number): void {
+    try {
+      const safeRemaining = Math.max(0, Math.floor(remainingSeconds));
+      if (safeRemaining > 0) {
+        console.log('⏰ [InstantSessionDetector] Resuming timer via public API with remaining:', safeRemaining);
+        this.serverTimerActive = true;
+        this.startTimer(safeRemaining);
+        this.hasPatientMessageSent = true;
+      } else {
+        console.log('⏰ [InstantSessionDetector] Resume requested with non-positive remaining; ignoring');
+      }
+    } catch (error) {
+      console.error('❌ [InstantSessionDetector] Failed to resume timer with remaining:', error);
     }
   }
 
