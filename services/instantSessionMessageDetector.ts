@@ -30,6 +30,7 @@ export class InstantSessionMessageDetector {
   private websocket: WebSocket | null = null;
   private isConnected: boolean = false;
   private timer: NodeJS.Timeout | null = null;
+  private countdownInterval: NodeJS.Timeout | null = null;
   private timerState: TimerState = {
     isActive: false,
     timeRemaining: 90,
@@ -255,6 +256,11 @@ export class InstantSessionMessageDetector {
   private startTimer(timeRemaining: number): void {
     if (this.timer) {
       clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
     }
 
     console.log('⏰ [InstantSessionDetector] Starting timer with remaining time:', timeRemaining);
@@ -282,9 +288,16 @@ export class InstantSessionMessageDetector {
    * Start countdown updates
    */
   private startCountdown(): void {
-    const countdownInterval = setInterval(() => {
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+    this.countdownInterval = setInterval(() => {
       if (!this.timerState.isActive) {
-        clearInterval(countdownInterval);
+        if (this.countdownInterval) {
+          clearInterval(this.countdownInterval);
+          this.countdownInterval = null;
+        }
         return;
       }
 
@@ -299,9 +312,12 @@ export class InstantSessionMessageDetector {
       }
       
       if (remaining <= 0) {
-        clearInterval(countdownInterval);
+        if (this.countdownInterval) {
+          clearInterval(this.countdownInterval);
+          this.countdownInterval = null;
+        }
       }
-    }, 1000);
+    }, 1000) as any;
   }
 
   /**
@@ -311,6 +327,10 @@ export class InstantSessionMessageDetector {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
+    }
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
     }
     
     this.timerState.isActive = false;
@@ -462,10 +482,14 @@ export class InstantSessionMessageDetector {
       
       // Only start timer if doctor hasn't responded yet
       if (!data.hasDoctorResponse) {
-        console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - attempting to fetch remaining time from backend');
-        // If server didn't report active timer, query backend for authoritative remaining time
-        this.fetchAndResumeRemainingFromBackend()
-          .catch(err => console.error('❌ [InstantSessionDetector] Failed to fetch remaining time:', err));
+        // If server didn't report active timer, only query backend if we don't already have an active timer
+        if (!this.timerState.isActive) {
+          console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - attempting backend remaining time fetch (no active local timer)');
+          this.fetchAndResumeRemainingFromBackend()
+            .catch(err => console.error('❌ [InstantSessionDetector] Failed to fetch remaining time:', err));
+        } else {
+          console.log('⏱️ [InstantSessionDetector] Local timer already active, skipping backend fetch');
+        }
       } else {
         console.log('👤 [InstantSessionDetector] Doctor already responded - not starting timer');
       }
@@ -496,6 +520,10 @@ export class InstantSessionMessageDetector {
    */
   private async fetchAndResumeRemainingFromBackend(): Promise<void> {
     try {
+      if (this.timerState.isActive) {
+        console.log('⏱️ [InstantSessionDetector] Timer already active, skipping backend resume');
+        return;
+      }
       const url = `${this.getApiBaseUrl()}/api/text-sessions/${this.config.sessionId}/check-response`;
       const response = await fetch(url, {
         headers: {
