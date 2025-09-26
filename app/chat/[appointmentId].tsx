@@ -197,7 +197,8 @@ export default function ChatPage() {
     hasDoctorResponded,
     isSessionActivated,
     isTimerActive,
-    timeRemaining
+    timeRemaining,
+    triggerPatientMessageDetection
   } = useInstantSessionDetector({
     sessionId,
     appointmentId,
@@ -1006,9 +1007,10 @@ export default function ChatPage() {
               senderId: message.sender_id
             });
             
-            // The WebRTC detection should now work properly
-            if (!hasPatientSentMessage) {
-              console.log('👤 [InstantSession] First patient message sent - WebRTC detection should trigger timer');
+            // Manually trigger patient message detection for instant sessions
+            if (!hasPatientSentMessage && message.sender_id === currentUserId) {
+              console.log('👤 [InstantSession] First patient message sent - manually triggering timer');
+              triggerPatientMessageDetection(message);
             }
           }
         } else {
@@ -1063,6 +1065,12 @@ export default function ChatPage() {
         
         setMessages(prev => [...prev, chatMessage]);
         scrollToBottom();
+        
+        // Manually trigger patient message detection for instant sessions
+        if (isInstantSession && !hasPatientSentMessage && chatMessage.sender_id === currentUserId) {
+          console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
+          triggerPatientMessageDetection(chatMessage);
+        }
       } else {
         console.error('❌ [ChatComponent] Backend API returned error:', response.message);
       }
