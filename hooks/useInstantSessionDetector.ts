@@ -40,7 +40,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
   const [isConnected, setIsConnected] = useState(false);
   const [timerState, setTimerState] = useState<TimerState>({
     isActive: false,
-    timeRemaining: 90,
+    timeRemaining: 0,
     startTime: 0,
     endTime: 0
   });
@@ -50,7 +50,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
 
   const detectorRef = useRef<InstantSessionMessageDetector | null>(null);
 
-  // Initialize detector
+  // Initialize detector (singleton per sessionId)
   useEffect(() => {
     console.log('🔧 [Hook] Initializing detector:', { enabled, sessionId, appointmentId, patientId, doctorId, hasAuthToken: !!authToken });
     console.log('🔧 [Hook] Detector enabled condition:', {
@@ -110,12 +110,33 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       }
     };
 
-    detectorRef.current = new InstantSessionMessageDetector(config, events);
+    // Use global singleton to persist across navigation
+    const g = global as any;
+    if (!g.__instantDetectorMap) {
+      g.__instantDetectorMap = new Map<string, InstantSessionMessageDetector>();
+    }
+    const map: Map<string, InstantSessionMessageDetector> = g.__instantDetectorMap;
+
+    const existing = map.get(sessionId);
+    if (existing) {
+      console.log('🔁 [Hook] Reusing existing InstantSessionMessageDetector for session:', sessionId);
+      detectorRef.current = existing;
+    } else {
+      console.log('🆕 [Hook] Creating new InstantSessionMessageDetector for session:', sessionId);
+      detectorRef.current = new InstantSessionMessageDetector(config, events);
+      map.set(sessionId, detectorRef.current);
+    }
+
+    // Seed local state from detector if available
+    if (detectorRef.current) {
+      setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
+      setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
+      setIsSessionActivated(detectorRef.current.isSessionActivated());
+      setTimerState(detectorRef.current.getTimerState());
+    }
 
     return () => {
-      if (detectorRef.current) {
-        detectorRef.current.disconnect();
-      }
+      // Do not disconnect or delete singleton on unmount; keep running across navigation
     };
   }, [sessionId, appointmentId, patientId, doctorId, authToken, enabled]);
 
