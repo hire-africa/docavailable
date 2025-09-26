@@ -58,6 +58,12 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
   const buttonScaleAnim = useRef(new Animated.Value(0)).current;
   // Animation value for history page slide
   const historySlideAnim = useRef(new Animated.Value(-width)).current;
+  // Animation values for enhanced typing indicator
+  const typingAnim1 = useRef(new Animated.Value(0)).current;
+  const typingAnim2 = useRef(new Animated.Value(0)).current;
+  const typingAnim3 = useRef(new Animated.Value(0)).current;
+  const typingPulseAnim = useRef(new Animated.Value(1)).current;
+  const typingFadeAnim = useRef(new Animated.Value(0)).current;
 
   // Generate chat title based on first user message
   const generateChatTitle = (userMessage: string): string => {
@@ -196,8 +202,80 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
     }).start();
   };
 
+  // Enhanced typing animation
+  const startTypingAnimation = () => {
+    // Reset all animations
+    typingAnim1.setValue(0);
+    typingAnim2.setValue(0);
+    typingAnim3.setValue(0);
+    typingPulseAnim.setValue(1);
+    typingFadeAnim.setValue(0);
+
+    // Fade in animation
+    Animated.timing(typingFadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    // Pulse animation
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(typingPulseAnim, {
+          toValue: 1.2,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(typingPulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    // Wave animation for dots
+    const createDotAnimation = (animValue: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(animValue, {
+            toValue: 1,
+            duration: 600,
+            delay: delay,
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    // Start all animations
+    pulseAnimation.start();
+    createDotAnimation(typingAnim1, 0).start();
+    createDotAnimation(typingAnim2, 200).start();
+    createDotAnimation(typingAnim3, 400).start();
+  };
+
+  const stopTypingAnimation = () => {
+    // Fade out animation
+    Animated.timing(typingFadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+  };
+
   // Toggle bottom panel visibility
   const toggleBottomPanel = () => {
+    // Don't animate when keyboard is visible
+    if (isKeyboardVisible) {
+      return;
+    }
+    
     const newState = !isBottomHidden;
     setIsBottomHidden(newState);
     animateBottomNav(newState);
@@ -211,27 +289,40 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
 
   // Keyboard visibility detection
   useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', () => {
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (event) => {
+      console.log('Keyboard shown, height:', event.endCoordinates.height);
       setIsKeyboardVisible(true);
       animateButtonPopUp(false); // Hide button with animation
       
-      // For Android, scroll to bottom when keyboard shows
-      if (Platform.OS === 'android') {
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+      // Reset bottom panel to hidden state when keyboard shows
+      if (!isBottomHidden) {
+        setIsBottomHidden(true);
+        animateBottomNav(true);
+        onBottomHiddenChange?.(true);
       }
+      
+      // Reset the animation value to ensure no transform when keyboard is visible
+      bottomSlideAnim.setValue(0);
+      
+      // Scroll to bottom when keyboard shows
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, Platform.OS === 'ios' ? 300 : 100);
     });
     const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      console.log('Keyboard hidden');
       setIsKeyboardVisible(false);
       animateButtonPopUp(true); // Show button with animation
+      
+      // Restore the animation value when keyboard hides
+      bottomSlideAnim.setValue(isBottomHidden ? 1 : 0);
     });
 
     return () => {
       keyboardDidShowListener?.remove();
       keyboardDidHideListener?.remove();
     };
-  }, []);
+  }, [isBottomHidden, onBottomHiddenChange]);
 
   // Auto slide down when component mounts
   useEffect(() => {
@@ -296,6 +387,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
           // Hide typing indicator on first chunk
           if (isFirstChunk) {
             setIsTyping(false);
+            stopTypingAnimation();
             isFirstChunk = false;
           }
           
@@ -385,6 +477,10 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
     }
     setInputText('');
     setIsTyping(true);
+    startTypingAnimation();
+
+    // Dismiss keyboard when sending message
+    Keyboard.dismiss();
 
     // Generate bot response with streaming
     setTimeout(async () => {
@@ -429,7 +525,12 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
 
   return (
     <>
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'position' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? -50 : 20}
+      enabled={true}
+    >
       {/* Modern Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -466,18 +567,13 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
         </View>
       </View>
 
-      {/* Messages Container - KeyboardAvoidingView as outer container */}
-        <KeyboardAvoidingView 
-          style={[styles.messagesContainer, { backgroundColor: '#FFFFFF' }]}
-          behavior={Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-          enabled={true}
-        >
+      {/* Messages Container */}
+      <View style={[styles.messagesContainer, { backgroundColor: '#FFFFFF' }]}>
         <Animated.View 
           style={{
             flex: 1,
             backgroundColor: '#FFFFFF',
-            transform: [{
+            transform: isKeyboardVisible ? [] : [{
               translateY: bottomSlideAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: [0, 60],
@@ -583,104 +679,138 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
             ))}
             
             {isTyping && (
-              <View style={styles.messageContainer}>
+              <Animated.View 
+                style={[
+                  styles.messageContainer,
+                  {
+                    opacity: typingFadeAnim,
+                    transform: [{ scale: typingPulseAnim }]
+                  }
+                ]}
+              >
                 <View style={styles.typingCard}>
-                  <View style={styles.typingDots}>
-                    <View style={[styles.dot, styles.dot1]} />
-                    <View style={[styles.dot, styles.dot2]} />
-                    <View style={[styles.dot, styles.dot3]} />
+                  <View style={styles.typingContainer}>
+                    <Text style={styles.typingText}>just a sec</Text>
+                    <View style={styles.typingDots}>
+                      <Animated.View 
+                        style={[
+                          styles.dot, 
+                          styles.dot1,
+                          {
+                            transform: [{
+                              scale: typingAnim1.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.5, 1.2],
+                                extrapolate: 'clamp',
+                              })
+                            }],
+                            opacity: typingAnim1.interpolate({
+                              inputRange: [0, 0.5, 1],
+                              outputRange: [0.3, 1, 0.3],
+                              extrapolate: 'clamp',
+                            })
+                          }
+                        ]} 
+                      />
+                      <Animated.View 
+                        style={[
+                          styles.dot, 
+                          styles.dot2,
+                          {
+                            transform: [{
+                              scale: typingAnim2.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.5, 1.2],
+                                extrapolate: 'clamp',
+                              })
+                            }],
+                            opacity: typingAnim2.interpolate({
+                              inputRange: [0, 0.5, 1],
+                              outputRange: [0.3, 1, 0.3],
+                              extrapolate: 'clamp',
+                            })
+                          }
+                        ]} 
+                      />
+                      <Animated.View 
+                        style={[
+                          styles.dot, 
+                          styles.dot3,
+                          {
+                            transform: [{
+                              scale: typingAnim3.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.5, 1.2],
+                                extrapolate: 'clamp',
+                              })
+                            }],
+                            opacity: typingAnim3.interpolate({
+                              inputRange: [0, 0.5, 1],
+                              outputRange: [0.3, 1, 0.3],
+                              extrapolate: 'clamp',
+                            })
+                          }
+                        ]} 
+                      />
+                    </View>
                   </View>
                 </View>
-              </View>
+              </Animated.View>
             )}
           </ScrollView>
 
           {/* Toggle Bottom Panel Button - Floating with Pop-up Animation */}
-          <Animated.View 
-            style={[
-              styles.floatingToggleContainer,
-              {
-                transform: [{ scale: buttonScaleAnim }],
-                opacity: buttonScaleAnim,
-              }
-            ]}
-          >
-            <TouchableOpacity 
-              style={styles.floatingToggleButton}
-              onPress={toggleBottomPanel}
+          {!isKeyboardVisible && (
+            <Animated.View 
+              style={[
+                styles.floatingToggleContainer,
+                {
+                  transform: [{ scale: buttonScaleAnim }],
+                  opacity: buttonScaleAnim,
+                }
+              ]}
+            >
+              <TouchableOpacity 
+                style={styles.floatingToggleButton}
+                onPress={toggleBottomPanel}
+              >
+                <FontAwesome 
+                  name={isBottomHidden ? "chevron-up" : "chevron-down"} 
+                  size={20} 
+                  color="#4CAF50" 
+                />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {/* Input Field - Inside animated view for bottom tab animation */}
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Ask Doc AI"
+              placeholderTextColor="#999"
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={500}
+              returnKeyType="send"
+              onSubmitEditing={sendMessage}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              onPress={sendMessage}
+              disabled={!inputText.trim()}
             >
               <FontAwesome 
-                name={isBottomHidden ? "chevron-up" : "chevron-down"} 
-                size={20} 
-                color="#4CAF50" 
+                name="send" 
+                size={18} 
+                color={inputText.trim() ? "#FFFFFF" : "#CCC"} 
               />
             </TouchableOpacity>
-          </Animated.View>
-
-          {/* Modern Input Area */}
-          {Platform.OS === 'android' ? (
-            <KeyboardAvoidingView 
-              behavior="height"
-              keyboardVerticalOffset={0}
-              style={[styles.inputContainer, { backgroundColor: '#FFFFFF' }]}
-            >
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Ask Doc AI about your health..."
-                  placeholderTextColor="#999"
-                  value={inputText}
-                  onChangeText={setInputText}
-                  multiline
-                  maxLength={500}
-                  returnKeyType="send"
-                  onSubmitEditing={sendMessage}
-                  blurOnSubmit={false}
-                />
-                <TouchableOpacity
-                  style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-                  onPress={sendMessage}
-                  disabled={!inputText.trim()}
-                >
-                  <FontAwesome 
-                    name="send" 
-                    size={18} 
-                    color={inputText.trim() ? "#FFFFFF" : "#CCC"} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </KeyboardAvoidingView>
-          ) : (
-            <View style={[styles.inputContainer, { backgroundColor: '#FFFFFF' }]}>
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Ask Doc AI about your health..."
-                  placeholderTextColor="#999"
-                  value={inputText}
-                  onChangeText={setInputText}
-                  multiline
-                  maxLength={500}
-                  returnKeyType="send"
-                  onSubmitEditing={sendMessage}
-                  blurOnSubmit={false}
-                />
-                <TouchableOpacity
-                  style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-                  onPress={sendMessage}
-                  disabled={!inputText.trim()}
-                >
-                  <FontAwesome 
-                    name="send" 
-                    size={18} 
-                    color={inputText.trim() ? "#FFFFFF" : "#CCC"} 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          </View>
         </Animated.View>
-      </KeyboardAvoidingView>
+      </View>
       
       {/* Chat History Side Panel */}
       {showHistory && (
@@ -761,8 +891,8 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
           </Animated.View>
         </Animated.View>
       )}
-
-    </View>
+      
+    </KeyboardAvoidingView>
 
     {/* Doc AI History Page - Full Screen with Slide Animation - Outside main container */}
     {showHistoryPage && (
@@ -937,10 +1067,15 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
   },
   botCard: {
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: 'transparent',
+    borderBottomLeftRadius: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   messageTypeHeader: {
     flexDirection: 'row',
@@ -982,38 +1117,49 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   typingCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 16,
     borderBottomLeftRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    borderWidth: 0,
+    borderColor: 'transparent',
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  typingText: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 8,
+    fontStyle: 'italic',
   },
   typingDots: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#4CAF50',
-    marginHorizontal: 2,
+    marginHorizontal: 3,
   },
   dot1: {
-    opacity: 0.4,
+    // Dynamic styling handled by animation
   },
   dot2: {
-    opacity: 0.7,
+    // Dynamic styling handled by animation
   },
   dot3: {
-    opacity: 1,
+    // Dynamic styling handled by animation
   },
   inputContainer: {
     backgroundColor: '#FFFFFF',
@@ -1039,15 +1185,21 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    marginHorizontal: 16,
+    marginVertical: 16,
+    marginBottom: Platform.OS === 'android' ? 20 : 16,
+    position: 'relative',
+    zIndex: 1000,
+    flexShrink: 0,
   },
   textInput: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     fontSize: 16,
     color: '#222',
-    maxHeight: 100,
-    minHeight: 44,
+    maxHeight: 120,
+    minHeight: 60,
   },
   sendButton: {
     width: 44,

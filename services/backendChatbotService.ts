@@ -40,7 +40,9 @@ export class BackendChatbotService {
         body: JSON.stringify({
           message: userInput,
           user_id: userId,
-          context: userContext || {}
+          context: userContext || {},
+          max_tokens: 150,
+          response_style: 'concise'
         })
       });
 
@@ -86,7 +88,9 @@ export class BackendChatbotService {
         body: JSON.stringify({
           message: userInput,
           user_id: userId,
-          context: userContext || {}
+          context: userContext || {},
+          max_tokens: 150,
+          response_style: 'concise'
         })
       });
 
@@ -147,41 +151,41 @@ export class BackendChatbotService {
     // Basic keyword-based responses
     if (input.includes('hello') || input.includes('hi')) {
       return {
-        text: 'Hello! I\'m DocBot, your health assistant. How can I help you today? For personalized medical advice, I recommend booking an appointment with one of our doctors.',
+        text: 'Hi! I\'m Doc AI. How can I help? For medical advice, book an appointment.',
         shouldBookAppointment: true,
         urgency: 'low',
         confidence: 0.7,
-        suggestions: ['Book an appointment', 'Ask about symptoms', 'Get health tips']
+        suggestions: ['Book appointment', 'Ask symptoms', 'Health tips']
       };
     }
 
     if (input.includes('pain') || input.includes('hurt')) {
       return {
-        text: 'I understand you\'re experiencing pain. While I can provide general information, it\'s important to consult with a healthcare professional for proper evaluation. Would you like to book an appointment with one of our doctors?',
+        text: 'I understand you\'re in pain. For proper evaluation, consult a healthcare professional. Book an appointment?',
         shouldBookAppointment: true,
         urgency: 'medium',
         confidence: 0.8,
-        suggestions: ['Book an appointment', 'Describe your symptoms', 'Emergency care']
+        suggestions: ['Book appointment', 'Describe symptoms', 'Emergency care']
       };
     }
 
     if (input.includes('emergency') || input.includes('urgent')) {
       return {
-        text: 'If this is a medical emergency, please call 911 or go to the nearest emergency room immediately. For non-emergency concerns, you can book an appointment with our doctors.',
+        text: 'Medical emergency? Call 911 or go to ER immediately. For non-emergency, book an appointment.',
         shouldBookAppointment: false,
         urgency: 'high',
         confidence: 0.9,
-        suggestions: ['Call 911', 'Book urgent appointment', 'Find emergency room']
+        suggestions: ['Call 911', 'Book urgent appointment', 'Find ER']
       };
     }
 
     // Default response
     return {
-      text: 'Thank you for your message. I\'m here to help with general health questions. For personalized medical advice, I recommend booking an appointment with one of our qualified doctors.',
+      text: 'Thanks! I can help with general health questions. For medical advice, book an appointment.',
       shouldBookAppointment: true,
       urgency: 'low',
       confidence: 0.6,
-      suggestions: ['Book an appointment', 'Ask a question', 'Get health information']
+      suggestions: ['Book appointment', 'Ask question', 'Health info']
     };
   }
 }
