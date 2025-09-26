@@ -462,11 +462,10 @@ export class InstantSessionMessageDetector {
       
       // Only start timer if doctor hasn't responded yet
       if (!data.hasDoctorResponse) {
-        console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - starting timer');
-        // If server didn't report active timer, start fresh 90s local display
-        if (!this.serverTimerActive && !this.timerState.isActive) {
-          this.start90SecondTimer();
-        }
+        console.log('👤 [InstantSessionDetector] Doctor hasn\'t responded - attempting to fetch remaining time from backend');
+        // If server didn't report active timer, query backend for authoritative remaining time
+        this.fetchAndResumeRemainingFromBackend()
+          .catch(err => console.error('❌ [InstantSessionDetector] Failed to fetch remaining time:', err));
       } else {
         console.log('👤 [InstantSessionDetector] Doctor already responded - not starting timer');
       }
@@ -489,6 +488,35 @@ export class InstantSessionMessageDetector {
       console.log('👨‍⚕️ [InstantSessionDetector] Doctor response already detected, skipping');
     } else {
       console.log('👨‍⚕️ [InstantSessionDetector] No existing doctor response found');
+    }
+  }
+
+  /**
+   * Fetch authoritative remaining time from backend and resume timer
+   */
+  private async fetchAndResumeRemainingFromBackend(): Promise<void> {
+    try {
+      const url = `${this.getApiBaseUrl()}/api/text-sessions/${this.config.sessionId}/check-response`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${this.config.authToken}`
+        }
+      });
+      if (!response.ok) {
+        console.error('❌ [InstantSessionDetector] Backend check-response failed with status:', response.status);
+        return;
+      }
+      const data = await response.json();
+      if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
+        console.log('⏰ [InstantSessionDetector] Backend remaining time:', data.timeRemaining);
+        this.serverTimerActive = true;
+        this.startTimer(Math.floor(data.timeRemaining));
+        this.hasPatientMessageSent = true;
+      } else {
+        console.log('ℹ️ [InstantSessionDetector] No remaining time from backend or not waiting');
+      }
+    } catch (error) {
+      console.error('❌ [InstantSessionDetector] Error fetching remaining time from backend:', error);
     }
   }
 

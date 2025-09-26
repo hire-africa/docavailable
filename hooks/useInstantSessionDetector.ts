@@ -147,6 +147,23 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
       setTimerState(detectorRef.current.getTimerState());
+
+      // Immediately rehydrate timer from backend after successful connect to avoid race conditions
+      try {
+        const { default: sessionService } = await import('../services/sessionService');
+        const result = await sessionService.checkDoctorResponse(sessionId);
+        if ((result as any)?.status === 'waiting' && typeof (result as any)?.timeRemaining === 'number') {
+          const remaining = Math.max(0, Math.floor((result as any).timeRemaining));
+          if (remaining > 0) {
+            console.log('⏰ [Hook] Post-connect rehydrate with remaining:', remaining);
+            detectorRef.current.resumeTimerWithRemaining(remaining);
+            setTimerState(detectorRef.current.getTimerState());
+            setHasPatientSentMessage(true);
+          }
+        }
+      } catch (rehydrateError) {
+        console.error('❌ [Hook] Post-connect rehydrate failed:', rehydrateError);
+      }
     } catch (error) {
       console.error('❌ [Hook] Failed to connect detector:', error);
       setIsConnected(false);
