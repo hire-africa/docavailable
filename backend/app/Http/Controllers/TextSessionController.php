@@ -138,7 +138,7 @@ class TextSessionController extends Controller
             // Clear any existing message cache for this text session to prevent old messages from showing
             // This ensures each new text session starts with a clean chat history
             try {
-                $this->messageStorageService->clearMessages($textSessionId);
+                $this->messageStorageService->clearMessages($textSessionId, 'text_session');
                 Log::info("Cleared message cache for new text session", [
                     'text_session_id' => $textSessionId,
                     'patient_id' => $patientId,

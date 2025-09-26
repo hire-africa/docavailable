@@ -681,7 +681,7 @@ class ChatController extends Controller
                 }
                 
                 // Sync messages from local storage
-                $result = $this->messageStorageService->syncFromLocalStorage($actualId, $request->messages);
+                $result = $this->messageStorageService->syncFromLocalStorage($actualId, $request->messages, 'text_session');
                 
                 return response()->json([
                     'success' => true,
@@ -704,7 +704,7 @@ class ChatController extends Controller
         }
         
         // Sync messages from local storage
-        $result = $this->messageStorageService->syncFromLocalStorage($actualId, $request->messages);
+        $result = $this->messageStorageService->syncFromLocalStorage($actualId, $request->messages, 'appointment');
         
         return response()->json([
             'success' => true,
@@ -908,7 +908,7 @@ class ChatController extends Controller
         }
         
         // Mark messages as read
-        $result = $this->messageStorageService->markMessagesAsRead($accessResult['actualId'], $request->user_id, $request->timestamp);
+        $result = $this->messageStorageService->markMessagesAsRead($accessResult['actualId'], $request->user_id, $request->timestamp, $accessResult['type']);
         
         return response()->json([
             'success' => true,
@@ -934,7 +934,7 @@ class ChatController extends Controller
         }
         
         // Force fix delivery status
-        $result = $this->messageStorageService->fixDeliveryStatus($accessResult['actualId']);
+        $result = $this->messageStorageService->fixDeliveryStatus($accessResult['actualId'], $accessResult['type']);
         
         return response()->json([
             'success' => true,
@@ -1139,7 +1139,7 @@ class ChatController extends Controller
         }
         
         // Clear messages from server storage
-        $result = $this->messageStorageService->clearMessages($accessResult['actualId']);
+        $result = $this->messageStorageService->clearMessages($accessResult['actualId'], $accessResult['type']);
         
         if ($result) {
             return response()->json([
