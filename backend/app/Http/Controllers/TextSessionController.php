@@ -271,7 +271,6 @@ class TextSessionController extends Controller
                         'success' => true,
                         'status' => 'expired',
                         'timeRemaining' => 0,
-                        'sessionType' => 'instant', // Add sessionType for frontend event handling
                         'message' => 'Session expired - no session will be deducted'
                     ]);
                 }
