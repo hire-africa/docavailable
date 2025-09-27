@@ -747,12 +747,31 @@ async function handleSessionStatusRequest(appointmentId, ws) {
         
         console.log(`👤 [Backend] Message analysis: hasPatientMessage=${hasPatientMessage}, hasDoctorResponse=${hasDoctorResponse}`);
         
+        // Compute authoritative timer state from in-memory sessionStates
+        let timerActive = false;
+        let timeRemaining = 0;
+        let startTime = null;
+        let endTime = null;
+
+        const state = sessionStates.get(`response_${sessionId}`);
+        if (state?.isActive && state.endTime) {
+          const now = Date.now();
+          timeRemaining = Math.max(0, Math.ceil((state.endTime - now) / 1000));
+          timerActive = timeRemaining > 0;
+          startTime = state.startTime;
+          endTime = state.endTime;
+        }
+
         const responseData = {
           type: 'session-status-response',
           sessionType: 'instant',
           sessionData: response.data.data,
           hasPatientMessage: hasPatientMessage,
-          hasDoctorResponse: hasDoctorResponse
+          hasDoctorResponse: hasDoctorResponse,
+          timerActive,
+          timeRemaining,
+          startTime,
+          endTime
         };
         
         console.log(`📤 [Backend] Sending session status response:`, responseData);

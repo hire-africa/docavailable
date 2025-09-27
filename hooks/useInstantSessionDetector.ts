@@ -23,6 +23,7 @@ export interface UseInstantSessionDetectorReturn {
   clearState: () => Promise<void>;
   triggerPatientMessageDetection: (message: any) => void;
   triggerDoctorMessageDetection: (message: any) => void;
+  forceStateSync: () => void;
   updateAuthToken: (newAuthToken: string) => void;
 }
 
@@ -82,6 +83,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       },
       onDoctorMessageDetected: (message) => {
         console.log('👨‍⚕️ [Hook] Doctor message detected:', message.id);
+        console.log('👨‍⚕️ [Hook] Setting hasDoctorResponded to true');
         setHasDoctorResponded(true);
       },
       onTimerStarted: (timeRemaining) => {
@@ -102,8 +104,17 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
           timeRemaining: 0
         }));
       },
+      onTimerStopped: () => {
+        console.log('⏹️ [Hook] Timer stopped');
+        setTimerState(prev => ({
+          ...prev,
+          isActive: false,
+          timeRemaining: 0
+        }));
+      },
       onSessionActivated: () => {
         console.log('✅ [Hook] Session activated');
+        console.log('✅ [Hook] Setting isSessionActivated to true');
         setIsSessionActivated(true);
       },
       onError: (error) => {
@@ -169,6 +180,10 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
       setTimerState(detectorRef.current.getTimerState());
+      
+      // Force state sync to ensure hook state matches detector state
+      console.log('🔄 [Hook] Forcing state synchronization after connect');
+      detectorRef.current.forceStateSync();
 
       // Immediately rehydrate timer from backend after successful connect to avoid race conditions
       try {
@@ -280,6 +295,12 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     }
   };
 
+  const forceStateSync = (): void => {
+    if (detectorRef.current) {
+      detectorRef.current.forceStateSync();
+    }
+  };
+
   return {
     isConnected,
     timerState,
@@ -293,6 +314,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     clearState,
     triggerPatientMessageDetection,
     triggerDoctorMessageDetection,
+    forceStateSync,
     updateAuthToken
   };
 }
