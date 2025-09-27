@@ -73,10 +73,19 @@ export class WebRTCChatService {
         
         this.websocket = new WebSocket(wsUrl);
         
-        this.websocket.onopen = () => {
+        this.websocket.onopen = async () => {
           console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // Auto-sync with server when connecting to ensure we have latest messages
+          try {
+            console.log('🔄 [WebRTCChat] Auto-syncing with server on connect...');
+            await this.syncWithServer();
+          } catch (error) {
+            console.error('❌ [WebRTCChat] Auto-sync failed on connect:', error);
+          }
+          
           resolve();
         };
         
@@ -341,6 +350,64 @@ export class WebRTCChatService {
     return this.messages;
   }
 
+  // Sync messages with server to ensure we have the latest messages
+  async syncWithServer(): Promise<ChatMessage[]> {
+    try {
+      console.log('🔄 [WebRTCChat] Syncing with server...');
+      
+      // Get auth token for API calls
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [WebRTCChat] No auth token available for server sync');
+        return this.messages;
+      }
+      
+      // Fetch messages from server
+      const response = await fetch(`${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('❌ [WebRTCChat] Server sync failed with status:', response.status);
+        return this.messages;
+      }
+      
+      const data = await response.json();
+      if (!data.success || !data.data) {
+        console.error('❌ [WebRTCChat] Server sync returned invalid data');
+        return this.messages;
+      }
+      
+      const serverMessages = data.data;
+      console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages');
+      
+      // Create a map of local messages by ID for quick lookup
+      const localMessageMap = new Map(this.messages.map(msg => [msg.id, msg]));
+      
+      // Add server messages that aren't already in local storage
+      const newMessages = serverMessages.filter(serverMsg => !localMessageMap.has(serverMsg.id));
+      
+      if (newMessages.length > 0) {
+        console.log('✅ [WebRTCChat] Found', newMessages.length, 'new messages from server');
+        
+        // Add new messages to local storage
+        for (const message of newMessages) {
+          await this.addMessage(message);
+        }
+      } else {
+        console.log('✅ [WebRTCChat] No new messages from server');
+      }
+      
+      return this.messages;
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Error syncing with server:', error);
+      return this.messages;
+    }
+  }
+
   // Clear messages from storage (useful when ending a session)
   async clearMessages(): Promise<void> {
     try {
@@ -355,6 +422,52 @@ export class WebRTCChatService {
   // Get message count
   getMessageCount(): number {
     return this.messages.length;
+  }
+
+  // Force refresh messages from server (useful for debugging)
+  async refreshMessagesFromServer(): Promise<ChatMessage[]> {
+    try {
+      console.log('🔄 [WebRTCChat] Force refreshing messages from server...');
+      
+      // Get auth token for API calls
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [WebRTCChat] No auth token available for refresh');
+        return this.messages;
+      }
+      
+      // Fetch messages from server
+      const response = await fetch(`${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.error('❌ [WebRTCChat] Server refresh failed with status:', response.status);
+        return this.messages;
+      }
+      
+      const data = await response.json();
+      if (!data.success || !data.data) {
+        console.error('❌ [WebRTCChat] Server refresh returned invalid data');
+        return this.messages;
+      }
+      
+      const serverMessages = data.data;
+      console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages on refresh');
+      
+      // Replace local messages with server messages
+      this.messages = serverMessages;
+      await this.saveMessages();
+      
+      console.log('✅ [WebRTCChat] Messages refreshed from server');
+      return this.messages;
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Error refreshing messages from server:', error);
+      return this.messages;
+    }
   }
 
   async disconnect(): Promise<void> {
