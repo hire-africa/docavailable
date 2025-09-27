@@ -22,6 +22,7 @@ export interface UseInstantSessionDetectorReturn {
   disconnect: () => Promise<void>;
   clearState: () => Promise<void>;
   triggerPatientMessageDetection: (message: any) => void;
+  triggerDoctorMessageDetection: (message: any) => void;
   updateAuthToken: (newAuthToken: string) => void;
 }
 
@@ -267,6 +268,12 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     }
   };
 
+  const triggerDoctorMessageDetection = (message: any): void => {
+    if (detectorRef.current) {
+      detectorRef.current.triggerDoctorMessageDetection(message);
+    }
+  };
+
   const updateAuthToken = (newAuthToken: string): void => {
     if (detectorRef.current) {
       detectorRef.current.updateAuthToken(newAuthToken);
@@ -285,6 +292,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     disconnect,
     clearState,
     triggerPatientMessageDetection,
+    triggerDoctorMessageDetection,
     updateAuthToken
   };
 }

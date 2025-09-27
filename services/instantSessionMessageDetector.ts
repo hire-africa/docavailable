@@ -238,6 +238,14 @@ export class InstantSessionMessageDetector {
   }
 
   /**
+   * Manually trigger doctor message detection (for integration with WebRTCChatService)
+   */
+  public triggerDoctorMessageDetection(message: any): void {
+    console.log('👨‍⚕️ [InstantSessionDetector] Manually triggering doctor message detection:', message.id);
+    this.handleDoctorMessage(message);
+  }
+
+  /**
    * Update auth token and reconnect if needed
    */
   public updateAuthToken(newAuthToken: string): void {
@@ -257,12 +265,20 @@ export class InstantSessionMessageDetector {
    */
   private handleDoctorMessage(message: any): void {
     console.log('👨‍⚕️ [InstantSessionDetector] Doctor message detected:', message.id);
+    console.log('👨‍⚕️ [InstantSessionDetector] Current state:', {
+      hasDoctorResponded: this.hasDoctorResponded,
+      sessionActivated: this.sessionActivated,
+      timerActive: this.timerState.isActive
+    });
     
     if (!this.hasDoctorResponded) {
       this.hasDoctorResponded = true;
       this.stopTimer();
       this.activateSession();
       this.events.onDoctorMessageDetected(message);
+      console.log('✅ [InstantSessionDetector] Doctor message processed - session activated');
+    } else {
+      console.log('⚠️ [InstantSessionDetector] Doctor already responded, skipping');
     }
   }
 

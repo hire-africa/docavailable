@@ -4,19 +4,19 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
@@ -167,18 +167,19 @@ export default function ChatPage() {
   const currentUserId = user?.id || 0;
   
   // Get doctor ID from chat info or text session info
-  const doctorId = chatInfo?.doctor_id || textSessionInfo?.doctor_id || 0;
-  
-  // For instant sessions, also try to get doctor ID from the session data
-  const instantSessionDoctorId = isInstantSession && textSessionInfo?.doctor_id ? textSessionInfo.doctor_id : 0;
-  const finalDoctorId = doctorId || instantSessionDoctorId;
+  const doctorId = chatInfo?.doctor_id || textSessionInfo?.doctor_id || 0; // Use a single source of truth for doctorId
+  const patientId = chatInfo?.patient_id || textSessionInfo?.patient_id || 0; // Use a single source of truth for patientId
+
+  // Determine if the hook should be enabled.
+  // It requires the session to be an instant session, and for us to have valid IDs and an auth token.
+  const isDetectorEnabled = isInstantSession && doctorId > 0 && patientId > 0 && !!token;
   
   // Debug logging for IDs
+  // NOTE: This console.log is kept for your debugging purposes.
   console.log('🔍 [InstantSession] IDs Debug:', {
     currentUserId,
     doctorId,
-    finalDoctorId,
-    instantSessionDoctorId,
+    patientId,
     chatInfoDoctorId: chatInfo?.doctor_id,
     textSessionDoctorId: textSessionInfo?.doctor_id,
     isInstantSession,
@@ -186,7 +187,8 @@ export default function ChatPage() {
     appointmentId,
     chatInfoLoaded: !!chatInfo,
     textSessionInfoLoaded: !!textSessionInfo,
-    loading: loading
+    loading: loading,
+    isDetectorEnabled,
   });
   
   // Instant session detector hook
@@ -199,14 +201,15 @@ export default function ChatPage() {
     isTimerActive,
     timeRemaining,
     triggerPatientMessageDetection,
+    triggerDoctorMessageDetection,
     updateAuthToken
   } = useInstantSessionDetector({
     sessionId,
     appointmentId,
-    patientId: chatInfo?.patient_id || textSessionInfo?.patient_id || (messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0),
-    doctorId: finalDoctorId,
+    patientId: patientId,
+    doctorId: doctorId,
     authToken: token || '',
-    enabled: isInstantSession && finalDoctorId > 0 && (chatInfo?.patient_id || textSessionInfo?.patient_id || (messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0)) > 0 && !!token // Only enable if we have valid IDs AND auth token
+    enabled: isDetectorEnabled
   });
 
   // Debug auth token
@@ -230,41 +233,39 @@ export default function ChatPage() {
 
   // Debug instant session detector configuration
   useEffect(() => {
-    const patientIdFromMessages = messages.length > 0 ? messages.find(m => m.sender_id !== finalDoctorId)?.sender_id || 0 : 0;
     console.log('🔍 [InstantSession] Detector Config Debug:', {
       sessionId,
       appointmentId,
-      patientId: chatInfo?.patient_id || textSessionInfo?.patient_id || patientIdFromMessages,
-      doctorId: finalDoctorId,
+      patientId: patientId,
+      doctorId: doctorId,
       chatInfoPatientId: chatInfo?.patient_id,
       textSessionPatientId: textSessionInfo?.patient_id,
-      patientIdFromMessages,
       isInstantSession,
-      enabled: isInstantSession && finalDoctorId > 0 && (chatInfo?.patient_id || textSessionInfo?.patient_id || patientIdFromMessages) > 0
+      enabled: isDetectorEnabled
     });
-    
     console.log('🔍 [InstantSession] Full chatInfo object:', chatInfo);
     console.log('🔍 [InstantSession] Full textSessionInfo object:', textSessionInfo);
-  }, [sessionId, appointmentId, chatInfo?.patient_id, textSessionInfo?.patient_id, finalDoctorId, isInstantSession, messages]);
+  }, [sessionId, appointmentId, patientId, doctorId, isInstantSession, isDetectorEnabled, chatInfo, textSessionInfo]);
   
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Show instant session UI when patient sends first message or when timer is active
   useEffect(() => {
-    if (isInstantSession && (hasPatientSentMessage || isTimerActive) && !hasDoctorResponded) {
+    // Only show the timer UI when the timer is confirmed to be active by the hook
+    if (isInstantSession && isTimerActive && !hasDoctorResponded) {
       setShowInstantSessionUI(true);
     } else if (isInstantSession && (hasDoctorResponded || isSessionActivated)) {
       setShowInstantSessionUI(false);
-    }
+    } // When the timer is not active, the component will be hidden.
   }, [isInstantSession, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
 
   // Log when doctor ID becomes available
   useEffect(() => {
-    if (isInstantSession && finalDoctorId > 0) {
-      console.log('✅ [InstantSession] Doctor ID now available:', finalDoctorId);
+    if (isInstantSession && doctorId > 0) {
+      console.log('✅ [InstantSession] Doctor ID now available:', doctorId);
       console.log('✅ [InstantSession] Detector should now be enabled');
     }
-  }, [isInstantSession, finalDoctorId]);
+  }, [isInstantSession, doctorId]);
 
   // Log when chat info loads
   useEffect(() => {
@@ -273,18 +274,18 @@ export default function ChatPage() {
         chatInfo: chatInfo ? 'loaded' : 'not loaded',
         textSessionInfo: textSessionInfo ? 'loaded' : 'not loaded',
         doctorId,
-        finalDoctorId,
+        patientId,
         currentUserId
       });
     }
-  }, [isInstantSession, chatInfo, textSessionInfo, doctorId, finalDoctorId, currentUserId]);
+  }, [isInstantSession, chatInfo, textSessionInfo, doctorId, patientId, currentUserId]);
 
   // Watch for new messages and trigger instant session detection
   useEffect(() => {
     if (isInstantSession && messages.length > 0) {
       // Check if there are any patient messages
       const patientMessages = messages.filter(msg => msg.sender_id === currentUserId);
-      const doctorMessages = messages.filter(msg => msg.sender_id === finalDoctorId);
+      const doctorMessages = messages.filter(msg => msg.sender_id === doctorId);
       
       console.log('📊 [InstantSession] Messages loaded, checking for patient messages:', {
         totalMessages: messages.length,
@@ -302,7 +303,7 @@ export default function ChatPage() {
         triggerPatientMessageDetection(firstPatientMessage);
       }
     }
-  }, [isInstantSession, messages, currentUserId, finalDoctorId, hasPatientSentMessage, hasDoctorResponded]);
+  }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded]);
   
   // Debug current user ID
   console.log('🔍 Current user ID debug:', {
@@ -317,6 +318,32 @@ export default function ChatPage() {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
+  }, []);
+
+  // Helper function to merge messages without duplicates
+  const mergeMessages = useCallback((existingMessages: ChatMessage[], newMessages: ChatMessage[]): ChatMessage[] => {
+    const messageMap = new Map<string, ChatMessage>();
+    
+    // Add existing messages to map
+    existingMessages.forEach(msg => {
+      messageMap.set(String(msg.id), msg);
+    });
+    
+    // Add new messages, keeping the most recent version
+    newMessages.forEach(msg => {
+      const msgId = String(msg.id);
+      const existing = messageMap.get(msgId);
+      if (!existing || new Date(msg.created_at || msg.timestamp) > new Date(existing.created_at || existing.timestamp)) {
+        messageMap.set(msgId, msg);
+      }
+    });
+    
+    // Convert back to array and sort by timestamp
+    return Array.from(messageMap.values()).sort((a, b) => {
+      const timeA = new Date(a.created_at || a.timestamp).getTime();
+      const timeB = new Date(b.created_at || b.timestamp).getTime();
+      return timeA - timeB;
+    });
   }, []);
   
   // Check if current user is a patient
@@ -467,23 +494,11 @@ export default function ChatPage() {
               console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
               }
               
-              // Check if message already exists to prevent duplicates
-              const existingMessage = prev.find(msg => msg.id === message.id);
-              if (existingMessage) {
-                if (__DEV__) {
-                console.log('⚠️ [ChatComponent] Message already exists in UI, skipping duplicate:', message.id);
-                }
-                return prev;
-              }
-              
+              const mergedMessages = mergeMessages(prev, [message]);
               if (__DEV__) {
-              console.log('✅ [ChatComponent] Adding new message to UI:', message.id);
+              console.log('📨 [ChatComponent] Messages after merge:', mergedMessages.length);
               }
-              const newMessages = [...prev, message];
-              if (__DEV__) {
-              console.log('📨 [ChatComponent] New messages count after update:', newMessages.length);
-              }
-              return newMessages;
+              return mergedMessages;
             });
             scrollToBottom();
           },
@@ -511,6 +526,30 @@ export default function ChatPage() {
         const existingMessages = await chatService.getMessages();
         setMessages(existingMessages);
         console.log('✅ [WebRTCChat] Service initialized successfully with', existingMessages.length, 'messages');
+        
+        // Add debug method to window for testing (only in development)
+        if (__DEV__) {
+          (window as any).refreshChatMessages = async () => {
+            console.log('🔄 [Debug] Manually refreshing messages from server...');
+            try {
+              const refreshedMessages = await chatService.refreshMessagesFromServer();
+              setMessages(refreshedMessages);
+              console.log('✅ [Debug] Messages refreshed:', refreshedMessages.length);
+            } catch (error) {
+              console.error('❌ [Debug] Failed to refresh messages:', error);
+            }
+          };
+          
+          // Add debug method to test doctor message detection
+          (window as any).testDoctorMessageDetection = (message: any) => {
+            console.log('🧪 [Debug] Testing doctor message detection with:', message);
+            if (triggerDoctorMessageDetection) {
+              triggerDoctorMessageDetection(message);
+            } else {
+              console.error('❌ [Debug] triggerDoctorMessageDetection not available');
+            }
+          };
+        }
         
         // Set up fallback polling for messages in case WebRTC fails
         const fallbackInterval = setInterval(async () => {
@@ -567,10 +606,16 @@ export default function ChatPage() {
           },
           
           onSessionExpired: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
-            console.log('⏰ Session expired via WebRTC:', sessionId, reason, sessionType);
-            // Session expired - logged to console only, no modal shown
-            // Store messages locally and close chat
-            handleStoreAndClose();
+            console.log('⏰ Session expired via WebRTC:', { sessionId, reason, sessionType });
+            
+            // For instant sessions, the detector hook handles the state. We should NOT clear messages.
+            // The UI will show the "expired" state, but the chat history remains.
+            if (sessionType === 'instant') {
+              console.log('🔥 [InstantSession] Expiration event received. UI state will be managed by the detector. Not clearing messages.');
+            } else {
+              // For regular appointments, store messages locally and close the chat.
+              handleStoreAndClose();
+            }
           },
           
           onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
@@ -580,60 +625,16 @@ export default function ChatPage() {
             setShowRatingModal(true);
           },
           
-          onSessionEndSuccess: async (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
-            console.log('✅ Session end success via WebRTC:', sessionId, reason, sessionType);
-            
-            // Clear the timeout since WebRTC succeeded
-            if ((window as any).endSessionTimeoutId) {
-              clearTimeout((window as any).endSessionTimeoutId);
-              (window as any).endSessionTimeoutId = null;
-            }
-            
-            try {
-              // Capture messages for local archive
-              const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
-              const cleanedMessages = archiveMessages.map(m => {
-                const { temp_id, ...rest } = m as any;
-                return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-              });
+          onSessionEndSuccess: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+            console.log('✅ [DEPRECATED] Session end success via WebRTC:', sessionId, reason, sessionType);
+            // This callback is now deprecated for message handling to prevent premature clearing.
+            // Message archiving is now handled exclusively by the manual `handleEndSession` function.
+            // This callback will now only handle UI state transitions.
 
-              // Build ended session payload for local storage
-              const endedSession: EndedSession = {
-                appointment_id: getNumericAppointmentId(),
-                doctor_id: chatInfo?.doctor_id,
-                doctor_name: chatInfo?.other_participant_name,
-                doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-                doctor_profile_picture: chatInfo?.other_participant_profile_picture,
-                patient_id: user?.id || 0,
-                patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
-                appointment_date: chatInfo?.appointment_date,
-                appointment_time: chatInfo?.appointment_time,
-                ended_at: new Date().toISOString(),
-                session_duration: undefined,
-                session_summary: undefined,
-                reason: reason,
-                messages: cleanedMessages,
-                message_count: cleanedMessages.length,
-              };
-
-              // Store for both patient and doctor
-              await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
-              
-              // Clear messages from WebRTC chat service after archiving
-              if (webrtcChatService) {
-                await webrtcChatService.clearMessages();
-              }
-              
-              console.log('✅ [WebRTC] Session archived successfully');
-            } catch (e) {
-              console.error('❌ [WebRTC] Failed to store ended session locally:', e);
-            }
-            
             // Update UI state
             setEndingSession(false);
             setShowEndSessionModal(false);
             setSessionEnded(true);
-            // Show rating modal
             setShowRatingModal(true);
           },
           
@@ -945,6 +946,23 @@ export default function ChatPage() {
       if (webrtcChatService) {
         const loadedMessages = await webrtcChatService.getMessages();
         setMessages(loadedMessages);
+        
+        // FIXED: Also sync with server to get any messages that might not be in local storage
+        try {
+          console.log('🔄 [ChatComponent] Syncing with server to get latest messages...');
+          const syncedMessages = await webrtcChatService.syncWithServer();
+          if (syncedMessages.length !== loadedMessages.length) {
+            console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
+            // Merge with existing messages to avoid duplicates
+            setMessages(prev => {
+              const mergedMessages = mergeMessages(prev, syncedMessages);
+              console.log('✅ [ChatComponent] Messages merged from server sync:', mergedMessages.length);
+              return mergedMessages;
+            });
+          }
+        } catch (error) {
+          console.error('❌ [ChatComponent] Failed to sync with server, using local messages only:', error);
+        }
       } else {
         // Fallback to backend API for loading messages
         console.log('🔄 [ChatComponent] WebRTC not available, loading messages via backend API');
@@ -1074,13 +1092,33 @@ export default function ChatPage() {
           delivery_status: 'sent'
         };
         
-        setMessages(prev => [...prev, chatMessage]);
+        // Merge message with existing messages to prevent duplicates
+        setMessages(prev => {
+          const mergedMessages = mergeMessages(prev, [chatMessage]);
+          console.log('✅ [ChatComponent] Message merged with existing messages:', mergedMessages.length);
+          return mergedMessages;
+        });
         scrollToBottom();
         
-        // Manually trigger patient message detection for instant sessions
-        if (isInstantSession && !hasPatientSentMessage && chatMessage.sender_id === currentUserId) {
-          console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
-          triggerPatientMessageDetection(chatMessage);
+        // Manually trigger message detection for instant sessions
+        if (isInstantSession) {
+          console.log('🔍 [InstantSession] Message sent, checking detection:', {
+            senderId: chatMessage.sender_id,
+            currentUserId,
+            doctorId,
+            hasPatientSentMessage,
+            hasDoctorResponded,
+            isPatient: chatMessage.sender_id === currentUserId,
+            isDoctor: chatMessage.sender_id === doctorId
+          });
+          
+          if (!hasPatientSentMessage && chatMessage.sender_id === currentUserId) {
+            console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
+            triggerPatientMessageDetection(chatMessage);
+          } else if (!hasDoctorResponded && chatMessage.sender_id === doctorId) {
+            console.log('👨‍⚕️ [InstantSession] Doctor message sent via backend API - manually triggering detection');
+            triggerDoctorMessageDetection(chatMessage);
+          }
         }
       } else {
         console.error('❌ [ChatComponent] Backend API returned error:', response.message);
@@ -1415,6 +1453,7 @@ export default function ChatPage() {
         try {
           await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
           if (webrtcChatService) {
+            console.log('🧹 Clearing messages from WebRTC service after manual end.');
             await webrtcChatService.clearMessages();
           }
         } catch (e) {
@@ -2178,6 +2217,27 @@ export default function ChatPage() {
             </Text>
           </View>
           
+          {/* "Waiting for Doctor" indicator for Instant Sessions */}
+          {isInstantSession && hasPatientSentMessage && !isTimerActive && !hasDoctorResponded && !isSessionActivated && (
+            <View style={{
+              backgroundColor: '#FFF3CD',
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 16,
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}>
+              <ActivityIndicator size="small" color="#856404" style={{ marginRight: 12 }} />
+              <Text style={{
+                fontSize: 14,
+                color: '#856404',
+                fontWeight: '500',
+              }}>
+                Connecting to doctor...
+              </Text>
+            </View>
+          )}
+
           {/* Instant Session Timer */}
           {isInstantSession && showInstantSessionUI && (
             <InstantSessionTimer
