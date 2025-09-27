@@ -202,6 +202,7 @@ export default function ChatPage() {
     timeRemaining,
     triggerPatientMessageDetection,
     triggerDoctorMessageDetection,
+    forceStateSync,
     updateAuthToken
   } = useInstantSessionDetector({
     sessionId,
@@ -302,8 +303,23 @@ export default function ChatPage() {
         console.log('👤 [InstantSession] Triggering detection for existing patient message:', firstPatientMessage.id);
         triggerPatientMessageDetection(firstPatientMessage);
       }
+      
+      // If doctor has sent messages but detector hasn't been triggered, trigger it manually
+      if (doctorMessages.length > 0 && !hasDoctorResponded) {
+        console.log('👨‍⚕️ [InstantSession] Doctor messages found but detector not triggered - triggering manually');
+        const firstDoctorMessage = doctorMessages[0];
+        console.log('👨‍⚕️ [InstantSession] Doctor message details:', {
+          messageId: firstDoctorMessage.id,
+          senderId: firstDoctorMessage.sender_id,
+          doctorId: doctorId,
+          hasDoctorResponded: hasDoctorResponded,
+          isDoctor: firstDoctorMessage.sender_id === doctorId
+        });
+        console.log('👨‍⚕️ [InstantSession] Triggering detection for existing doctor message:', firstDoctorMessage.id);
+        triggerDoctorMessageDetection(firstDoctorMessage);
+      }
     }
-  }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded]);
+  }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
   
   // Debug current user ID
   console.log('🔍 Current user ID debug:', {
@@ -495,7 +511,7 @@ export default function ChatPage() {
               }
               
               const mergedMessages = mergeMessages(prev, [message]);
-              if (__DEV__) {
+                if (__DEV__) {
               console.log('📨 [ChatComponent] Messages after merge:', mergedMessages.length);
               }
               return mergedMessages;
@@ -549,20 +565,37 @@ export default function ChatPage() {
               console.error('❌ [Debug] triggerDoctorMessageDetection not available');
             }
           };
+          
+          // Add debug method to force state sync
+          (window as any).forceStateSync = () => {
+            console.log('🔄 [Debug] Forcing state synchronization...');
+            if (forceStateSync) {
+              forceStateSync();
+            } else {
+              console.error('❌ [Debug] forceStateSync not available');
+            }
+          };
         }
         
         // Set up fallback polling for messages in case WebRTC fails
         const fallbackInterval = setInterval(async () => {
           try {
             const currentMessages = await chatService.getMessages();
-            if (currentMessages.length > messages.length) {
-              console.log('🔄 [Fallback] New messages detected via polling:', currentMessages.length - messages.length);
-              setMessages(currentMessages);
+            if (currentMessages.length > 0) {
+              console.log('🔄 [Fallback] Polling messages:', currentMessages.length);
+              // Use merge function to prevent duplicates and loops
+              setMessages(prev => {
+                const mergedMessages = mergeMessages(prev, currentMessages);
+                if (mergedMessages.length !== prev.length) {
+                  console.log('🔄 [Fallback] New messages merged:', mergedMessages.length - prev.length);
+                }
+                return mergedMessages;
+              });
             }
           } catch (error) {
             console.error('❌ [Fallback] Error polling messages:', error);
           }
-        }, 5000); // Poll every 5 seconds as fallback
+        }, 10000); // Poll every 10 seconds as fallback (reduced frequency)
         
         // Store interval for cleanup
         (chatService as any).fallbackInterval = fallbackInterval;
@@ -1113,10 +1146,16 @@ export default function ChatPage() {
           });
           
           if (!hasPatientSentMessage && chatMessage.sender_id === currentUserId) {
-            console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
-            triggerPatientMessageDetection(chatMessage);
+          console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
+          triggerPatientMessageDetection(chatMessage);
           } else if (!hasDoctorResponded && chatMessage.sender_id === doctorId) {
             console.log('👨‍⚕️ [InstantSession] Doctor message sent via backend API - manually triggering detection');
+            console.log('👨‍⚕️ [InstantSession] Doctor message details:', {
+              messageId: chatMessage.id,
+              senderId: chatMessage.sender_id,
+              doctorId: doctorId,
+              hasDoctorResponded: hasDoctorResponded
+            });
             triggerDoctorMessageDetection(chatMessage);
           }
         }

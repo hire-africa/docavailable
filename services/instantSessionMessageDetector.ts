@@ -13,6 +13,7 @@ export interface MessageDetectionEvents {
   onDoctorMessageDetected: (message: any) => void;
   onTimerStarted: (timeRemaining: number) => void;
   onTimerExpired: () => void;
+  onTimerStopped: () => void;
   onSessionActivated: () => void;
   onError: (error: string) => void;
 }
@@ -242,7 +243,41 @@ export class InstantSessionMessageDetector {
    */
   public triggerDoctorMessageDetection(message: any): void {
     console.log('👨‍⚕️ [InstantSessionDetector] Manually triggering doctor message detection:', message.id);
+    console.log('👨‍⚕️ [InstantSessionDetector] Message details:', {
+      id: message.id,
+      sender_id: message.sender_id,
+      message: message.message?.substring(0, 50) + '...',
+      doctorId: this.config.doctorId,
+      patientId: this.config.patientId
+    });
     this.handleDoctorMessage(message);
+  }
+
+  /**
+   * Force state synchronization with hook (useful when detector state is restored)
+   */
+  public forceStateSync(): void {
+    console.log('🔄 [InstantSessionDetector] Forcing state synchronization');
+    console.log('🔄 [InstantSessionDetector] Current detector state:', {
+      hasPatientSentMessage: this.hasPatientMessageSent,
+      hasDoctorResponded: this.hasDoctorResponded,
+      sessionActivated: this.sessionActivated,
+      timerActive: this.timerState.isActive
+    });
+    
+    // Trigger events to sync hook state
+    if (this.hasPatientMessageSent) {
+      this.events.onPatientMessageDetected({ id: 'sync', message: 'State sync' });
+    }
+    if (this.hasDoctorResponded) {
+      this.events.onDoctorMessageDetected({ id: 'sync', message: 'State sync' });
+    }
+    if (this.sessionActivated) {
+      this.events.onSessionActivated();
+    }
+    if (this.timerState.isActive) {
+      this.events.onTimerStarted(this.timerState.timeRemaining);
+    }
   }
 
   /**
@@ -278,7 +313,15 @@ export class InstantSessionMessageDetector {
       this.events.onDoctorMessageDetected(message);
       console.log('✅ [InstantSessionDetector] Doctor message processed - session activated');
     } else {
-      console.log('⚠️ [InstantSessionDetector] Doctor already responded, skipping');
+      console.log('⚠️ [InstantSessionDetector] Doctor already responded, but ensuring state sync');
+      // Even if already processed, ensure the hook state is synchronized
+      this.events.onDoctorMessageDetected(message);
+      if (this.timerState.isActive) {
+        this.stopTimer();
+      }
+      if (!this.sessionActivated) {
+        this.activateSession();
+      }
     }
   }
 
@@ -375,6 +418,7 @@ export class InstantSessionMessageDetector {
     this.timerState.isActive = false;
     console.log('⏹️ [InstantSessionDetector] Timer stopped');
     this.saveSessionState();
+    this.events.onTimerStopped();
   }
 
   /**
