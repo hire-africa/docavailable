@@ -829,7 +829,7 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
       const sessionId = appointmentId.replace('text_session_', '');
       
       const response = await axios.post(`${API_BASE_URL}/api/text-sessions/${sessionId}/end`, {
-        reason: data.reason || 'manual_end'
+        reason: data.reason || 'General Checkup'
       }, {
         headers: {
           'Authorization': `Bearer ${data.authToken}`,
@@ -846,7 +846,7 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           type: 'session-end-success',
           sessionId: sessionId,
           sessionType: 'instant',
-          reason: data.reason || 'manual_end',
+          reason: data.reason || 'General Checkup',
           endedAt: new Date().toISOString()
         }));
         
@@ -855,7 +855,7 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           type: 'session-ended',
           sessionId: sessionId,
           sessionType: 'instant',
-          reason: data.reason || 'manual_end',
+          reason: data.reason || 'General Checkup',
           endedAt: new Date().toISOString()
         });
       } else {
@@ -882,7 +882,7 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           type: 'session-end-success',
           sessionId: appointmentId,
           sessionType: 'appointment',
-          reason: data.reason || 'manual_end',
+          reason: data.reason || 'General Checkup',
           endedAt: new Date().toISOString()
         }));
         
@@ -891,7 +891,7 @@ async function handleSessionEndRequest(appointmentId, data, ws) {
           type: 'session-ended',
           sessionId: appointmentId,
           sessionType: 'appointment',
-          reason: data.reason || 'manual_end',
+          reason: data.reason || 'General Checkup',
           endedAt: new Date().toISOString()
         });
       } else {

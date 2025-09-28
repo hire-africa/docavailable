@@ -556,7 +556,9 @@ class TextSessionController extends Controller
             }
 
             // End the session using the new queue-based approach with atomic operations
-            $endResult = $session->endManually('manual_end');
+            // Preserve the original reason when ending manually
+            $originalReason = $session->reason ?: 'General Checkup';
+            $endResult = $session->endManually($originalReason);
             
             if (!$endResult) {
                 return response()->json([

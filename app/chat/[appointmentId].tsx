@@ -1817,7 +1817,7 @@ export default function ChatPage() {
           ended_at: new Date().toISOString(),
           session_duration: undefined,
           session_summary: undefined,
-          reason: textSessionInfo?.reason || 'manual_end',
+          reason: textSessionInfo?.reason || 'General Checkup', // Use original reason, fallback to generic
           messages: cleanedMessages,
           message_count: cleanedMessages.length,
         };
