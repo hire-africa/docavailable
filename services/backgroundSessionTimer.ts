@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from './apiService';
+import sessionTimerNotifier from './sessionTimerNotifier';
 
 export interface SessionTimerState {
   sessionId: string;
@@ -98,7 +99,7 @@ class BackgroundSessionTimer {
   private startTimer(sessionId: string, startTime: Date) {
     const timer = setInterval(async () => {
       await this.processTimerTick(sessionId);
-    }, 30000); // Check every 30 seconds
+    }, 10000); // Check every 10 seconds for more accurate timing
     
     this.timers.set(sessionId, timer);
     console.log('🕐 [BackgroundTimer] Timer started for session:', sessionId);
@@ -126,34 +127,50 @@ class BackgroundSessionTimer {
     const previousDeductions = Math.floor((elapsedMinutes - 1) / 10);
     const currentDeductions = Math.floor(elapsedMinutes / 10);
     
+    // More precise check: trigger deduction exactly at 10, 20, 30, etc. minutes
+    const shouldTriggerDeduction = currentDeductions > previousDeductions && elapsedMinutes >= 10;
+    
     console.log('🕐 [BackgroundTimer] Timer tick:', {
       sessionId,
       elapsedMinutes,
       previousDeductions,
       currentDeductions,
-      shouldTrigger: currentDeductions > previousDeductions && elapsedMinutes > 0,
+      shouldTrigger: shouldTriggerDeduction,
       startTime: startTime.toISOString(),
       now: now.toISOString()
     });
     
-    if (currentDeductions > previousDeductions && elapsedMinutes > 0) {
+    if (shouldTriggerDeduction) {
+      const deductionsToProcess = currentDeductions - state.sessionsDeducted;
+      
       console.log('💰 [BackgroundTimer] 10-minute mark reached, triggering backend deduction:', {
         sessionId,
         elapsedMinutes,
         previousDeductions,
-        currentDeductions
+        currentDeductions,
+        deductionsToProcess,
+        alreadyDeducted: state.sessionsDeducted
       });
       
-      // Trigger backend auto-deduction
-      await this.triggerAutoDeduction(sessionId, currentDeductions);
-      
-      // Update state
-      state.sessionsDeducted = currentDeductions;
-      state.lastUpdateTime = now.toISOString();
-      await this.persistStates();
-      
-      // Notify listeners
-      this.events?.onDeductionTriggered(sessionId, currentDeductions);
+      if (deductionsToProcess > 0) {
+        // Trigger backend auto-deduction
+        await this.triggerAutoDeduction(sessionId, deductionsToProcess);
+        
+        // Update state
+        state.sessionsDeducted = currentDeductions;
+        state.lastUpdateTime = now.toISOString();
+        await this.persistStates();
+        
+        // Notify listeners
+        this.events?.onDeductionTriggered(sessionId, deductionsToProcess);
+        
+        // Notify UI via event emitter
+        sessionTimerNotifier.notifyDeduction({
+          sessionId,
+          deductions: deductionsToProcess,
+          totalDeductions: currentDeductions
+        });
+      }
     }
     
     // Update last update time
@@ -162,6 +179,15 @@ class BackgroundSessionTimer {
     
     // Notify listeners of timer update
     this.events?.onTimerUpdate(sessionId, elapsedMinutes, minutesUntilNextDeduction);
+    
+    // Notify UI via event emitter
+    sessionTimerNotifier.notifyTimerUpdate({
+      sessionId,
+      elapsedMinutes,
+      nextDeductionIn: minutesUntilNextDeduction,
+      sessionsDeducted: state.sessionsDeducted,
+      remainingSessions: 0 // This will be updated by the UI when it fetches session status
+    });
   }
 
   private async triggerAutoDeduction(sessionId: string, deductions: number) {

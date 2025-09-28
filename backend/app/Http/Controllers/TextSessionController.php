@@ -416,6 +416,46 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Get all active sessions (for global monitoring).
+     */
+    public function getAllActiveSessions(Request $request): JsonResponse
+    {
+        try {
+            // Clear any cached query plans to handle schema changes
+            DB::statement('DISCARD PLANS');
+            
+            $sessions = TextSession::with(['patient', 'doctor'])
+                ->where('status', 'active')
+                ->whereNotNull('activated_at')
+                ->orderBy('activated_at', 'desc')
+                ->get();
+
+            $sessionsData = $sessions->map(function ($session) {
+                return [
+                    'id' => $session->id,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id,
+                    'status' => $session->status,
+                    'activated_at' => $session->activated_at,
+                    'created_at' => $session->created_at,
+                    'updated_at' => $session->updated_at,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $sessionsData
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch all active sessions: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get active sessions for the authenticated user.
      */
     public function activeSessions(Request $request): JsonResponse
@@ -669,6 +709,7 @@ class TextSessionController extends Controller
             }
 
             $status = $request->input('status');
+            $oldStatus = $session->status;
             
             // Update session status
             $session->update([
@@ -676,9 +717,29 @@ class TextSessionController extends Controller
                 'updated_at' => now()
             ]);
 
+            // If status changed to active, set activated_at and trigger timer
+            if ($status === 'active' && $oldStatus !== 'active') {
+                $session->update([
+                    'activated_at' => now()
+                ]);
+                
+                Log::info("Session activated - timer should start immediately", [
+                    'session_id' => $sessionId,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id,
+                    'activated_at' => now(),
+                    'old_status' => $oldStatus,
+                    'new_status' => $status
+                ]);
+                
+                // Trigger immediate timer start
+                $this->triggerImmediateTimerStart($session);
+            }
+
             Log::info("Session status updated", [
                 'session_id' => $sessionId,
                 'new_status' => $status,
+                'old_status' => $oldStatus,
                 'user_id' => auth()->id()
             ]);
 
@@ -701,6 +762,27 @@ class TextSessionController extends Controller
                 'success' => false,
                 'message' => 'Failed to update session status: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Trigger immediate timer start for activated session
+     */
+    private function triggerImmediateTimerStart(TextSession $session)
+    {
+        try {
+            // This will be picked up by the global monitor on its next check
+            // We could also implement a more direct notification system here
+            Log::info("Session activation trigger sent", [
+                'session_id' => $session->id,
+                'patient_id' => $session->patient_id,
+                'activated_at' => $session->activated_at
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to trigger immediate timer start", [
+                'session_id' => $session->id,
+                'error' => $e->getMessage()
+            ]);
         }
     }
 

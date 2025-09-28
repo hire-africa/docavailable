@@ -31,6 +31,7 @@ import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
+import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import sessionService from '../../services/sessionService';
@@ -782,6 +783,12 @@ export default function ChatPage() {
   // Background session timer setup
   useEffect(() => {
     if (!isInstantSession || !sessionId) return;
+    
+    // Only set up timer for patients, not doctors
+    if (user?.user_type !== 'patient') {
+      console.log('🕐 [BackgroundTimer] Timer setup skipped - user is not a patient:', user?.user_type);
+      return;
+    }
 
     // Set up background timer events
     const timerEvents: SessionTimerEvents = {
@@ -838,8 +845,16 @@ export default function ChatPage() {
       sessionStartTime: sessionStartTime?.toISOString(),
       hasDoctorResponded,
       chatInfoStatus: chatInfo?.status,
-      sessionId
+      sessionId,
+      userType: user?.user_type,
+      currentUserId: user?.id
     });
+    
+    // Only start timer for patients, not doctors
+    if (user?.user_type !== 'patient') {
+      console.log('🕐 [SessionTimer] Timer skipped - user is not a patient:', user?.user_type);
+      return;
+    }
     
     // Start timer if session is activated OR if it's an active instant session with doctor response
     const shouldStartTimer = (isInstantSession && isSessionActivated) || 
@@ -982,6 +997,59 @@ export default function ChatPage() {
       backgroundSessionTimer.endSessionTimer(sessionId);
     }
   }, [sessionEnded, sessionId]);
+
+  // Listen for real-time timer updates
+  useEffect(() => {
+    if (!isInstantSession || !sessionId) return;
+
+    const handleTimerUpdate = (update: any) => {
+      if (update.sessionId === sessionId) {
+        console.log('📡 [Chat] Received timer update:', update);
+        setSessionDuration(update.elapsedMinutes);
+        setNextDeductionIn(update.nextDeductionIn);
+        setSessionsDeducted(update.sessionsDeducted);
+      }
+    };
+
+    const handleDeduction = (update: any) => {
+      if (update.sessionId === sessionId) {
+        console.log('📡 [Chat] Received deduction update:', update);
+        setSessionsDeducted(prev => prev + update.deductions);
+        // Refresh session status to get updated remaining sessions
+        requestSessionStatus();
+      }
+    };
+
+    const handleSessionStarted = (update: any) => {
+      if (update.sessionId === sessionId) {
+        console.log('📡 [Chat] Session started notification:', update);
+        setSessionStartTime(new Date(update.startTime));
+      }
+    };
+
+    const handleSessionEnded = (update: any) => {
+      if (update.sessionId === sessionId) {
+        console.log('📡 [Chat] Session ended notification:', update);
+        setSessionDuration(0);
+        setNextDeductionIn(0);
+        setSessionsDeducted(0);
+      }
+    };
+
+    // Add event listeners
+    sessionTimerNotifier.on('timerUpdate', handleTimerUpdate);
+    sessionTimerNotifier.on('deduction', handleDeduction);
+    sessionTimerNotifier.on('sessionStarted', handleSessionStarted);
+    sessionTimerNotifier.on('sessionEnded', handleSessionEnded);
+
+    return () => {
+      // Remove event listeners
+      sessionTimerNotifier.off('timerUpdate', handleTimerUpdate);
+      sessionTimerNotifier.off('deduction', handleDeduction);
+      sessionTimerNotifier.off('sessionStarted', handleSessionStarted);
+      sessionTimerNotifier.off('sessionEnded', handleSessionEnded);
+    };
+  }, [isInstantSession, sessionId]);
   
   // Show authentication error if user is not authenticated
   if (!authLoading && !isAuthenticated) {

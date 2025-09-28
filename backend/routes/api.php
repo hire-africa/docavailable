@@ -373,6 +373,7 @@ Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUse
 
 // Text session routes
 Route::post('/text-sessions/end/{sessionId}', [TextSessionController::class, 'endSession']);
+Route::get('/text-sessions/active', [TextSessionController::class, 'getAllActiveSessions']);
 Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'getActiveSessions']);
 Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
 
