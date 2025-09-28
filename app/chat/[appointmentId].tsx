@@ -28,6 +28,7 @@ import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
+import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { AudioCallService } from '../../services/audioCallService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
@@ -35,6 +36,7 @@ import sessionService from '../../services/sessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
+import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import { apiService } from '../services/apiService';
@@ -145,7 +147,6 @@ export default function ChatPage() {
   const [sessionsDeducted, setSessionsDeducted] = useState<number>(0);
   const [remainingSessions, setRemainingSessions] = useState<number>(0);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
-  const [deductionTimer, setDeductionTimer] = useState<number | null>(null);
   
   // WebRTC audio call state
   const [webrtcReady, setWebrtcReady] = useState(false);
@@ -173,6 +174,9 @@ export default function ChatPage() {
   
   // Get current user ID
   const currentUserId = user?.id || 0;
+
+  // Set up app state listener for background timer management
+  useAppStateListener();
   
   // Get doctor ID from chat info or text session info
   const doctorId = chatInfo?.doctor_id || textSessionInfo?.doctor_id || 0; // Use a single source of truth for doctorId
@@ -775,93 +779,56 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Session duration tracking and 10-minute deduction system
+  // Background session timer setup
   useEffect(() => {
-    // Only start tracking for active text sessions
-    const shouldStartTimer = (isInstantSession && isSessionActivated) || 
-                            (isInstantSession && chatInfo?.status === 'active' && hasDoctorResponded);
-    
-    if (!shouldStartTimer || !sessionStartTime) {
-      console.log('🕐 [SessionTimer] Timer not started:', {
-        isInstantSession,
-        isSessionActivated,
-        sessionStartTime: sessionStartTime?.toISOString(),
-        hasDoctorResponded,
-        chatInfoStatus: chatInfo?.status,
-        shouldStartTimer,
-        reason: !isInstantSession ? 'Not instant session' : 
-                !shouldStartTimer ? 'Session not ready' : 'No session start time'
-      });
-      return;
-    }
+    if (!isInstantSession || !sessionId) return;
 
-    console.log('🕐 [SessionTimer] Starting session duration tracking', {
-      sessionStartTime: sessionStartTime.toISOString(),
-      isSessionActivated,
-      isInstantSession
-    });
-
-    // Start the deduction timer
-    const startDeductionTimer = () => {
-      const timer = setInterval(async () => {
-        const now = new Date();
-        const elapsedMinutes = Math.floor((now.getTime() - sessionStartTime.getTime()) / (1000 * 60));
-        
+    // Set up background timer events
+    const timerEvents: SessionTimerEvents = {
+      onDeductionTriggered: (sessionId, deductions) => {
+        console.log('💰 [BackgroundTimer] Deduction triggered:', { sessionId, deductions });
+        setSessionsDeducted(prev => prev + deductions);
+        // Refresh session status to get updated remaining sessions
+        requestSessionStatus();
+      },
+      onTimerUpdate: (sessionId, elapsedMinutes, nextDeductionIn) => {
+        console.log('🕐 [BackgroundTimer] Timer update:', { sessionId, elapsedMinutes, nextDeductionIn });
         setSessionDuration(elapsedMinutes);
-        
-        // Calculate deductions and next deduction time
-        const deductions = Math.floor(elapsedMinutes / 10);
-        const nextDeductionMinute = Math.ceil(elapsedMinutes / 10) * 10;
-        const minutesUntilNextDeduction = Math.max(0, nextDeductionMinute - elapsedMinutes);
-        
-        // Check if we've hit a 10-minute mark and need to trigger deduction
-        const previousDeductions = Math.floor((elapsedMinutes - 1) / 10);
-        const currentDeductions = Math.floor(elapsedMinutes / 10);
-        
-        console.log('🕐 [SessionTimer] Timer check:', {
-          elapsedMinutes,
-          previousDeductions,
-          currentDeductions,
-          shouldTrigger: currentDeductions > previousDeductions && elapsedMinutes > 0
-        });
-        
-        if (currentDeductions > previousDeductions && elapsedMinutes > 0) {
-          console.log('💰 [SessionTimer] 10-minute mark reached, triggering backend deduction', {
-            elapsedMinutes,
-            previousDeductions,
-            currentDeductions
-          });
-          
-          // Trigger backend auto-deduction
-          await triggerAutoDeduction();
-        } else {
-          // Update local state for display
-          setSessionsDeducted(deductions);
-        }
-        
-        setNextDeductionIn(minutesUntilNextDeduction);
-        
-        console.log('🕐 [SessionTimer] Duration update', {
-          elapsedMinutes,
-          deductions,
-          minutesUntilNextDeduction,
-          nextDeductionMinute
-        });
-      }, 30000); // Update every 30 seconds for testing
-      
-      setDeductionTimer(timer);
-    };
-
-    startDeductionTimer();
-
-    // Cleanup timer on unmount or when session ends
-    return () => {
-      if (deductionTimer) {
-        clearInterval(deductionTimer);
-        setDeductionTimer(null);
+        setNextDeductionIn(nextDeductionIn);
+      },
+      onSessionEnded: (sessionId) => {
+        console.log('🕐 [BackgroundTimer] Session ended:', sessionId);
+        setSessionDuration(0);
+        setNextDeductionIn(0);
+        setSessionsDeducted(0);
       }
     };
-  }, [isInstantSession, isSessionActivated, sessionStartTime]);
+
+    backgroundSessionTimer.setEvents(timerEvents);
+
+    // Check if there's already an active timer for this session
+    const existingState = backgroundSessionTimer.getSessionState(sessionId);
+    if (existingState && existingState.isActive) {
+      console.log('🕐 [BackgroundTimer] Resuming existing timer for session:', sessionId);
+      const startTime = new Date(existingState.startTime);
+      setSessionStartTime(startTime);
+      setSessionsDeducted(existingState.sessionsDeducted);
+      
+      // Calculate current elapsed time
+      const now = new Date();
+      const elapsedMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+      setSessionDuration(elapsedMinutes);
+      
+      const nextDeductionMinute = Math.ceil(elapsedMinutes / 10) * 10;
+      const minutesUntilNextDeduction = Math.max(0, nextDeductionMinute - elapsedMinutes);
+      setNextDeductionIn(minutesUntilNextDeduction);
+    }
+
+    return () => {
+      // Don't stop the timer when component unmounts - let it run in background
+      console.log('🕐 [BackgroundTimer] Component unmounted, timer continues in background');
+    };
+  }, [isInstantSession, sessionId]);
 
   // Initialize session start time when session is activated
   useEffect(() => {
@@ -880,12 +847,15 @@ export default function ChatPage() {
     if (shouldStartTimer && !sessionStartTime) {
       const startTime = new Date();
       setSessionStartTime(startTime);
-      console.log('🕐 [SessionTimer] Session activated, starting timer at:', startTime.toISOString());
+      console.log('🕐 [SessionTimer] Session activated, starting background timer at:', startTime.toISOString());
+      
+      // Start background timer
+      backgroundSessionTimer.startSessionTimer(sessionId, startTime);
       
       // Request initial session status to get current deduction info
       requestSessionStatus();
     }
-  }, [isInstantSession, isSessionActivated, sessionStartTime, hasDoctorResponded, chatInfo?.status]);
+  }, [isInstantSession, isSessionActivated, sessionStartTime, hasDoctorResponded, chatInfo?.status, sessionId]);
 
   // Function to request session status from backend
   const requestSessionStatus = async () => {
@@ -986,6 +956,14 @@ export default function ChatPage() {
       clearInterval(statusCheckInterval);
     };
   }, [isInstantSession, isSessionActivated, sessionId]);
+
+  // Clean up background timer when session ends
+  useEffect(() => {
+    if (sessionEnded && sessionId) {
+      console.log('🕐 [BackgroundTimer] Session ended, cleaning up timer:', sessionId);
+      backgroundSessionTimer.endSessionTimer(sessionId);
+    }
+  }, [sessionEnded, sessionId]);
   
   // Show authentication error if user is not authenticated
   if (!authLoading && !isAuthenticated) {
