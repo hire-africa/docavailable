@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { environment } from '../config/environment';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -46,7 +47,7 @@ export default function OnlineStatusToggle({
 
     setUpdating(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/toggle-online`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/toggle-online`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

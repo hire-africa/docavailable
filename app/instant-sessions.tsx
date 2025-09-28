@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import DirectBookingModal from '../components/DirectBookingModal';
 import SessionTypeSelectionModal, { SessionType } from '../components/SessionTypeSelectionModal';
+import { environment } from '../config/environment';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -70,7 +71,7 @@ export default function InstantSessionsScreen() {
 
   const fetchAvailableDoctors = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/available-doctors`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/available-doctors`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -90,7 +91,7 @@ export default function InstantSessionsScreen() {
 
   const checkActiveSession = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/active-sessions`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/active-sessions`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -135,7 +136,7 @@ export default function InstantSessionsScreen() {
         endpoint = '/api/video-sessions/start';
       }
 
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}${endpoint}`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

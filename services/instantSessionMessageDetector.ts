@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { environment } from '../config/environment';
 
 export interface InstantSessionConfig {
   sessionId: string;
@@ -527,7 +528,7 @@ export class InstantSessionMessageDetector {
    * Get API base URL
    */
   private getApiBaseUrl(): string {
-    return process.env.EXPO_PUBLIC_API_URL || 'https://docavailable-3vbdv.ondigitalocean.app';
+    return environment.LARAVEL_API_URL;
   }
 
   /**

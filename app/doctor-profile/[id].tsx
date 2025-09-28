@@ -12,10 +12,11 @@ import {
     View,
 } from 'react-native';
 import DoctorProfilePicture from '../../components/DoctorProfilePicture';
+import { environment } from '../../config/environment';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
-import { apiService } from '../services/apiService';
 import { stripDoctorPrefix, withDoctorPrefix } from '../../utils/name';
+import { apiService } from '../services/apiService';
 
 const { width } = Dimensions.get('window');
 
@@ -80,7 +81,7 @@ export default function DoctorProfileScreen() {
 
   const checkActiveSession = async () => {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/active`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/active`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -103,7 +104,7 @@ export default function DoctorProfileScreen() {
 
     setStartingSession(true);
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/text-sessions/start`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/start`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

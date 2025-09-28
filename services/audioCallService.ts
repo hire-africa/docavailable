@@ -7,6 +7,7 @@ import {
     RTCPeerConnection,
     RTCSessionDescription,
 } from 'react-native-webrtc';
+import { environment } from '../config/environment';
 
 export interface AudioCallState {
   isConnected: boolean;
@@ -212,7 +213,7 @@ class AudioCallService {
    */
   private async checkCallAvailability(): Promise<boolean> {
     try {
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/call-sessions/check-availability`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/check-availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
