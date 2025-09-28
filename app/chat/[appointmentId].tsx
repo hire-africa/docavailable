@@ -778,7 +778,20 @@ export default function ChatPage() {
   // Session duration tracking and 10-minute deduction system
   useEffect(() => {
     // Only start tracking for active text sessions
-    if (!isInstantSession || !isSessionActivated || !sessionStartTime) {
+    const shouldStartTimer = (isInstantSession && isSessionActivated) || 
+                            (isInstantSession && chatInfo?.status === 'active' && hasDoctorResponded);
+    
+    if (!shouldStartTimer || !sessionStartTime) {
+      console.log('🕐 [SessionTimer] Timer not started:', {
+        isInstantSession,
+        isSessionActivated,
+        sessionStartTime: sessionStartTime?.toISOString(),
+        hasDoctorResponded,
+        chatInfoStatus: chatInfo?.status,
+        shouldStartTimer,
+        reason: !isInstantSession ? 'Not instant session' : 
+                !shouldStartTimer ? 'Session not ready' : 'No session start time'
+      });
       return;
     }
 
@@ -805,6 +818,13 @@ export default function ChatPage() {
         const previousDeductions = Math.floor((elapsedMinutes - 1) / 10);
         const currentDeductions = Math.floor(elapsedMinutes / 10);
         
+        console.log('🕐 [SessionTimer] Timer check:', {
+          elapsedMinutes,
+          previousDeductions,
+          currentDeductions,
+          shouldTrigger: currentDeductions > previousDeductions && elapsedMinutes > 0
+        });
+        
         if (currentDeductions > previousDeductions && elapsedMinutes > 0) {
           console.log('💰 [SessionTimer] 10-minute mark reached, triggering backend deduction', {
             elapsedMinutes,
@@ -827,7 +847,7 @@ export default function ChatPage() {
           minutesUntilNextDeduction,
           nextDeductionMinute
         });
-      }, 60000); // Update every minute
+      }, 30000); // Update every 30 seconds for testing
       
       setDeductionTimer(timer);
     };
@@ -845,7 +865,19 @@ export default function ChatPage() {
 
   // Initialize session start time when session is activated
   useEffect(() => {
-    if (isInstantSession && isSessionActivated && !sessionStartTime) {
+    console.log('🕐 [SessionTimer] Checking session activation:', {
+      isInstantSession,
+      isSessionActivated,
+      sessionStartTime: sessionStartTime?.toISOString(),
+      hasDoctorResponded,
+      chatInfoStatus: chatInfo?.status
+    });
+    
+    // Start timer if session is activated OR if it's an active instant session with doctor response
+    const shouldStartTimer = (isInstantSession && isSessionActivated) || 
+                            (isInstantSession && chatInfo?.status === 'active' && hasDoctorResponded);
+    
+    if (shouldStartTimer && !sessionStartTime) {
       const startTime = new Date();
       setSessionStartTime(startTime);
       console.log('🕐 [SessionTimer] Session activated, starting timer at:', startTime.toISOString());
@@ -853,7 +885,7 @@ export default function ChatPage() {
       // Request initial session status to get current deduction info
       requestSessionStatus();
     }
-  }, [isInstantSession, isSessionActivated, sessionStartTime]);
+  }, [isInstantSession, isSessionActivated, sessionStartTime, hasDoctorResponded, chatInfo?.status]);
 
   // Function to request session status from backend
   const requestSessionStatus = async () => {
@@ -895,13 +927,22 @@ export default function ChatPage() {
 
   // Function to trigger backend auto-deduction
   const triggerAutoDeduction = async () => {
-    if (!isInstantSession || !sessionId) return;
+    if (!isInstantSession || !sessionId) {
+      console.log('❌ [SessionTimer] Cannot trigger auto-deduction:', {
+        isInstantSession,
+        sessionId,
+        reason: !isInstantSession ? 'Not instant session' : 'No session ID'
+      });
+      return;
+    }
     
     try {
       console.log('💰 [SessionTimer] Triggering auto-deduction for session:', sessionId);
       const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, {
         triggered_by: 'frontend_timer'
       });
+      
+      console.log('💰 [SessionTimer] Auto-deduction API response:', response.data);
       
       if ((response.data as any)?.success) {
         const deductionData = (response.data as any).data;
@@ -2411,7 +2452,7 @@ export default function ChatPage() {
           )}
 
           {/* Session Duration and Deduction Timer */}
-          {isInstantSession && isSessionActivated && sessionStartTime && (
+          {isInstantSession && ((isSessionActivated) || (chatInfo?.status === 'active' && hasDoctorResponded)) && sessionStartTime && (
             <View style={{
               backgroundColor: '#f8f9fa',
               padding: 16,
@@ -2526,6 +2567,29 @@ export default function ChatPage() {
                   </Text>
                 </View>
               )}
+              
+              {/* Debug Test Button */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#007bff',
+                  padding: 8,
+                  borderRadius: 6,
+                  marginTop: 8,
+                }}
+                onPress={async () => {
+                  console.log('🧪 [SessionTimer] Manual test trigger');
+                  await triggerAutoDeduction();
+                }}
+              >
+                <Text style={{
+                  fontSize: 12,
+                  color: 'white',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                }}>
+                  🧪 Test Deduction
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
