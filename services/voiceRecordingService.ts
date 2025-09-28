@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import { apiService } from '../app/services/apiService';
+import { environment } from '../config/environment';
 
 export interface VoiceRecordingState {
   isRecording: boolean;
@@ -184,7 +185,7 @@ class VoiceRecordingService {
       }
 
       // Send message via API
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/chat/${appointmentId}/messages`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/chat/${appointmentId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
