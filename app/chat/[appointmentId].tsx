@@ -198,6 +198,7 @@ export default function ChatPage() {
     hasPatientSentMessage,
     hasDoctorResponded,
     isSessionActivated,
+    isSessionExpired,
     isTimerActive,
     timeRemaining,
     triggerPatientMessageDetection,
@@ -1024,6 +1025,12 @@ export default function ChatPage() {
     // Check if session is valid before sending message
     if (!sessionValid) {
       console.error('❌ [ChatComponent] Cannot send message - session is invalid');
+      return;
+    }
+    
+    // Check if session has expired (for instant sessions)
+    if (isInstantSession && isSessionExpired) {
+      console.error('❌ [ChatComponent] Cannot send message - session has expired');
       return;
     }
     
@@ -2285,6 +2292,7 @@ export default function ChatPage() {
               hasPatientSentMessage={hasPatientSentMessage}
               hasDoctorResponded={hasDoctorResponded}
               isSessionActivated={isSessionActivated}
+              isSessionExpired={isSessionExpired}
               onTimerExpired={() => {
                 console.log('⏰ [InstantSession] Timer expired');
                 // Handle timer expiration
@@ -2459,13 +2467,14 @@ export default function ChatPage() {
               paddingVertical: 12,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? 0.5 : 1,
+              opacity: (sessionEnded && !isPatient) || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? 0.5 : 1,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
             }}
             multiline
             maxLength={1000}
             editable={
               !(sessionEnded && !isPatient) && 
+              !(isInstantSession && isSessionExpired) &&
               !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
             }
           />
@@ -2477,6 +2486,7 @@ export default function ChatPage() {
               isRecording || 
               sessionEnded || 
               !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
             }
             style={{

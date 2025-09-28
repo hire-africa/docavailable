@@ -312,56 +312,19 @@ class TextSessionController extends Controller
                     $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
                     
                     Log::info("Auto-ended session payment processing result", [
-            // Only perform auto-ending and deduction checks for ACTIVE sessions
-            if ($session->status === TextSession::STATUS_ACTIVE) {
-                // Check if active session has run out of time
-                if ($session->hasRunOutOfTime()) {
-                    Log::info("Active session has run out of time - auto-ending", [
                         'session_id' => $sessionId,
                         'doctor_payment_success' => $paymentResult['doctor_payment_success'],
                         'patient_deduction_success' => $paymentResult['patient_deduction_success'],
-                        'sessions_deducted' => $paymentResult['patient_sessions_deducted']
+                        'sessions_deducted' => $paymentResult['patient_sessions_deducted'],
                         'elapsed_minutes' => $session->getElapsedMinutes(),
                         'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                         'total_allowed_minutes' => $session->getTotalAllowedMinutes()
                     ]);
                 } catch (\Exception $e) {
                     Log::error("Failed to process payment for auto-ended session", [
-                    
-                    // Auto-end the session and process payment/deduction
-                    $session->update(['status' => TextSession::STATUS_ENDED, 'ended_at' => now()]);
-                    
-                    try {
-                        $paymentService = new \App\Services\DoctorPaymentService();
-                        $paymentResult = $paymentService->processSessionEnd($session, true);
-                        Log::info("Auto-ended session payment processing result", ['session_id' => $sessionId, 'result' => $paymentResult]);
-                    } catch (\Exception $e) {
-                        Log::error("Failed to process payment for auto-ended session", ['session_id' => $sessionId, 'error' => $e->getMessage()]);
-                    }
-                    
-                    return response()->json(['success' => true, 'status' => 'ended', 'timeRemaining' => 0, 'message' => 'Session has ended - time limit reached']);
-                }
-                
-                // Check if active session should end due to insufficient sessions
-                if ($session->shouldAutoEndDueToInsufficientSessions()) {
-                    Log::info("Active session should end due to insufficient sessions", [
                         'session_id' => $sessionId,
                         'error' => $e->getMessage()
-                        'session_details' => $session->getSessionStatusDetails()
                     ]);
-                    
-                    // Auto-end the session and process payment/deduction
-                    $session->update(['status' => TextSession::STATUS_ENDED, 'ended_at' => now()]);
-                    
-                    try {
-                        $paymentService = new \App\Services\DoctorPaymentService();
-                        $paymentResult = $paymentService->processSessionEnd($session, true);
-                        Log::info("Auto-ended session due to insufficient sessions - payment processing result", ['session_id' => $sessionId, 'result' => $paymentResult]);
-                    } catch (\Exception $e) {
-                        Log::error("Failed to process payment for session ended due to insufficient sessions", ['session_id' => $sessionId, 'error' => $e->getMessage()]);
-                    }
-                    
-                    return response()->json(['success' => true, 'status' => 'ended', 'timeRemaining' => 0, 'message' => 'Session has ended - no sessions remaining']);
                 }
                 
                 return response()->json([
@@ -375,13 +338,8 @@ class TextSessionController extends Controller
             // Check if active session should end due to insufficient sessions
             if ($session->status === TextSession::STATUS_ACTIVE && $session->shouldAutoEndDueToInsufficientSessions()) {
                 Log::info("Active session should end due to insufficient sessions", [
-                // Session is active and has time remaining
-                Log::info("Session is active with time remaining", [
                     'session_id' => $sessionId,
                     'session_details' => $session->getSessionStatusDetails()
-                    'status' => $session->status,
-                    'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
-                    'elapsed_minutes' => $session->getElapsedMinutes()
                 ]);
                 
                 // Auto-end the session and process payment/deduction
@@ -390,44 +348,19 @@ class TextSessionController extends Controller
                     'ended_at' => now()
                 ]);
                 
-                // Process payment and deduction
-                // Trigger auto-deduction processing for active sessions
                 try {
                     $paymentService = new \App\Services\DoctorPaymentService();
-                    $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
-                    $autoDeductionResult = $paymentService->processAutoDeduction($session);
-                    
-                    Log::info("Auto-ended session due to insufficient sessions - payment processing result", [
-                    Log::info("Auto-deduction processed during status check", [
-                        'session_id' => $sessionId,
-                        'doctor_payment_success' => $paymentResult['doctor_payment_success'],
-                        'patient_deduction_success' => $paymentResult['patient_deduction_success'],
-                        'sessions_deducted' => $paymentResult['patient_sessions_deducted']
-                        'auto_deduction_result' => $autoDeductionResult,
-                        'elapsed_minutes' => $session->getElapsedMinutes(),
-                        'auto_deductions_processed' => $session->auto_deductions_processed,
-                        'sessions_used' => $session->sessions_used
-                    ]);
+                    $paymentResult = $paymentService->processSessionEnd($session, true);
+                    Log::info("Auto-ended session due to insufficient sessions - payment processing result", ['session_id' => $sessionId, 'result' => $paymentResult]);
                 } catch (\Exception $e) {
-                    Log::error("Failed to process payment for session ended due to insufficient sessions", [
-                    Log::error("Failed to process auto-deduction during status check", [
-                        'session_id' => $sessionId,
-                        'error' => $e->getMessage()
-                    ]);
-                    // Don't fail the status check if auto-deduction fails
+                    Log::error("Failed to process payment for session ended due to insufficient sessions", ['session_id' => $sessionId, 'error' => $e->getMessage()]);
                 }
                 
-
                 return response()->json([
                     'success' => true,
                     'status' => 'ended',
                     'timeRemaining' => 0,
                     'message' => 'Session has ended - no sessions remaining'
-                    'status' => 'active',
-                    'timeRemaining' => null, // Not applicable for active sessions
-                    'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
-                    'remainingSessions' => $session->getRemainingSessions(),
-                    'message' => 'Session is active'
                 ]);
             }
             
@@ -439,8 +372,7 @@ class TextSessionController extends Controller
                 'elapsed_minutes' => $session->getElapsedMinutes()
             ]);
             
-            // 🔧 AUTO-DETECTION FIX: Trigger auto-deduction processing for active sessions
-            // This ensures auto-deductions happen when frontend polls for session status
+            // Trigger auto-deduction processing for active sessions
             try {
                 $paymentService = new \App\Services\DoctorPaymentService();
                 $autoDeductionResult = $paymentService->processAutoDeduction($session);
