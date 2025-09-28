@@ -72,7 +72,7 @@ class BackgroundSessionTimer {
   }
 
   async startSessionTimer(sessionId: string, startTime: Date = new Date()) {
-    console.log('🕐 [BackgroundTimer] Starting timer for session:', sessionId);
+    console.log('🕐 [BackgroundTimer] Starting timer for session:', sessionId, 'at:', startTime.toISOString());
     
     // Stop existing timer if any
     this.stopSessionTimer(sessionId);
@@ -89,6 +89,8 @@ class BackgroundSessionTimer {
     this.states.set(sessionId, state);
     await this.persistStates();
     
+    console.log('🕐 [BackgroundTimer] Timer state created and persisted:', state);
+    
     // Start the timer
     this.startTimer(sessionId, startTime);
   }
@@ -103,9 +105,11 @@ class BackgroundSessionTimer {
   }
 
   private async processTimerTick(sessionId: string) {
+    console.log('🕐 [BackgroundTimer] Processing timer tick for session:', sessionId);
+    
     const state = this.states.get(sessionId);
     if (!state || !state.isActive) {
-      console.log('🕐 [BackgroundTimer] Timer tick skipped - session not active:', sessionId);
+      console.log('🕐 [BackgroundTimer] Timer tick skipped - session not active:', sessionId, 'state:', state);
       return;
     }
 
@@ -127,7 +131,9 @@ class BackgroundSessionTimer {
       elapsedMinutes,
       previousDeductions,
       currentDeductions,
-      shouldTrigger: currentDeductions > previousDeductions && elapsedMinutes > 0
+      shouldTrigger: currentDeductions > previousDeductions && elapsedMinutes > 0,
+      startTime: startTime.toISOString(),
+      now: now.toISOString()
     });
     
     if (currentDeductions > previousDeductions && elapsedMinutes > 0) {
