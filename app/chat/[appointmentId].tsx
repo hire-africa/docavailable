@@ -27,16 +27,16 @@ import RatingModal from '../../components/RatingModal';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
-import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
+import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { AudioCallService } from '../../services/audioCallService';
+import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import sessionService from '../../services/sessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
-import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import { apiService } from '../services/apiService';
@@ -837,12 +837,20 @@ export default function ChatPage() {
       isSessionActivated,
       sessionStartTime: sessionStartTime?.toISOString(),
       hasDoctorResponded,
-      chatInfoStatus: chatInfo?.status
+      chatInfoStatus: chatInfo?.status,
+      sessionId
     });
     
     // Start timer if session is activated OR if it's an active instant session with doctor response
     const shouldStartTimer = (isInstantSession && isSessionActivated) || 
                             (isInstantSession && chatInfo?.status === 'active' && hasDoctorResponded);
+    
+    console.log('🕐 [SessionTimer] Timer start conditions:', {
+      condition1: isInstantSession && isSessionActivated,
+      condition2: isInstantSession && chatInfo?.status === 'active' && hasDoctorResponded,
+      shouldStartTimer,
+      hasSessionStartTime: !!sessionStartTime
+    });
     
     if (shouldStartTimer && !sessionStartTime) {
       const startTime = new Date();
@@ -854,6 +862,16 @@ export default function ChatPage() {
       
       // Request initial session status to get current deduction info
       requestSessionStatus();
+    } else if (shouldStartTimer && sessionStartTime) {
+      console.log('🕐 [SessionTimer] Timer already started, checking if background timer is active');
+      // Check if background timer is already running
+      const existingState = backgroundSessionTimer.getSessionState(sessionId);
+      if (!existingState || !existingState.isActive) {
+        console.log('🕐 [SessionTimer] Background timer not active, starting it now');
+        backgroundSessionTimer.startSessionTimer(sessionId, sessionStartTime);
+      } else {
+        console.log('🕐 [SessionTimer] Background timer already active');
+      }
     }
   }, [isInstantSession, isSessionActivated, sessionStartTime, hasDoctorResponded, chatInfo?.status, sessionId]);
 
