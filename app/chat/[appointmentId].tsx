@@ -31,10 +31,10 @@ import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
-import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import sessionService from '../../services/sessionService';
+import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
@@ -997,6 +997,39 @@ export default function ChatPage() {
       backgroundSessionTimer.endSessionTimer(sessionId);
     }
   }, [sessionEnded, sessionId]);
+
+  // Direct timer start when session becomes active (fallback)
+  useEffect(() => {
+    if (!isInstantSession || !sessionId || user?.user_type !== 'patient') return;
+
+    // Check if session is active and should start timer
+    const shouldStartTimer = chatInfo?.status === 'active' && hasDoctorResponded;
+    
+    console.log('🚀 [Chat] Checking direct timer start:', {
+      sessionId,
+      chatStatus: chatInfo?.status,
+      hasDoctorResponded,
+      shouldStartTimer,
+      sessionStartTime: sessionStartTime?.toISOString()
+    });
+    
+    if (shouldStartTimer && !sessionStartTime) {
+      console.log('🚀 [Chat] Starting timer directly - session is active:', {
+        sessionId,
+        chatStatus: chatInfo?.status,
+        hasDoctorResponded
+      });
+      
+      const startTime = new Date();
+      setSessionStartTime(startTime);
+      
+      // Start background timer directly
+      backgroundSessionTimer.startSessionTimer(sessionId, startTime);
+      
+      // Request initial session status
+      requestSessionStatus();
+    }
+  }, [isInstantSession, sessionId, chatInfo?.status, hasDoctorResponded, sessionStartTime, user?.user_type]);
 
   // Listen for real-time timer updates
   useEffect(() => {
@@ -2652,6 +2685,36 @@ export default function ChatPage() {
                   fontWeight: '500',
                 }}>
                   🧪 Test Deduction
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={{
+                  backgroundColor: '#FF6B6B',
+                  padding: 8,
+                  borderRadius: 6,
+                  marginTop: 8,
+                }}
+                onPress={async () => {
+                  console.log('🧪 [SessionTimer] Force deduction test');
+                  try {
+                    const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, {
+                      triggered_by: 'manual_test',
+                      deductions_requested: 1
+                    });
+                    console.log('🧪 [SessionTimer] Force deduction response:', response.data);
+                  } catch (error) {
+                    console.error('🧪 [SessionTimer] Force deduction error:', error);
+                  }
+                }}
+              >
+                <Text style={{
+                  fontSize: 12,
+                  color: 'white',
+                  textAlign: 'center',
+                  fontWeight: '500',
+                }}>
+                  ⚡ Force Deduction
                 </Text>
               </TouchableOpacity>
             </View>

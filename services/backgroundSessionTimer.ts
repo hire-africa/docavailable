@@ -153,6 +153,8 @@ class BackgroundSessionTimer {
       });
       
       if (deductionsToProcess > 0) {
+        console.log('💰 [BackgroundTimer] Processing deduction - calling backend API');
+        
         // Trigger backend auto-deduction
         await this.triggerAutoDeduction(sessionId, deductionsToProcess);
         
@@ -169,6 +171,12 @@ class BackgroundSessionTimer {
           sessionId,
           deductions: deductionsToProcess,
           totalDeductions: currentDeductions
+        });
+      } else {
+        console.log('💰 [BackgroundTimer] No new deductions to process:', {
+          deductionsToProcess,
+          currentDeductions,
+          alreadyDeducted: state.sessionsDeducted
         });
       }
     }
@@ -192,25 +200,41 @@ class BackgroundSessionTimer {
 
   private async triggerAutoDeduction(sessionId: string, deductions: number) {
     try {
-      console.log('💰 [BackgroundTimer] Triggering auto-deduction for session:', sessionId);
-      const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, {
-        triggered_by: 'background_timer'
-      });
+      console.log('💰 [BackgroundTimer] Triggering auto-deduction for session:', sessionId, 'deductions:', deductions);
       
-      console.log('💰 [BackgroundTimer] Auto-deduction API response:', response.data);
+      const requestData = {
+        triggered_by: 'background_timer',
+        deductions_requested: deductions
+      };
+      
+      console.log('💰 [BackgroundTimer] Sending deduction request:', requestData);
+      
+      const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, requestData);
+      
+      console.log('💰 [BackgroundTimer] Auto-deduction API response:', {
+        status: response.status,
+        data: response.data
+      });
       
       if ((response.data as any)?.success) {
         const deductionData = (response.data as any).data;
-        console.log('✅ [BackgroundTimer] Auto-deduction processed:', deductionData);
+        console.log('✅ [BackgroundTimer] Auto-deduction processed successfully:', deductionData);
         
         if (deductionData.deductions_processed > 0) {
           console.log(`🔔 [BackgroundTimer] ${deductionData.deductions_processed} session(s) deducted via backend`);
+        } else {
+          console.warn('⚠️ [BackgroundTimer] No deductions were processed by backend');
         }
       } else {
         console.warn('⚠️ [BackgroundTimer] Auto-deduction response not successful:', response.data);
       }
     } catch (error) {
-      console.error('❌ [BackgroundTimer] Failed to trigger auto-deduction:', error);
+      console.error('❌ [BackgroundTimer] Failed to trigger auto-deduction:', {
+        sessionId,
+        deductions,
+        error: error.message,
+        stack: error.stack
+      });
     }
   }
 
