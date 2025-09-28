@@ -895,6 +895,12 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
     
+    // Call session routes
+    Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);
+    Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
+    Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
+    Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
+    
 });
 
 // Public chatbot routes (no authentication required)

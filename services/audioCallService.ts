@@ -235,7 +235,10 @@ class AudioCallService {
       }
     } catch (error) {
       console.error('❌ Error checking call availability:', error);
-      this.events?.onError('Failed to check call availability');
+      const errorMessage = error.message?.includes('Network request failed') 
+        ? 'Network error. Please check your internet connection and try again.'
+        : 'Failed to check call availability. Please try again.';
+      this.events?.onError(errorMessage);
       return false;
     }
   }
@@ -244,9 +247,15 @@ class AudioCallService {
    * Get authentication token
    */
   private async getAuthToken(): Promise<string> {
-    // This should be implemented based on your auth system
-    // For now, return a placeholder
-    return 'your-auth-token';
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const token = await AsyncStorage.getItem('auth_token');
+      console.log('🔑 [AudioCallService] Retrieved auth token:', token ? 'Present' : 'Missing');
+      return token || '';
+    } catch (error) {
+      console.error('❌ [AudioCallService] Failed to get auth token:', error);
+      return '';
+    }
   }
 
   /**

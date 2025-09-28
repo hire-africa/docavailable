@@ -183,6 +183,9 @@ class VideoCallService {
       }
     } catch (error) {
       console.error('❌ Error checking call availability:', error);
+      const errorMessage = error.message?.includes('Network request failed') 
+        ? 'Network error. Please check your internet connection and try again.'
+        : 'Failed to check call availability. Please try again.';
       this.events?.onCallRejected();
       return false;
     }
@@ -192,9 +195,15 @@ class VideoCallService {
    * Get authentication token
    */
   private async getAuthToken(): Promise<string> {
-    // This should be implemented based on your auth system
-    // For now, return a placeholder
-    return 'your-auth-token';
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const token = await AsyncStorage.getItem('auth_token');
+      console.log('🔑 [VideoCallService] Retrieved auth token:', token ? 'Present' : 'Missing');
+      return token || '';
+    } catch (error) {
+      console.error('❌ [VideoCallService] Failed to get auth token:', error);
+      return '';
+    }
   }
 
   /**

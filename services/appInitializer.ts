@@ -13,7 +13,9 @@ class AppInitializer {
     
     try {
       // Initialize global session monitor
+      console.log('🚀 [AppInitializer] Starting global session monitor...');
       await globalSessionMonitor.initialize();
+      console.log('✅ [AppInitializer] Global session monitor started');
       
       this.isInitialized = true;
       console.log('✅ [AppInitializer] App services initialized successfully');

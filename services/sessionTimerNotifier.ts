@@ -1,4 +1,37 @@
-import { EventEmitter } from 'events';
+// Custom EventEmitter implementation for React Native
+class CustomEventEmitter {
+  private listeners: { [event: string]: Function[] } = {};
+
+  on(event: string, listener: Function): void {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    this.listeners[event].push(listener);
+  }
+
+  off(event: string, listener: Function): void {
+    if (this.listeners[event]) {
+      const index = this.listeners[event].indexOf(listener);
+      if (index > -1) {
+        this.listeners[event].splice(index, 1);
+      }
+    }
+  }
+
+  emit(event: string, ...args: any[]): void {
+    if (this.listeners[event]) {
+      this.listeners[event].forEach(listener => listener(...args));
+    }
+  }
+
+  removeAllListeners(event?: string): void {
+    if (event) {
+      delete this.listeners[event];
+    } else {
+      this.listeners = {};
+    }
+  }
+}
 
 export interface TimerUpdate {
   sessionId: string;
@@ -14,7 +47,7 @@ export interface DeductionUpdate {
   totalDeductions: number;
 }
 
-class SessionTimerNotifier extends EventEmitter {
+class SessionTimerNotifier extends CustomEventEmitter {
   private static instance: SessionTimerNotifier;
 
   private constructor() {
