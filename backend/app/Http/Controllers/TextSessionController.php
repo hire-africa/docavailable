@@ -590,7 +590,7 @@ class TextSessionController extends Controller
         try {
             $user = auth()->user();
             
-            $session = TextSession::with(['patient', 'doctor'])
+            $session = TextSession::with(['patient.subscription', 'doctor'])
                 ->where('id', $sessionId)
                 ->first();
                 
@@ -609,6 +609,12 @@ class TextSessionController extends Controller
                 ], 403);
             }
             
+            // Get actual subscription balance
+            $actualSessionsRemaining = 0;
+            if ($session->patient && $session->patient->subscription) {
+                $actualSessionsRemaining = $session->patient->subscription->text_sessions_remaining;
+            }
+            
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -618,7 +624,7 @@ class TextSessionController extends Controller
                     'ended_at' => $session->ended_at,
                     'last_activity_at' => $session->last_activity_at,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
-                    'remaining_sessions' => $session->getRemainingSessions(),
+                    'remaining_sessions' => $actualSessionsRemaining, // Use actual subscription balance
                     'elapsed_minutes' => $session->getElapsedMinutes(),
                     'sessions_used' => $session->sessions_used,
                     'sessions_remaining_before_start' => $session->sessions_remaining_before_start,

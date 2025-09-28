@@ -139,6 +139,14 @@ export default function ChatPage() {
   const [sessionDeductionInfo, setSessionDeductionInfo] = useState<any>(null);
   const [isWebRTCConnected, setIsWebRTCConnected] = useState(false);
   
+  // Session duration and deduction tracking state
+  const [sessionDuration, setSessionDuration] = useState<number>(0); // in minutes
+  const [nextDeductionIn, setNextDeductionIn] = useState<number>(0); // minutes until next deduction
+  const [sessionsDeducted, setSessionsDeducted] = useState<number>(0);
+  const [remainingSessions, setRemainingSessions] = useState<number>(0);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [deductionTimer, setDeductionTimer] = useState<number | null>(null);
+  
   // WebRTC audio call state
   const [webrtcReady, setWebrtcReady] = useState(false);
   
@@ -254,7 +262,7 @@ export default function ChatPage() {
   // Show instant session UI when patient sends first message or when timer is active
   useEffect(() => {
     // Only show the timer UI when the timer is confirmed to be active by the hook
-    if (isInstantSession && isTimerActive && !hasDoctorResponded) {
+    if (isInstantSession && isTimerActive && !hasDoctorResponded && !isSessionActivated) {
       setShowInstantSessionUI(true);
     } else if (isInstantSession && (hasDoctorResponded || isSessionActivated)) {
       setShowInstantSessionUI(false);
@@ -683,9 +691,18 @@ export default function ChatPage() {
             console.log('💰 Session deduction via WebRTC:', deductionData, sessionType);
             setSessionDeductionInfo(deductionData);
             
-            // Session deduction logged to console only for instant sessions
+            // Update local deduction tracking for instant sessions
             if (sessionType === 'instant') {
               console.log(`📊 Session Deduction: ${deductionData.sessionsDeducted} session(s) deducted. ${deductionData.remainingSessions} remaining.`);
+              
+              // Update local state to reflect the deduction
+              setSessionsDeducted(deductionData.sessionsDeducted || 0);
+              setRemainingSessions(deductionData.remainingSessions || 0);
+              
+              // Show a brief notification about the deduction
+              if (deductionData.sessionsDeducted > 0) {
+                console.log(`🔔 [SessionTimer] Auto-deduction occurred: ${deductionData.sessionsDeducted} session(s) deducted`);
+              }
             }
           },
           
@@ -757,6 +774,177 @@ export default function ChatPage() {
       }
     };
   }, []);
+
+  // Session duration tracking and 10-minute deduction system
+  useEffect(() => {
+    // Only start tracking for active text sessions
+    if (!isInstantSession || !isSessionActivated || !sessionStartTime) {
+      return;
+    }
+
+    console.log('🕐 [SessionTimer] Starting session duration tracking', {
+      sessionStartTime: sessionStartTime.toISOString(),
+      isSessionActivated,
+      isInstantSession
+    });
+
+    // Start the deduction timer
+    const startDeductionTimer = () => {
+      const timer = setInterval(async () => {
+        const now = new Date();
+        const elapsedMinutes = Math.floor((now.getTime() - sessionStartTime.getTime()) / (1000 * 60));
+        
+        setSessionDuration(elapsedMinutes);
+        
+        // Calculate deductions and next deduction time
+        const deductions = Math.floor(elapsedMinutes / 10);
+        const nextDeductionMinute = Math.ceil(elapsedMinutes / 10) * 10;
+        const minutesUntilNextDeduction = Math.max(0, nextDeductionMinute - elapsedMinutes);
+        
+        // Check if we've hit a 10-minute mark and need to trigger deduction
+        const previousDeductions = Math.floor((elapsedMinutes - 1) / 10);
+        const currentDeductions = Math.floor(elapsedMinutes / 10);
+        
+        if (currentDeductions > previousDeductions && elapsedMinutes > 0) {
+          console.log('💰 [SessionTimer] 10-minute mark reached, triggering backend deduction', {
+            elapsedMinutes,
+            previousDeductions,
+            currentDeductions
+          });
+          
+          // Trigger backend auto-deduction
+          await triggerAutoDeduction();
+        } else {
+          // Update local state for display
+          setSessionsDeducted(deductions);
+        }
+        
+        setNextDeductionIn(minutesUntilNextDeduction);
+        
+        console.log('🕐 [SessionTimer] Duration update', {
+          elapsedMinutes,
+          deductions,
+          minutesUntilNextDeduction,
+          nextDeductionMinute
+        });
+      }, 60000); // Update every minute
+      
+      setDeductionTimer(timer);
+    };
+
+    startDeductionTimer();
+
+    // Cleanup timer on unmount or when session ends
+    return () => {
+      if (deductionTimer) {
+        clearInterval(deductionTimer);
+        setDeductionTimer(null);
+      }
+    };
+  }, [isInstantSession, isSessionActivated, sessionStartTime]);
+
+  // Initialize session start time when session is activated
+  useEffect(() => {
+    if (isInstantSession && isSessionActivated && !sessionStartTime) {
+      const startTime = new Date();
+      setSessionStartTime(startTime);
+      console.log('🕐 [SessionTimer] Session activated, starting timer at:', startTime.toISOString());
+      
+      // Request initial session status to get current deduction info
+      requestSessionStatus();
+    }
+  }, [isInstantSession, isSessionActivated, sessionStartTime]);
+
+  // Function to request session status from backend
+  const requestSessionStatus = async () => {
+    if (!isInstantSession || !sessionId) return;
+    
+    try {
+      console.log('🔍 [SessionTimer] Requesting session status for:', sessionId);
+      const response = await apiService.get(`/text-sessions/${sessionId}`);
+      
+      if ((response.data as any)?.success && (response.data as any)?.data) {
+        const sessionData = (response.data as any).data;
+        console.log('📊 [SessionTimer] Session status received:', sessionData);
+        
+        // Update deduction info if available
+        if (sessionData.sessions_used !== undefined) {
+          setSessionsDeducted(sessionData.sessions_used);
+        }
+        if (sessionData.remaining_sessions !== undefined) {
+          setRemainingSessions(sessionData.remaining_sessions);
+        }
+        
+        // Also try to get the actual subscription balance
+        if (sessionData.patient?.subscription?.text_sessions_remaining !== undefined) {
+          setRemainingSessions(sessionData.patient.subscription.text_sessions_remaining);
+          console.log('📊 [SessionTimer] Updated remaining sessions from subscription:', sessionData.patient.subscription.text_sessions_remaining);
+        }
+        
+        // Update session start time if available
+        if (sessionData.activated_at && !sessionStartTime) {
+          const activatedTime = new Date(sessionData.activated_at);
+          setSessionStartTime(activatedTime);
+          console.log('🕐 [SessionTimer] Session start time updated from backend:', activatedTime.toISOString());
+        }
+      }
+    } catch (error) {
+      console.error('❌ [SessionTimer] Failed to get session status:', error);
+    }
+  };
+
+  // Function to trigger backend auto-deduction
+  const triggerAutoDeduction = async () => {
+    if (!isInstantSession || !sessionId) return;
+    
+    try {
+      console.log('💰 [SessionTimer] Triggering auto-deduction for session:', sessionId);
+      const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, {
+        triggered_by: 'frontend_timer'
+      });
+      
+      if ((response.data as any)?.success) {
+        const deductionData = (response.data as any).data;
+        console.log('✅ [SessionTimer] Auto-deduction processed:', deductionData);
+        
+        // Update local state with the deduction results
+        if (deductionData.deductions_processed > 0) {
+          setSessionsDeducted(prev => prev + deductionData.deductions_processed);
+          console.log(`🔔 [SessionTimer] ${deductionData.deductions_processed} session(s) deducted via backend`);
+        }
+        
+        // Refresh session status to get updated remaining sessions
+        await requestSessionStatus();
+      } else {
+        console.warn('⚠️ [SessionTimer] Auto-deduction response not successful:', response.data);
+      }
+    } catch (error) {
+      console.error('❌ [SessionTimer] Failed to trigger auto-deduction:', error);
+    }
+  };
+
+  // Update remaining sessions when deduction info changes
+  useEffect(() => {
+    if (sessionDeductionInfo?.remainingSessions !== undefined) {
+      setRemainingSessions(sessionDeductionInfo.remainingSessions);
+    }
+  }, [sessionDeductionInfo]);
+
+  // Periodic status check to sync with backend deductions
+  useEffect(() => {
+    if (!isInstantSession || !isSessionActivated || !sessionId) {
+      return;
+    }
+
+    // Check status every 2 minutes to sync with backend
+    const statusCheckInterval = setInterval(() => {
+      requestSessionStatus();
+    }, 120000); // 2 minutes
+
+    return () => {
+      clearInterval(statusCheckInterval);
+    };
+  }, [isInstantSession, isSessionActivated, sessionId]);
   
   // Show authentication error if user is not authenticated
   if (!authLoading && !isAuthenticated) {
@@ -2221,6 +2409,125 @@ export default function ChatPage() {
               </Text>
             </View>
           )}
+
+          {/* Session Duration and Deduction Timer */}
+          {isInstantSession && isSessionActivated && sessionStartTime && (
+            <View style={{
+              backgroundColor: '#f8f9fa',
+              padding: 16,
+              borderRadius: 12,
+              marginTop: 8,
+              borderWidth: 1,
+              borderColor: '#e9ecef',
+            }}>
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}>
+                <Text style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: '#495057',
+                }}>
+                  🕐 Session Duration
+                </Text>
+                <Text style={{
+                  fontSize: 16,
+                  fontWeight: '700',
+                  color: '#007bff',
+                }}>
+                  {sessionDuration}m
+                </Text>
+              </View>
+              
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}>
+                <Text style={{
+                  fontSize: 12,
+                  color: '#6c757d',
+                }}>
+                  Sessions Used:
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: '#dc3545',
+                }}>
+                  {sessionsDeducted}
+                </Text>
+              </View>
+              
+              <View style={{
+                flexDirection: 'row',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}>
+                <Text style={{
+                  fontSize: 12,
+                  color: '#6c757d',
+                }}>
+                  Sessions Remaining:
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  fontWeight: '600',
+                  color: remainingSessions > 0 ? '#28a745' : '#dc3545',
+                }}>
+                  {remainingSessions}
+                </Text>
+              </View>
+              
+              {nextDeductionIn > 0 && (
+                <View style={{
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  paddingTop: 8,
+                  borderTopWidth: 1,
+                  borderTopColor: '#e9ecef',
+                }}>
+                  <Text style={{
+                    fontSize: 12,
+                    color: '#6c757d',
+                  }}>
+                    Next deduction in:
+                  </Text>
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: '600',
+                    color: '#ffc107',
+                  }}>
+                    {nextDeductionIn}m
+                  </Text>
+                </View>
+              )}
+              
+              {remainingSessions <= 0 && (
+                <View style={{
+                  backgroundColor: '#f8d7da',
+                  padding: 8,
+                  borderRadius: 6,
+                  marginTop: 8,
+                }}>
+                  <Text style={{
+                    fontSize: 12,
+                    color: '#721c24',
+                    textAlign: 'center',
+                    fontWeight: '500',
+                  }}>
+                    ⚠️ No sessions remaining. Session will end soon.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       )}
 
@@ -2263,26 +2570,6 @@ export default function ChatPage() {
             </Text>
           </View>
           
-          {/* "Waiting for Doctor" indicator for Instant Sessions */}
-          {isInstantSession && hasPatientSentMessage && !isTimerActive && !hasDoctorResponded && !isSessionActivated && (
-            <View style={{
-              backgroundColor: '#FFF3CD',
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 16,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}>
-              <ActivityIndicator size="small" color="#856404" style={{ marginRight: 12 }} />
-              <Text style={{
-                fontSize: 14,
-                color: '#856404',
-                fontWeight: '500',
-              }}>
-                Connecting to doctor...
-              </Text>
-            </View>
-          )}
 
           {/* Instant Session Timer */}
           {isInstantSession && showInstantSessionUI && (
