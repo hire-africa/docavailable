@@ -15,6 +15,7 @@ interface InstantSessionTimerProps {
   hasPatientSentMessage: boolean;
   hasDoctorResponded: boolean;
   isSessionActivated: boolean;
+  isSessionExpired: boolean;
   onTimerExpired?: () => void;
 }
 
@@ -26,6 +27,7 @@ export default function InstantSessionTimer({
   hasPatientSentMessage,
   hasDoctorResponded,
   isSessionActivated,
+  isSessionExpired,
   onTimerExpired
 }: InstantSessionTimerProps) {
   const [pulseAnim] = useState(new Animated.Value(1));
@@ -95,6 +97,10 @@ export default function InstantSessionTimer({
       return 'Doctor Responded';
     }
     
+    if (isSessionExpired) {
+      return 'Session Expired';
+    }
+    
     if (hasPatientSentMessage && isActive) {
       return 'Waiting for Doctor';
     }
@@ -113,6 +119,10 @@ export default function InstantSessionTimer({
     
     if (hasDoctorResponded) {
       return Colors.primary;
+    }
+    
+    if (isSessionExpired) {
+      return Colors.error;
     }
     
     if (hasPatientSentMessage && isActive) {
@@ -152,7 +162,7 @@ export default function InstantSessionTimer({
         </Text>
       </View>
 
-      {hasPatientSentMessage && (
+      {hasPatientSentMessage && !isSessionExpired && (
         <View style={styles.timerContainer}>
           <Animated.View
             style={[
@@ -209,7 +219,13 @@ export default function InstantSessionTimer({
           </Text>
         )}
         
-        {hasPatientSentMessage && !isActive && !hasDoctorResponded && (
+        {isSessionExpired && (
+          <Text style={[styles.infoText, { color: Colors.error }]}>
+            Session expired - Doctor did not respond within 90 seconds
+          </Text>
+        )}
+        
+        {hasPatientSentMessage && !isActive && !hasDoctorResponded && !isSessionExpired && (
           <Text style={[styles.infoText, { color: Colors.error }]}>
             Doctor did not respond within 90 seconds
           </Text>

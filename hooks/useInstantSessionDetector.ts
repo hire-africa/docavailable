@@ -16,6 +16,7 @@ export interface UseInstantSessionDetectorReturn {
   hasPatientSentMessage: boolean;
   hasDoctorResponded: boolean;
   isSessionActivated: boolean;
+  isSessionExpired: boolean;
   isTimerActive: boolean;
   timeRemaining: number;
   connect: () => Promise<void>;
@@ -49,6 +50,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
   const [hasPatientSentMessage, setHasPatientSentMessage] = useState(false);
   const [hasDoctorResponded, setHasDoctorResponded] = useState(false);
   const [isSessionActivated, setIsSessionActivated] = useState(false);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   const detectorRef = useRef<InstantSessionMessageDetector | null>(null);
 
@@ -97,12 +99,13 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
         }));
       },
       onTimerExpired: () => {
-        console.log('⏰ [Hook] Timer expired');
+        console.log('⏰ [Hook] Timer expired - session expired');
         setTimerState(prev => ({
           ...prev,
           isActive: false,
           timeRemaining: 0
         }));
+        setIsSessionExpired(true);
       },
       onTimerStopped: () => {
         console.log('⏹️ [Hook] Timer stopped');
@@ -307,6 +310,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     hasPatientSentMessage,
     hasDoctorResponded,
     isSessionActivated,
+    isSessionExpired,
     isTimerActive: timerState.isActive,
     timeRemaining: timerState.timeRemaining,
     connect,
