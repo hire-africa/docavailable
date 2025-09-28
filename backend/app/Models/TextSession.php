@@ -300,17 +300,21 @@ class TextSession extends Model
                 return false;
             }
 
+            // Preserve the original reason if it exists, otherwise use the provided reason
+            $finalReason = $session->reason && $session->reason !== 'manual_end' ? $session->reason : $reason;
+
             // Update session status first
             $session->update([
                 'status' => self::STATUS_ENDED,
                 'ended_at' => now(),
-                'reason' => $reason,
+                'reason' => $finalReason,
                 'sessions_used' => $session->sessions_used + 1 // +1 for manual end
             ]);
 
             \Illuminate\Support\Facades\Log::info("Session ended manually", [
                 'session_id' => $this->id,
-                'reason' => $reason
+                'original_reason' => $session->reason,
+                'final_reason' => $finalReason
             ]);
 
             return true;

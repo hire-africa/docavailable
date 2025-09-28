@@ -1683,62 +1683,24 @@ export default function PatientDashboard() {
   };
 
   const renderMessagesContent = () => (
-    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
-      {/* Header */}
-      <View style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        paddingBottom: 20, 
-        paddingHorizontal: 20, 
-        paddingTop: 8,
-        backgroundColor: '#F8F9FA' 
-      }}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 26, fontWeight: 'bold', color: '#222' }}>Messages</Text>
-        </View>
-        <TouchableOpacity 
-          onPress={refreshMessagesTab}
-          disabled={refreshingMessages}
-          style={{ 
-            padding: 14, 
-            borderRadius: 16, 
-            backgroundColor: refreshingMessages ? '#E0E0E0' : '#4CAF50',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: 0.15,
-            shadowRadius: 6,
-            elevation: 4,
-          }}
-        >
-          <Icon 
-            name={refreshingMessages ? 'spinner' : 'refresh'} 
-            size={22} 
-            color={refreshingMessages ? '#999' : '#FFFFFF'} 
-          />
-        </TouchableOpacity>
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
 
       {/* Search Bar */}
       <View style={{ 
         flexDirection: 'row', 
         alignItems: 'center', 
-        backgroundColor: '#FFFFFF', 
-        borderRadius: 20, 
+        backgroundColor: '#F5F5F5', 
+        borderRadius: 25, 
         marginHorizontal: 20, 
-        marginBottom: 24, 
+        marginBottom: 16, 
         paddingHorizontal: 18, 
-        height: 52,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-        elevation: 3,
+        height: 50,
         borderWidth: 1,
-        borderColor: '#E8F5E8',
+        borderColor: '#E5E5E5',
       }}>
-        <Icon name="search" size={22} color="#4CAF50" />
+        <Icon name="search" size={20} color="#999" />
         <TextInput
-          style={{ flex: 1, fontSize: 17, color: '#666', backgroundColor: 'transparent', marginLeft: 14 }}
+          style={{ flex: 1, fontSize: 16, color: '#333', backgroundColor: 'transparent', marginLeft: 12 }}
           placeholder="Search conversations..."
           placeholderTextColor="#999"
           value={messageSearchQuery}
@@ -1746,95 +1708,12 @@ export default function PatientDashboard() {
         />
         {messageSearchQuery.length > 0 && (
           <TouchableOpacity onPress={() => setMessageSearchQuery('')} style={{ marginLeft: 10 }}>
-            <Icon name="times" size={22} color="#666" />
+            <Icon name="times" size={18} color="#999" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Active Text Session */}
-      {activeTextSession && (
-        <View style={{ marginHorizontal: 20, marginBottom: 24 }}>
-          <Text style={{ 
-            fontWeight: 'bold', 
-            fontSize: 18, 
-            color: '#4CAF50', 
-            marginBottom: 16, 
-            marginLeft: 4 
-          }}>Active Session</Text>
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: '#FFFFFF',
-              borderRadius: 20,
-              padding: 20,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.12,
-              shadowRadius: 12,
-              elevation: 5,
-              borderWidth: 2,
-              borderColor: '#4CAF50'
-            }}
-            onPress={() => {
-              // Navigate to chat using text session ID with proper prefix
-              const chatId = `text_session_${activeTextSession.appointment_id}`;
-              router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
-            }}
-          >
-            {activeTextSession.doctor?.profile_picture_url ? (
-              <Image source={{ uri: activeTextSession.doctor.profile_picture_url }} style={{ width: 60, height: 60, borderRadius: 30, marginRight: 16 }} />
-            ) : activeTextSession.doctor?.profile_picture ? (
-              <Image source={{ uri: activeTextSession.doctor.profile_picture }} style={{ width: 60, height: 60, borderRadius: 30, marginRight: 16 }} />
-            ) : (
-              <View style={{ 
-                width: 60, 
-                height: 60, 
-                borderRadius: 30, 
-                backgroundColor: '#E8F5E8', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                marginRight: 16,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2,
-              }}>
-                <Icon name="user" size={26} color="#4CAF50" />
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6 }}>
-                Dr. {activeTextSession.doctor?.first_name} {activeTextSession.doctor?.last_name}
-              </Text>
-              <Text style={{ fontSize: 15, color: '#4CAF50', fontWeight: '600' }}>
-                Text Session • {activeTextSession.remaining_time_minutes} min remaining
-              </Text>
-            </View>
-            <View style={{ 
-              width: 44, 
-              height: 44, 
-              borderRadius: 22, 
-              backgroundColor: '#E8F5E8', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              elevation: 2,
-            }}>
-              <Icon name="chevronRight" size={22} color="#4CAF50" />
-            </View>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Recent Label */}
-      <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#222', marginLeft: 24, marginBottom: 10 }}>Recent</Text>
-
-      {/* Combined Chat List - Active Appointments and Ended Sessions */}
+      {/* Unified Chat List - WhatsApp Style Inbox */}
       <ScrollView 
         style={{ flex: 1 }} 
         showsVerticalScrollIndicator={false}
@@ -1849,6 +1728,14 @@ export default function PatientDashboard() {
         }
       >
         {(() => {
+          // Get active text session and add to list
+          const activeTextSessionItem = activeTextSession ? {
+            ...activeTextSession,
+            type: 'active_text',
+            sortDate: new Date().getTime(), // Most recent
+            isActive: true
+          } : null;
+
           // Get active appointments
           const activeAppointments = getSafeAppointments()
             .filter(appt => 
@@ -1874,7 +1761,8 @@ export default function PatientDashboard() {
                   }
                 }
                 return 0;
-              })()
+              })(),
+              isActive: false
             }));
 
           // Get ended sessions (filtered by search if needed)
@@ -1889,108 +1777,220 @@ export default function PatientDashboard() {
             .map(session => ({
               ...session,
               type: 'ended',
-              sortDate: session.ended_at ? new Date(session.ended_at).getTime() : 0
+              sortDate: session.ended_at ? new Date(session.ended_at).getTime() : 0,
+              isActive: false
             }));
 
-          // Combine and sort by date (most recent first)
-          const combinedList = [...activeAppointments, ...filteredEndedSessions]
+          // Combine all items and sort by date (most recent first)
+          const allItems = [activeTextSessionItem, ...activeAppointments, ...filteredEndedSessions]
+            .filter(Boolean) // Remove null values
             .sort((a, b) => b.sortDate - a.sortDate);
 
-          return combinedList.map((item) => {
-            if (item.type === 'active') {
-              // Render active appointment
+          return allItems.map((item, index) => {
+            const isLastItem = index === allItems.length - 1;
+            
+            if (item.type === 'active_text') {
+              // Render active text session as card
+              return (
+                <TouchableOpacity
+                  key={`active_text_${item.appointment_id}`}
+                  style={{ 
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    marginHorizontal: 20,
+                    marginBottom: 12,
+                    padding: 16,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                    borderWidth: item.isActive ? 2 : 0,
+                    borderColor: item.isActive ? '#4CAF50' : 'transparent'
+                  }}
+                  onPress={() => {
+                    const chatId = `text_session_${item.appointment_id}`;
+                    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ position: 'relative' }}>
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: '#4CAF50',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16
+                      }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
+                          {item.doctor?.first_name?.charAt(0) || 'D'}
+                        </Text>
+                      </View>
+                      {/* Active indicator */}
+                      {item.isActive && (
+                        <View style={{
+                          position: 'absolute',
+                          bottom: 2,
+                          right: 2,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          backgroundColor: '#4CAF50',
+                          borderWidth: 2,
+                          borderColor: '#FFFFFF'
+                        }} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                        Dr. {item.doctor?.first_name} {item.doctor?.last_name}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                        Text Session
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                        {item.remaining_time_minutes} min remaining
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#999' }}>
+                      Now
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            } else if (item.type === 'active') {
+              // Render active appointment as card
               return (
                 <TouchableOpacity
                   key={`active_${item.id}`}
-                  style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
+                  style={{ 
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    marginHorizontal: 20,
+                    marginBottom: 12,
+                    padding: 16,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}
                   onPress={() => {
                     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
                   }}
                 >
-                  <DoctorProfilePicture
-                    profilePictureUrl={item.doctor?.profile_picture_url}
-                    size={56}
-                    style={{ marginRight: 18 }}
-                    name={item.doctorName}
-                  />
-                  <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
-                      {String(item.reason) || 'Chat'}
-                    </Text>
-                    <Text style={{ fontSize: 16, color: '#4CAF50' }} numberOfLines={1}>
-                      {String(item.doctorName)}
-                    </Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                      <Text style={{ fontSize: 14, color: '#666', marginRight: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: '#4CAF50',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16
+                    }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
+                        {String(item.doctorName).charAt(0) || 'D'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                        {String(item.doctorName)}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                        {String(item.reason) || 'Chat'}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
                         {item.consultationType === 'text' ? 'Text Chat' : 
                          item.consultationType === 'voice' ? 'Voice Call' : 
                          item.consultationType === 'video' ? 'Video Call' : 'Chat'}
                       </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
                       {getAppointmentSessionStatus(item) === 'ready' && (
-                        <View style={{ backgroundColor: '#4CAF50', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                          <Text style={{ fontSize: 12, color: 'white', fontWeight: '600' }}>Ready</Text>
+                        <View style={{ backgroundColor: '#4CAF50', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
+                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Ready</Text>
                         </View>
                       )}
                       {getAppointmentSessionStatus(item) === 'scheduled' && (
-                        <View style={{ backgroundColor: '#FF9800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                          <Text style={{ fontSize: 12, color: 'white', fontWeight: '600' }}>Scheduled</Text>
+                        <View style={{ backgroundColor: '#FF9800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
+                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Scheduled</Text>
                         </View>
                       )}
                       {getAppointmentSessionStatus(item) === 'pending' && (
-                        <View style={{ backgroundColor: '#999', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                          <Text style={{ fontSize: 12, color: 'white', fontWeight: '600' }}>Pending</Text>
+                        <View style={{ backgroundColor: '#999', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
+                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Pending</Text>
                         </View>
                       )}
+                      <Text style={{ fontSize: 12, color: '#999' }}>
+                        {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                      </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
               );
             } else {
-              // Render ended session
+              // Render ended session as card
               return (
                 <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                   <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
+                    style={{ 
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 12,
+                      marginHorizontal: 20,
+                      marginBottom: 12,
+                      padding: 16,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 3
+                    }}
                     onPress={() => {
                       router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
                     }}
                   >
-                    <DoctorProfilePicture
-                      profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture}
-                      size={56}
-                      style={{ marginRight: 18 }}
-                      name={stripDoctorPrefix(item.doctor_name || 'Doctor')}
-                    />
-                    <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
-                        {item.reason || 'General Checkup'}
-                      </Text>
-                      <Text style={{ fontSize: 16, color: '#222' }} numberOfLines={1}>
-                        {withDoctorPrefix(item.doctor_name || 'Unknown')}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                        <Text style={{ fontSize: 14, color: '#4CAF50', marginRight: 8 }}>
-                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'} • {formatDuration(item.session_duration || 0)}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: '#E0E0E0',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16
+                      }}>
+                        <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                          {stripDoctorPrefix(item.doctor_name || 'Doctor').charAt(0) || 'D'}
                         </Text>
-                        <View style={{ backgroundColor: '#4CAF50', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                          <Text style={{ fontSize: 12, color: 'white', fontWeight: '600' }}>Ended</Text>
-                        </View>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                          {withDoctorPrefix(item.doctor_name || 'Unknown')}
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                          {item.reason || 'General Checkup'}
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                          Session ended • {formatDuration(item.session_duration || 0)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
+                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
+                        </Text>
+                        <TouchableOpacity
+                          style={{
+                            padding: 4,
+                          }}
+                          onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
+                        >
+                          <Icon name="more" size={16} color="#999" />
+                        </TouchableOpacity>
                       </View>
                     </View>
-                  </TouchableOpacity>
-                  
-                  {/* 3-dot menu button */}
-                  <TouchableOpacity
-                    style={{
-                      position: 'absolute',
-                      right: 20,
-                      top: 12,
-                      padding: 8,
-                      zIndex: 1,
-                    }}
-                    onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
-                  >
-                    <Icon name="more" size={20} color="#666" />
                   </TouchableOpacity>
                   
                   {/* Menu dropdown */}
@@ -1998,7 +1998,7 @@ export default function PatientDashboard() {
                     <View style={{
                       position: 'absolute',
                       right: 20,
-                      top: 40,
+                      top: 60,
                       backgroundColor: '#fff',
                       borderRadius: 8,
                       paddingVertical: 4,
@@ -2055,11 +2055,12 @@ export default function PatientDashboard() {
           const activeAppointments = getSafeAppointments().filter(appt => ['pending', 'confirmed'].includes(appt.status || ''));
           const hasActiveAppointments = activeAppointments.length > 0;
           const hasEndedSessions = endedSessions.length > 0;
-          const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0);
+          const hasActiveTextSession = !!activeTextSession;
+          const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0 || hasActiveTextSession);
 
-          if (!hasActiveAppointments && !hasEndedSessions && !messageSearchQuery) {
+          if (!hasActiveAppointments && !hasEndedSessions && !hasActiveTextSession && !messageSearchQuery) {
             return (
-              <View style={{ alignItems: 'center', marginTop: 60 }}>
+              <View style={{ alignItems: 'center', marginTop: 60, paddingHorizontal: 40 }}>
                 <DoctorProfilePicture
                   size={80}
                   style={{ marginBottom: 18 }}
@@ -2073,7 +2074,7 @@ export default function PatientDashboard() {
 
           if (messageSearchQuery && !hasSearchResults) {
             return (
-              <View style={{ alignItems: 'center', marginTop: 60 }}>
+              <View style={{ alignItems: 'center', marginTop: 60, paddingHorizontal: 40 }}>
                 <DoctorProfilePicture
                   size={80}
                   style={{ marginBottom: 18 }}
@@ -2387,55 +2388,45 @@ export default function PatientDashboard() {
           getFilteredAndSortedDoctors().map((doctor) => (
             <View key={doctor.id} style={{
               backgroundColor: '#FFFFFF',
-              borderRadius: 20,
-              padding: 20,
-              marginBottom: 16,
+              borderRadius: 16,
+              padding: 16,
+              marginBottom: 12,
               flexDirection: 'row',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.1,
-              shadowRadius: 12,
-              elevation: 4,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 8,
+              elevation: 3,
               borderWidth: 1,
               borderColor: '#F0F0F0',
               alignSelf: 'stretch',
             }}>
-              <View style={{ flex: 1, marginRight: 16 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
                   <Text style={{
-                    fontSize: 12,
-                    fontWeight: 'bold',
+                    fontSize: 11,
+                    fontWeight: '600',
                     color: '#4CAF50',
                     backgroundColor: '#E8F5E8',
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    marginRight: 8,
-                  }}>{doctor.country || 'Available'}</Text>
-                  {doctor.is_online && (
-                    <View style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: '#4CAF50',
-                      marginLeft: 4,
-                    }} />
-                  )}
+                    paddingHorizontal: 6,
+                    paddingVertical: 3,
+                    borderRadius: 10,
+                  }}>{doctor.country || 'Location not set'}</Text>
                 </View>
                 <Text style={{
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: 'bold',
                   color: '#222',
-                  marginBottom: 6,
+                  marginBottom: 4,
                 }}>
                   {`Dr. ${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown'}
                 </Text>
                 <Text style={{
-                  fontSize: 14,
+                  fontSize: 13,
                   color: '#666',
-                  marginBottom: 8,
-                  lineHeight: 20,
+                  marginBottom: 6,
+                  lineHeight: 18,
                 }}>
                   {(() => {
                     let specializationText = '';
@@ -2444,15 +2435,15 @@ export default function PatientDashboard() {
                     } else {
                       specializationText = doctor.specialization || 'General Medicine';
                     }
-                    return `${specializationText} with ${doctor.years_of_experience || 0}+ years of experience`;
+                    return `${specializationText} • ${doctor.years_of_experience || 0}+ years`;
                   })()}
                 </Text>
                 
                 {doctor.languages_spoken && doctor.languages_spoken.length > 0 && (
                   <Text style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     color: '#888',
-                    marginBottom: 12,
+                    marginBottom: 8,
                     fontStyle: 'italic',
                   }}>
                     Languages: {doctor.languages_spoken.join(', ')}
@@ -2461,21 +2452,21 @@ export default function PatientDashboard() {
                 <TouchableOpacity 
                   style={{
                     backgroundColor: '#4CAF50',
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 10,
                     alignSelf: 'flex-start',
                     shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
+                    shadowOffset: { width: 0, height: 1 },
                     shadowOpacity: 0.1,
-                    shadowRadius: 4,
+                    shadowRadius: 3,
                     elevation: 2,
                   }}
                   onPress={() => handleViewDoctorDetails(doctor)}
                 >
                   <Text style={{
                     color: '#FFFFFF',
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 'bold',
                   }}>View Profile</Text>
                 </TouchableOpacity>

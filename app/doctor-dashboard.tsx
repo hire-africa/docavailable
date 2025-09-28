@@ -1404,127 +1404,220 @@ export default function DoctorDashboard() {
   );
 
   const renderMessagesContent = () => (
-    <View style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 18, paddingBottom: 10, paddingHorizontal: 16, backgroundColor: '#F8F9FA' }}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222' }}>Messages</Text>
-        </View>
-      </View>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
 
       {/* Search Bar */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EAF4EC', borderRadius: 16, marginHorizontal: 16, marginBottom: 18, paddingHorizontal: 14, height: 44 }}>
-        <Icon name="search" size={20} color="#666" />
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        backgroundColor: '#F5F5F5', 
+        borderRadius: 25, 
+        marginHorizontal: 20, 
+        marginBottom: 16, 
+        paddingHorizontal: 18, 
+        height: 50,
+        borderWidth: 1,
+        borderColor: '#E5E5E5',
+      }}>
+        <Icon name="search" size={20} color="#999" />
         <TextInput
-          style={{ flex: 1, fontSize: 17, color: '#222', backgroundColor: 'transparent' }}
-          placeholder="Search"
-          placeholderTextColor="#7CB18F"
-          underlineColorAndroid="transparent"
+          style={{ flex: 1, fontSize: 16, color: '#333', backgroundColor: 'transparent', marginLeft: 12 }}
+          placeholder="Search conversations..."
+          placeholderTextColor="#999"
         />
       </View>
 
-      {/* Active Text Sessions */}
-      {activeTextSessions.length > 0 && (
-        <View style={{ marginHorizontal: 20, marginBottom: 16 }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#4CAF50', marginBottom: 8 }}>Active Text Sessions</Text>
-          {activeTextSessions.map((session) => (
-            <TouchableOpacity
-              key={session.id}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                backgroundColor: '#E8F5E8',
-                borderRadius: 12,
-                padding: 16,
-                marginBottom: 8,
-                borderWidth: 1,
-                borderColor: '#4CAF50'
-              }}
-              onPress={() => handleSelectTextSession(session)}
-            >
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#4CAF50', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                <Icon name="message" size={20} color="#666" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 2 }}>
-                  {session.patient?.first_name} {session.patient?.last_name}
-                </Text>
-                <Text style={{ fontSize: 14, color: '#4CAF50' }}>
-                  Text Session • {session.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
-                </Text>
-              </View>
-              <Icon name="chevronRight" size={20} color="#666" />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      {/* Unified Chat List - WhatsApp Style Inbox */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        {(() => {
+          // Get active text sessions and add to list
+          const activeTextSessionItems = activeTextSessions.map(session => ({
+            ...session,
+            type: 'active_text',
+            sortDate: new Date().getTime(), // Most recent
+            isActive: true
+          }));
 
-      {/* Recent Label */}
-      <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#222', marginLeft: 24, marginBottom: 10 }}>Recent</Text>
-
-      {loadingConfirmed || loadingTextSessions ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4CAF50" />
-          <Text style={styles.loadingText}>Loading patients...</Text>
-        </View>
-      ) : (confirmedAppointments?.length || 0) === 0 && (activeTextSessions?.length || 0) === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyStateIcon}>
-            <Icon name="users" size={20} color="#666" />
-          </View>
-          <Text style={styles.emptyStateTitle}>No Active Chats</Text>
-          <Text style={styles.emptyStateSubtitle}>
-            Patients will appear here once you accept their booking requests or start text sessions
-          </Text>
-          <View style={styles.emptyStateAction}>
-            <Icon name="calendar" size={20} color="#666" />
-            <Text style={styles.emptyStateActionText}>Check Appointments Tab</Text>
-          </View>
-        </View>
-      ) : (
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          {confirmedAppointments
-            .sort((a, b) => {
-              // Sort by most recent activity (createdAt, updatedAt, or date)
-              const getDate = (appt: any) => {
-                if (appt.updatedAt) return new Date(appt.updatedAt).getTime();
-                if (appt.createdAt) return new Date(appt.createdAt).getTime();
-                if (appt.date && appt.time) {
-                  try {
-                    // Try to parse date and time
-                    const [month, day, year] = (appt.date || '').split('/').map(Number);
-                    const [hour, minute] = (appt.time || '').split(':').map(Number);
-                    return new Date(year, month - 1, day, hour, minute).getTime();
-                  } catch {
-                    return 0;
-                  }
+          // Get confirmed appointments
+          const confirmedAppointmentItems = confirmedAppointments.map(appt => ({
+            ...appt,
+            type: 'confirmed',
+            sortDate: (() => {
+              if (appt.updatedAt) return new Date(appt.updatedAt).getTime();
+              if (appt.createdAt) return new Date(appt.createdAt).getTime();
+              if (appt.date && appt.time) {
+                try {
+                  const [month, day, year] = (appt.date || '').split('/').map(Number);
+                  const [hour, minute] = (appt.time || '').split(':').map(Number);
+                  return new Date(year, month - 1, day, hour, minute).getTime();
+                } catch {
+                  return 0;
                 }
-                return 0;
-              };
-              return getDate(b) - getDate(a); // Most recent first
-            })
-            .map((patient) => (
-            <TouchableOpacity
-              key={String(patient.id || patient.patientId || 'unknown')}
-              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, marginBottom: 2 }}
-              onPress={() => handleSelectPatient(patient)}
-              activeOpacity={0.7}
-            >
-              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D1E7DD', alignItems: 'center', justifyContent: 'center', marginRight: 18 }}>
-                <Icon name="user" size={20} color="#666" />
+              }
+              return 0;
+            })(),
+            isActive: false
+          }));
+
+          // Combine all items and sort by date (most recent first)
+          const allItems = [...activeTextSessionItems, ...confirmedAppointmentItems]
+            .sort((a, b) => b.sortDate - a.sortDate);
+
+          if (loadingConfirmed || loadingTextSessions) {
+            return (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#4CAF50" />
+                <Text style={styles.loadingText}>Loading patients...</Text>
               </View>
-              <View style={{ flex: 1, borderBottomWidth: 0, justifyContent: 'center' }}>
-                <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginBottom: 2 }} numberOfLines={1}>
-                  {String(patient.reason || 'Chat')}
+            );
+          }
+
+          if (allItems.length === 0) {
+            return (
+              <View style={styles.emptyState}>
+                <View style={styles.emptyStateIcon}>
+                  <Icon name="users" size={20} color="#666" />
+                </View>
+                <Text style={styles.emptyStateTitle}>No Active Chats</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Patients will appear here once you accept their booking requests or start text sessions
                 </Text>
-                <Text style={{ fontSize: 16, color: '#4CAF50' }} numberOfLines={1}>
-                  {String(patient.patient_name || 'Unknown Patient')}
-                </Text>
+                <View style={styles.emptyStateAction}>
+                  <Icon name="calendar" size={20} color="#666" />
+                  <Text style={styles.emptyStateActionText}>Check Appointments Tab</Text>
+                </View>
               </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
+            );
+          }
+
+          return allItems.map((item, index) => {
+            const isLastItem = index === allItems.length - 1;
+            
+            if (item.type === 'active_text') {
+              // Render active text session as card
+              return (
+                <TouchableOpacity
+                  key={`active_text_${item.id}`}
+                  style={{ 
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    marginHorizontal: 20,
+                    marginBottom: 12,
+                    padding: 16,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3,
+                    borderWidth: item.isActive ? 2 : 0,
+                    borderColor: item.isActive ? '#4CAF50' : 'transparent'
+                  }}
+                  onPress={() => handleSelectTextSession(item)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{ position: 'relative' }}>
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: '#4CAF50',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16
+                      }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
+                          {item.patient?.first_name?.charAt(0) || 'P'}
+                        </Text>
+                      </View>
+                      {/* Active indicator */}
+                      {item.isActive && (
+                        <View style={{
+                          position: 'absolute',
+                          bottom: 2,
+                          right: 2,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 6,
+                          backgroundColor: '#4CAF50',
+                          borderWidth: 2,
+                          borderColor: '#FFFFFF'
+                        }} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                        {item.patient?.first_name} {item.patient?.last_name}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                        Text Session
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                        {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#999' }}>
+                      Now
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            } else {
+              // Render confirmed appointment as card
+              return (
+                <TouchableOpacity
+                  key={`confirmed_${item.id || item.patientId || 'unknown'}`}
+                  style={{ 
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 12,
+                    marginHorizontal: 20,
+                    marginBottom: 12,
+                    padding: 16,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}
+                  onPress={() => handleSelectPatient(item)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: '#D1E7DD',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16
+                    }}>
+                      <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                        {String(item.patient_name || 'Unknown Patient').charAt(0) || 'P'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                        {String(item.patient_name || 'Unknown Patient')}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                        {String(item.reason || 'Chat')}
+                      </Text>
+                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                        {item.consultationType === 'text' ? 'Text Chat' : 
+                         item.consultationType === 'voice' ? 'Voice Call' : 
+                         item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#999' }}>
+                      {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+          });
+        })()}
+      </ScrollView>
     </View>
   );
 
