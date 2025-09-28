@@ -5,6 +5,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import '../services/cryptoPolyfill';
 import apiService from './services/apiService';
+import appInitializer from '../services/appInitializer';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -12,6 +13,9 @@ export default function RootLayout() {
     apiService.healthCheck().catch(() => {
       // Ignore errors here; this is a best-effort warm-up
     });
+    
+    // Initialize global services
+    appInitializer.initialize();
   }, []);
   return (
     <AuthProvider>
