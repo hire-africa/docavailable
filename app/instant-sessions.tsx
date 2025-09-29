@@ -128,12 +128,21 @@ export default function InstantSessionsScreen() {
     setStartingSession(true);
     try {
       let endpoint = '';
+      let requestBody: any = { reason };
+      
       if (sessionType === 'text') {
         endpoint = '/api/text-sessions/start';
+        requestBody.doctor_id = selectedDoctor.id;
       } else if (sessionType === 'audio') {
-        endpoint = '/api/audio-sessions/start';
+        endpoint = '/api/call-sessions/start';
+        requestBody.call_type = 'voice'; // Backend expects 'voice' not 'audio'
+        requestBody.appointment_id = `direct_session_${Date.now()}`;
+        requestBody.doctor_id = selectedDoctor.id; // Pass doctor ID for direct sessions
       } else if (sessionType === 'video') {
-        endpoint = '/api/video-sessions/start';
+        endpoint = '/api/call-sessions/start';
+        requestBody.call_type = 'video';
+        requestBody.appointment_id = `direct_session_${Date.now()}`;
+        requestBody.doctor_id = selectedDoctor.id; // Pass doctor ID for direct sessions
       }
 
       const response = await fetch(`${environment.LARAVEL_API_URL}${endpoint}`, {
@@ -142,10 +151,7 @@ export default function InstantSessionsScreen() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          doctor_id: selectedDoctor.id,
-          reason: reason 
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -160,11 +166,13 @@ export default function InstantSessionsScreen() {
           const chatId = `text_session_${data.data.session_id}`;
           router.push(`/chat/${chatId}`);
         } else {
-          // For audio/video calls, navigate to call screen
+          // For audio/video calls, use the data from the call-sessions response
+          const sessionData = data.data;
+          const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
           router.push({
             pathname: '/call',
             params: {
-              sessionId: data.data.session_id,
+              sessionId: appointmentId,
               doctorId: selectedDoctor.id,
               doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
               doctorSpecialization: selectedDoctor.specialization,

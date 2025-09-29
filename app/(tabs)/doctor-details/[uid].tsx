@@ -163,36 +163,41 @@ export default function DoctorProfilePage() {
           reason: reason
         });
       } else if (sessionType === 'audio') {
-        // Start audio call session
-        response = await apiService.post('/audio-sessions/start', {
-          doctor_id: doctor.id,
+        // Start audio call session using unified call-sessions endpoint
+        response = await apiService.post('/call-sessions/start', {
+          call_type: 'voice', // Backend expects 'voice' not 'audio'
+          appointment_id: `direct_session_${Date.now()}`, // Generate a temporary appointment ID
+          doctor_id: doctor.id, // Pass doctor ID for direct sessions
           reason: reason
         });
       } else if (sessionType === 'video') {
-        // Start video call session
-        response = await apiService.post('/video-sessions/start', {
-          doctor_id: doctor.id,
+        // Start video call session using unified call-sessions endpoint
+        response = await apiService.post('/call-sessions/start', {
+          call_type: 'video',
+          appointment_id: `direct_session_${Date.now()}`, // Generate a temporary appointment ID
+          doctor_id: doctor.id, // Pass doctor ID for direct sessions
           reason: reason
         });
       }
       
-      if (response && response.success && response.data) {
-        const sessionData = response.data as any;
-        
+      if (response && response.success) {
         // Close the modal
         setShowDirectBookingModal(false);
         
         // Navigate to the appropriate screen based on session type
         if (sessionType === 'text') {
-          // Navigate directly to chat
+          // For text sessions, use the data from response
+          const sessionData = response.data as any;
           const chatId = `text_session_${sessionData.session_id}`;
           router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
         } else {
-          // For audio/video calls, navigate to call screen
+          // For audio/video calls, use the data from the call-sessions response
+          const sessionData = response.data;
+          const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
           router.push({
             pathname: '/call',
             params: {
-              sessionId: sessionData.session_id,
+              sessionId: appointmentId,
               doctorId: doctor.id,
               doctorName: `${doctor.first_name} ${doctor.last_name}`,
               doctorSpecialization: doctor.specialization,
