@@ -59,7 +59,7 @@ class CallSessionController extends Controller
 
             // Check remaining calls based on type
             $remainingCalls = 0;
-            $callTypeField = $callType === 'voice' ? 'voice_sessions_remaining' : 'video_sessions_remaining';
+            $callTypeField = $callType === 'voice' ? 'voiceCallsRemaining' : 'videoCallsRemaining';
             $remainingCalls = $subscription->$callTypeField ?? 0;
 
             if ($remainingCalls <= 0) {
@@ -84,10 +84,10 @@ class CallSessionController extends Controller
                 'message' => "You have {$remainingCalls} {$callType} calls remaining",
                 'remaining_calls' => $remainingCalls,
                 'subscription' => [
-                    'text_sessions_remaining' => $subscription->text_sessions_remaining,
-                    'voice_sessions_remaining' => $subscription->voice_sessions_remaining,
-                    'video_sessions_remaining' => $subscription->video_sessions_remaining,
-                    'is_active' => $subscription->is_active
+                    'textSessionsRemaining' => $subscription->textSessionsRemaining,
+                    'voiceCallsRemaining' => $subscription->voiceCallsRemaining,
+                    'videoCallsRemaining' => $subscription->videoCallsRemaining,
+                    'isActive' => $subscription->isActive
                 ]
             ]);
 
@@ -150,7 +150,7 @@ class CallSessionController extends Controller
 
             // Get subscription for remaining sessions count
             $subscription = Subscription::where('user_id', $user->id)->first();
-            $callTypeField = $callType === 'voice' ? 'voice_sessions_remaining' : 'video_sessions_remaining';
+            $callTypeField = $callType === 'voice' ? 'voiceCallsRemaining' : 'videoCallsRemaining';
             $sessionsRemainingBeforeStart = $subscription->$callTypeField;
 
             // For direct sessions, we need to find a doctor
