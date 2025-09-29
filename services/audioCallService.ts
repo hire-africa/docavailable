@@ -1052,6 +1052,9 @@ class AudioCallService {
         wasConnected: wasConnected
       });
       
+      // Update call session in backend
+      await this.updateCallSessionInBackend(sessionDuration, wasConnected);
+      
       // Close signaling connection
       if (this.signalingChannel) {
         this.signalingChannel.close();
@@ -1139,6 +1142,38 @@ class AudioCallService {
     };
     
     console.log('✅ AudioCallService state reset complete');
+  }
+
+  /**
+   * Update call session in backend when call ends
+   */
+  private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
+    try {
+      console.log('📞 Updating call session in backend...');
+      
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'voice',
+          appointment_id: this.appointmentId,
+          session_duration: sessionDuration,
+          was_connected: wasConnected
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Call session updated in backend:', data);
+      } else {
+        console.error('❌ Failed to update call session in backend:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error updating call session in backend:', error);
+    }
   }
 }
 

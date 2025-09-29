@@ -155,8 +155,8 @@ export default function CallScreen() {
       videoCallService.current.endCall();
     }
 
-    // Navigate back to the previous screen
-    router.back();
+    // Navigate back to patient dashboard
+    router.replace('/patient-dashboard');
   };
 
   const handleCallTimeout = () => {
@@ -166,7 +166,7 @@ export default function CallScreen() {
       [
         {
           text: 'OK',
-          onPress: () => router.back()
+          onPress: () => router.replace('/patient-dashboard')
         }
       ]
     );
@@ -179,7 +179,7 @@ export default function CallScreen() {
       [
         {
           text: 'OK',
-          onPress: () => router.back()
+          onPress: () => router.replace('/patient-dashboard')
         }
       ]
     );
