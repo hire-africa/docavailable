@@ -268,11 +268,41 @@ class CallSessionController extends Controller
 
             $callType = $request->input('call_type');
             $appointmentId = $request->input('appointment_id');
+            $sessionId = $request->input('session_id');
             $sessionDuration = $request->input('session_duration', 0);
             $wasConnected = $request->input('was_connected', false);
 
+            // Find the call session to end
+            $callSession = null;
+            if ($sessionId) {
+                $callSession = CallSession::where('id', $sessionId)
+                    ->where('patient_id', $user->id)
+                    ->first();
+            } elseif ($appointmentId) {
+                $callSession = CallSession::where('appointment_id', $appointmentId)
+                    ->where('patient_id', $user->id)
+                    ->first();
+            }
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call session not found'
+                ], 404);
+            }
+
+            // Update the call session status
+            $callSession->update([
+                'status' => CallSession::STATUS_ENDED,
+                'ended_at' => now(),
+                'last_activity_at' => now(),
+                'is_connected' => $wasConnected,
+                'call_duration' => $sessionDuration,
+            ]);
+
             Log::info("Call session ended", [
                 'user_id' => $user->id,
+                'call_session_id' => $callSession->id,
                 'call_type' => $callType,
                 'appointment_id' => $appointmentId,
                 'session_duration' => $sessionDuration,
