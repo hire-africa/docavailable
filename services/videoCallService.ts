@@ -626,7 +626,7 @@ class VideoCallService {
   /**
    * End the call
    */
-  endCall(): void {
+  async endCall(): Promise<void> {
     console.log('📞 Ending video call...');
     
     // Calculate session duration
@@ -641,6 +641,9 @@ class VideoCallService {
       sessionDuration: sessionDuration,
       wasConnected: wasConnected
     });
+    
+    // Update call session in backend
+    await this.updateCallSessionInBackend(sessionDuration, wasConnected);
     
     this.cleanup();
     this.events?.onCallEnded();
@@ -883,6 +886,38 @@ class VideoCallService {
     this.cleanup();
     
     console.log('✅ VideoCallService state reset complete');
+  }
+
+  /**
+   * Update call session in backend when call ends
+   */
+  private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
+    try {
+      console.log('📞 Updating call session in backend...');
+      
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'video',
+          appointment_id: this.appointmentId,
+          session_duration: sessionDuration,
+          was_connected: wasConnected
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Call session updated in backend:', data);
+      } else {
+        console.error('❌ Failed to update call session in backend:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ Error updating call session in backend:', error);
+    }
   }
 }
 
