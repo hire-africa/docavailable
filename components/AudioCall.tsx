@@ -444,7 +444,14 @@ export default function AudioCall({
               setIsRinging(false);
               setIsProcessingAnswer(true);
               
-              // Just trigger the callback - let the parent handle the logic
+              try {
+                // Process the stored pending offer and send answer
+                await AudioCallService.getInstance().processIncomingCall();
+              } catch (e) {
+                console.error('❌ Failed to process incoming call:', e);
+              }
+              
+              // Trigger callback for any parent-side effects
               onCallAnswered?.();
             }}
             activeOpacity={0.8}

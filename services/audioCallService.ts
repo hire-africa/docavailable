@@ -43,6 +43,7 @@ class AudioCallService {
   private userId: string | null = null;
   private processedMessages: Set<string> = new Set();
   private isProcessingIncomingCall: boolean = false;
+  private isIncoming: boolean = false;
 
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
@@ -94,6 +95,7 @@ class AudioCallService {
   async initializeForIncomingCall(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
     try {
       console.log(`📞 [AudioCallService ${this.instanceId}] Initializing for incoming call...`);
+      this.isIncoming = true;
       console.log(`📞 [AudioCallService ${this.instanceId}] Parameters:`, { appointmentId, userId });
       
       if (!appointmentId || appointmentId === 'null' || appointmentId === 'undefined') {
@@ -264,6 +266,7 @@ class AudioCallService {
    */
   async initialize(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
     try {
+      this.isIncoming = false;
       this.events = events;
       this.appointmentId = appointmentId;
       this.userId = userId;
@@ -398,7 +401,13 @@ class AudioCallService {
             
             switch (message.type) {
               case 'offer':
-                    await this.handleOffer(message.offer);
+                    if (this.isIncoming) {
+                      // Do not auto-answer on incoming; wait for explicit accept
+                      (global as any).pendingOffer = message.offer;
+                      console.log('📞 [AudioCallService] Stored pending offer; awaiting user acceptance');
+                    } else {
+                      await this.handleOffer(message.offer);
+                    }
                     break;
               case 'answer':
                     await this.handleAnswer(message.answer);

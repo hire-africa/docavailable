@@ -25,7 +25,8 @@ export default {
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
-      }
+      },
+      googleServicesFile: "./android/app/google-services.json"
     },
     web: {
       favicon: "./assets/images/favicon.png"
@@ -47,7 +48,9 @@ export default {
           "microphonePermission": "Allow DocAvailable to access your microphone for audio calls with healthcare providers.",
           "cameraPermission": "Allow DocAvailable to access your camera for video consultations with healthcare providers."
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
     ],
     extra: {
       // API Configuration

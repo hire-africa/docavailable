@@ -15,6 +15,8 @@ import {
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SessionTypeSelectionModal, { SessionType } from '../../../components/SessionTypeSelectionModal';
+import AudioCallModal from '../../../components/AudioCallModal';
+import VideoCallModal from '../../../components/VideoCallModal';
 import { DoctorProfileSkeleton } from '../../../components/skeleton';
 import SubscriptionModal from '../../../components/SubscriptionModal';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -49,7 +51,7 @@ interface DoctorProfile {
 
 export default function DoctorProfilePage() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
-  const { userData } = useAuth();
+  const { user, userData } = useAuth();
   const [doctor, setDoctor] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
@@ -57,6 +59,11 @@ export default function DoctorProfilePage() {
   const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
   const [currentSubscription, setCurrentSubscription] = useState<any>(null);
+  // Direct booking call state
+  const [showAudioCallModal, setShowAudioCallModal] = useState(false);
+  const [showVideoCallModal, setShowVideoCallModal] = useState(false);
+  const [directSessionId, setDirectSessionId] = useState<string | null>(null);
+  const [startingSession, setStartingSession] = useState(false);
 
   useEffect(() => {
     if (uid) {
@@ -154,6 +161,7 @@ export default function DoctorProfilePage() {
     if (!doctor || !userData) return;
     
     try {
+      setStartingSession(true);
       let response;
       
       if (sessionType === 'text') {
@@ -162,50 +170,37 @@ export default function DoctorProfilePage() {
           doctor_id: doctor.id,
           reason: reason
         });
-      } else if (sessionType === 'audio') {
-        // Start audio call session using unified call-sessions endpoint
+      } else if (sessionType === 'audio' || sessionType === 'video') {
+        // Generate a direct session ID so both peers can connect to the same signaling room
+        const provisionalAppointmentId = `direct_session_${Date.now()}`;
+        // Start call session on backend so it can notify the doctor via push (for background/killed delivery)
         response = await apiService.post('/call-sessions/start', {
-          call_type: 'voice', // Backend expects 'voice' not 'audio'
-          appointment_id: `direct_session_${Date.now()}`, // Generate a temporary appointment ID
-          doctor_id: doctor.id, // Pass doctor ID for direct sessions
-          reason: reason
-        });
-      } else if (sessionType === 'video') {
-        // Start video call session using unified call-sessions endpoint
-        response = await apiService.post('/call-sessions/start', {
-          call_type: 'video',
-          appointment_id: `direct_session_${Date.now()}`, // Generate a temporary appointment ID
-          doctor_id: doctor.id, // Pass doctor ID for direct sessions
+          call_type: sessionType === 'audio' ? 'voice' : 'video',
+          appointment_id: provisionalAppointmentId,
+          doctor_id: doctor.id,
           reason: reason
         });
       }
       
       if (response && response.success) {
-        // Close the modal
+        // Close the direct booking modal
         setShowDirectBookingModal(false);
         
-        // Navigate to the appropriate screen based on session type
         if (sessionType === 'text') {
-          // For text sessions, use the data from response
+          // For text sessions, navigate to chat using the returned session id
           const sessionData = response.data as any;
           const chatId = `text_session_${sessionData.session_id}`;
           router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
         } else {
-          // For audio/video calls, use the data from the call-sessions response
-          const sessionData = response.data;
+          // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
+          const sessionData = response.data as any;
           const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
-          router.push({
-            pathname: '/call',
-            params: {
-              sessionId: appointmentId,
-              doctorId: doctor.id,
-              doctorName: `${doctor.first_name} ${doctor.last_name}`,
-              doctorSpecialization: doctor.specialization,
-              doctorProfilePicture: doctor.profile_picture_url || doctor.profile_picture,
-              callType: sessionType,
-              isDirectSession: 'true'
-            }
-          });
+          setDirectSessionId(appointmentId);
+          if (sessionType === 'audio') {
+            setShowAudioCallModal(true);
+          } else {
+            setShowVideoCallModal(true);
+          }
         }
       } else {
         Alert.alert('Error', response?.message || 'Failed to start session');
@@ -213,6 +208,8 @@ export default function DoctorProfilePage() {
     } catch (error) {
       console.error('Error starting session:', error);
       Alert.alert('Error', 'Failed to start session. Please try again.');
+    } finally {
+      setStartingSession(false);
     }
   };
 
@@ -421,7 +418,40 @@ export default function DoctorProfilePage() {
         onConfirm={handleDirectBookingConfirm}
         doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
         sessionType={selectedSessionType}
+        loading={startingSession}
       />
+
+      {/* Outgoing audio call modal (reuses chat call flow) */}
+      {directSessionId && (
+        <AudioCallModal
+          visible={showAudioCallModal}
+          onClose={() => setShowAudioCallModal(false)}
+          appointmentId={directSessionId}
+          userId={(user?.id ?? userData?.id ?? 0).toString()}
+          isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+          doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+          patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+          otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
+          onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
+          onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
+        />
+      )}
+
+      {/* Outgoing video call modal (reuses chat call flow) */}
+      {directSessionId && (
+        <VideoCallModal
+          appointmentId={directSessionId}
+          userId={(user?.id ?? userData?.id ?? 0).toString()}
+          isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+          doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+          patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+          otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
+          onEndCall={() => setShowVideoCallModal(false)}
+          onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
+          onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
+          isIncomingCall={false}
+        />
+      )}
     </SafeAreaView>
   );
 }
