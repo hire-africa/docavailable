@@ -29,12 +29,15 @@ export default function CallScreen() {
   const [showAudioCall, setShowAudioCall] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
+  const incomingParam = String(params.isIncomingCall || '').toLowerCase() === 'true';
 
   // Call services
   const audioCallService = useRef<AudioCallService | null>(null);
   const videoCallService = useRef<VideoCallService | null>(null);
 
   useEffect(() => {
+    // Derive incoming flag from params on mount
+    setIsIncomingCall(incomingParam);
     initializeCall();
   }, []);
 
@@ -53,8 +56,8 @@ export default function CallScreen() {
         return;
       }
 
-      // Create appointment ID for the call (using session ID)
-      const appointmentId = `direct_session_${sessionId}`;
+      // Use session ID directly as appointment ID
+      const appointmentId = sessionId;
       const userId = user.id.toString();
       const isDoctor = user.user_type === 'doctor';
 
@@ -68,16 +71,20 @@ export default function CallScreen() {
       });
 
       if (callType === 'audio') {
-        // Initialize audio call
-        audioCallService.current = AudioCallService.getInstance();
-        await audioCallService.current.initialize(
-          appointmentId,
-          userId,
-          {
-            onCallAnswered: () => {
-              console.log('📞 Audio call answered');
-              setShowAudioCall(true);
-            },
+        if (incomingParam) {
+          // Incoming call: render UI and let component initialize for incoming
+          setShowAudioCall(true);
+        } else {
+          // Outgoing call
+          audioCallService.current = AudioCallService.getInstance();
+          await audioCallService.current.initialize(
+            appointmentId,
+            userId,
+            {
+              onCallAnswered: () => {
+                console.log('📞 Audio call answered');
+                setShowAudioCall(true);
+              },
             onCallEnded: () => {
               console.log('📞 Audio call ended');
               handleCallEnd();
@@ -95,23 +102,32 @@ export default function CallScreen() {
             },
             onStateChange: (state) => {
               console.log('📞 Audio call state changed:', state);
+            },
+            onError: (error) => {
+              console.error('📞 Audio call error:', error);
+              setError(error);
             }
           }
         );
 
         // The call starts automatically after initialization
         setShowAudioCall(true);
+        }
       } else if (callType === 'video') {
-        // Initialize video call
-        videoCallService.current = new VideoCallService();
-        await videoCallService.current.initialize(
-          appointmentId,
-          userId,
-          {
-            onCallAnswered: () => {
-              console.log('📹 Video call answered');
-              setShowVideoCall(true);
-            },
+        if (incomingParam) {
+          // Incoming call: render UI and let component initialize for incoming
+          setShowVideoCall(true);
+        } else {
+          // Outgoing call
+          videoCallService.current = new VideoCallService();
+          await videoCallService.current.initialize(
+            appointmentId,
+            userId,
+            {
+              onCallAnswered: () => {
+                console.log('📹 Video call answered');
+                setShowVideoCall(true);
+              },
             onCallEnded: () => {
               console.log('📹 Video call ended');
               handleCallEnd();
@@ -129,12 +145,17 @@ export default function CallScreen() {
             },
             onStateChange: (state) => {
               console.log('📹 Video call state changed:', state);
+            },
+            onError: (error) => {
+              console.error('📹 Video call error:', error);
+              setError(error);
             }
           }
         );
 
         // The call starts automatically after initialization
         setShowVideoCall(true);
+        }
       }
 
       setIsInitialized(true);
@@ -216,7 +237,7 @@ export default function CallScreen() {
     <SafeAreaView style={styles.container}>
       {callType === 'audio' && showAudioCall && (
         <AudioCall
-          appointmentId={`direct_session_${sessionId}`}
+          appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
           doctorName={doctorName as string || 'Doctor'}
@@ -225,12 +246,13 @@ export default function CallScreen() {
           onEndCall={handleCallEnd}
           onCallTimeout={handleCallTimeout}
           onCallRejected={handleCallRejected}
+          isIncomingCall={isIncomingCall}
         />
       )}
 
       {callType === 'video' && showVideoCall && (
         <VideoCallModal
-          appointmentId={`direct_session_${sessionId}`}
+          appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
           doctorName={doctorName as string || 'Doctor'}

@@ -1,13 +1,16 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import messaging from '@react-native-firebase/messaging';
 import { AuthProvider } from '../contexts/AuthContext';
+import pushNotificationService from '../services/pushNotificationService';
 
 // Import crypto polyfill early to ensure it's loaded before any encryption services
+import appInitializer from '../services/appInitializer';
 import '../services/cryptoPolyfill';
 import apiService from './services/apiService';
-import appInitializer from '../services/appInitializer';
 
 export default function RootLayout() {
+  const router = useRouter();
   useEffect(() => {
     // Warm the backend on app start to reduce initial timeouts due to cold starts
     apiService.healthCheck().catch(() => {
@@ -16,6 +19,60 @@ export default function RootLayout() {
     
     // Initialize global services
     appInitializer.initialize();
+
+    // Register for FCM (permission + token) and send to backend
+    pushNotificationService.registerForPushNotifications().catch(() => {});
+
+    // Foreground handler for incoming call data
+    const onMessageUnsub = messaging().onMessage(async (remoteMessage) => {
+      try {
+        const data: any = remoteMessage?.data || {};
+        if (data.type === 'incoming_call') {
+          const appointmentId = data.appointment_id || data.appointmentId;
+          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
+          if (appointmentId) {
+            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to handle foreground FCM:', e);
+      }
+    });
+
+    // App opened from background by tapping notification
+    const onOpenedUnsub = messaging().onNotificationOpenedApp((remoteMessage) => {
+      try {
+        const data: any = remoteMessage?.data || {};
+        if (data.type === 'incoming_call') {
+          const appointmentId = data.appointment_id || data.appointmentId;
+          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
+          if (appointmentId) {
+            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to handle opened-app FCM:', e);
+      }
+    });
+
+    // Cold start (app was quit)
+    messaging().getInitialNotification().then((remoteMessage) => {
+      try {
+        const data: any = remoteMessage?.data || {};
+        if (data.type === 'incoming_call') {
+          const appointmentId = data.appointment_id || data.appointmentId;
+          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
+          if (appointmentId) {
+            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
+          }
+        }
+      } catch {}
+    }).catch(() => {});
+
+    return () => {
+      onMessageUnsub();
+      onOpenedUnsub();
+    };
   }, []);
   return (
     <AuthProvider>
