@@ -1,0 +1,29 @@
+{
+    "project_info": {
+      "project_number": "327624693503",
+      "project_id": "doc-push",
+      "storage_bucket": "doc-push.firebasestorage.app"
+    },
+    "client": [
+      {
+        "client_info": {
+          "mobilesdk_app_id": "1:327624693503:android:c5161ae5476505b5861eca",
+          "android_client_info": {
+            "package_name": "com.docavailable.app"
+          }
+        },
+        "oauth_client": [],
+        "api_key": [
+          {
+            "current_key": "AIzaSy***REMOVED***"
+          }
+        ],
+        "services": {
+          "appinvite_service": {
+            "other_platform_oauth_client": []
+          }
+        }
+      }
+    ],
+    "configuration_version": "1"
+  }
