@@ -5,7 +5,8 @@ namespace App\Providers;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Notification;
-use App\Broadcasting\OneSignalChannel;
+use Illuminate\Support\Facades\Log;
+use App\Broadcasting\FcmChannel;
 use App\Services\TextSessionMessageService;
 
 class AppServiceProvider extends ServiceProvider
@@ -35,10 +36,32 @@ class AppServiceProvider extends ServiceProvider
             return config('app.frontend_url')."/password-reset/$token?email={$notifiable->getEmailForPasswordReset()}";
         });
 
-        // Register OneSignal channel for secure medical notifications
-        Notification::extend('onesignal', function ($app) {
-            return new OneSignalChannel();
+        // Register FCM channel for push notifications
+        Notification::extend('fcm', function ($app) {
+            return new FcmChannel();
         });
+
+        // Ensure Firebase service account file exists (for FCM v1)
+        try {
+            $serviceAccountPath = storage_path('app/firebase-service-account.json');
+            if (!file_exists($serviceAccountPath)) {
+                $json = env('FIREBASE_SERVICE_ACCOUNT_JSON');
+                if (!empty($json)) {
+                    // Create directory if missing
+                    $dir = dirname($serviceAccountPath);
+                    if (!is_dir($dir)) {
+                        @mkdir($dir, 0755, true);
+                    }
+                    // Write file
+                    file_put_contents($serviceAccountPath, $json);
+                    Log::info('FCM: Wrote service account JSON to storage/app/firebase-service-account.json');
+                } else {
+                    Log::warning('FCM: Service account file missing and FIREBASE_SERVICE_ACCOUNT_JSON not provided. Push will fail.');
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('FCM: Failed ensuring service account file: '.$e->getMessage());
+        }
 
         // Register Intervention Image facade (v3)
         $this->app->alias(\Intervention\Image\ImageManager::class, 'Image');
