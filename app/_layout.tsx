@@ -3,6 +3,8 @@ import { useEffect } from 'react';
 import messaging from '@react-native-firebase/messaging';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
+import { routeIncomingCall } from '../utils/callRouter';
+import { routePushEvent } from '../utils/notificationRouter';
 
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import appInitializer from '../services/appInitializer';
@@ -27,13 +29,10 @@ export default function RootLayout() {
     const onMessageUnsub = messaging().onMessage(async (remoteMessage) => {
       try {
         const data: any = remoteMessage?.data || {};
-        if (data.type === 'incoming_call') {
-          const appointmentId = data.appointment_id || data.appointmentId;
-          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
-          if (appointmentId) {
-            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
-          }
-        }
+        // Conservative foreground handling: only auto-route for incoming calls
+        routeIncomingCall(router, data);
+        // Also let the centralized router process (it will no-op for non-call events in foreground)
+        routePushEvent(router, data, 'foreground');
       } catch (e) {
         console.error('Failed to handle foreground FCM:', e);
       }
@@ -43,13 +42,7 @@ export default function RootLayout() {
     const onOpenedUnsub = messaging().onNotificationOpenedApp((remoteMessage) => {
       try {
         const data: any = remoteMessage?.data || {};
-        if (data.type === 'incoming_call') {
-          const appointmentId = data.appointment_id || data.appointmentId;
-          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
-          if (appointmentId) {
-            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
-          }
-        }
+        routePushEvent(router, data, 'opened');
       } catch (e) {
         console.error('Failed to handle opened-app FCM:', e);
       }
@@ -59,13 +52,7 @@ export default function RootLayout() {
     messaging().getInitialNotification().then((remoteMessage) => {
       try {
         const data: any = remoteMessage?.data || {};
-        if (data.type === 'incoming_call') {
-          const appointmentId = data.appointment_id || data.appointmentId;
-          const callType = (data.call_type || data.callType || 'audio').toLowerCase();
-          if (appointmentId) {
-            router.push({ pathname: '/call', params: { sessionId: String(appointmentId), callType, isIncomingCall: 'true' } });
-          }
-        }
+        routePushEvent(router, data, 'initial');
       } catch {}
     }).catch(() => {});
 
