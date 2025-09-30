@@ -1138,9 +1138,9 @@ Route::post('/test-login-error-handling', function (Illuminate\Http\Request $req
 // OneSignal Test Endpoints
 Route::get('/test-env', function() {
     return response()->json([
-        'onesignal_app_id' => config('services.onesignal.app_id'),
-        'onesignal_rest_api_key' => config('services.onesignal.rest_api_key') ? 'configured' : 'missing',
-        'notification_channel' => 'onesignal'
+        'fcm_project_id' => config('services.fcm.project_id'),
+        'service_account_exists' => file_exists(storage_path('app/firebase-service-account.json')),
+        'notification_channel' => 'fcm'
     ]);
 });
 

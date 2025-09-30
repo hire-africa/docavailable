@@ -37,16 +37,16 @@ class ChatMessageNotification extends Notification implements ShouldQueue
         
         // Only send push notifications for chat messages
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
-            $channels[] = 'onesignal'; // Changed from 'fcm' to 'onesignal'
+            $channels[] = 'fcm';
         }
 
         return $channels;
     }
 
     /**
-     * Get the OneSignal representation of the notification (PRIVACY-FIRST - NO MESSAGE CONTENT).
+     * Get the FCM representation of the notification (PRIVACY-FIRST - NO MESSAGE CONTENT).
      */
-    public function toOneSignal($notifiable): array
+    public function toFcm($notifiable): array
     {
         $senderName = $this->getSenderDisplayName();
         
