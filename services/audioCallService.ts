@@ -298,33 +298,65 @@ class AudioCallService {
         return;
       }
 
-      // Start call session on backend to trigger push notification to the doctor
-      if (doctorId !== undefined && doctorId !== null && String(doctorId) !== '') {
+      // Resolve doctorId: must not skip backend start-call
+      let finalDoctorId: number | null = null;
+      if (doctorId !== undefined && doctorId !== null && String(doctorId).trim() !== '') {
+        finalDoctorId = Number(doctorId);
+      } else {
+        // Try to infer from appointment for non-direct sessions
         try {
-          const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await this.getAuthToken()}`
-            },
-            body: JSON.stringify({
-              call_type: 'voice',
-              appointment_id: appointmentId,
-              doctor_id: Number(doctorId)
-            })
-          });
-          if (!startResp.ok) {
-            const body = await startResp.text().catch(() => '');
-            console.error('❌ Failed to start call session on backend:', startResp.status, body);
-          } else {
-            const startData = await startResp.json().catch(() => ({} as any));
-            console.log('✅ Call session started on backend:', startData?.data?.session_id ?? startData);
+          if (!appointmentId.startsWith('direct_session_')) {
+            const resp = await fetch(`${environment.LARAVEL_API_URL}/api/appointments/${appointmentId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await this.getAuthToken()}`
+              }
+            });
+            if (resp.ok) {
+              const data = await resp.json().catch(() => ({} as any));
+              const inferred = data?.data?.doctor_id ?? data?.doctor_id;
+              if (inferred) finalDoctorId = Number(inferred);
+            } else {
+              console.warn('⚠️ Could not fetch appointment to infer doctorId (audio):', resp.status);
+            }
           }
         } catch (e) {
-          console.error('❌ Error starting call session on backend:', e);
+          console.warn('⚠️ Error inferring doctorId from appointment (audio):', e);
         }
-      } else {
-        console.log('ℹ️ No doctorId provided; skipping backend start-call API.');
+      }
+
+      if (finalDoctorId == null || Number.isNaN(finalDoctorId)) {
+        const msg = 'Doctor ID is required to start call session';
+        console.error('❌ [AudioCallService] ' + msg);
+        this.events?.onError?.(msg);
+        this.updateState({ connectionState: 'failed' });
+        return;
+      }
+
+      // Start call session on backend to trigger push notification to the doctor
+      try {
+        const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await this.getAuthToken()}`
+          },
+          body: JSON.stringify({
+            call_type: 'voice',
+            appointment_id: appointmentId,
+            doctor_id: finalDoctorId
+          })
+        });
+        if (!startResp.ok) {
+          const body = await startResp.text().catch(() => '');
+          console.error('❌ Failed to start call session on backend:', startResp.status, body);
+        } else {
+          const startData = await startResp.json().catch(() => ({} as any));
+          console.log('✅ Call session started on backend:', startData?.data?.session_id ?? startData);
+        }
+      } catch (e) {
+        console.error('❌ Error starting call session on backend:', e);
       }
 
       // Get user media (audio only)
