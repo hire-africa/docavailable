@@ -1,14 +1,33 @@
-import 'expo-router/entry';
 import messaging from '@react-native-firebase/messaging';
+import * as Notifications from 'expo-notifications';
 
-// Background/killed message handler (Android & iOS)
-messaging().setBackgroundMessageHandler(async remoteMessage => {
+// Background/Killed handler: Display a high-importance local notification for incoming calls
+messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
-    console.log('[FCM] Background message:', remoteMessage?.data || remoteMessage);
-    // Note: Navigation is not available here. You can display a local notification
-    // or schedule a foreground service (Android) from native code if needed.
+    const data = remoteMessage?.data || {};
+    if (data?.type === 'incoming_call') {
+      await Notifications.setNotificationChannelAsync('calls', {
+        name: 'Calls',
+        importance: Notifications.AndroidImportance.MAX,
+        sound: 'default',
+        vibrationPattern: [0, 250, 250, 250],
+        bypassDnd: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: data.call_type === 'video' ? 'Incoming video call' : 'Incoming audio call',
+          body: 'Tap to answer',
+          data,
+          sound: 'default',
+        },
+        trigger: null,
+      });
+    }
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error('[FCM] Background handler error:', e);
+    // headless errors must be swallowed
   }
 });
+
+// Keep expo-router entry after handlers are set
+export * from 'expo-router/entry';
