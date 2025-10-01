@@ -29,7 +29,13 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        $channels = ['database'];
+        // Optional: still send email if you want
+        // $channels[] = 'mail';
+        if (isset($notifiable->push_notifications_enabled) && isset($notifiable->push_token) && $notifiable->push_notifications_enabled && !empty($notifiable->push_token)) {
+            $channels[] = 'fcm';
+        }
+        return $channels;
     }
 
     /**
@@ -45,6 +51,31 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
             ->line('Message: ' . $this->data['message_preview'])
             ->action('View Session', url('/text-sessions/' . $this->data['session_id']))
             ->line('Thank you for using DocAvailable!');
+    }
+
+    /**
+     * Get the FCM representation of the notification.
+     */
+    public function toFcm($notifiable): array
+    {
+        $senderName = $this->data['sender_name'] ?? 'Unknown';
+        $sessionId = $this->data['session_id'] ?? '';
+        // Use appointment_id as the unified key the client expects
+        $appointmentId = is_string($sessionId) && str_starts_with($sessionId, 'text_session_')
+            ? $sessionId
+            : 'text_session_' . $sessionId;
+
+        return [
+            'title' => "New message from {$senderName}",
+            'body' => 'You have a new message',
+            'data' => [
+                'type' => 'chat_message',
+                'appointment_id' => (string)$appointmentId,
+                'sender_name' => $senderName,
+                'message_count' => 1,
+                'timestamp' => now()->toISOString(),
+            ],
+        ];
     }
 
     /**
