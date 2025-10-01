@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
 use App\Broadcasting\FcmChannel;
 use App\Services\TextSessionMessageService;
+use App\Models\CallSession;
+use App\Observers\CallSessionObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -65,5 +67,13 @@ class AppServiceProvider extends ServiceProvider
 
         // Register Intervention Image facade (v3)
         $this->app->alias(\Intervention\Image\ImageManager::class, 'Image');
+
+        // Observe CallSession model to auto-send incoming call notifications on creation
+        try {
+            CallSession::observe(CallSessionObserver::class);
+            Log::info('AppServiceProvider: CallSessionObserver registered');
+        } catch (\Throwable $t) {
+            Log::error('AppServiceProvider: Failed to register CallSessionObserver: '.$t->getMessage());
+        }
     }
 }
