@@ -419,8 +419,34 @@ class ChatController extends Controller
             
             $this->sendChatNotification($user, $appointment, $request->message, $message['id']);
         } else {
-            // For text sessions, we'll skip notification for now or implement a different approach
-            // TODO: Implement text session specific notifications
+            // Text session message notification
+            if (isset($session) && $session) {
+                try {
+                    $recipient = ($user->id === $session->patient_id) ? \App\Models\User::find($session->doctor_id) : \App\Models\User::find($session->patient_id);
+                    if ($recipient && $recipient->push_notifications_enabled && $recipient->push_token) {
+                        $notificationData = [
+                            'session_id' => $session->id,
+                            'sender_name' => $this->getUserName($user->id),
+                            'message_preview' => substr($request->message ?? '', 0, 50),
+                            'message_id' => $message['id']
+                        ];
+                        $recipient->notify(new \App\Notifications\TextSessionMessageNotification($notificationData));
+                        Log::info('📤 Text session push sent', [
+                            'session_id' => $session->id,
+                            'recipient_id' => $recipient->id
+                        ]);
+                    } else {
+                        Log::info('⚠️ Text session push skipped (no token or disabled)', [
+                            'session_id' => $session->id,
+                            'recipient_id' => $recipient->id ?? 'unknown'
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::error('❌ Failed to send text session message notification: '.$e->getMessage(), [
+                        'session_id' => $session->id
+                    ]);
+                }
+            }
         }
         
         // Return the message
