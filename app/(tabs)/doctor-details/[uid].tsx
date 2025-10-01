@@ -429,6 +429,7 @@ export default function DoctorProfilePage() {
           appointmentId={directSessionId}
           userId={(user?.id ?? userData?.id ?? 0).toString()}
           isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+          doctorId={doctor?.id}
           doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
           patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
           otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
@@ -443,6 +444,7 @@ export default function DoctorProfilePage() {
           appointmentId={directSessionId}
           userId={(user?.id ?? userData?.id ?? 0).toString()}
           isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+          doctorId={doctor?.id}
           doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
           patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
           otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
