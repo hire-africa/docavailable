@@ -74,7 +74,8 @@
     "react-native-web": "^0.20.0",
     "react-native-webrtc": "^124.0.6",
     "react-native-webview": "13.13.5",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "expo-font": "~13.3.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

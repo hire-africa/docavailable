@@ -3349,6 +3349,7 @@ export default function ChatPage() {
         appointmentId={appointmentId}
         userId={currentUserId.toString()}
         isDoctor={!isPatient}
+        doctorId={doctorId}
         doctorName={(() => {
           const name = isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`;
           console.log('🔍 AudioCall doctorName:', { isPatient, name, chatInfo: chatInfo?.other_participant_name, user: user?.display_name });
@@ -3453,6 +3454,7 @@ export default function ChatPage() {
             appointmentId={appointmentId}
             userId={currentUserId.toString()}
             isDoctor={user?.user_type === 'doctor'}
+            doctorId={doctorId}
             doctorName={chatInfo?.other_participant_name || 'Doctor'}
             patientName={user?.display_name || 'Patient'}
             otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}

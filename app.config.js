@@ -26,7 +26,13 @@ export default {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
       },
-      googleServicesFile: "./android/app/google-services.json"
+      // IMPORTANT: Point to the source file in project root; the plugin will copy it into android/app
+      googleServicesFile: "./google-services.json",
+      permissions: [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     web: {
       favicon: "./assets/images/favicon.png"

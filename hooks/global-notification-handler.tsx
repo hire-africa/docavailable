@@ -88,18 +88,18 @@ export function useGlobalNotificationHandler() {
       console.log('🔔 [GlobalNotificationHandler] Notification tapped:', response);
       
       const data = response.notification.request.content.data;
-      if (data && data.type === 'direct_call') {
-        console.log('📞 [GlobalNotificationHandler] Processing direct call notification tap:', data);
+      if (data && (data.type === 'incoming_call' || data.type === 'direct_call')) {
+        console.log('📞 [GlobalNotificationHandler] Processing call notification tap:', data);
         
-        // Navigate to incoming call screen
+        // Navigate to unified call screen
         router.push({
-          pathname: '/incoming-direct-call',
+          pathname: '/call',
           params: {
-            appointmentId: data.appointment_id,
-            callerId: data.caller_id,
-            callerName: data.caller_name,
-            callType: data.call_type || 'audio',
-            reason: data.reason || ''
+            sessionId: String(data.appointment_id || data.session_id || ''),
+            doctorId: String(data.doctor_id || data.caller_id || ''),
+            doctorName: String(data.doctor_name || data.caller_name || ''),
+            callType: String(data.call_type || 'audio'),
+            isIncomingCall: 'true'
           }
         });
       }

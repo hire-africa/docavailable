@@ -38,11 +38,14 @@ class IncomingCallNotification extends Notification implements ShouldQueue
         return [
             'title' => $callType === 'video' ? 'Incoming video call' : 'Incoming voice call',
             'body' => $callerName . ' is calling…',
-            'data' => [
+'data' => [
                 'type' => 'incoming_call',
                 'appointment_id' => (string)($this->callSession->appointment_id ?? $this->callSession->id),
                 'call_type' => $callType,
                 'doctor_name' => $callerName,
+                'caller_id' => (string)($this->caller->id ?? ''),
+                'doctor_id' => (string)($this->callSession->doctor_id ?? ''),
+                'isIncomingCall' => 'true',
                 'click_action' => 'OPEN_CALL',
             ],
         ];

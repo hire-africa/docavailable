@@ -210,7 +210,7 @@ class VideoCallService {
   /**
    * Initialize video call service
    */
-  async initialize(appointmentId: string, userId: string, events: VideoCallEvents): Promise<void> {
+  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: VideoCallEvents): Promise<void> {
     try {
       this.events = events;
       this.appointmentId = appointmentId;
@@ -223,6 +223,35 @@ class VideoCallService {
       if (!canMakeCall) {
         this.updateState({ connectionState: 'failed' });
         return;
+      }
+
+      // Start call session on backend to trigger push notification to the doctor (video)
+      if (doctorId !== undefined && doctorId !== null && String(doctorId) !== '') {
+        try {
+          const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await this.getAuthToken()}`
+            },
+            body: JSON.stringify({
+              call_type: 'video',
+              appointment_id: appointmentId,
+              doctor_id: Number(doctorId)
+            })
+          });
+          if (!startResp.ok) {
+            const body = await startResp.text().catch(() => '');
+            console.error('❌ Failed to start video call session on backend:', startResp.status, body);
+          } else {
+            const startData = await startResp.json().catch(() => ({} as any));
+            console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+          }
+        } catch (e) {
+          console.error('❌ Error starting video call session on backend:', e);
+        }
+      } else {
+        console.log('ℹ️ No doctorId provided; skipping backend start-call API (video).');
       }
 
       // Get user media (audio + video)

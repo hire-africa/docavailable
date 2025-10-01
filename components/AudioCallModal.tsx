@@ -15,6 +15,7 @@ interface AudioCallModalProps {
   appointmentId: string;
   userId: string;
   isDoctor: boolean;
+  doctorId?: string | number;
   doctorName?: string;
   patientName?: string;
   otherParticipantProfilePictureUrl?: string;
@@ -29,6 +30,7 @@ export default function AudioCallModal({
   appointmentId,
   userId,
   isDoctor,
+  doctorId,
   doctorName,
   patientName,
   otherParticipantProfilePictureUrl,
@@ -71,6 +73,7 @@ export default function AudioCallModal({
           appointmentId={appointmentId}
           userId={userId}
           isDoctor={isDoctor}
+          doctorId={doctorId}
           doctorName={doctorName}
           patientName={patientName}
           otherParticipantProfilePictureUrl={otherParticipantProfilePictureUrl}
@@ -94,6 +97,7 @@ export default function AudioCallModal({
           appointmentId={appointmentId}
           userId={userId}
           isDoctor={isDoctor}
+          doctorId={doctorId}
           doctorName={doctorName}
           patientName={patientName}
           otherParticipantProfilePictureUrl={otherParticipantProfilePictureUrl}

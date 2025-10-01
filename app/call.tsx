@@ -46,8 +46,13 @@ export default function CallScreen() {
       setIsLoading(true);
       setError(null);
 
-      if (!sessionId || !doctorId || !callType) {
+      if (!sessionId || !callType) {
         setError('Missing required call parameters');
+        return;
+      }
+      // doctorId is only required for outgoing calls
+      if (!incomingParam && !doctorId) {
+        setError('Missing doctorId for outgoing call');
         return;
       }
 
@@ -80,6 +85,7 @@ export default function CallScreen() {
           await audioCallService.current.initialize(
             appointmentId,
             userId,
+            String(doctorId || ''),
             {
               onCallAnswered: () => {
                 console.log('📞 Audio call answered');
@@ -123,6 +129,7 @@ export default function CallScreen() {
           await videoCallService.current.initialize(
             appointmentId,
             userId,
+            String(doctorId || ''),
             {
               onCallAnswered: () => {
                 console.log('📹 Video call answered');
@@ -240,6 +247,7 @@ export default function CallScreen() {
           appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
+          doctorId={String(doctorId || '')}
           doctorName={doctorName as string || 'Doctor'}
           patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
           otherParticipantProfilePictureUrl={doctorProfilePicture as string}
@@ -255,6 +263,7 @@ export default function CallScreen() {
           appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
+          doctorId={String(doctorId || '')}
           doctorName={doctorName as string || 'Doctor'}
           patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
           otherParticipantProfilePictureUrl={doctorProfilePicture as string}
