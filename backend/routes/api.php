@@ -900,6 +900,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
+    Route::post('/call-sessions/re-notify', [App\Http\Controllers\CallSessionController::class, 'reNotify']);
     
 });
 

@@ -213,15 +213,18 @@ class CallSessionController extends Controller
             $subscription->save();
 
             // Notify the doctor about the incoming call via FCM
+            $notified = false;
+            $tokensCount = 0;
             try {
                 $doctor = User::find($doctorId);
                 if ($doctor) {
-                    Log::info('Attempting to send IncomingCallNotification', [
-                        'doctor_id' => $doctorId,
-                        'doctor_has_token' => !empty($doctor->push_token),
-                        'call_session_id' => $callSession->id,
-                        'call_type' => $callType,
+                    $tokensCount = !empty($doctor->push_token) ? 1 : 0;
+                    Log::info('📣 Incoming call: preparing push', [
                         'appointment_id' => $appointmentId,
+                        'call_type' => $callType,
+                        'caller_id' => $user->id,
+                        'doctor_id' => $doctorId,
+                        'tokens_count' => $tokensCount,
                     ]);
 
                     // Build and log sanitized FCM payload for verification
@@ -243,11 +246,23 @@ class CallSessionController extends Controller
                             ];
                             Log::info('FCM payload (sanitized) for IncomingCallNotification', $sanitized);
                             // Send after logging
-                            $doctor->notify($notification);
+                            if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
+                                $doctor->notify($notification);
+                                $notified = true; // best-effort flag; actual channel may not return a result
+                            } else {
+                                Log::warning('⚠️ No token or push disabled for doctor; skipping push send', [
+                                    'doctor_id' => $doctorId,
+                                    'push_enabled' => $doctor->push_notifications_enabled,
+                                    'has_token' => $tokensCount > 0,
+                                ]);
+                            }
                         } else {
                             // Fallback: send without preview
                             Log::warning('IncomingCallNotification has no toFcm method - sending without payload preview');
-                            $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                            if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
+                                $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                                $notified = true;
+                            }
                         }
                     } catch (\Throwable $t) {
                         Log::error('Error building/logging FCM payload for IncomingCallNotification', [
@@ -255,12 +270,16 @@ class CallSessionController extends Controller
                             'trace' => config('app.debug') ? $t->getTraceAsString() : 'hidden',
                         ]);
                         // Still attempt to send notification
-                        $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                        if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
+                            $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                            $notified = true;
+                        }
                     }
 
-                    Log::info('IncomingCallNotification invoked', [
-                        'doctor_id' => $doctorId,
-                        'call_session_id' => $callSession->id,
+                    Log::info('📤 Incoming call push attempted', [
+                        'appointment_id' => $appointmentId,
+                        'tokens_count' => $tokensCount,
+                        'result' => $notified ? 'success' : 'skipped_or_unknown',
                     ]);
                 } else {
                     Log::warning('Doctor not found for call notification', [
@@ -294,6 +313,9 @@ class CallSessionController extends Controller
                     'call_type' => $callType,
                     'status' => $callSession->status,
                     'started_at' => $callSession->started_at->toISOString(),
+                    'notified' => $notified ?? false,
+                    'tokens' => $tokensCount ?? 0,
+                    'last_notified_at' => now()->toISOString(),
                 ],
                 'remaining_calls' => $subscription->$callTypeField,
                 'call_type' => $callType,
@@ -392,6 +414,126 @@ class CallSessionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to end call session'
+            ], 500);
+        }
+    }
+
+    /**
+     * Re-send incoming call push for an existing connecting session (rate-limited)
+     */
+    public function reNotify(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $doctorId = $request->input('doctor_id');
+            if (!$appointmentId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment ID is required'
+                ], 400);
+            }
+
+            // Find session still connecting
+            $callSession = CallSession::where('appointment_id', $appointmentId)
+                ->whereIn('status', [CallSession::STATUS_CONNECTING, CallSession::STATUS_WAITING_FOR_DOCTOR])
+                ->first();
+            if (!$callSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No connecting session found for re-notify'
+                ], 404);
+            }
+
+            if (!$doctorId) {
+                $doctorId = $callSession->doctor_id;
+            }
+
+            $doctor = User::find($doctorId);
+            if (!$doctor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Doctor not found'
+                ], 404);
+            }
+
+            // Basic rate limit (10s per appointment)
+            $key = 'call_notify:' . $appointmentId;
+            if (\Illuminate\Support\Facades\Cache::has($key)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Re-notify skipped due to rate limit'
+                ]);
+            }
+            \Illuminate\Support\Facades\Cache::put($key, 1, 10);
+
+            // Build and send
+            $notified = false;
+            $tokensCount = !empty($doctor->push_token) ? 1 : 0;
+            Log::info('📣 Re-notify incoming call', [
+                'appointment_id' => $appointmentId,
+                'doctor_id' => $doctorId,
+                'tokens_count' => $tokensCount,
+            ]);
+
+            try {
+                $notification = new \App\Notifications\IncomingCallNotification($callSession, $user);
+                if (method_exists($notification, 'toFcm')) {
+                    $payload = $notification->toFcm($doctor);
+                    $sanitized = [
+                        'title' => $payload['title'] ?? null,
+                        'body' => $payload['body'] ?? null,
+                        'data_keys' => array_keys($payload['data'] ?? []),
+                        'data_preview' => [
+                            'type' => $payload['data']['type'] ?? null,
+                            'appointment_id' => $payload['data']['appointment_id'] ?? null,
+                            'call_type' => $payload['data']['call_type'] ?? null,
+                            'doctor_id' => $payload['data']['doctor_id'] ?? null,
+                            'caller_id' => $payload['data']['caller_id'] ?? null,
+                        ],
+                    ];
+                    Log::info('FCM payload (sanitized) for Re-Notify IncomingCall', $sanitized);
+                }
+
+                if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
+                    $doctor->notify($notification);
+                    $notified = true;
+                } else {
+                    Log::warning('⚠️ Re-notify skipped: no token or push disabled', [
+                        'doctor_id' => $doctorId,
+                        'push_enabled' => $doctor->push_notifications_enabled,
+                        'has_token' => $tokensCount > 0,
+                    ]);
+                }
+            } catch (\Throwable $t) {
+                Log::error('Failed to re-notify incoming call', [
+                    'error' => $t->getMessage(),
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $notified ? 'Re-notify dispatched' : 'Re-notify skipped',
+                'data' => [
+                    'appointment_id' => $appointmentId,
+                    'notified' => $notified,
+                    'tokens' => $tokensCount,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error in reNotify', [
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to re-notify'
             ], 500);
         }
     }
