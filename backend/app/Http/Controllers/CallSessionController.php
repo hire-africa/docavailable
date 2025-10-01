@@ -226,7 +226,7 @@ class CallSessionController extends Controller
 
                     // Build and log sanitized FCM payload for verification
                     try {
-                        $notification = new \\App\\Notifications\\IncomingCallNotification($callSession, $user);
+                        $notification = new \App\Notifications\IncomingCallNotification($callSession, $user);
                         if (method_exists($notification, 'toFcm')) {
                             $payload = $notification->toFcm($doctor);
                             $sanitized = [
@@ -247,15 +247,15 @@ class CallSessionController extends Controller
                         } else {
                             // Fallback: send without preview
                             Log::warning('IncomingCallNotification has no toFcm method - sending without payload preview');
-                            $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+                            $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
                         }
-                    } catch (\\Throwable $t) {
+                    } catch (\Throwable $t) {
                         Log::error('Error building/logging FCM payload for IncomingCallNotification', [
                             'error' => $t->getMessage(),
                             'trace' => config('app.debug') ? $t->getTraceAsString() : 'hidden',
                         ]);
                         // Still attempt to send notification
-                        $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+                        $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
                     }
 
                     Log::info('IncomingCallNotification invoked', [
@@ -268,7 +268,7 @@ class CallSessionController extends Controller
                         'call_session_id' => $callSession->id,
                     ]);
                 }
-            } catch (\\Exception $e) {
+            } catch (\Exception $e) {
                 Log::error('Failed to send incoming call notification', [
                     'doctor_id' => $doctorId,
                     'call_session_id' => $callSession->id,
