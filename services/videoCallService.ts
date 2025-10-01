@@ -242,33 +242,64 @@ class VideoCallService {
         return;
       }
 
-      // Start call session on backend to trigger push notification to the doctor (video)
-      if (doctorId !== undefined && doctorId !== null && String(doctorId) !== '') {
+      // Resolve doctorId: must not skip backend start-call
+      let finalDoctorId: number | null = null;
+      if (doctorId !== undefined && doctorId !== null && String(doctorId).trim() !== '') {
+        finalDoctorId = Number(doctorId);
+      } else {
+        // Try to infer from appointment for non-direct sessions
         try {
-          const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${await this.getAuthToken()}`
-            },
-            body: JSON.stringify({
-              call_type: 'video',
-              appointment_id: appointmentId,
-              doctor_id: Number(doctorId)
-            })
-          });
-          if (!startResp.ok) {
-            const body = await startResp.text().catch(() => '');
-            console.error('❌ Failed to start video call session on backend:', startResp.status, body);
-          } else {
-            const startData = await startResp.json().catch(() => ({} as any));
-            console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+          if (!appointmentId.startsWith('direct_session_')) {
+            const resp = await fetch(`${environment.LARAVEL_API_URL}/api/appointments/${appointmentId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await this.getAuthToken()}`
+              }
+            });
+            if (resp.ok) {
+              const data = await resp.json().catch(() => ({} as any));
+              const inferred = data?.data?.doctor_id ?? data?.doctor_id;
+              if (inferred) finalDoctorId = Number(inferred);
+            } else {
+              console.warn('⚠️ Could not fetch appointment to infer doctorId for video call:', resp.status);
+            }
           }
         } catch (e) {
-          console.error('❌ Error starting video call session on backend:', e);
+          console.warn('⚠️ Error inferring doctorId from appointment (video):', e);
         }
-      } else {
-        console.log('ℹ️ No doctorId provided; skipping backend start-call API (video).');
+      }
+
+      if (finalDoctorId == null || Number.isNaN(finalDoctorId)) {
+        console.error('❌ [VideoCallService] doctorId is required to start call session; aborting call start');
+        this.events?.onCallRejected?.();
+        this.updateState({ connectionState: 'failed' });
+        return;
+      }
+
+      // Start call session on backend to trigger push notification to the doctor (video)
+      try {
+        const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await this.getAuthToken()}`
+          },
+          body: JSON.stringify({
+            call_type: 'video',
+            appointment_id: appointmentId,
+            doctor_id: finalDoctorId
+          })
+        });
+        if (!startResp.ok) {
+          const body = await startResp.text().catch(() => '');
+          console.error('❌ Failed to start video call session on backend:', startResp.status, body);
+        } else {
+          const startData = await startResp.json().catch(() => ({} as any));
+          console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+        }
+      } catch (e) {
+        console.error('❌ Error starting video call session on backend:', e);
       }
 
       // Get user media (audio + video)
