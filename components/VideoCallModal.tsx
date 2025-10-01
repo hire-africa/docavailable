@@ -179,6 +179,15 @@ export default function VideoCallModal({
 
   const initializeVideoCall = async () => {
     try {
+      // Debug logging for doctorId
+      console.log('🔍 [VideoCallModal] initializeVideoCall called with:', {
+        appointmentId,
+        userId,
+        doctorId,
+        doctorName,
+        isDoctor
+      });
+      
       // Reset the service state before initializing
       await VideoCallService.getInstance().reset();
 

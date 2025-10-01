@@ -91,7 +91,10 @@ export default function CallScreen() {
         isDoctor,
         callType,
         doctorName,
-        sessionId
+        sessionId,
+        doctorId,
+        doctorIdType: typeof doctorId,
+        doctorIdValue: doctorId
       });
 
       if (callType === 'audio') {
@@ -270,7 +273,16 @@ export default function CallScreen() {
       )}
 
       {callType === 'video' && showVideoCall && (
-        <VideoCallModal
+        <>
+          {console.log('🔍 [CallScreen] Rendering VideoCallModal with props:', {
+            appointmentId: String(sessionId),
+            userId: user?.id.toString() || '',
+            doctorId: String(doctorId || ''),
+            doctorName: doctorName as string || 'Doctor',
+            isDoctor: user?.user_type === 'doctor',
+            isIncomingCall
+          })}
+          <VideoCallModal
           appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
@@ -293,6 +305,7 @@ export default function CallScreen() {
             handleCallRejected();
           }}
         />
+        </>
       )}
     </SafeAreaView>
   );
