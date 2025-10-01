@@ -1145,7 +1145,13 @@ Route::get('/test-env', function() {
 });
 
 Route::post('/test-notification', function(Request $request) {
-    $user = User::find($request->user_id);
+    $user = null;
+    if ($request->has('user_id') && $request->user_id) {
+        $user = User::find($request->user_id);
+    }
+    if (!$user && $request->has('email') && $request->email) {
+        $user = User::where('email', $request->email)->first();
+    }
     if (!$user) {
         return response()->json(['error' => 'User not found'], 404);
     }
