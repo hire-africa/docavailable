@@ -223,7 +223,41 @@ class CallSessionController extends Controller
                         'call_type' => $callType,
                         'appointment_id' => $appointmentId,
                     ]);
-                    $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+
+                    // Build and log sanitized FCM payload for verification
+                    try {
+                        $notification = new \\App\\Notifications\\IncomingCallNotification($callSession, $user);
+                        if (method_exists($notification, 'toFcm')) {
+                            $payload = $notification->toFcm($doctor);
+                            $sanitized = [
+                                'title' => $payload['title'] ?? null,
+                                'body' => $payload['body'] ?? null,
+                                'data_keys' => array_keys($payload['data'] ?? []),
+                                'data_preview' => [
+                                    'type' => $payload['data']['type'] ?? null,
+                                    'appointment_id' => $payload['data']['appointment_id'] ?? null,
+                                    'call_type' => $payload['data']['call_type'] ?? null,
+                                    'doctor_id' => $payload['data']['doctor_id'] ?? null,
+                                    'caller_id' => $payload['data']['caller_id'] ?? null,
+                                ],
+                            ];
+                            Log::info('FCM payload (sanitized) for IncomingCallNotification', $sanitized);
+                            // Send after logging
+                            $doctor->notify($notification);
+                        } else {
+                            // Fallback: send without preview
+                            Log::warning('IncomingCallNotification has no toFcm method - sending without payload preview');
+                            $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+                        }
+                    } catch (\\Throwable $t) {
+                        Log::error('Error building/logging FCM payload for IncomingCallNotification', [
+                            'error' => $t->getMessage(),
+                            'trace' => config('app.debug') ? $t->getTraceAsString() : 'hidden',
+                        ]);
+                        // Still attempt to send notification
+                        $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+                    }
+
                     Log::info('IncomingCallNotification invoked', [
                         'doctor_id' => $doctorId,
                         'call_session_id' => $callSession->id,
