@@ -1178,6 +1178,48 @@ Route::post('/test-notification', function(Request $request) {
     ]);
 });
 
+// New: Test notification by email (FCM)
+Route::post('/test-notification-by-email', function(Illuminate\Http\Request $request) {
+    $email = $request->input('email');
+    if (!$email) {
+        return response()->json(['error' => 'Email is required'], 422);
+    }
+
+    $user = \App\Models\User::where('email', $email)->first();
+    if (!$user) {
+        return response()->json(['error' => 'User not found by email'], 404);
+    }
+
+    // Create a test appointment for the notification
+    $testAppointment = new \App\Models\Appointment();
+    $testAppointment->id = 'test-appointment-' . time();
+    $testAppointment->appointment_date = now();
+
+    // Create a test sender user
+    $testSender = new \App\Models\User();
+    $testSender->id = 999;
+    $testSender->first_name = 'Test';
+    $testSender->last_name = 'Sender';
+    $testSender->role = 'doctor';
+
+    $message = $request->input('message', 'Test FCM notification');
+
+    $user->notify(new \App\Notifications\ChatMessageNotification(
+        $testSender,
+        $testAppointment,
+        $message,
+        'test-message-' . time()
+    ));
+
+    return response()->json([
+        'message' => 'Test notification (by email) dispatched',
+        'user_id' => $user->id,
+        'user_email' => $user->email,
+        'has_push_token' => !empty($user->push_token),
+        'push_notifications_enabled' => $user->push_notifications_enabled
+    ]);
+});
+
 // Payment routes (no auth required for webhooks)
 Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum']);
 Route::get('/payments/status', [PaymentController::class, 'checkStatus'])->withoutMiddleware(['auth:sanctum']);
