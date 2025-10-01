@@ -89,7 +89,8 @@ class FcmChannel
                 'android' => [
                     'notification' => [
                         'sound' => 'default',
-                        'channel_id' => 'docavailable_channel',
+                        // Use Firebase fallback channel so we don't depend on client-side channel creation
+                        'channel_id' => 'fcm_fallback_notification_channel',
                         'priority' => 'high',
                     ],
                 ],
