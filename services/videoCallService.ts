@@ -38,6 +38,7 @@ class VideoCallService {
   private callStartTime: number = 0;
   private events: VideoCallEvents | null = null;
   private callTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private reofferTimer: ReturnType<typeof setInterval> | null = null;
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
@@ -130,6 +131,7 @@ class VideoCallService {
         console.log('🔗 Video call connection state:', state);
         
         if (state === 'connected') {
+          this.clearReofferLoop();
           this.updateState({ 
             isConnected: true, 
             connectionState: 'connected' 
@@ -172,7 +174,15 @@ class VideoCallService {
         })
       });
 
-      const data = await response.json();
+      let data: any = null;
+      try {
+        const text = await response.text();
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('❌ Failed to parse availability response as JSON');
+        this.events?.onCallRejected();
+        return false;
+      }
       
       if (data.success && data.can_make_call) {
         console.log('✅ Video call availability confirmed:', data.remaining_calls, 'calls remaining');
@@ -331,6 +341,9 @@ class VideoCallService {
       // Create and send offer for outgoing calls
       await this.createOffer();
       console.log('📞 Video call offer sent successfully, starting call timeout...');
+      
+      // Begin periodic re-offer loop until answered or connected
+      this.startReofferLoop();
       
       console.log('✅ [VideoCallService] Video call initialization complete');
     } catch (error) {
@@ -872,6 +885,7 @@ class VideoCallService {
    * Cleanup resources
    */
   private cleanup(): void {
+    this.clearReofferLoop();
     console.log('🧹 Cleaning up video call resources...');
     
     this.stopCallTimer();
@@ -912,6 +926,36 @@ class VideoCallService {
     
     console.log('✅ Video call cleanup complete');
     (global as any).activeVideoCall = false;
+  }
+
+  /**
+   * Start periodic re-offer loop while waiting for callee to connect
+   */
+  private startReofferLoop(): void {
+    try {
+      this.clearReofferLoop();
+      this.reofferTimer = setInterval(() => {
+        if (
+          this.peerConnection?.localDescription &&
+          this.state.connectionState !== 'connected'
+        ) {
+          this.sendSignalingMessage({
+            type: 'offer',
+            offer: this.peerConnection.localDescription,
+            senderId: this.userId,
+          });
+        }
+      }, 4000);
+    } catch (e) {
+      console.warn('⚠️ [VideoCallService] Failed to start re-offer loop:', e);
+    }
+  }
+
+  private clearReofferLoop(): void {
+    if (this.reofferTimer) {
+      clearInterval(this.reofferTimer);
+      this.reofferTimer = null;
+    }
   }
 
   /**
