@@ -123,7 +123,25 @@ export default function InstantSessionsScreen() {
   };
 
   const startSession = async (reason: string, sessionType: SessionType) => {
-    if (!selectedDoctor) return;
+    // Enhanced validation to ensure doctorId is always present
+    if (!selectedDoctor) {
+      console.error('❌ [InstantSessions] No doctor selected');
+      Alert.alert('Error', 'Please select a doctor first');
+      return;
+    }
+    
+    if (!selectedDoctor.id || selectedDoctor.id <= 0) {
+      console.error('❌ [InstantSessions] Invalid doctor ID:', selectedDoctor.id);
+      Alert.alert('Error', 'Invalid doctor selected. Please try again.');
+      return;
+    }
+    
+    console.log('🔍 [InstantSessions] Starting session with doctor:', {
+      doctorId: selectedDoctor.id,
+      doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
+      sessionType,
+      reason
+    });
     
     setStartingSession(true);
     try {
@@ -169,6 +187,21 @@ export default function InstantSessionsScreen() {
           // For audio/video calls, use the data from the call-sessions response
           const sessionData = data.data;
           const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
+          
+          // Double-check doctorId before navigation
+          if (!selectedDoctor.id || selectedDoctor.id <= 0) {
+            console.error('❌ [InstantSessions] Invalid doctorId during navigation:', selectedDoctor.id);
+            Alert.alert('Error', 'Invalid doctor data. Please try again.');
+            return;
+          }
+          
+          console.log('🔍 [InstantSessions] Navigating to call with params:', {
+            sessionId: appointmentId,
+            doctorId: selectedDoctor.id,
+            doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
+            callType: sessionType
+          });
+          
           router.push({
             pathname: '/call',
             params: {

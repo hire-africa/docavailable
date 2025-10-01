@@ -301,7 +301,13 @@ class AudioCallService {
       // Resolve doctorId: must not skip backend start-call
       let finalDoctorId: number | null = null;
       if (doctorId !== undefined && doctorId !== null && String(doctorId).trim() !== '') {
-        finalDoctorId = Number(doctorId);
+        // Improved number conversion with better error handling
+        const parsedId = Number(doctorId);
+        if (!Number.isNaN(parsedId) && parsedId > 0) {
+          finalDoctorId = parsedId;
+        } else {
+          console.warn('⚠️ [AudioCallService] Invalid doctorId format:', doctorId);
+        }
       } else {
         // Try to infer from appointment for non-direct sessions
         try {
@@ -316,7 +322,12 @@ class AudioCallService {
             if (resp.ok) {
               const data = await resp.json().catch(() => ({} as any));
               const inferred = data?.data?.doctor_id ?? data?.doctor_id;
-              if (inferred) finalDoctorId = Number(inferred);
+              if (inferred) {
+                const parsedInferred = Number(inferred);
+                if (!Number.isNaN(parsedInferred) && parsedInferred > 0) {
+                  finalDoctorId = parsedInferred;
+                }
+              }
             } else {
               console.warn('⚠️ Could not fetch appointment to infer doctorId (audio):', resp.status);
             }
@@ -326,9 +337,21 @@ class AudioCallService {
         }
       }
 
-      if (finalDoctorId == null || Number.isNaN(finalDoctorId)) {
+      // Add debug logging before the validation
+      console.log('🔍 [AudioCallService] doctorId resolution:', {
+        originalDoctorId: doctorId,
+        finalDoctorId,
+        appointmentId,
+        isDirectSession: appointmentId.startsWith('direct_session_')
+      });
+
+      if (finalDoctorId == null || Number.isNaN(finalDoctorId) || finalDoctorId <= 0) {
         const msg = 'Doctor ID is required to start call session';
-        console.error('❌ [AudioCallService] ' + msg);
+        console.error('❌ [AudioCallService] ' + msg, {
+          originalDoctorId: doctorId,
+          finalDoctorId,
+          appointmentId
+        });
         this.events?.onError?.(msg);
         this.updateState({ connectionState: 'failed' });
         return;

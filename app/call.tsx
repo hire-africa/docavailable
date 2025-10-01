@@ -50,10 +50,29 @@ export default function CallScreen() {
         setError('Missing required call parameters');
         return;
       }
-      // doctorId is only required for outgoing calls
-      if (!incomingParam && !doctorId) {
-        setError('Missing doctorId for outgoing call');
-        return;
+      
+      // Enhanced doctorId validation for outgoing calls
+      if (!incomingParam) {
+        if (!doctorId) {
+          console.error('❌ [CallScreen] Missing doctorId for outgoing call');
+          setError('Missing doctorId for outgoing call');
+          return;
+        }
+        
+        // Validate doctorId is a valid number
+        const doctorIdNum = Number(doctorId);
+        if (Number.isNaN(doctorIdNum) || doctorIdNum <= 0) {
+          console.error('❌ [CallScreen] Invalid doctorId format:', doctorId);
+          setError('Invalid doctor ID. Please try again.');
+          return;
+        }
+        
+        console.log('🔍 [CallScreen] Validated call parameters:', {
+          sessionId,
+          callType,
+          doctorId: doctorIdNum,
+          isIncoming: incomingParam
+        });
       }
 
       if (!user) {
@@ -62,7 +81,7 @@ export default function CallScreen() {
       }
 
       // Use session ID directly as appointment ID
-      const appointmentId = sessionId;
+      const appointmentId = String(sessionId);
       const userId = user.id.toString();
       const isDoctor = user.user_type === 'doctor';
 
@@ -131,10 +150,6 @@ export default function CallScreen() {
             userId,
             String(doctorId || ''),
             {
-              onCallAnswered: () => {
-                console.log('📹 Video call answered');
-                setShowVideoCall(true);
-              },
             onCallEnded: () => {
               console.log('📹 Video call ended');
               handleCallEnd();
@@ -152,10 +167,6 @@ export default function CallScreen() {
             },
             onStateChange: (state) => {
               console.log('📹 Video call state changed:', state);
-            },
-            onError: (error) => {
-              console.error('📹 Video call error:', error);
-              setError(error);
             }
           }
         );
