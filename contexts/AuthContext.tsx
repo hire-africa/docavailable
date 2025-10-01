@@ -191,6 +191,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Get token from authService
           const storedToken = await authService.getStoredToken();
           setToken(storedToken);
+          // After cold-start login, also try to register/sync FCM token
+          try {
+            const { default: pushNotificationService } = await import('../services/pushNotificationService');
+            await pushNotificationService.registerForPushNotifications();
+            await pushNotificationService.syncPendingToken();
+          } catch (e) {
+            console.error('AuthContext: Failed to sync FCM token during init:', e);
+          }
         } else {
           console.log('AuthContext: No authenticated user found');
           setUser(null);
@@ -217,8 +225,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(authState.user);
         setUserData(authState.user);
         // Get token from authService (synchronous)
-        authService.getStoredToken().then(storedToken => {
+        authService.getStoredToken().then(async (storedToken) => {
           setToken(storedToken);
+          // After login, sync any pending FCM token
+          try {
+            const { default: pushNotificationService } = await import('../services/pushNotificationService');
+            // Re-register (ensures current token) and sync queued token
+            await pushNotificationService.registerForPushNotifications();
+            await pushNotificationService.syncPendingToken();
+          } catch (e) {
+            console.error('AuthContext: Failed to sync FCM token after login:', e);
+          }
         }).catch(error => {
           console.error('AuthContext: Error getting stored token:', error);
         });
