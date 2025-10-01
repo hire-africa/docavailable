@@ -320,6 +320,21 @@ class VideoCallService {
           // Treat "already active" as benign (e.g., another flow already started the session)
           if (startResp.status === 400 && body.includes('already have an active call session')) {
             console.log('ℹ️ [VideoCallService] Backend reports existing active call session; continuing');
+            // Proactively request a re-notify to ensure the callee gets the push
+            try {
+              const rn = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/re-notify`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${await this.getAuthToken()}`
+                },
+                body: JSON.stringify({ appointment_id: appointmentId, doctor_id: finalDoctorId })
+              });
+              const rnText = await rn.text().catch(() => '');
+              console.log('ℹ️ [VideoCallService] Re-notify response:', rn.status, rnText);
+            } catch (e) {
+              console.warn('⚠️ [VideoCallService] Re-notify failed:', e);
+            }
           } else {
             console.error('❌ Failed to start video call session on backend:', startResp.status, body);
           }
