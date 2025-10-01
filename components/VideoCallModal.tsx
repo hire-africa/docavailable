@@ -19,6 +19,7 @@ interface VideoCallModalProps {
   appointmentId: string;
   userId: string;
   isDoctor: boolean;
+  doctorId?: string | number;
   doctorName: string;
   patientName: string;
   otherParticipantProfilePictureUrl?: string;
@@ -37,6 +38,7 @@ export default function VideoCallModal({
   appointmentId,
   userId,
   isDoctor,
+  doctorId,
   doctorName,
   patientName,
   otherParticipantProfilePictureUrl,
@@ -201,7 +203,7 @@ export default function VideoCallModal({
         },
       };
 
-      await VideoCallService.getInstance().initialize(appointmentId, userId, events);
+      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
       videoCallService.current = VideoCallService.getInstance();
       
       // Get local stream for display

@@ -20,6 +20,7 @@ interface AudioCallProps {
   appointmentId: string;
   userId: string;
   isDoctor: boolean;
+  doctorId?: string | number;
   doctorName?: string;
   patientName?: string;
   otherParticipantProfilePictureUrl?: string;
@@ -34,6 +35,7 @@ export default function AudioCall({
   appointmentId, 
   userId, 
   isDoctor, 
+  doctorId,
   doctorName = 'Doctor',
   patientName = 'Patient',
   otherParticipantProfilePictureUrl,
@@ -199,7 +201,7 @@ export default function AudioCall({
         },
       };
 
-      await AudioCallService.getInstance().initialize(appointmentId, userId, events);
+      await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
       
       // Offer creation is now handled automatically in AudioCallService.initialize
       console.log('📞 Call initialization completed - offer will be created automatically if needed');

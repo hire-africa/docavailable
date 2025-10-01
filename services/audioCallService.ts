@@ -264,7 +264,7 @@ class AudioCallService {
   /**
    * Initialize audio call service
    */
-  async initialize(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
+  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents): Promise<void> {
     try {
       this.isIncoming = false;
       this.events = events;
@@ -278,6 +278,35 @@ class AudioCallService {
       if (!canMakeCall) {
         this.updateState({ connectionState: 'failed' });
         return;
+      }
+
+      // Start call session on backend to trigger push notification to the doctor
+      if (doctorId !== undefined && doctorId !== null && String(doctorId) !== '') {
+        try {
+          const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await this.getAuthToken()}`
+            },
+            body: JSON.stringify({
+              call_type: 'voice',
+              appointment_id: appointmentId,
+              doctor_id: Number(doctorId)
+            })
+          });
+          if (!startResp.ok) {
+            const body = await startResp.text().catch(() => '');
+            console.error('❌ Failed to start call session on backend:', startResp.status, body);
+          } else {
+            const startData = await startResp.json().catch(() => ({} as any));
+            console.log('✅ Call session started on backend:', startData?.data?.session_id ?? startData);
+          }
+        } catch (e) {
+          console.error('❌ Error starting call session on backend:', e);
+        }
+      } else {
+        console.log('ℹ️ No doctorId provided; skipping backend start-call API.');
       }
 
       // Get user media (audio only)

@@ -57,3 +57,4 @@ export function usePolling({
     isPolling: isPollingRef.current
   };
 }
+
