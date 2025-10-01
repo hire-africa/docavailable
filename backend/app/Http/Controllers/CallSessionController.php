@@ -216,9 +216,25 @@ class CallSessionController extends Controller
             try {
                 $doctor = User::find($doctorId);
                 if ($doctor) {
-                    $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                    Log::info('Attempting to send IncomingCallNotification', [
+                        'doctor_id' => $doctorId,
+                        'doctor_has_token' => !empty($doctor->push_token),
+                        'call_session_id' => $callSession->id,
+                        'call_type' => $callType,
+                        'appointment_id' => $appointmentId,
+                    ]);
+                    $doctor->notify(new \\App\\Notifications\\IncomingCallNotification($callSession, $user));
+                    Log::info('IncomingCallNotification invoked', [
+                        'doctor_id' => $doctorId,
+                        'call_session_id' => $callSession->id,
+                    ]);
+                } else {
+                    Log::warning('Doctor not found for call notification', [
+                        'doctor_id' => $doctorId,
+                        'call_session_id' => $callSession->id,
+                    ]);
                 }
-            } catch (\Exception $e) {
+            } catch (\\Exception $e) {
                 Log::error('Failed to send incoming call notification', [
                     'doctor_id' => $doctorId,
                     'call_session_id' => $callSession->id,
