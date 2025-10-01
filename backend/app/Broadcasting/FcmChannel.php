@@ -89,10 +89,12 @@ class FcmChannel
                 'android' => [
                     // Set overall Android priority at the correct level for FCM v1
                     'priority' => 'HIGH',
-                    'notification' => [
+'notification' => [
                         'sound' => 'default',
-                        // Use Firebase fallback channel so we don't depend on client-side channel creation
-                        'channel_id' => 'fcm_fallback_notification_channel'
+                        // Route to our high-importance calls channel
+                        'channel_id' => 'calls',
+                        'priority' => 'PRIORITY_MAX',
+                        'visibility' => 'PUBLIC'
                     ],
                 ],
                 'apns' => [

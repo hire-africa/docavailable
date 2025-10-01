@@ -1,6 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import messaging from '@react-native-firebase/messaging';
+import * as Notifications from 'expo-notifications';
+import { AndroidImportance, AndroidNotificationVisibility } from 'expo-notifications';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
 import { routeIncomingCall } from '../utils/callRouter';
@@ -18,6 +20,29 @@ export default function RootLayout() {
     apiService.healthCheck().catch(() => {
       // Ignore errors here; this is a best-effort warm-up
     });
+
+    // Configure Android calls notification channel and default handler
+    (async () => {
+      try {
+        await Notifications.setNotificationChannelAsync('calls', {
+          name: 'Calls',
+          importance: AndroidImportance.MAX,
+          sound: 'default',
+          vibrationPattern: [0, 250, 250, 250],
+          bypassDnd: true,
+          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+        });
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldShowAlert: true,
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+          })
+        });
+      } catch (e) {
+        console.warn('Failed to configure notification channel', e);
+      }
+    })();
     
     // Initialize global services
     appInitializer.initialize();
