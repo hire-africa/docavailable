@@ -212,6 +212,20 @@ class CallSessionController extends Controller
             $subscription->$callTypeField = max(0, $subscription->$callTypeField - 1);
             $subscription->save();
 
+            // Notify the doctor about the incoming call via FCM
+            try {
+                $doctor = User::find($doctorId);
+                if ($doctor) {
+                    $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                }
+            } catch (\Exception $e) {
+                Log::error('Failed to send incoming call notification', [
+                    'doctor_id' => $doctorId,
+                    'call_session_id' => $callSession->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             Log::info("Call session started", [
                 'user_id' => $user->id,
                 'call_session_id' => $callSession->id,
