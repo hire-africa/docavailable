@@ -212,6 +212,13 @@ class VideoCallService {
    */
   async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: VideoCallEvents): Promise<void> {
     try {
+      // Prevent simultaneous audio call initialization
+      if ((global as any).activeAudioCall) {
+        console.warn('⚠️ [VideoCallService] Audio call already active; aborting video initialization');
+        events?.onCallRejected?.();
+        return;
+      }
+      (global as any).activeVideoCall = true;
       this.events = events;
       this.appointmentId = appointmentId;
       this.userId = userId;
@@ -904,6 +911,7 @@ class VideoCallService {
     });
     
     console.log('✅ Video call cleanup complete');
+    (global as any).activeVideoCall = false;
   }
 
   /**
