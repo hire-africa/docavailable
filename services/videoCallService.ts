@@ -301,28 +301,39 @@ class VideoCallService {
       }
 
       // Start call session on backend to trigger push notification to the doctor (video)
-      try {
-        const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await this.getAuthToken()}`
-          },
-          body: JSON.stringify({
-            call_type: 'video',
-            appointment_id: appointmentId,
-            doctor_id: finalDoctorId
-          })
-        });
-        if (!startResp.ok) {
-          const body = await startResp.text().catch(() => '');
-          console.error('❌ Failed to start video call session on backend:', startResp.status, body);
-        } else {
-          const startData = await startResp.json().catch(() => ({} as any));
-          console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+      // For direct sessions, doctor-details screen already called start; skip duplicate to avoid 400
+      const isDirect = typeof appointmentId === 'string' && appointmentId.startsWith('direct_session_');
+      if (isDirect) {
+        console.log('ℹ️ [VideoCallService] Direct session detected; skipping duplicate backend start-call');
+      } else {
+        try {
+          const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${await this.getAuthToken()}`
+            },
+            body: JSON.stringify({
+              call_type: 'video',
+              appointment_id: appointmentId,
+              doctor_id: finalDoctorId
+            })
+          });
+          if (!startResp.ok) {
+            const body = await startResp.text().catch(() => '');
+            // Treat "already active" as benign (e.g., another flow already started the session)
+            if (startResp.status === 400 && body.includes('already have an active call session')) {
+              console.log('ℹ️ [VideoCallService] Backend reports existing active call session; continuing');
+            } else {
+              console.error('❌ Failed to start video call session on backend:', startResp.status, body);
+            }
+          } else {
+            const startData = await startResp.json().catch(() => ({} as any));
+            console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+          }
+        } catch (e) {
+          console.error('❌ Error starting video call session on backend:', e);
         }
-      } catch (e) {
-        console.error('❌ Error starting video call session on backend:', e);
       }
 
       // Get user media (audio + video)
