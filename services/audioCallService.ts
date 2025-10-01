@@ -226,7 +226,16 @@ class AudioCallService {
         })
       });
 
-      const data = await response.json();
+      let data: any = null;
+      try {
+        const text = await response.text();
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.error('❌ Failed to parse availability response as JSON');
+        const errorMessage = 'Failed to check call availability. Please try again.';
+        this.events?.onError(errorMessage);
+        return false;
+      }
       
       if (data.success && data.can_make_call) {
         console.log('✅ Voice call availability confirmed:', data.remaining_calls, 'calls remaining');
