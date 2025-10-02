@@ -49,6 +49,10 @@ export default function CallScreen() {
       setIsLoading(true);
       setError(null);
 
+      // Ensure we don't render stale modals from a previous visit
+      setShowAudioCall(false);
+      setShowVideoCall(false);
+
       if (!sessionId) {
         setError('Missing required call parameters');
         return;
@@ -101,6 +105,8 @@ export default function CallScreen() {
       });
 
       if (normalizedCallType === 'audio') {
+        // Explicitly ensure video modal is hidden for audio flows
+        setShowVideoCall(false);
         if (incomingParam) {
           // Incoming call: render UI and let component initialize for incoming
           setShowAudioCall(true);
@@ -145,6 +151,8 @@ export default function CallScreen() {
         setShowAudioCall(true);
         }
       } else if (normalizedCallType === 'video') {
+        // Explicitly ensure audio modal is hidden for video flows
+        setShowAudioCall(false);
         if (incomingParam) {
           // Incoming call: render UI and let component initialize for incoming
           setShowVideoCall(true);
