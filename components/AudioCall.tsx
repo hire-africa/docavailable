@@ -65,6 +65,7 @@ export default function AudioCall({
   const waveAnim = useRef(new Animated.Value(0)).current;
   const connectingAnim = useRef(new Animated.Value(0)).current;
 
+  const initOnceRef = useRef<string | null>(null);
   useEffect(() => {
     const setupCall = async () => {
       console.log('🎯 AudioCall useEffect triggered:', {
@@ -73,6 +74,9 @@ export default function AudioCall({
         userId,
         isDoctor
       });
+
+      if (initOnceRef.current === appointmentId) return; // dedupe per session
+      initOnceRef.current = appointmentId;
       
       if (!isIncomingCall) {
         console.log('🚀 AudioCall: Initializing call (outgoing)');
@@ -88,9 +92,10 @@ export default function AudioCall({
     startPulseAnimation();
     return () => {
       console.log('🧹 AudioCall cleanup - ending call');
+      initOnceRef.current = null;
       AudioCallService.getInstance().endCall();
     };
-  }, [isIncomingCall]);
+  }, [isIncomingCall, appointmentId]);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
@@ -424,7 +429,11 @@ export default function AudioCall({
           {/* Decline Button */}
           <TouchableOpacity
             style={[styles.controlButton, styles.declineButton]}
-            onPress={onEndCall}
+            onPress={async () => {
+              Vibration.vibrate(50);
+              try { await AudioCallService.getInstance().rejectIncomingCall?.('declined'); } catch {}
+              onCallRejected?.();
+            }}
             activeOpacity={0.8}
           >
             <Ionicons name="call" size={20} color="white" />
@@ -511,7 +520,12 @@ export default function AudioCall({
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
     backgroundColor: '#000',
     width: '100%',
     height: '100%',

@@ -44,6 +44,11 @@ class AudioCallService {
   private processedMessages: Set<string> = new Set();
   private isProcessingIncomingCall: boolean = false;
   private isIncoming: boolean = false;
+  // Incoming-call gating and lifecycle guards
+  private isIncomingMode: boolean = false;
+  private hasAccepted: boolean = false;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
+  private hasEnded: boolean = false;
 
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
@@ -119,45 +124,26 @@ class AudioCallService {
       // Set flag after basic setup is complete
       this.isProcessingIncomingCall = true;
 
-      // Get user media (audio only)
-      this.localStream = await mediaDevices.getUserMedia({
-        video: false,
-        audio: true,
-      });
+      // Incoming mode gating: do not get media or create PC until accept
+      this.isIncomingMode = true;
+      this.hasAccepted = false;
+      this.pendingCandidates = [];
+      this.hasEnded = false;
 
-      // Configure audio routing for phone calls
-      await this.configureAudioRouting();
+      // Connect to signaling only; buffer offer/ICE until accept
+      await this.connectSignaling(appointmentId, userId);
+      console.log('📞 Signaling connected for incoming call - waiting for user to accept');
 
-      // Create peer connection
-      this.peerConnection = new RTCPeerConnection({
-        iceServers: this.iceServers,
-      });
+      const pendingOffer = (global as any).pendingOffer;
+      if (pendingOffer) {
+        console.log('📞 Pending offer found - waiting for user acceptance');
+      } else {
+        console.warn('⚠️ No pending offer found for incoming call');
+      }
 
-      // Add local audio track to peer connection
-      this.localStream.getAudioTracks().forEach(track => {
-        this.peerConnection?.addTrack(track, this.localStream!);
-      });
+      // Do not auto-create PC or answer yet
 
-      // Handle remote stream
-      this.peerConnection.addEventListener('track', (event) => {
-        console.log('🎵 Remote audio stream received');
-        this.remoteStream = event.streams[0];
-        this.events?.onRemoteStream(event.streams[0]);
-      });
-
-      // Handle ICE candidates
-      this.peerConnection.addEventListener('icecandidate', (event) => {
-        if (event.candidate) {
-          this.sendSignalingMessage({
-            type: 'ice-candidate',
-            candidate: event.candidate,
-            senderId: this.userId,
-          });
-        }
-      });
-
-      // Handle connection state changes
-      this.peerConnection.addEventListener('connectionstatechange', () => {
+      // Handle connection state changes (once PC is created on accept)
         const connectionState = this.peerConnection?.connectionState;
         console.log('🔗 Connection state changed:', connectionState);
         console.log('🔗 Current call state:', {
@@ -524,7 +510,7 @@ class AudioCallService {
             
             switch (message.type) {
               case 'offer':
-                    if (this.isIncoming) {
+                    if (this.isIncomingMode && !this.hasAccepted) {
                       // Do not auto-answer on incoming; wait for explicit accept
                       (global as any).pendingOffer = message.offer;
                       console.log('📞 [AudioCallService] Stored pending offer; awaiting user acceptance');
@@ -536,7 +522,12 @@ class AudioCallService {
                     await this.handleAnswer(message.answer);
                     break;
               case 'ice-candidate':
-                    await this.handleIceCandidate(message.candidate);
+                    if (this.isIncomingMode && (!this.peerConnection || !this.peerConnection.remoteDescription)) {
+                      this.pendingCandidates.push(message.candidate);
+                      console.log('⏸️ [AudioCallService] Queued ICE candidate (awaiting remoteDescription)');
+                    } else {
+                      await this.handleIceCandidate(message.candidate);
+                    }
                     break;
               case 'call-ended':
                     this.endCall();
@@ -789,11 +780,15 @@ class AudioCallService {
           appointmentId: this.appointmentId,
           userId: this.userId,
         });
-        console.log('✅ Offer handled and answer sent successfully');
-        
-        // Mark call as answered
+        // Notify caller that call has been answered
         this.isCallAnswered = true;
-        console.log('📞 Call marked as answered');
+        this.sendSignalingMessage({
+          type: 'call-answered',
+          callType: 'voice',
+          userId: this.userId,
+          appointmentId: this.appointmentId
+        });
+        console.log('✅ Offer handled and answer sent successfully');
       } else {
         console.warn('⚠️ Cannot handle offer in current state:', currentState);
         // Reset peer connection to stable state
@@ -890,6 +885,11 @@ class AudioCallService {
     if (!this.peerConnection) return;
     
     try {
+      if (!this.peerConnection.remoteDescription) {
+        this.pendingCandidates.push(candidate as any);
+        console.log('⏸️ [AudioCallService] Queued ICE candidate (no remoteDescription)');
+        return;
+      }
       await this.peerConnection.addIceCandidate(candidate);
     } catch (error) {
       console.error('❌ Error handling ICE candidate:', error);
@@ -927,11 +927,29 @@ class AudioCallService {
         throw new Error('No pending offer found');
       }
       
+      // On accept, prepare media and create PC if needed
+      if (!this.localStream) {
+        this.localStream = await mediaDevices.getUserMedia({ video: false, audio: true });
+        await this.configureAudioRouting();
+      }
+      if (!this.peerConnection) {
+        await this.initializePeerConnection();
+      }
+
       console.log('📞 [AudioCallService] Processing pending offer...');
       await this.handleOffer(pendingOffer);
       
+      // Drain queued ICE candidates now that remoteDescription is set
+      if (this.peerConnection && this.pendingCandidates.length > 0) {
+        for (const c of this.pendingCandidates) {
+          try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+        }
+        this.pendingCandidates = [];
+      }
+
       // Clear the pending offer
       (global as any).pendingOffer = null;
+      this.hasAccepted = true;
       console.log('✅ [AudioCallService] Incoming call processed successfully');
       
     } catch (error) {
@@ -992,7 +1010,7 @@ class AudioCallService {
    * Handle call answered
    */
   private handleCallAnswered(): void {
-    console.log(`✅ [AudioCallService ${this.instanceId}] Call answered by doctor`);
+    console.log(`✅ [AudioCallService ${this.instanceId}] Call answered by peer`);
     console.log(`📞 [AudioCallService ${this.instanceId}] Current call state when answered:`, {
       isCallAnswered: this.isCallAnswered,
       connectionState: this.state.connectionState,
@@ -1001,15 +1019,7 @@ class AudioCallService {
     this.isCallAnswered = true;
     this.clearCallTimeout();
     this.updateState({ connectionState: 'connected' });
-    
-    // Send call-answered message with call type
-    this.sendSignalingMessage({
-      type: 'call-answered',
-      callType: 'voice',
-      userId: this.userId,
-      appointmentId: this.appointmentId
-    });
-    
+    // Do not echo call-answered back
     this.events?.onCallAnswered();
   }
 
@@ -1142,6 +1152,11 @@ class AudioCallService {
    */
   async endCall(): Promise<void> {
     try {
+      if (this.hasEnded) {
+        console.log('ℹ️ [AudioCallService] endCall already processed');
+        return;
+      }
+      this.hasEnded = true;
       console.log('📞 Ending audio call...');
       console.log('📞 Call state when ending:', {
         connectionState: this.state.connectionState,
@@ -1301,11 +1316,37 @@ class AudioCallService {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Call session updated in backend:', data);
+      } else if (response.status === 404) {
+        console.log('ℹ️ Backend reported 404 for end update; treating as already ended');
       } else {
         console.error('❌ Failed to update call session in backend:', response.status);
       }
     } catch (error) {
       console.error('❌ Error updating call session in backend:', error);
+    }
+  }
+}
+
+  /**
+   * Reject an incoming call (callee)
+   */
+  async rejectIncomingCall(reason: string = 'declined'): Promise<void> {
+    try {
+      console.log('📞 Rejecting incoming audio call...');
+      this.sendSignalingMessage({
+        type: 'call-rejected',
+        callType: 'voice',
+        userId: this.userId,
+        appointmentId: this.appointmentId,
+        reason,
+      });
+      await this.updateCallSessionInBackend(0, false);
+      await this.endCall();
+      this.events?.onCallRejected();
+    } catch (e) {
+      console.error('❌ Error rejecting audio call:', e);
+      await this.endCall();
+      this.events?.onCallRejected();
     }
   }
 }
