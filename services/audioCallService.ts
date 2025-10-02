@@ -141,51 +141,7 @@ class AudioCallService {
         console.warn('⚠️ No pending offer found for incoming call');
       }
 
-      // Do not auto-create PC or answer yet
-
-      // Handle connection state changes (once PC is created on accept)
-        const connectionState = this.peerConnection?.connectionState;
-        console.log('🔗 Connection state changed:', connectionState);
-        console.log('🔗 Current call state:', {
-          isCallAnswered: this.isCallAnswered,
-          connectionState: this.state.connectionState
-        });
-        
-        if (connectionState === 'connected') {
-          console.log('✅ WebRTC connection established');
-          this.updateState({ 
-            isConnected: true, 
-            connectionState: 'connected' 
-          });
-          this.startCallTimer();
-        } else if (connectionState === 'connecting') {
-          console.log('🔄 WebRTC connection in progress...');
-          this.updateState({ 
-            isConnected: false, 
-            connectionState: 'connecting' 
-          });
-        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
-          console.log('❌ WebRTC connection lost:', connectionState);
-          this.updateState({ 
-            isConnected: false, 
-            connectionState: 'disconnected' 
-          });
-          this.endCall();
-        }
-      });
-
-      // Connect to signaling server
-      await this.connectSignaling(appointmentId, userId);
-      console.log('📞 Signaling connected for incoming call - waiting for user to accept');
-
-      // Don't process the offer automatically - wait for user to accept
-      // The offer will be processed when the accept button is pressed
-      const pendingOffer = (global as any).pendingOffer;
-      if (pendingOffer) {
-        console.log('📞 Pending offer found - waiting for user acceptance');
-      } else {
-        console.warn('⚠️ No pending offer found for incoming call');
-      }
+      // Do not auto-create PC or answer yet; will proceed on accept
 
     } catch (error) {
       console.error('❌ Failed to initialize incoming call:', error);
