@@ -273,11 +273,17 @@ export default function VideoCallModal({
         setLocalStream(localStream);
       }
       
+      console.log('✅ Video call processed - resetting processing state');
+      // Reset processing state after successful processing
+      setIsProcessingAnswer(false);
+      
       // Just trigger the callback - let the parent handle the logic
       onCallAnswered?.();
     } catch (error) {
       console.error('❌ Error accepting call:', error);
       Alert.alert('Error', 'Failed to accept call. Please try again.');
+      // Reset processing state even on error
+      setIsProcessingAnswer(false);
     }
   };
 
@@ -399,15 +405,6 @@ export default function VideoCallModal({
     }
   };
 
-  // Debug logging to understand what's rendering
-  console.log('🔍 [VideoCallModal] RENDERING with props:', {
-    appointmentId,
-    userId,
-    isDoctor,
-    isIncomingCall,
-    callAccepted,
-    connectionState: callState.connectionState
-  });
 
   return (
     <SafeAreaView style={styles.container}>

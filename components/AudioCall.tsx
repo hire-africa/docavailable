@@ -380,15 +380,6 @@ export default function AudioCall({
     outputRange: [0, 360],
   });
 
-  // Debug logging to understand what's rendering
-  console.log('🔍 [AudioCall] RENDERING with props:', {
-    appointmentId,
-    userId,
-    isDoctor,
-    isIncomingCall,
-    callAccepted,
-    connectionState: callState.connectionState
-  });
 
   return (
     <View style={styles.container}>
@@ -489,8 +480,13 @@ export default function AudioCall({
               try {
                 // Process the stored pending offer and send answer
                 await AudioCallService.getInstance().processIncomingCall();
+                console.log('✅ Incoming call processed - resetting processing state');
+                // Reset processing state after successful processing
+                setIsProcessingAnswer(false);
               } catch (e) {
                 console.error('❌ Failed to process incoming call:', e);
+                // Reset processing state even on error
+                setIsProcessingAnswer(false);
               }
               
               // Trigger callback for any parent-side effects
