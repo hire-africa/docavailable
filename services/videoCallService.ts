@@ -630,6 +630,15 @@ class VideoCallService {
         callType: 'video',
       });
       
+      // Notify caller that call has been answered
+      this.isCallAnswered = true;
+      this.sendSignalingMessage({
+        type: 'call-answered',
+        callType: 'video',
+        userId: this.userId,
+        appointmentId: this.appointmentId
+      });
+      
       console.log('✅ Video call answer sent with callType: video');
     } catch (error) {
       console.error('❌ Error handling video offer:', error);
@@ -793,6 +802,31 @@ class VideoCallService {
   }
 
   /**
+   * Reject an incoming call (callee)
+   */
+  async rejectIncomingCall(reason: string = 'declined'): Promise<void> {
+    try {
+      console.log('📞 Rejecting incoming video call...');
+      // Inform peer immediately
+      this.sendSignalingMessage({
+        type: 'call-rejected',
+        callType: 'video',
+        userId: this.userId,
+        appointmentId: this.appointmentId,
+        reason,
+      });
+      // Update backend as ended without connection
+      await this.updateCallSessionInBackend(0, false);
+      this.cleanup();
+      this.events?.onCallRejected();
+    } catch (e) {
+      console.error('❌ Error rejecting call:', e);
+      this.cleanup();
+      this.events?.onCallRejected();
+    }
+  }
+
+  /**
    * End the call
    */
   async endCall(): Promise<void> {
@@ -830,14 +864,8 @@ class VideoCallService {
     console.log('📞 Video call answered');
     this.isCallAnswered = true;
     this.clearCallTimeout();
-    
-    // Send call-answered message with call type
-    this.sendSignalingMessage({
-      type: 'call-answered',
-      callType: 'video',
-      userId: this.userId,
-      appointmentId: this.appointmentId
-    });
+    // Do not echo another call-answered to avoid ping-pong
+    // Caller will stop reoffers upon connection; this flag is enough for UI
   }
 
   /**
