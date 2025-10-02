@@ -56,6 +56,7 @@ export default function AudioCall({
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
   const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Track speaker state
+  const [callAccepted, setCallAccepted] = useState(!isIncomingCall); // For outgoing calls, always accepted
   
   // For outgoing calls, we should never show incoming call UI
   const shouldShowIncomingUI = isIncomingCall && isRinging;
@@ -442,7 +443,7 @@ export default function AudioCall({
       </View>
 
           {/* Dynamic Controls based on call state */}
-          {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
+          {isIncomingCall && !callAccepted ? (
         /* Incoming Call Controls - Accept/Decline */
         <View style={styles.controls}>
           {/* Decline Button */}
@@ -473,6 +474,7 @@ export default function AudioCall({
               // Immediately update UI state
               setIsRinging(false);
               setIsProcessingAnswer(true);
+              setCallAccepted(true); // Mark call as accepted to show connected UI
               
               try {
                 // Process the stored pending offer and send answer
