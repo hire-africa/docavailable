@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Modal,
     StyleSheet,
@@ -39,6 +39,16 @@ export default function AudioCallModal({
   onCallRejected,
 }: AudioCallModalProps) {
   const [showAudioCall, setShowAudioCall] = useState(false);
+
+  // Auto-start the outgoing call as soon as this modal becomes visible
+  useEffect(() => {
+    if (visible && !isIncomingCall) {
+      setShowAudioCall(true);
+    }
+    if (!visible) {
+      setShowAudioCall(false);
+    }
+  }, [visible, isIncomingCall]);
 
   const handleStartCall = () => {
     setShowAudioCall(true);
@@ -109,6 +119,7 @@ export default function AudioCallModal({
     );
   }
 
+  // Outgoing call: we auto-start above; this fallback should rarely render
   return (
     <Modal
       visible={visible}
@@ -119,7 +130,7 @@ export default function AudioCallModal({
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
           <View style={styles.header}>
-            <Text style={styles.title}>Start Audio Call</Text>
+            <Text style={styles.title}>Starting Audio Call...</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <FontAwesome name="times" size={20} color="#666" />
             </TouchableOpacity>
@@ -131,29 +142,12 @@ export default function AudioCallModal({
             </View>
             
             <Text style={styles.description}>
-              Start an audio call with {isDoctor ? patientName : doctorName}
+              Connecting to {isDoctor ? patientName : doctorName}
             </Text>
             
             <Text style={styles.note}>
-              Make sure you have a stable internet connection for the best call quality.
+              Please wait while we initialize the call...
             </Text>
-          </View>
-
-          <View style={styles.buttons}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.startButton}
-              onPress={handleStartCall}
-            >
-              <FontAwesome name="phone" size={16} color="white" style={styles.buttonIcon} />
-              <Text style={styles.startButtonText}>Start Call</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </View>
