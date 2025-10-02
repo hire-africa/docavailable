@@ -439,7 +439,7 @@ export default function DoctorProfilePage() {
       )}
 
       {/* Outgoing video call modal (reuses chat call flow) */}
-      {directSessionId && (
+      {directSessionId && showVideoCallModal && (
         <VideoCallModal
           appointmentId={directSessionId}
           userId={(user?.id ?? userData?.id ?? 0).toString()}
