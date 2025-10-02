@@ -750,6 +750,12 @@ class AudioCallService {
           appointmentId: this.appointmentId
         });
         console.log('✅ Offer handled and answer sent successfully');
+        
+        // For receiver side: Update connection state after sending answer
+        // This ensures UI transitions properly even if WebRTC connection event is delayed
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.startCallTimer(); // Start the call duration timer
+        this.events?.onCallAnswered();
       } else {
         console.warn('⚠️ Cannot handle offer in current state:', currentState);
         // Reset peer connection to stable state
@@ -769,6 +775,12 @@ class AudioCallService {
           senderId: this.userId,
         });
         console.log('✅ Offer handled and answer sent successfully after reset');
+        
+        // For receiver side: Update connection state after sending answer (retry path)
+        this.isCallAnswered = true;
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.startCallTimer(); // Start the call duration timer
+        this.events?.onCallAnswered();
       }
     } catch (error) {
       console.error('❌ Error handling offer:', error);
@@ -912,6 +924,16 @@ class AudioCallService {
       (global as any).pendingOffer = null;
       this.hasAccepted = true;
       console.log('✅ [AudioCallService] Incoming call processed successfully');
+      
+      // Debug: Check WebRTC connection state after processing
+      if (this.peerConnection) {
+        console.log('🔍 [AudioCallService] Post-processing WebRTC state:', {
+          connectionState: this.peerConnection.connectionState,
+          iceConnectionState: this.peerConnection.iceConnectionState,
+          signalingState: this.peerConnection.signalingState,
+          currentCallState: this.state.connectionState
+        });
+      }
       
     } catch (error) {
       console.error('❌ [AudioCallService] Failed to process incoming call:', error);
