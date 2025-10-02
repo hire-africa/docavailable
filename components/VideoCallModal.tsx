@@ -81,6 +81,13 @@ export default function VideoCallModal({
         userId,
         isDoctor
       });
+
+      // Global suppression: do not start video if audio call is active or current call is audio
+      const g: any = global as any;
+      if (g.activeAudioCall || g.currentCallType === 'audio') {
+        console.log('🚫 [VideoCallModal] Suppressing video init because audio call is active/current');
+        return;
+      }
       
       // Prevent duplicate initialization for the same appointment
       if (initOnceRef.current === appointmentId) {

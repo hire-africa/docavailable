@@ -104,6 +104,9 @@ export default function CallScreen() {
         doctorIdValue: doctorId
       });
 
+      // Set global current call type to help suppress the other flow
+      (global as any).currentCallType = normalizedCallType;
+
       if (normalizedCallType === 'audio') {
         // Explicitly ensure video modal is hidden for audio flows
         setShowVideoCall(false);

@@ -101,6 +101,9 @@ class AudioCallService {
     try {
       console.log(`📞 [AudioCallService ${this.instanceId}] Initializing for incoming call...`);
       this.isIncoming = true;
+      // Set audio as current to suppress any video init while ringing
+      const g: any = global as any;
+      g.currentCallType = 'audio';
       console.log(`📞 [AudioCallService ${this.instanceId}] Parameters:`, { appointmentId, userId });
       
       if (!appointmentId || appointmentId === 'null' || appointmentId === 'undefined') {
@@ -217,14 +220,16 @@ class AudioCallService {
    */
   async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents): Promise<void> {
     try {
-      // Prevent simultaneous video call initialization
-      if ((global as any).activeVideoCall) {
+      // Mark audio flow as current immediately to suppress any video init
+      const g: any = global as any;
+      if (g.activeVideoCall) {
         console.warn('⚠️ [AudioCallService] Video call already active; aborting audio initialization');
         events?.onError?.('Another call is active');
         this.updateState({ connectionState: 'failed' });
         return;
       }
-      (global as any).activeAudioCall = true;
+      g.activeAudioCall = true;
+      g.currentCallType = 'audio';
 
       this.isIncoming = false;
       this.events = events;
@@ -1174,6 +1179,11 @@ class AudioCallService {
       
       this.events?.onCallEnded();
       
+      // Clear global markers
+      (global as any).activeAudioCall = false;
+      if ((global as any).currentCallType === 'audio') {
+        (global as any).currentCallType = null;
+      }
     } catch (error) {
       console.error('❌ Error ending call:', error);
     }
