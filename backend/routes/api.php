@@ -901,6 +901,42 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
     Route::post('/call-sessions/re-notify', [App\Http\Controllers\CallSessionController::class, 'reNotify']);
+
+    // Debug: Tail laravel.log (last 200 lines)
+    Route::get('/debug/log-tail', function () {
+        try {
+            $path = storage_path('logs/laravel.log');
+            if (!file_exists($path)) {
+                return response()->json(['success' => false, 'message' => 'laravel.log not found']);
+            }
+            $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+            $tail = array_slice($lines, -200);
+            return response()->json(['success' => true, 'data' => $tail]);
+        } catch (\Throwable $t) {
+            return response()->json(['success' => false, 'error' => $t->getMessage()], 500);
+        }
+    });
+
+    // Debug: Show masked doctor push token and flags
+    Route::get('/debug/doctor-token', function (\Illuminate\Http\Request $request) {
+        $doctorId = (int) $request->query('doctor_id', 2);
+        $user = \App\Models\User::find($doctorId);
+        if (!$user) {
+            return response()->json(['success' => false, 'message' => 'Doctor not found'], 404);
+        }
+        $token = (string) ($user->push_token ?? '');
+        $masked = $token ? (substr($token, 0, 12) . '...' . substr($token, -8)) : '';
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'doctor_id' => $doctorId,
+                'push_notifications_enabled' => (bool) $user->push_notifications_enabled,
+                'has_push_token' => !empty($token),
+                'push_token_preview' => $masked,
+                'token_length' => strlen($token),
+            ]
+        ]);
+    });
     
 });
 
