@@ -447,6 +447,14 @@ class AudioCallService {
       this.startCallTimeout();
       console.log('⏰ Call timeout started (30 seconds)');
       
+      console.log('📞 [AudioCallService] Call initialization complete:', {
+        appointmentId: this.appointmentId,
+        userId: this.userId,
+        connectionState: this.state.connectionState,
+        isCallAnswered: this.isCallAnswered,
+        hasEnded: this.hasEnded
+      });
+      
       this.isInitializing = false;
 
     } catch (error) {
@@ -511,6 +519,12 @@ class AudioCallService {
                     }
                     break;
               case 'call-ended':
+                    console.log('📞 [AudioCallService] Received call-ended message:', {
+                      message,
+                      currentState: this.state.connectionState,
+                      isCallAnswered: this.isCallAnswered,
+                      hasEnded: this.hasEnded
+                    });
                     this.endCall();
                     break;
               case 'call-answered':

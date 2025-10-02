@@ -70,14 +70,24 @@ export default function AudioCall({
   const connectingAnim = useRef(new Animated.Value(0)).current;
 
   const initOnceRef = useRef<string | null>(null);
+  const hasInitializedRef = useRef(false);
+  
+  // Initialize call when component mounts
   useEffect(() => {
     const setupCall = async () => {
       console.log('🎯 AudioCall useEffect triggered:', {
         isIncomingCall,
         appointmentId,
         userId,
-        isDoctor
+        isDoctor,
+        hasInitialized: hasInitializedRef.current
       });
+
+      // Prevent multiple initializations
+      if (hasInitializedRef.current) {
+        console.log('⚠️ [AudioCall] Already initialized - skipping');
+        return;
+      }
 
       // Check for active calls globally
       const g: any = global as any;
@@ -88,6 +98,7 @@ export default function AudioCall({
 
       if (initOnceRef.current === appointmentId) return; // dedupe per session
       initOnceRef.current = appointmentId;
+      hasInitializedRef.current = true;
       
       if (!isIncomingCall) {
         console.log('🚀 AudioCall: Initializing call (outgoing)');
@@ -101,12 +112,18 @@ export default function AudioCall({
     
     setupCall();
     startPulseAnimation();
+  }, [isIncomingCall, appointmentId, userId, isDoctor]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      console.log('🧹 AudioCall cleanup - ending call');
+      console.log('🧹 AudioCall cleanup - component unmounting');
       initOnceRef.current = null;
-      AudioCallService.getInstance().endCall();
+      hasInitializedRef.current = false;
+      // Don't end call immediately - let the call complete naturally
+      // The call will be ended by user action or timeout
     };
-  }, [isIncomingCall, appointmentId]);
+  }, []);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
