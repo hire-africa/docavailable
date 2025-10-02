@@ -28,6 +28,9 @@ const sessionStates = new Map();
 // Store call session states
 const callSessions = new Map();
 
+// Store processed offers to prevent duplicates
+const processedOffers = new Map();
+
 // API base URL
 const API_BASE_URL = process.env.API_BASE_URL || 'https://docavailable-3vbdv.ondigitalocean.app';
 
@@ -95,6 +98,26 @@ const handleConnection = (ws, req, connectionType) => {
       // Handle different message types
       switch (data.type) {
         case 'offer':
+          // Check for duplicate offers
+          const offerKey = `${appointmentId}_${data.senderId || data.userId}_${data.offer?.sdp?.substring(0, 50) || 'unknown'}`;
+          if (processedOffers.has(offerKey)) {
+            console.log(`⚠️ [WebRTC] Duplicate offer detected and ignored: ${offerKey}`);
+            break;
+          }
+          processedOffers.set(offerKey, Date.now());
+          
+          // Clean up old offers (older than 5 minutes)
+          const now = Date.now();
+          for (const [key, timestamp] of processedOffers.entries()) {
+            if (now - timestamp > 300000) { // 5 minutes
+              processedOffers.delete(key);
+            }
+          }
+          
+          // Broadcast to others
+          broadcastToOthers(ws, appointmentId, data);
+          break;
+          
         case 'answer':
         case 'ice-candidate':
         case 'call-ended':

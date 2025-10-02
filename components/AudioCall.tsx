@@ -64,7 +64,6 @@ export default function AudioCall({
   // For outgoing calls, we should never show incoming call UI
   const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const ringAnim = useRef(new Animated.Value(0)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
@@ -79,6 +78,13 @@ export default function AudioCall({
         userId,
         isDoctor
       });
+
+      // Check for active calls globally
+      const g: any = global as any;
+      if (g.activeAudioCall && !isIncomingCall) {
+        console.warn('⚠️ [AudioCall] Another audio call is already active - preventing duplicate');
+        return;
+      }
 
       if (initOnceRef.current === appointmentId) return; // dedupe per session
       initOnceRef.current = appointmentId;

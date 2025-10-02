@@ -49,6 +49,9 @@ class AudioCallService {
   private hasAccepted: boolean = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
   private hasEnded: boolean = false;
+  private offerCreated: boolean = false;
+  private isInitializing: boolean = false;
+  private connectionState: 'disconnected' | 'connecting' | 'connected' | 'failed' = 'disconnected';
 
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
@@ -220,12 +223,26 @@ class AudioCallService {
    */
   async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents): Promise<void> {
     try {
+      // Prevent multiple initializations
+      if (this.isInitializing) {
+        console.warn('⚠️ [AudioCallService] Already initializing - preventing duplicate');
+        return;
+      }
+      
+      if (this.connectionState === 'connecting' || this.connectionState === 'connected') {
+        console.warn('⚠️ [AudioCallService] Call already active - preventing duplicate initialization');
+        return;
+      }
+      
+      this.isInitializing = true;
+      
       // Mark audio flow as current immediately to suppress any video init
       const g: any = global as any;
       if (g.activeVideoCall) {
         console.warn('⚠️ [AudioCallService] Video call already active; aborting audio initialization');
         events?.onError?.('Another call is active');
         this.updateState({ connectionState: 'failed' });
+        this.isInitializing = false;
         return;
       }
       g.activeAudioCall = true;
@@ -429,11 +446,14 @@ class AudioCallService {
       // Start call timeout (30 seconds for doctor to answer)
       this.startCallTimeout();
       console.log('⏰ Call timeout started (30 seconds)');
+      
+      this.isInitializing = false;
 
     } catch (error) {
       console.error('❌ Failed to initialize audio call:', error);
       this.events?.onError(`Failed to initialize call: ${error.message}`);
       this.updateState({ connectionState: 'failed' });
+      this.isInitializing = false;
     }
   }
 
@@ -710,6 +730,12 @@ class AudioCallService {
       return;
     }
     
+    // Prevent duplicate offer handling
+    if (this.hasAccepted) {
+      console.warn('⚠️ [handleOffer] Call already accepted - ignoring duplicate offer');
+      return;
+    }
+    
     try {
       // Check if we're in the right state to set remote description
       const currentState = this.peerConnection.signalingState;
@@ -961,9 +987,25 @@ class AudioCallService {
    * Create and send offer (for caller)
    */
   async createOffer(): Promise<void> {
-    if (!this.peerConnection) return;
+    if (!this.peerConnection) {
+      console.warn('⚠️ [AudioCallService] Cannot create offer - no peer connection');
+      return;
+    }
+    
+    if (this.offerCreated) {
+      console.warn('⚠️ [AudioCallService] Offer already created - preventing duplicate');
+      return;
+    }
+    
+    if (this.isInitializing) {
+      console.warn('⚠️ [AudioCallService] Already initializing - preventing duplicate offer');
+      return;
+    }
+    
+    this.isInitializing = true;
     
     try {
+      console.log('📞 [AudioCallService] Creating offer...');
       const offer = await this.peerConnection.createOffer();
       await this.peerConnection.setLocalDescription(offer);
       
@@ -974,8 +1016,12 @@ class AudioCallService {
         appointmentId: this.appointmentId,
         userId: this.userId,
       });
+      
+      this.offerCreated = true;
+      console.log('✅ [AudioCallService] Offer created and sent successfully');
     } catch (error) {
       console.error('❌ Error creating offer:', error);
+      this.isInitializing = false;
       this.events?.onError('Failed to initiate call');
     }
   }
@@ -1301,6 +1347,19 @@ class AudioCallService {
       callDuration: 0,
       connectionState: 'disconnected',
     };
+    
+    // Reset new state variables
+    this.offerCreated = false;
+    this.isInitializing = false;
+    this.connectionState = 'disconnected';
+    this.isIncoming = false;
+    this.isIncomingMode = false;
+    this.hasAccepted = false;
+    this.pendingCandidates = [];
+    this.hasEnded = false;
+    
+    // Clear global pending offer
+    (global as any).pendingOffer = null;
     
     console.log('✅ AudioCallService state reset complete');
     (global as any).activeAudioCall = false;
