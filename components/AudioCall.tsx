@@ -442,7 +442,7 @@ export default function AudioCall({
       </View>
 
           {/* Dynamic Controls based on call state */}
-          {shouldShowIncomingUI || isProcessingAnswer ? (
+          {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
         /* Incoming Call Controls - Accept/Decline */
         <View style={styles.controls}>
           {/* Decline Button */}
