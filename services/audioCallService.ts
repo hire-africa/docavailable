@@ -759,6 +759,8 @@ class AudioCallService {
         this.updateState({ isConnected: true, connectionState: 'connected' });
         this.startCallTimer();
       }
+      // Fallback in case UI event ordering delays connection
+      this.ensureConnectedSoon();
       
       console.log('✅ Offer handled and answer sent successfully');
         // For receiver side: Update connection state after sending answer
@@ -934,6 +936,8 @@ class AudioCallService {
       (global as any).pendingOffer = null;
       this.hasAccepted = true;
       console.log('✅ [AudioCallService] Incoming call processed successfully');
+      // Additional fallback after full processing
+      this.ensureConnectedSoon(1000);
       
       // Debug: Check WebRTC connection state after processing
       if (this.peerConnection) {
@@ -1087,6 +1091,18 @@ class AudioCallService {
   /**
    * Start call duration timer
    */
+  private ensureConnectedSoon(delayMs: number = 800): void {
+    try {
+      setTimeout(() => {
+        if (!this.state.isConnected) {
+          console.log('⏳ [AudioCallService] Ensuring connected UI after answer/track');
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+          this.startCallTimer();
+        }
+      }, delayMs);
+    } catch {}
+  }
+
   private startCallTimer(): void {
     this.callStartTime = Date.now();
     this.callTimer = setInterval(() => {
