@@ -197,8 +197,9 @@ export default function CallScreen() {
       videoCallService.current.endCall();
     }
 
-    // Navigate back to patient dashboard
-    router.replace('/patient-dashboard');
+    // Navigate back to the correct dashboard based on role
+    const isDoctorUser = user?.user_type === 'doctor';
+    router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
   };
 
   const handleCallTimeout = () => {
@@ -208,7 +209,10 @@ export default function CallScreen() {
       [
         {
           text: 'OK',
-          onPress: () => router.replace('/patient-dashboard')
+          onPress: () => {
+            const isDoctorUser = user?.user_type === 'doctor';
+            router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
+          }
         }
       ]
     );
@@ -221,7 +225,10 @@ export default function CallScreen() {
       [
         {
           text: 'OK',
-          onPress: () => router.replace('/patient-dashboard')
+          onPress: () => {
+            const isDoctorUser = user?.user_type === 'doctor';
+            router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
+          }
         }
       ]
     );
