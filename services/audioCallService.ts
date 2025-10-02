@@ -795,13 +795,13 @@ class AudioCallService {
         // Mark call as answered
         this.isCallAnswered = true;
         this.clearCallTimeout();
-        this.updateState({ connectionState: 'connected' });
+        this.updateState({ connectionState: 'connected', isConnected: true });
         this.events?.onCallAnswered();
       } else if (this.peerConnection.signalingState === 'stable') {
         console.log('📞 Already in stable state - connection established, marking as answered');
         this.isCallAnswered = true;
         this.clearCallTimeout();
-        this.updateState({ connectionState: 'connected' });
+        this.updateState({ connectionState: 'connected', isConnected: true });
         this.events?.onCallAnswered();
       } else {
         console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
@@ -812,13 +812,13 @@ class AudioCallService {
           console.log('✅ Answer set successfully despite state');
           this.isCallAnswered = true;
           this.clearCallTimeout();
-          this.updateState({ connectionState: 'connected' });
+          this.updateState({ connectionState: 'connected', isConnected: true });
           this.events?.onCallAnswered();
         } catch (stateError) {
           console.log('⚠️ Failed to set remote description due to state, but marking as answered');
           this.isCallAnswered = true;
           this.clearCallTimeout();
-          this.updateState({ connectionState: 'connected' });
+          this.updateState({ connectionState: 'connected', isConnected: true });
           this.events?.onCallAnswered();
         }
       }
@@ -831,7 +831,7 @@ class AudioCallService {
         console.log('📞 State error but already connected, marking as answered');
         this.isCallAnswered = true;
         this.clearCallTimeout();
-        this.updateState({ connectionState: 'connected' });
+        this.updateState({ connectionState: 'connected', isConnected: true });
         this.events?.onCallAnswered();
       } else {
         this.events?.onError('Failed to establish call connection');
@@ -979,7 +979,7 @@ class AudioCallService {
     });
     this.isCallAnswered = true;
     this.clearCallTimeout();
-    this.updateState({ connectionState: 'connected' });
+    this.updateState({ connectionState: 'connected', isConnected: true });
     // Do not echo call-answered back
     this.events?.onCallAnswered();
   }
