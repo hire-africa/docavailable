@@ -12,13 +12,13 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import AudioCallModal from '../../../components/AudioCallModal';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SessionTypeSelectionModal, { SessionType } from '../../../components/SessionTypeSelectionModal';
-import AudioCallModal from '../../../components/AudioCallModal';
-import VideoCallModal from '../../../components/VideoCallModal';
 import { DoctorProfileSkeleton } from '../../../components/skeleton';
 import SubscriptionModal from '../../../components/SubscriptionModal';
+import VideoCallModal from '../../../components/VideoCallModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { apiService } from '../../../services/apiService';
 

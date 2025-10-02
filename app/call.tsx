@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -277,7 +277,8 @@ export default function CallScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-        {normalizedCallType === 'audio' && showAudioCall && (
+      <Stack.Screen options={{ headerShown: false }} />
+      {normalizedCallType === 'audio' && showAudioCall && (
           <AudioCall
             appointmentId={String(sessionId)}
             userId={user?.id.toString() || ''}
