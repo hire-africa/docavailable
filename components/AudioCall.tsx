@@ -323,7 +323,7 @@ export default function AudioCall({
 
   const getStatusText = () => {
     if (shouldShowIncomingUI) return 'Incoming Call';
-    if (isProcessingAnswer) return 'Answering...';
+    if (isIncomingCall && isProcessingAnswer) return 'Answering...';
     
     switch (callState.connectionState) {
       case 'connecting':
@@ -336,6 +336,21 @@ export default function AudioCall({
         return 'Connection Failed';
       default:
         return isIncomingCall ? 'Initializing...' : 'Starting call...';
+    }
+  };
+
+  const getConnectionIndicatorColor = () => {
+    switch (callState.connectionState) {
+      case 'connecting':
+        return '#FF9800';
+      case 'connected':
+        return '#4CAF50';
+      case 'disconnected':
+        return '#9E9E9E';
+      case 'failed':
+        return '#F44336';
+      default:
+        return '#2196F3';
     }
   };
 
@@ -414,7 +429,11 @@ export default function AudioCall({
           <Text style={[styles.statusText, { color: getStatusColor() }]}>
             {getStatusText()}
           </Text>
-          {callState.isConnected && (
+          <View style={styles.connectionStatus}>
+            <View style={[styles.connectionDot, { backgroundColor: getConnectionIndicatorColor() }]} />
+            <Text style={styles.connectionText}>{getStatusText()}</Text>
+          </View>
+          {callState.connectionState === 'connected' && (
             <Text style={styles.durationText}>
               {formatDuration(callState.callDuration)}
             </Text>
@@ -605,6 +624,26 @@ const styles = StyleSheet.create({
   durationText: {
     fontSize: 14,
     color: '#4CAF50',
+    fontWeight: '500',
+  },
+  connectionStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  connectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  connectionText: {
+    color: 'white',
+    fontSize: 14,
     fontWeight: '500',
   },
   controls: {
