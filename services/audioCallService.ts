@@ -594,6 +594,11 @@ class AudioCallService {
       console.log('🎵 Remote audio stream received');
       this.remoteStream = event.streams[0];
       this.events?.onRemoteStream(event.streams[0]);
+      // Fallback: mark connected on receiving remote track (RN WebRTC may delay connectionstatechange)
+      if (!this.state.isConnected) {
+        this.updateState({ isConnected: true, connectionState: 'connected' });
+        this.startCallTimer();
+      }
     });
 
     // Handle ICE candidates
@@ -743,14 +748,19 @@ class AudioCallService {
         });
         // Notify caller that call has been answered
         this.isCallAnswered = true;
-        this.sendSignalingMessage({
-          type: 'call-answered',
-          callType: 'voice',
-          userId: this.userId,
-          appointmentId: this.appointmentId
-        });
-        console.log('✅ Offer handled and answer sent successfully');
-        
+      this.sendSignalingMessage({
+        type: 'call-answered',
+        callType: 'voice',
+        userId: this.userId,
+        appointmentId: this.appointmentId
+      });
+      // Mark callee UI connected once we answered
+      if (!this.state.isConnected) {
+        this.updateState({ isConnected: true, connectionState: 'connected' });
+        this.startCallTimer();
+      }
+      
+      console.log('✅ Offer handled and answer sent successfully');
         // For receiver side: Update connection state after sending answer
         // This ensures UI transitions properly even if WebRTC connection event is delayed
         this.updateState({ connectionState: 'connected', isConnected: true });
