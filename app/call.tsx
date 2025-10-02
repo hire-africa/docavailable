@@ -23,6 +23,9 @@ export default function CallScreen() {
     isDirectSession
   } = params;
 
+  // Normalize callType to 'audio' | 'video' (treat 'voice' as 'audio')
+  const normalizedCallType = String(callType || 'audio').toLowerCase() === 'video' ? 'video' : 'audio';
+
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export default function CallScreen() {
       setIsLoading(true);
       setError(null);
 
-      if (!sessionId || !callType) {
+      if (!sessionId) {
         setError('Missing required call parameters');
         return;
       }
@@ -97,7 +100,7 @@ export default function CallScreen() {
         doctorIdValue: doctorId
       });
 
-      if (callType === 'audio') {
+      if (normalizedCallType === 'audio') {
         if (incomingParam) {
           // Incoming call: render UI and let component initialize for incoming
           setShowAudioCall(true);
@@ -141,7 +144,7 @@ export default function CallScreen() {
         // The call starts automatically after initialization
         setShowAudioCall(true);
         }
-      } else if (callType === 'video') {
+      } else if (normalizedCallType === 'video') {
         if (incomingParam) {
           // Incoming call: render UI and let component initialize for incoming
           setShowVideoCall(true);
@@ -263,25 +266,25 @@ export default function CallScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {callType === 'audio' && showAudioCall && (
-        <AudioCall
-          appointmentId={String(sessionId)}
-          userId={user?.id.toString() || ''}
-          isDoctor={user?.user_type === 'doctor'}
-          doctorId={String(doctorId || '')}
-          doctorName={doctorName as string || 'Doctor'}
-          patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
-          otherParticipantProfilePictureUrl={doctorProfilePicture as string}
-          onEndCall={handleCallEnd}
-          onCallTimeout={handleCallTimeout}
-          onCallRejected={handleCallRejected}
-          isIncomingCall={isIncomingCall}
-        />
-      )}
+        {normalizedCallType === 'audio' && showAudioCall && (
+          <AudioCall
+            appointmentId={String(sessionId)}
+            userId={user?.id.toString() || ''}
+            isDoctor={user?.user_type === 'doctor'}
+            doctorId={String(doctorId || '')}
+            doctorName={doctorName as string || 'Doctor'}
+            patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
+            otherParticipantProfilePictureUrl={doctorProfilePicture as string}
+            onEndCall={handleCallEnd}
+            onCallTimeout={handleCallTimeout}
+            onCallRejected={handleCallRejected}
+            isIncomingCall={isIncomingCall}
+          />
+        )}
 
-      {callType === 'video' && showVideoCall && (
-        <>
-          {console.log('🔍 [CallScreen] Rendering VideoCallModal with props:', {
+        {normalizedCallType === 'video' && showVideoCall && (
+          <>
+            {console.log('🔍 [CallScreen] Rendering VideoCallModal with props:', {
             appointmentId: String(sessionId),
             userId: user?.id.toString() || '',
             doctorId: String(doctorId || ''),
