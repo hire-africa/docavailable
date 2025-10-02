@@ -940,6 +940,51 @@ Route::middleware(['auth:api'])->group(function () {
     
 });
 
+// Public debug endpoints (guarded by shared secret)
+Route::get('/public-debug/log-tail', function (Request $request) {
+    $key = (string) $request->query('key', '');
+    $secret = env('PUBLIC_DEBUG_KEY', 'docdebug');
+    if ($key !== $secret) {
+        return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
+    }
+    try {
+        $path = storage_path('logs/laravel.log');
+        if (!file_exists($path)) {
+            return response()->json(['success' => false, 'message' => 'laravel.log not found']);
+        }
+        $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+        $tail = array_slice($lines, -200);
+        return response()->json(['success' => true, 'data' => $tail]);
+    } catch (\Throwable $t) {
+        return response()->json(['success' => false, 'error' => $t->getMessage()], 500);
+    }
+});
+
+Route::get('/public-debug/doctor-token', function (Request $request) {
+    $key = (string) $request->query('key', '');
+    $secret = env('PUBLIC_DEBUG_KEY', 'docdebug');
+    if ($key !== $secret) {
+        return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
+    }
+    $doctorId = (int) $request->query('doctor_id', 2);
+    $user = \App\Models\User::find($doctorId);
+    if (!$user) {
+        return response()->json(['success' => false, 'message' => 'Doctor not found'], 404);
+    }
+    $token = (string) ($user->push_token ?? '');
+    $masked = $token ? (substr($token, 0, 12) . '...' . substr($token, -8)) : '';
+    return response()->json([
+        'success' => true,
+        'data' => [
+            'doctor_id' => $doctorId,
+            'push_notifications_enabled' => (bool) $user->push_notifications_enabled,
+            'has_push_token' => !empty($token),
+            'push_token_preview' => $masked,
+            'token_length' => strlen($token),
+        ]
+    ]);
+});
+
 // Public chatbot routes (no authentication required)
 Route::post('/chatbot/response', [App\Http\Controllers\ChatbotController::class, 'getResponse']);
 Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class, 'getStreamingResponse']);
