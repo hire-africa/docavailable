@@ -1281,7 +1281,6 @@ class AudioCallService {
       console.error('❌ Error updating call session in backend:', error);
     }
   }
-}
 
   /**
    * Reject an incoming call (callee)
