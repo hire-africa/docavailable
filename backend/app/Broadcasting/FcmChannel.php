@@ -95,8 +95,8 @@ class FcmChannel
                         'channel_id' => 'calls',
                         // Use correct field name for notification-level priority in FCM v1
                         'notification_priority' => 'PRIORITY_MAX',
-                        // Use correct enum for visibility
-                        'visibility' => 'VISIBILITY_PUBLIC'
+                        // Visibility must be an integer enum for some clients (1=Public, 0=Private, -1=Secret)
+                        'visibility' => 1
                     ],
                 ],
                 'apns' => [
