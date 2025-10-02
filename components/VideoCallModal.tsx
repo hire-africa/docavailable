@@ -68,6 +68,7 @@ export default function VideoCallModal({
   const [callAccepted, setCallAccepted] = useState(false);
   
   const videoCallService = useRef<VideoCallService | null>(null);
+  const initOnceRef = useRef<string | null>(null);
   
   // For incoming calls, show incoming UI until accepted, then show connected UI
   const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
@@ -81,6 +82,12 @@ export default function VideoCallModal({
         isDoctor
       });
       
+      // Prevent duplicate initialization for the same appointment
+      if (initOnceRef.current === appointmentId) {
+        return;
+      }
+      initOnceRef.current = appointmentId;
+      
       if (!isIncomingCall) {
         console.log('🚀 VideoCallModal: Initializing call (outgoing)');
         await initializeVideoCall();
@@ -93,11 +100,12 @@ export default function VideoCallModal({
     setupCall();
     return () => {
       console.log('🧹 VideoCallModal cleanup - ending call');
+      initOnceRef.current = null;
       if (videoCallService.current) {
         videoCallService.current.reset();
       }
     };
-  }, [isIncomingCall]);
+  }, [isIncomingCall, appointmentId]);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
@@ -166,7 +174,7 @@ export default function VideoCallModal({
         },
       };
 
-      // Initialize the VideoCallService for incoming call
+      // Initialize the VideoCallService for incoming call (ringing only; no auto-answer)
       await VideoCallService.getInstance().initializeForIncomingCall(appointmentId, userId, events);
       videoCallService.current = VideoCallService.getInstance();
       console.log('✅ VideoCallModal: Incoming call initialized successfully');
@@ -249,7 +257,7 @@ export default function VideoCallModal({
       setCallAccepted(true); // Mark call as accepted
       
       if (videoCallService.current) {
-        await videoCallService.current.processIncomingCall();
+        await videoCallService.current.acceptIncomingCall();
       }
       
       // Get local stream for display after accepting
