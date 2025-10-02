@@ -56,10 +56,14 @@ export default function AudioCall({
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
   const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Track speaker state
-  const [callAccepted, setCallAccepted] = useState(!isIncomingCall); // For outgoing calls, always accepted
+  const [callAccepted, setCallAccepted] = useState(false); // Track if in-call UI should replace incoming UI
+
+  // Freeze UI to connected once we detect a connected state to avoid regressions
+  const freezeConnectedRef = useRef(false);
   
   // For outgoing calls, we should never show incoming call UI
-  const shouldShowIncomingUI = isIncomingCall && isRinging;
+  const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const ringAnim = useRef(new Animated.Value(0)).current;
@@ -116,11 +120,17 @@ export default function AudioCall({
         onStateChange: (state) => {
           console.log('📊 Call state changed:', state);
           setCallState(state);
+
+          // Freeze to connected once true to avoid later regressions from late events
+          if (state.isConnected && !freezeConnectedRef.current) {
+            freezeConnectedRef.current = true;
+          }
           
-          // Update ringing state based on connection state
-          if (state.connectionState === 'connected') {
+          // Update ringing state and switch UI when connected
+          if (state.connectionState === 'connected' || state.isConnected) {
             setIsRinging(false);
             setIsProcessingAnswer(false);
+            setCallAccepted(true);
           }
         },
         onRemoteStream: (stream) => {
@@ -322,8 +332,12 @@ export default function AudioCall({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Effective connectivity (once connected, stay connected visually)
+  const isEffectivelyConnected = freezeConnectedRef.current || callState.isConnected || callState.connectionState === 'connected';
+
   const getStatusText = () => {
     if (shouldShowIncomingUI) return 'Incoming Call';
+    if (isEffectivelyConnected) return 'Connected';
     if (isIncomingCall && isProcessingAnswer) return 'Answering...';
     
     switch (callState.connectionState) {
@@ -341,6 +355,7 @@ export default function AudioCall({
   };
 
   const getConnectionIndicatorColor = () => {
+    if (isEffectivelyConnected) return '#4CAF50';
     switch (callState.connectionState) {
       case 'connecting':
         return '#FF9800';
@@ -435,7 +450,7 @@ export default function AudioCall({
             <View style={[styles.connectionDot, { backgroundColor: getConnectionIndicatorColor() }]} />
             <Text style={styles.connectionText}>{getStatusText()}</Text>
           </View>
-          {callState.connectionState === 'connected' && (
+          {isEffectivelyConnected && (
             <Text style={styles.durationText}>
               {formatDuration(callState.callDuration)}
             </Text>
