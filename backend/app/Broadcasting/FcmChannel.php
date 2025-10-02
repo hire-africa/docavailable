@@ -86,15 +86,17 @@ class FcmChannel
                     'title' => $message['title'] ?? '',
                     'body' => $message['body'] ?? '',
                 ],
-                'android' => [
+'android' => [
                     // Set overall Android priority at the correct level for FCM v1
                     'priority' => 'HIGH',
-'notification' => [
+                    'notification' => [
                         'sound' => 'default',
                         // Route to our high-importance calls channel
                         'channel_id' => 'calls',
-                        'priority' => 'PRIORITY_MAX',
-                        'visibility' => 'PUBLIC'
+                        // Use correct field name for notification-level priority in FCM v1
+                        'notification_priority' => 'PRIORITY_MAX',
+                        // Use correct enum for visibility
+                        'visibility' => 'VISIBILITY_PUBLIC'
                     ],
                 ],
                 'apns' => [
