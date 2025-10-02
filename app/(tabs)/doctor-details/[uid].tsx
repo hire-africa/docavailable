@@ -433,6 +433,7 @@ export default function DoctorProfilePage() {
           doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
           patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
           otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
+          isIncomingCall={false}
           onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
           onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
         />
