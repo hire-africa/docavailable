@@ -380,6 +380,16 @@ export default function AudioCall({
     outputRange: [0, 360],
   });
 
+  // Debug logging to understand what's rendering
+  console.log('🔍 [AudioCall] RENDERING with props:', {
+    appointmentId,
+    userId,
+    isDoctor,
+    isIncomingCall,
+    callAccepted,
+    connectionState: callState.connectionState
+  });
+
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />

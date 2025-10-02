@@ -399,6 +399,16 @@ export default function VideoCallModal({
     }
   };
 
+  // Debug logging to understand what's rendering
+  console.log('🔍 [VideoCallModal] RENDERING with props:', {
+    appointmentId,
+    userId,
+    isDoctor,
+    isIncomingCall,
+    callAccepted,
+    connectionState: callState.connectionState
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
@@ -515,7 +525,7 @@ export default function VideoCallModal({
       )}
 
       {/* Dynamic Controls based on call state */}
-      {shouldShowIncomingUI || isProcessingAnswer ? (
+      {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
         /* Incoming Call Controls - Accept/Decline */
         <View style={styles.controls}>
           {/* Decline Button */}
