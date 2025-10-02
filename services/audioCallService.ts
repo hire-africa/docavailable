@@ -499,12 +499,23 @@ class AudioCallService {
             
             switch (message.type) {
               case 'offer':
-                    if (this.isIncomingMode && !this.hasAccepted) {
-                      // Do not auto-answer on incoming; wait for explicit accept
+                    console.log('📞 [AudioCallService] Received offer:', {
+                      isIncomingMode: this.isIncomingMode,
+                      hasAccepted: this.hasAccepted,
+                      isIncoming: this.isIncoming,
+                      messageSenderId: message.senderId,
+                      currentUserId: this.userId
+                    });
+                    
+                    // Always store offers for incoming calls, regardless of mode
+                    if (this.isIncoming || this.isIncomingMode) {
                       (global as any).pendingOffer = message.offer;
-                      console.log('📞 [AudioCallService] Stored pending offer; awaiting user acceptance');
-                    } else {
+                      console.log('📞 [AudioCallService] Stored pending offer for incoming call; awaiting user acceptance');
+                    } else if (!this.hasAccepted) {
+                      // For outgoing calls, handle offer immediately
                       await this.handleOffer(message.offer);
+                    } else {
+                      console.log('📞 [AudioCallService] Ignoring offer - call already accepted');
                     }
                     break;
               case 'answer':
@@ -948,8 +959,26 @@ class AudioCallService {
       console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
       
       const pendingOffer = (global as any).pendingOffer;
+      console.log('📞 [AudioCallService] Checking for pending offer:', {
+        hasPendingOffer: !!pendingOffer,
+        offerType: pendingOffer?.type,
+        offerSdpLength: pendingOffer?.sdp?.length
+      });
+      
       if (!pendingOffer) {
-        throw new Error('No pending offer found');
+        console.warn('⚠️ [AudioCallService] No pending offer found - this might be a direct call or offer was already processed');
+        // For direct calls or if offer was already processed, just initialize the connection
+        if (!this.localStream) {
+          this.localStream = await mediaDevices.getUserMedia({ video: false, audio: true });
+          await this.configureAudioRouting();
+        }
+        if (!this.peerConnection) {
+          await this.initializePeerConnection();
+        }
+        this.hasAccepted = true;
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.startCallTimer();
+        return;
       }
       
       // On accept, prepare media and create PC if needed
@@ -963,6 +992,10 @@ class AudioCallService {
 
       console.log('📞 [AudioCallService] Processing pending offer...');
       await this.handleOffer(pendingOffer);
+      
+      console.log('📞 [AudioCallService] Offer processed successfully, clearing pending offer');
+      // Clear the pending offer after processing
+      (global as any).pendingOffer = null;
       
       // Drain queued ICE candidates now that remoteDescription is set
       if (this.peerConnection && this.pendingCandidates.length > 0) {
