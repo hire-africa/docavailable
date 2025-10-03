@@ -1005,10 +1005,6 @@ class AudioCallService {
             this.events?.onCallAnswered();
           }
           this.markConnectedOnce();
-e;
-            this.events?.onCallAnswered();
-          }
-          this.markConnectedOnce();
         } catch (stateError) {
           console.log('⚠️ Failed to set remote description due to state, but marking as answered');
           this.isCallAnswered = true;
