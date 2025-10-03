@@ -145,7 +145,7 @@ export default function AudioCall({
           setCallState(state);
 
           // Freeze to connected once true to avoid later regressions from late events
-          if (state.isConnected && !freezeConnectedRef.current) {
+          if ((state.isConnected || state.connectionState === 'connected') && !freezeConnectedRef.current) {
             freezeConnectedRef.current = true;
           }
           
@@ -176,6 +176,11 @@ export default function AudioCall({
         },
         onCallAnswered: () => {
           console.log('✅ Call answered');
+          // Ensure UI flips to connected immediately on answered
+          if (!freezeConnectedRef.current) freezeConnectedRef.current = true;
+          setIsRinging(false);
+          setIsProcessingAnswer(false);
+          setCallAccepted(true);
           onCallAnswered?.();
         },
         onCallRejected: () => {
