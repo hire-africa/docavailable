@@ -61,6 +61,8 @@ class AudioCallService {
   private signalingFlushTimer: ReturnType<typeof setInterval> | null = null;
   // Avoid duplicate re-notify calls per instance
   private reNotifyAttempted: boolean = false;
+  // Offer creation guard (separate from overall initialization)
+  private creatingOffer: boolean = false;
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
     console.log(`🏗️ [AudioCallService] Instance ${this.instanceId} created`);
@@ -586,15 +588,27 @@ class AudioCallService {
                     this.handleCallTimeout();
                     break;
               case 'resend-offer-request':
-                    if (this.peerConnection?.localDescription) {
-                      console.log('📨 [AudioCallService] Received resend-offer-request; resending offer');
-                      this.sendSignalingMessage({
-                        type: 'offer',
-                        offer: this.peerConnection.localDescription,
-                        senderId: this.userId,
-                        appointmentId: this.appointmentId,
-                        userId: this.userId,
-                      });
+                    if (this.peerConnection) {
+                      if (!this.peerConnection.localDescription) {
+                        try {
+                          console.log('📨 [AudioCallService] Resend requested but no localDescription; creating fresh offer');
+                          await this.createOffer();
+                        } catch (e) {
+                          console.warn('⚠️ [AudioCallService] Failed to create fresh offer on resend request:', e);
+                        }
+                      }
+                      if (this.peerConnection?.localDescription) {
+                        console.log('📨 [AudioCallService] Received resend-offer-request; resending offer');
+                        this.sendSignalingMessage({
+                          type: 'offer',
+                          offer: this.peerConnection.localDescription,
+                          senderId: this.userId,
+                          appointmentId: this.appointmentId,
+                          userId: this.userId,
+                        });
+                      } else {
+                        console.warn('⚠️ [AudioCallService] Cannot resend offer - still no localDescription available');
+                      }
                     }
                     break;
             }
@@ -1146,12 +1160,12 @@ class AudioCallService {
       return;
     }
     
-    if (this.isInitializing) {
-      console.warn('⚠️ [AudioCallService] Already initializing - preventing duplicate offer');
+    if (this.creatingOffer) {
+      console.warn('⚠️ [AudioCallService] Offer creation in progress - skipping');
       return;
     }
     
-    this.isInitializing = true;
+    this.creatingOffer = true;
     
     try {
       console.log('📞 [AudioCallService] Creating offer...');
@@ -1176,14 +1190,15 @@ class AudioCallService {
     } catch (error) {
       console.error('❌ Error creating offer:', error);
       console.error('❌ Error details:', {
-        message: error.message,
-        stack: error.stack,
+        message: (error as any).message,
+        stack: (error as any).stack,
         peerConnectionState: this.peerConnection?.connectionState,
         hasLocalStream: !!this.localStream
       });
-      this.isInitializing = false;
       this.events?.onError('Failed to initiate call');
       throw error; // Re-throw to be caught by caller
+    } finally {
+      this.creatingOffer = false;
     }
   }
 
