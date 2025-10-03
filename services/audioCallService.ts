@@ -963,7 +963,10 @@ class AudioCallService {
         this.isCallAnswered = true;
         this.clearCallTimeout();
         this.updateState({ connectionState: 'connected', isConnected: true });
-        this.events?.onCallAnswered();
+        if (!this.didEmitAnswered) {
+          this.didEmitAnswered = true;
+          this.events?.onCallAnswered();
+        }
         this.clearReofferLoop();
         this.markConnectedOnce();
       } else if (this.peerConnection.signalingState === 'stable') {
@@ -997,7 +1000,14 @@ class AudioCallService {
           this.isCallAnswered = true;
           this.clearCallTimeout();
           this.updateState({ connectionState: 'connected', isConnected: true });
-          this.events?.onCallAnswered();
+          if (!this.didEmitAnswered) {
+            this.didEmitAnswered = true;
+            this.events?.onCallAnswered();
+          }
+          this.markConnectedOnce();
+e;
+            this.events?.onCallAnswered();
+          }
           this.markConnectedOnce();
         } catch (stateError) {
           console.log('⚠️ Failed to set remote description due to state, but marking as answered');
@@ -1272,7 +1282,11 @@ class AudioCallService {
     this.clearCallTimeout();
     this.updateState({ connectionState: 'connected', isConnected: true });
     // Do not echo call-answered back
-    this.events?.onCallAnswered();
+    if (!this.didEmitAnswered) {
+      this.didEmitAnswered = true;
+      this.events?.onCallAnswered();
+    }
+    this.markConnectedOnce();
   }
 
   /**
@@ -1459,7 +1473,19 @@ class AudioCallService {
    */
   private updateState(updates: Partial<AudioCallState>): void {
     const oldState = { ...this.state };
-    this.state = { ...this.state, ...updates };
+    const next: AudioCallState = { ...this.state, ...updates } as AudioCallState;
+
+    // Prevent downgrading connection state from connected -> connecting
+    if (oldState.connectionState === 'connected' && updates.connectionState === 'connecting') {
+      next.connectionState = 'connected';
+    }
+
+    // Ensure callDuration is monotonic while connected (avoid resets to 0 mid-call)
+    if (typeof updates.callDuration === 'number' && oldState.connectionState === 'connected' && updates.callDuration < oldState.callDuration) {
+      next.callDuration = oldState.callDuration;
+    }
+
+    this.state = next;
     console.log('📊 Call state changed:', {
       from: oldState,
       to: this.state,
@@ -1658,6 +1684,7 @@ class AudioCallService {
     this.hasEnded = false;
     this.reNotifyAttempted = false;
     this.callStartAttempted = false;
+    this.didEmitAnswered = false;
     
     // Clear global pending offer
     (global as any).pendingOffer = null;
