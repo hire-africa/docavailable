@@ -233,17 +233,40 @@ chatWss.on('connection', (ws, req) => {
 
 // Health check endpoint
 server.on('request', (req, res) => {
+  // Add error handling to prevent "write after end" errors
+  req.on('error', (err) => {
+    console.warn('⚠️ [HTTP] Request error:', err.message);
+  });
+  
+  res.on('error', (err) => {
+    console.warn('⚠️ [HTTP] Response error:', err.message);
+  });
+  
+  // Check if response is still writable
+  if (res.destroyed || res.finished) {
+    console.warn('⚠️ [HTTP] Response already closed, skipping');
+    return;
+  }
+  
   if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'healthy',
-      activeConnections: connections.size,
-      totalConnections: Array.from(connections.values()).reduce((sum, conns) => sum + conns.length, 0),
-      timestamp: new Date().toISOString()
-    }));
+    try {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'healthy',
+        activeConnections: connections.size,
+        totalConnections: Array.from(connections.values()).reduce((sum, conns) => sum + conns.length, 0),
+        timestamp: new Date().toISOString()
+      }));
+    } catch (err) {
+      console.warn('⚠️ [HTTP] Error writing health response:', err.message);
+    }
   } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
+    try {
+      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.end('Not Found');
+    } catch (err) {
+      console.warn('⚠️ [HTTP] Error writing 404 response:', err.message);
+    }
   }
 });
 
@@ -1172,21 +1195,7 @@ async function processAutoDeductionForAppointment(appointmentId) {
 
 // Server is already started above
 
-// Add health check endpoint
-server.on('request', (req, res) => {
-  if (req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ 
-      status: 'healthy', 
-      timestamp: new Date().toISOString(),
-      connections: connections.size,
-      port: PORT
-    }));
-  } else {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not Found');
-  }
-});
+// Health check endpoint already defined above - removing duplicate
 
 // Handle server errors
 server.on('error', (error) => {

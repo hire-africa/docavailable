@@ -56,6 +56,11 @@ class AudioCallService {
   private didEmitAnswered: boolean = false;
   // Graceful disconnect guard
   private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Queue for signaling messages before WebSocket opens
+  private messageQueue: any[] = [];
+  private signalingFlushTimer: ReturnType<typeof setInterval> | null = null;
+  // Avoid duplicate re-notify calls per instance
+  private reNotifyAttempted: boolean = false;
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
     console.log(`🏗️ [AudioCallService] Instance ${this.instanceId} created`);
@@ -344,20 +349,25 @@ class AudioCallService {
           // Treat "already active" as benign (e.g., another flow already started the session)
           if (startResp.status === 400 && body.includes('already have an active call session')) {
             console.log('ℹ️ [AudioCallService] Backend reports existing active call session; continuing');
-            // Proactively request a re-notify to ensure the callee gets the push
-            try {
-              const rn = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/re-notify`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${await this.getAuthToken()}`
-                },
-                body: JSON.stringify({ appointment_id: appointmentId, doctor_id: finalDoctorId })
-              });
-              const rnText = await rn.text().catch(() => '');
-              console.log('ℹ️ [AudioCallService] Re-notify response:', rn.status, rnText);
-            } catch (e) {
-              console.warn('⚠️ [AudioCallService] Re-notify failed:', e);
+            // Proactively request a re-notify to ensure the callee gets the push (only once per instance)
+            if (!this.reNotifyAttempted) {
+              this.reNotifyAttempted = true;
+              try {
+                const rn = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/re-notify`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${await this.getAuthToken()}`
+                  },
+                  body: JSON.stringify({ appointment_id: appointmentId, doctor_id: finalDoctorId })
+                });
+                const rnText = await rn.text().catch(() => '');
+                console.log('ℹ️ [AudioCallService] Re-notify response:', rn.status, rnText);
+              } catch (e) {
+                console.warn('⚠️ [AudioCallService] Re-notify failed:', e);
+              }
+            } else {
+              console.log('ℹ️ [AudioCallService] Re-notify already attempted; skipping');
             }
           } else {
             console.error('❌ Failed to start call session on backend:', startResp.status, body);
@@ -368,6 +378,19 @@ class AudioCallService {
         }
       } catch (e) {
         console.error('❌ Error starting call session on backend:', e);
+      }
+
+      // Ensure signaling is connected BEFORE creating and sending an offer
+      // This prevents lost offers and ensures the callee can receive it (and any re-offer requests)
+      try {
+        await this.connectSignaling(appointmentId, userId);
+        console.log('📞 Signaling connected for outgoing call - proceeding to media and offer');
+      } catch (wsErr) {
+        console.error('❌ Failed to connect signaling for outgoing call:', wsErr);
+        this.events?.onError('Unable to connect to call signaling. Please try again.');
+        this.updateState({ connectionState: 'failed' });
+        this.isInitializing = false;
+        return;
       }
 
       // Get user media (audio only)
@@ -503,6 +526,7 @@ class AudioCallService {
         
         this.signalingChannel.onopen = () => {
           console.log('🔌 Connected to signaling server');
+          try { this.flushSignalingQueue(); } catch (e) { console.warn('⚠️ [AudioCallService] Failed to flush signaling queue on open:', e); }
           resolve();
         };
 
@@ -586,6 +610,10 @@ class AudioCallService {
 
         this.signalingChannel.onclose = () => {
           console.log('🔌 Signaling connection closed');
+          if (this.signalingFlushTimer) {
+            clearInterval(this.signalingFlushTimer);
+            this.signalingFlushTimer = null;
+          }
           this.updateState({ connectionState: 'disconnected' });
         };
 
@@ -974,8 +1002,26 @@ class AudioCallService {
     if (this.signalingChannel?.readyState === WebSocket.OPEN) {
       console.log('📤 [AudioCallService] Sending message:', message.type, 'to audio signaling');
       this.signalingChannel.send(JSON.stringify(message));
-    } else {
-      console.warn('⚠️ Signaling channel not open, cannot send message');
+      return;
+    }
+    // Queue the message until signaling opens
+    console.warn('⚠️ Signaling channel not open, queuing message:', message.type);
+    this.messageQueue.push(message);
+
+    // If there is an active socket, rely on onopen flush; otherwise try periodic flush for a short window
+    if (!this.signalingFlushTimer) {
+      let tries = 0;
+      this.signalingFlushTimer = setInterval(() => {
+        tries++;
+        if (this.isConnectedToSignaling()) {
+          try { this.flushSignalingQueue(); } catch {}
+          if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
+        } else if (tries >= 10) { // ~5s at 500ms
+          console.warn('⚠️ [AudioCallService] Discarding queued signaling messages after timeout');
+          this.messageQueue = [];
+          if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
+        }
+      }, 500);
     }
   }
 
@@ -984,6 +1030,22 @@ class AudioCallService {
    */
   sendMessage(message: any): void {
     this.sendSignalingMessage(message);
+  }
+
+  // Flush queued signaling messages once the socket is open
+  private flushSignalingQueue(): void {
+    if (this.signalingChannel?.readyState !== WebSocket.OPEN) return;
+    while (this.messageQueue.length > 0) {
+      const msg = this.messageQueue.shift();
+      try {
+        console.log('📤 [AudioCallService] Flushing queued message:', msg?.type);
+        this.signalingChannel.send(JSON.stringify(msg));
+      } catch (e) {
+        console.warn('⚠️ [AudioCallService] Failed to send queued message, re-queuing');
+        this.messageQueue.unshift(msg);
+        break;
+      }
+    }
   }
 
   /**
