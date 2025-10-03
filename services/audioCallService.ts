@@ -38,6 +38,7 @@ class AudioCallService {
   private callStartTime: number = 0;
   private events: AudioCallEvents | null = null;
   private callTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private reofferTimer: ReturnType<typeof setInterval> | null = null;
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
@@ -450,6 +451,7 @@ class AudioCallService {
         console.log('📞 [AudioCallService] About to create offer...');
         await this.createOffer();
         console.log('📞 Offer sent successfully, starting call timeout...');
+        this.startReofferLoop();
       } catch (error) {
         console.error('❌ [AudioCallService] Failed to create offer:', error);
         throw error; // Re-throw to be caught by outer try-catch
@@ -558,6 +560,18 @@ class AudioCallService {
                     break;
               case 'call-timeout':
                     this.handleCallTimeout();
+                    break;
+              case 'resend-offer-request':
+                    if (this.peerConnection?.localDescription) {
+                      console.log('📨 [AudioCallService] Received resend-offer-request; resending offer');
+                      this.sendSignalingMessage({
+                        type: 'offer',
+                        offer: this.peerConnection.localDescription,
+                        senderId: this.userId,
+                        appointmentId: this.appointmentId,
+                        userId: this.userId,
+                      });
+                    }
                     break;
             }
           } catch (error) {
@@ -890,8 +904,9 @@ class AudioCallService {
         // Mark call as answered
         this.isCallAnswered = true;
         this.clearCallTimeout();
-        this.updateState({ connectionState: 'connected', isConnected: true });
-        this.events?.onCallAnswered();
+    this.updateState({ connectionState: 'connected', isConnected: true });
+    this.events?.onCallAnswered();
+    this.clearReofferLoop();
       } else if (this.peerConnection.signalingState === 'stable') {
         console.log('📞 Already in stable state - connection established, marking as answered');
         this.isCallAnswered = true;
@@ -986,8 +1001,8 @@ class AudioCallService {
       });
       
       if (!pendingOffer) {
-        console.warn('⚠️ [AudioCallService] No pending offer found - this might be a direct call or offer was already processed');
-        // For direct calls or if offer was already processed, just initialize the connection
+        console.warn('⚠️ [AudioCallService] No pending offer found - requesting re-offer from caller');
+        // Prepare media and PC so we can immediately process the re-offer when it arrives
         if (!this.localStream) {
           this.localStream = await mediaDevices.getUserMedia({ video: false, audio: true });
           await this.configureAudioRouting();
@@ -995,9 +1010,14 @@ class AudioCallService {
         if (!this.peerConnection) {
           await this.initializePeerConnection();
         }
+        // Ask caller to resend the current offer
+        this.sendSignalingMessage({
+          type: 'resend-offer-request',
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
         this.hasAccepted = true;
-        this.updateState({ connectionState: 'connected', isConnected: true });
-        this.startCallTimer();
+        // Do NOT mark connected yet; wait for offer -> answer handshake
         return;
       }
       
@@ -1213,6 +1233,36 @@ class AudioCallService {
     }
   }
 
+  private startReofferLoop(): void {
+    try {
+      this.clearReofferLoop();
+      this.reofferTimer = setInterval(() => {
+        if (
+          this.peerConnection?.localDescription &&
+          this.state.connectionState !== 'connected' &&
+          !this.state.isConnected
+        ) {
+          this.sendSignalingMessage({
+            type: 'offer',
+            offer: this.peerConnection.localDescription,
+            senderId: this.userId,
+            appointmentId: this.appointmentId,
+            userId: this.userId,
+          });
+        }
+      }, 4000);
+    } catch (e) {
+      console.warn('⚠️ [AudioCallService] Failed to start re-offer loop:', e);
+    }
+  }
+
+  private clearReofferLoop(): void {
+    if (this.reofferTimer) {
+      clearInterval(this.reofferTimer);
+      this.reofferTimer = null;
+    }
+  }
+
   /**
    * Start call duration timer
    */
@@ -1348,6 +1398,9 @@ class AudioCallService {
         this.signalingChannel = null;
       }
       
+      // Clear re-offer loop
+      this.clearReofferLoop();
+      
       // Reset state
       this.updateState({
         isConnected: false,
@@ -1415,6 +1468,7 @@ class AudioCallService {
     this.peerConnection = null;
     this.localStream = null;
     this.remoteStream = null;
+    this.clearReofferLoop();
     this.signalingChannel = null;
     this.callTimer = null;
     this.callStartTime = 0;
