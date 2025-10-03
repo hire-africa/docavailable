@@ -670,8 +670,25 @@ class VideoCallService {
       await this.peerConnection.setRemoteDescription(answer);
       console.log('✅ Video call answer processed successfully');
       
-      // Update connection state
-      this.updateState({ connectionState: 'connected' });
+      // FIX: Properly set connection state and start call timer
+      this.isCallAnswered = true;
+      this.updateState({ 
+        connectionState: 'connected', 
+        isConnected: true 
+      });
+      this.startCallTimer();
+      this.events?.onCallAnswered();
+      
+      // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+      setTimeout(() => {
+        if (this.peerConnection?.connectionState === 'connected' && 
+            this.state.connectionState !== 'connected') {
+          console.log('🔄 Fallback: Forcing connected state after timeout');
+          this.updateState({ connectionState: 'connected', isConnected: true });
+          this.startCallTimer();
+        }
+      }, 3000);
+      
     } catch (error) {
       console.error('❌ Error handling video answer:', error);
     }

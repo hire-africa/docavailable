@@ -969,6 +969,16 @@ class AudioCallService {
         }
         this.clearReofferLoop();
         this.markConnectedOnce();
+        
+        // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+        setTimeout(() => {
+          if (this.peerConnection?.connectionState === 'connected' && 
+              this.state.connectionState !== 'connected') {
+            console.log('🔄 Fallback: Forcing connected state after timeout');
+            this.updateState({ connectionState: 'connected', isConnected: true });
+            this.startCallTimer();
+          }
+        }, 3000);
       } else if (this.peerConnection.signalingState === 'stable') {
         console.log('📞 Already in stable state - connection established, marking as answered');
         // Drain queued ICE if any
@@ -983,6 +993,16 @@ class AudioCallService {
         this.updateState({ connectionState: 'connected', isConnected: true });
         this.events?.onCallAnswered();
         this.markConnectedOnce();
+        
+        // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+        setTimeout(() => {
+          if (this.peerConnection?.connectionState === 'connected' && 
+              this.state.connectionState !== 'connected') {
+            console.log('🔄 Fallback: Forcing connected state after timeout');
+            this.updateState({ connectionState: 'connected', isConnected: true });
+            this.startCallTimer();
+          }
+        }, 3000);
       } else {
         console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
         // Try to set remote description anyway for other states
@@ -1005,6 +1025,16 @@ class AudioCallService {
             this.events?.onCallAnswered();
           }
           this.markConnectedOnce();
+          
+          // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+          setTimeout(() => {
+            if (this.peerConnection?.connectionState === 'connected' && 
+                this.state.connectionState !== 'connected') {
+              console.log('🔄 Fallback: Forcing connected state after timeout');
+              this.updateState({ connectionState: 'connected', isConnected: true });
+              this.startCallTimer();
+            }
+          }, 3000);
         } catch (stateError) {
           console.log('⚠️ Failed to set remote description due to state, but marking as answered');
           this.isCallAnswered = true;
@@ -1436,7 +1466,8 @@ class AudioCallService {
   }
 
   /**
-   * Idempotently mark the call as connected and start timer oncen   */
+   * Idempotently mark the call as connected and start timer once
+n   */
   private markConnectedOnce(): void {
     try {
       if (!this.didConnect) {
