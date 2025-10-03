@@ -951,18 +951,35 @@ class AudioCallService {
         await this.peerConnection.setRemoteDescription(answer);
         console.log('✅ Answer set successfully');
         
+        // Drain any queued ICE candidates now that remoteDescription is set
+        if (this.pendingCandidates.length > 0 && this.peerConnection) {
+          for (const c of this.pendingCandidates) {
+            try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+          }
+          this.pendingCandidates = [];
+        }
+        
         // Mark call as answered
-        this.isCallAnswered = true;
-        this.clearCallTimeout();
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    this.events?.onCallAnswered();
-    this.clearReofferLoop();
-      } else if (this.peerConnection.signalingState === 'stable') {
-        console.log('📞 Already in stable state - connection established, marking as answered');
         this.isCallAnswered = true;
         this.clearCallTimeout();
         this.updateState({ connectionState: 'connected', isConnected: true });
         this.events?.onCallAnswered();
+        this.clearReofferLoop();
+        this.markConnectedOnce();
+      } else if (this.peerConnection.signalingState === 'stable') {
+        console.log('📞 Already in stable state - connection established, marking as answered');
+        // Drain queued ICE if any
+        if (this.pendingCandidates.length > 0 && this.peerConnection) {
+          for (const c of this.pendingCandidates) {
+            try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+          }
+          this.pendingCandidates = [];
+        }
+        this.isCallAnswered = true;
+        this.clearCallTimeout();
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.events?.onCallAnswered();
+        this.markConnectedOnce();
       } else {
         console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
         // Try to set remote description anyway for other states
@@ -970,10 +987,18 @@ class AudioCallService {
           console.log('📞 Attempting to set remote description despite state...');
           await this.peerConnection.setRemoteDescription(answer);
           console.log('✅ Answer set successfully despite state');
+          // Drain queued ICE if any
+          if (this.pendingCandidates.length > 0 && this.peerConnection) {
+            for (const c of this.pendingCandidates) {
+              try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+            }
+            this.pendingCandidates = [];
+          }
           this.isCallAnswered = true;
           this.clearCallTimeout();
           this.updateState({ connectionState: 'connected', isConnected: true });
           this.events?.onCallAnswered();
+          this.markConnectedOnce();
         } catch (stateError) {
           console.log('⚠️ Failed to set remote description due to state, but marking as answered');
           this.isCallAnswered = true;
@@ -1390,10 +1415,33 @@ class AudioCallService {
 
   private startCallTimer(): void {
     this.callStartTime = Date.now();
+    if (this.callTimer) {
+      clearInterval(this.callTimer);
+      this.callTimer = null;
+    }
     this.callTimer = setInterval(() => {
       const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
       this.updateState({ callDuration: duration });
     }, 1000);
+  }
+
+  /**
+   * Idempotently mark the call as connected and start timer oncen   */
+  private markConnectedOnce(): void {
+    try {
+      if (!this.didConnect) {
+        this.didConnect = true;
+        this.clearCallTimeout();
+        if (!this.state.isConnected || this.state.connectionState !== 'connected') {
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+        }
+        if (!this.callTimer) {
+          this.startCallTimer();
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);
+    }
   }
 
   /**
@@ -1588,6 +1636,7 @@ class AudioCallService {
     this.processedMessages.clear();
     this.isProcessingIncomingCall = false;
     this.isCallAnswered = false;
+    this.didConnect = false;
     
     // Reset call state
     this.state = {
