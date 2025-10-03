@@ -126,14 +126,24 @@ export default function AudioCall({
   }, []);
 
   useEffect(() => {
-    if (callState.connectionState === 'connected') {
+    console.log('🔄 AudioCall useEffect triggered:', {
+      connectionState: callState.connectionState,
+      isConnected: callState.isConnected,
+      isRinging,
+      isInitializing
+    });
+    
+    if (callState.connectionState === 'connected' || callState.isConnected) {
+      console.log('✅ Setting UI to connected state');
       setIsInitializing(false);
       setIsRinging(false);
+      setCallAccepted(true);
     } else if (callState.connectionState === 'connecting') {
+      console.log('🔄 Setting UI to connecting state');
       setIsRinging(true);
       startConnectingAnimation();
     }
-  }, [callState.connectionState]);
+  }, [callState.connectionState, callState.isConnected]);
 
   const initializeIncomingCall = async () => {
     try {
