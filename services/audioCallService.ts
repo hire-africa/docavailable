@@ -48,11 +48,13 @@ class AudioCallService {
   private isIncomingMode: boolean = false;
   private hasAccepted: boolean = false;
   private pendingCandidates: RTCIceCandidateInit[] = [];
+  private pendingOffer: RTCSessionDescription | null = null;
   private hasEnded: boolean = false;
-  private offerCreated: boolean = false;
-  private isInitializing: boolean = false;
-  private connectionState: 'disconnected' | 'connecting' | 'connected' | 'failed' = 'disconnected';
-
+  // Idempotency guards
+  private didConnect: boolean = false;
+  private didEmitAnswered: boolean = false;
+  // Graceful disconnect guard
+  private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
     console.log(`🏗️ [AudioCallService] Instance ${this.instanceId} created`);
@@ -404,7 +406,7 @@ class AudioCallService {
         }
       });
 
-      // Handle connection state changes
+      // Handle connection state changes (outgoing path)
       this.peerConnection.addEventListener('connectionstatechange', () => {
         const connectionState = this.peerConnection?.connectionState;
         console.log('🔗 Connection state changed:', connectionState);
@@ -415,33 +417,43 @@ class AudioCallService {
         
         if (connectionState === 'connected') {
           console.log('✅ WebRTC connection established');
-          this.updateState({ 
-            isConnected: true, 
-            connectionState: 'connected' 
-          });
-          this.startCallTimer();
+          // Clear any pending disconnect grace timer
+          if (this.disconnectGraceTimer) {
+            clearTimeout(this.disconnectGraceTimer);
+            this.disconnectGraceTimer = null;
+          }
+          this.markConnectedOnce();
         } else if (connectionState === 'connecting') {
-          console.log('🔄 WebRTC connection in progress...');
-          this.updateState({ 
-            isConnected: false, 
-            connectionState: 'connecting' 
-          });
+          // Never downgrade UI back to connecting once connected
+          console.log('🔄 WebRTC connection in progress (ignored if already connected)');
+          // No state change here to avoid UI regressions
         } else if (connectionState === 'disconnected' || connectionState === 'failed') {
-          console.log('❌ WebRTC connection lost:', connectionState);
-          this.updateState({ 
-            isConnected: false, 
-            connectionState: 'disconnected' 
-          });
-          this.endCall();
+          console.log('❌ WebRTC connection lost (grace period):', connectionState);
+          // Start a short grace period before ending the call to absorb brief drops
+          if (this.disconnectGraceTimer) {
+            clearTimeout(this.disconnectGraceTimer);
+            this.disconnectGraceTimer = null;
+          }
+          this.disconnectGraceTimer = setTimeout(() => {
+            const cs = this.peerConnection?.connectionState;
+            if (cs === 'disconnected' || cs === 'failed') {
+              this.updateState({ 
+                isConnected: false, 
+                connectionState: 'disconnected' 
+              });
+              this.endCall();
+            }
+          }, 2500);
         }
       });
-
-      // Connect to signaling server
-      await this.connectSignaling(appointmentId, userId);
-
-      // Create and send offer for outgoing calls
-      await this.createOffer();
-      console.log('📞 Offer sent successfully, starting call timeout...');
+      try {
+        console.log('📞 [AudioCallService] About to create offer...');
+        await this.createOffer();
+        console.log('📞 Offer sent successfully, starting call timeout...');
+      } catch (error) {
+        console.error('❌ [AudioCallService] Failed to create offer:', error);
+        throw error; // Re-throw to be caught by outer try-catch
+      }
 
       // Start call timeout (30 seconds for doctor to answer)
       this.startCallTimeout();
@@ -657,23 +669,38 @@ class AudioCallService {
       }
     });
 
-    // Handle connection state changes
+    // Handle connection state changes (incoming path)
     this.peerConnection.addEventListener('connectionstatechange', () => {
       const state = this.peerConnection?.connectionState;
       console.log('🔗 Connection state changed:', state);
       
       if (state === 'connected') {
         console.log('🔗 WebRTC connected - updating call state');
-        this.updateState({ 
-          isConnected: true, 
-          connectionState: 'connected' 
-        });
-        this.startCallTimer();
+        // Clear any pending disconnect grace timer
+        if (this.disconnectGraceTimer) {
+          clearTimeout(this.disconnectGraceTimer);
+          this.disconnectGraceTimer = null;
+        }
+        this.markConnectedOnce();
       } else if (state === 'disconnected' || state === 'failed') {
-        console.log('🔗 WebRTC disconnected/failed - updating call state');
-        this.updateState({ 
-          isConnected: false, 
-          connectionState: 'disconnected' 
+        console.log('🔗 WebRTC disconnected/failed - starting grace timer');
+        if (this.disconnectGraceTimer) {
+          clearTimeout(this.disconnectGraceTimer);
+          this.disconnectGraceTimer = null;
+        }
+        this.disconnectGraceTimer = setTimeout(() => {
+          const cs = this.peerConnection?.connectionState;
+          if (cs === 'disconnected' || cs === 'failed') {
+            this.updateState({ 
+              isConnected: false, 
+              connectionState: 'disconnected' 
+            });
+            this.stopCallTimer();
+            this.endCall();
+          }
+        }, 2500);
+      }
+    });
         });
         this.stopCallTimer();
       }
@@ -1053,9 +1080,14 @@ class AudioCallService {
     
     try {
       console.log('📞 [AudioCallService] Creating offer...');
+      console.log('📞 [AudioCallService] Peer connection state:', this.peerConnection?.connectionState);
+      console.log('📞 [AudioCallService] Local stream available:', !!this.localStream);
+      
       const offer = await this.peerConnection.createOffer();
+      console.log('📞 [AudioCallService] Offer created, setting local description...');
       await this.peerConnection.setLocalDescription(offer);
       
+      console.log('📞 [AudioCallService] Sending offer via signaling...');
       this.sendSignalingMessage({
         type: 'offer',
         offer: offer,
@@ -1068,8 +1100,15 @@ class AudioCallService {
       console.log('✅ [AudioCallService] Offer created and sent successfully');
     } catch (error) {
       console.error('❌ Error creating offer:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        peerConnectionState: this.peerConnection?.connectionState,
+        hasLocalStream: !!this.localStream
+      });
       this.isInitializing = false;
       this.events?.onError('Failed to initiate call');
+      throw error; // Re-throw to be caught by caller
     }
   }
 
@@ -1285,13 +1324,19 @@ class AudioCallService {
       // Reset audio routing to default
       await this.resetAudioRouting();
       
-      // Close peer connection
-      if (this.peerConnection) {
-        this.peerConnection.close();
-        this.peerConnection = null;
-      }
-      
-      // Send call ended message with session info
+    // Close peer connection
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+    
+    // Clear any pending disconnect grace timer
+    if (this.disconnectGraceTimer) {
+      clearTimeout(this.disconnectGraceTimer);
+      this.disconnectGraceTimer = null;
+    }
+    
+    // Send call ended message with session info
       this.sendSignalingMessage({
         type: 'call-ended',
         callType: 'voice',
