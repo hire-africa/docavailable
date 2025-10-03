@@ -652,10 +652,7 @@ class AudioCallService {
       this.remoteStream = event.streams[0];
       this.events?.onRemoteStream(event.streams[0]);
       // Fallback: mark connected on receiving remote track (RN WebRTC may delay connectionstatechange)
-      if (!this.state.isConnected) {
-        this.updateState({ isConnected: true, connectionState: 'connected' });
-        this.startCallTimer();
-      }
+      this.markConnectedOnce();
     });
 
     // Handle ICE candidates
@@ -699,10 +696,6 @@ class AudioCallService {
             this.endCall();
           }
         }, 2500);
-      }
-    });
-        });
-        this.stopCallTimer();
       }
     });
   }
