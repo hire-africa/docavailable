@@ -115,23 +115,13 @@ export default function VideoCallModal({
   }, [isIncomingCall, appointmentId]);
 
   useEffect(() => {
-    console.log('🔄 VideoCallModal useEffect triggered:', {
-      connectionState: callState.connectionState,
-      isConnected: callState.isConnected,
-      isRinging,
-      isInitializing
-    });
-    
-    if (callState.connectionState === 'connected' || callState.isConnected) {
-      console.log('✅ Setting UI to connected state');
+    if (callState.connectionState === 'connected') {
       setIsInitializing(false);
       setIsRinging(false);
-      setCallAccepted(true);
     } else if (callState.connectionState === 'connecting') {
-      console.log('🔄 Setting UI to connecting state');
       setIsRinging(true);
     }
-  }, [callState.connectionState, callState.isConnected]);
+  }, [callState.connectionState]);
 
   // Monitor local stream availability
   useEffect(() => {
