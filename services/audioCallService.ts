@@ -63,6 +63,8 @@ class AudioCallService {
   private reNotifyAttempted: boolean = false;
   // Offer creation guard (separate from overall initialization)
   private creatingOffer: boolean = false;
+  // Backend start/re-notify guard per call attempt
+  private callStartAttempted: boolean = false;
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
     console.log(`🏗️ [AudioCallService] Instance ${this.instanceId} created`);
@@ -334,7 +336,13 @@ class AudioCallService {
       // Start call session on backend to trigger push notification to the doctor
       // Always attempt start; if already active, continue without error so both flows work
       try {
-        const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+        if (!this.callStartAttempted) {
+          this.callStartAttempted = true;
+        } else {
+          console.log('ℹ️ [AudioCallService] Call session start already attempted; skipping duplicate');
+          // still proceed with signaling/media even if backend start was attempted
+        }
+        const startResp = !this.callStartAttempted ? null : await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -346,7 +354,7 @@ class AudioCallService {
             doctor_id: finalDoctorId
           })
         });
-        if (!startResp.ok) {
+        if (startResp && !startResp.ok) {
           const body = await startResp.text().catch(() => '');
           // Treat "already active" as benign (e.g., another flow already started the session)
           if (startResp.status === 400 && body.includes('already have an active call session')) {
@@ -374,7 +382,7 @@ class AudioCallService {
           } else {
             console.error('❌ Failed to start call session on backend:', startResp.status, body);
           }
-        } else {
+        } else if (startResp) {
           const startData = await startResp.json().catch(() => ({} as any));
           console.log('✅ Call session started on backend:', startData?.data?.session_id ?? startData);
         }
@@ -406,7 +414,7 @@ class AudioCallService {
 
       // Create peer connection
       this.peerConnection = new RTCPeerConnection({
-        iceServers: this.iceServers,
+        iceServers: this.getIceServers(),
       });
 
       // Add local audio track to peer connection
@@ -692,7 +700,7 @@ class AudioCallService {
   private async initializePeerConnection(): Promise<void> {
     // Create peer connection
     this.peerConnection = new RTCPeerConnection({
-      iceServers: this.iceServers,
+      iceServers: this.getIceServers(),
     });
 
     // Add local audio track to peer connection
@@ -1273,6 +1281,31 @@ class AudioCallService {
   }
 
   /**
+   * Compute ICE servers, including optional TURN from env/config
+   */
+  private getIceServers() {
+    const base = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ];
+    try {
+      const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
+      const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
+      const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
+      if (turnUrl && turnUsername && turnCredential) {
+        base.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
+        console.log('🌐 [AudioCallService] TURN server configured');
+      } else {
+        console.log('🌐 [AudioCallService] No TURN configured (using STUN only)');
+      }
+    } catch (e) {
+      console.warn('⚠️ [AudioCallService] Failed to read TURN config:', e);
+    }
+    return base;
+  }
+
+  /**
    * Toggle audio mute/unmute
    */
   toggleAudio(): boolean {
@@ -1566,6 +1599,7 @@ class AudioCallService {
     
     // Reset new state variables
     this.offerCreated = false;
+    this.creatingOffer = false;
     this.isInitializing = false;
     this.connectionState = 'disconnected';
     this.isIncoming = false;
@@ -1573,6 +1607,8 @@ class AudioCallService {
     this.hasAccepted = false;
     this.pendingCandidates = [];
     this.hasEnded = false;
+    this.reNotifyAttempted = false;
+    this.callStartAttempted = false;
     
     // Clear global pending offer
     (global as any).pendingOffer = null;
