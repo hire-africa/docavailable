@@ -73,28 +73,39 @@ class FcmChannel
         
         Log::info("📤 FCM Channel: Preparing FCM V1 payload", [
             'user_id' => $notifiable->id,
-            'title' => $message['title'] ?? 'no title',
-            'body' => $message['body'] ?? 'no body',
+            'title' => $message['notification']['title'] ?? 'no title',
+            'body' => $message['notification']['body'] ?? 'no body',
             'project_id' => $this->projectId
         ]);
+
+        // Determine channel based on notification type
+        $data = $message['data'] ?? [];
+        $type = $data['type'] ?? '';
+        $channelId = 'calls'; // default
+        
+        if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
+            $channelId = 'messages';
+        } elseif (str_contains($type, 'appointment')) {
+            $channelId = 'appointments';
+        }
 
         // FCM V1 API payload structure
         $payload = [
             'message' => [
                 'token' => $notifiable->push_token,
                 'notification' => [
-                    'title' => $message['title'] ?? '',
-                    'body' => $message['body'] ?? '',
+                    'title' => $message['notification']['title'] ?? '',
+                    'body' => $message['notification']['body'] ?? '',
                 ],
-'android' => [
+                'android' => [
                     // Set overall Android priority at the correct level for FCM v1
                     'priority' => 'HIGH',
                     'notification' => [
                         'sound' => 'default',
-                        // Route to our high-importance calls channel
-                        'channel_id' => 'calls',
+                        // Route to appropriate channel based on type
+                        'channel_id' => $channelId,
                         // Use correct field name for notification-level priority in FCM v1
-                        'notification_priority' => 'PRIORITY_MAX',
+                        'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
                         // Visibility must be an integer enum for some clients (1=Public, 0=Private, -1=Secret)
                         'visibility' => 1
                     ],
@@ -107,7 +118,7 @@ class FcmChannel
                         ],
                     ],
                 ],
-                'data' => $message['data'] ?? [],
+                'data' => $data,
             ]
         ];
 

@@ -67,10 +67,14 @@ class AppointmentNotification extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         return [
-            'title' => $this->getSubject(),
-            'body' => $this->getContent(),
+            'notification' => [
+                'title' => $this->getSubject(),
+                'body' => $this->getContent(),
+                'sound' => 'default',
+                'badge' => 1,
+            ],
             'data' => [
-                'type' => 'appointment',
+                'type' => 'appointment_' . $this->type,
                 'appointment_id' => $this->appointment->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_APPOINTMENT',

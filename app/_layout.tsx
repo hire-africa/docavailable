@@ -1,8 +1,8 @@
-import { Stack, useRouter } from 'expo-router';
-import { useEffect } from 'react';
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { AndroidImportance, AndroidNotificationVisibility } from 'expo-notifications';
+import { Stack, useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
 import { routeIncomingCall } from '../utils/callRouter';
@@ -21,9 +21,10 @@ export default function RootLayout() {
       // Ignore errors here; this is a best-effort warm-up
     });
 
-    // Configure Android calls notification channel and default handler
+    // Configure Android notification channels and default handler
     (async () => {
       try {
+        // Calls channel
         await Notifications.setNotificationChannelAsync('calls', {
           name: 'Calls',
           importance: AndroidImportance.MAX,
@@ -32,15 +33,43 @@ export default function RootLayout() {
           bypassDnd: true,
           lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
         });
+
+        // Messages channel
+        await Notifications.setNotificationChannelAsync('messages', {
+          name: 'Messages',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+          vibrationPattern: [0, 250, 250, 250],
+          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+        });
+
+        // Appointments channel
+        await Notifications.setNotificationChannelAsync('appointments', {
+          name: 'Appointments',
+          importance: AndroidImportance.HIGH,
+          sound: 'default',
+          vibrationPattern: [0, 250, 250, 250],
+          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+        });
+
+        // Default notification handler - always show pop-ups
         Notifications.setNotificationHandler({
-          handleNotification: async () => ({
-            shouldShowAlert: true,
-            shouldPlaySound: true,
-            shouldSetBadge: false,
-          })
+          handleNotification: async (notification) => {
+            const data = notification.request.content.data || {};
+            const type = (data.type || '').toString();
+
+            // Always show pop-up notifications for all types
+            return {
+              shouldShowAlert: true,
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+              shouldShowBanner: true,
+              shouldShowList: true,
+            };
+          }
         });
       } catch (e) {
-        console.warn('Failed to configure notification channel', e);
+        console.warn('Failed to configure notification channels', e);
       }
     })();
     
@@ -50,13 +79,47 @@ export default function RootLayout() {
     // Register for FCM (permission + token) and send to backend
     pushNotificationService.registerForPushNotifications().catch(() => {});
 
-    // Foreground handler for incoming call data
+    // Foreground handler for all notification types
     const onMessageUnsub = messaging().onMessage(async (remoteMessage) => {
       try {
         const data: any = remoteMessage?.data || {};
-        // Conservative foreground handling: only auto-route for incoming calls
-        routeIncomingCall(router, data);
-        // Also let the centralized router process (it will no-op for non-call events in foreground)
+        const notification = remoteMessage?.notification || {};
+        const type = data?.type || '';
+
+        console.log('🔔 [Foreground] Received notification:', { type, data, notification });
+
+        // For incoming calls, route immediately
+        if (type === 'incoming_call') {
+          routeIncomingCall(router, data);
+          return;
+        }
+
+        // For messages and appointments, show pop-up notification
+        if (type === 'chat_message' || type === 'new_message' || type.includes('appointment') || type.includes('session')) {
+          // Show immediate pop-up notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: notification.title || (type === 'chat_message' ? 'New Message' : 'Appointment Update'),
+              body: notification.body || (type === 'chat_message' ? 'You have a new message' : 'You have an appointment update'),
+              data,
+              sound: 'default',
+            },
+            trigger: null,
+          });
+        } else {
+          // For other notification types, show generic pop-up notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: notification.title || 'DocAvailable',
+              body: notification.body || 'You have a new notification',
+              data,
+              sound: 'default',
+            },
+            trigger: null,
+          });
+        }
+
+        // Let the centralized router process (it will no-op for non-call events in foreground)
         routePushEvent(router, data, 'foreground');
       } catch (e) {
         console.error('Failed to handle foreground FCM:', e);

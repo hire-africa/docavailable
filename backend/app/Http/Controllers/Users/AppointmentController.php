@@ -614,7 +614,7 @@ class AppointmentController extends Controller
             // Award earnings to doctor
             $doctor = User::find($appointment->doctor_id);
             if ($doctor) {
-                $earnings = 5000; // Default earnings amount
+                $earnings = 4000; // Default earnings amount - consistent with all session types
                 $appointment->update(['earnings_awarded' => $earnings]);
                 
                 // Update doctor's wallet

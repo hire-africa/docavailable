@@ -316,14 +316,14 @@ class DoctorWalletTest extends TestCase
     public function payment_rates_are_correct()
     {
         $this->assertEquals(4000.00, DoctorPaymentService::getPaymentAmount('text'));
-        $this->assertEquals(5000.00, DoctorPaymentService::getPaymentAmount('audio'));
-        $this->assertEquals(6000.00, DoctorPaymentService::getPaymentAmount('video'));
+        $this->assertEquals(4000.00, DoctorPaymentService::getPaymentAmount('audio'));
+        $this->assertEquals(4000.00, DoctorPaymentService::getPaymentAmount('video'));
 
         $rates = DoctorPaymentService::getPaymentAmounts();
         $this->assertEquals([
             'text' => 4000.00,
-            'audio' => 5000.00,
-            'video' => 6000.00,
+            'audio' => 4000.00,
+            'video' => 4000.00,
         ], $rates);
     }
 

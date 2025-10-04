@@ -10,18 +10,18 @@ use App\Models\Subscription;
 
 class DoctorPaymentService
 {
-    // Payment amounts in MWK (Malawi)
+    // Payment amounts in MWK (Malawi) - All session types same rate
     private const MWK_PAYMENT_RATES = [
         'text' => 4000.00,
-        'audio' => 5000.00,
-        'video' => 6000.00,
+        'audio' => 4000.00,
+        'video' => 4000.00,
     ];
 
-    // Payment amounts in USD (International)
+    // Payment amounts in USD (International) - All session types same rate
     private const USD_PAYMENT_RATES = [
         'text' => 4.00,
-        'audio' => 5.00,
-        'video' => 6.00,
+        'audio' => 4.00,
+        'video' => 4.00,
     ];
 
     /**

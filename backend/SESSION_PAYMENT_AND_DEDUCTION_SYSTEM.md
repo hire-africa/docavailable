@@ -11,8 +11,8 @@ The Session Payment and Deduction System ensures that when sessions end, both th
 | Session Type | Doctor Payment (MWK) | Patient Deduction |
 |--------------|---------------------|-------------------|
 | Text Session | 4,000 MWK | 1 text session |
-| Audio Call   | 5,000 MWK | 1 voice call |
-| Video Call   | 6,000 MWK | 1 video call |
+| Audio Call   | 4,000 MWK | 1 voice call |
+| Video Call   | 4,000 MWK | 1 video call |
 
 ### 2. Payment Processing Flow
 
@@ -97,7 +97,7 @@ POST /api/appointments/{id}/end-session
         "payment_processing": {
             "doctor_payment_success": true,
             "patient_deduction_success": true,
-            "doctor_payment_amount": 5000.00,
+            "doctor_payment_amount": 4000.00,
             "patient_sessions_deducted": 1,
             "errors": []
         }
