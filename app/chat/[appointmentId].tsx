@@ -82,26 +82,37 @@ interface TextSessionInfo {
 function safeMergeMessages(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
   try {
     const map = new Map<string, ChatMessage>();
+    
+    // Add existing messages to map
     for (const m of prev) {
-      map.set(String((m as any).id), m);
+      const key = String(m.id);
+      map.set(key, m);
     }
+    
+    // Add new messages, only if they don't already exist
     for (const msg of incoming) {
-      const key = String((msg as any).id ?? `ws_${Date.now()}`);
-      const existing = map.get(key) || {} as any;
-      const merged = {
-        ...existing,
-        ...msg,
-        created_at: (msg as any).created_at || (existing as any).created_at || new Date().toISOString(),
-        delivery_status: (msg as any).delivery_status || (existing as any).delivery_status || 'sent'
-      } as ChatMessage;
-      map.set(key, merged);
+      const key = String(msg.id);
+      if (!map.has(key)) {
+        map.set(key, msg);
+        console.log('🔄 [safeMergeMessages] Adding new message:', { id: msg.id, message: msg.message });
+      } else {
+        console.log('🔄 [safeMergeMessages] Message already exists, skipping:', { id: msg.id, message: msg.message });
+      }
     }
+    
     const arr = Array.from(map.values());
-    arr.sort((a: any, b: any) => {
+    arr.sort((a, b) => {
       const ta = new Date(a.created_at || 0).getTime();
       const tb = new Date(b.created_at || 0).getTime();
       return ta - tb;
     });
+    
+    console.log('🔄 [safeMergeMessages] Result:', { 
+      prevCount: prev.length, 
+      incomingCount: incoming.length, 
+      resultCount: arr.length 
+    });
+    
     return arr;
   } catch (e) {
     console.log('⚠️ safeMergeMessages failed, appending fallback', e);
@@ -590,13 +601,12 @@ export default function ChatPage() {
               console.log('📨 [ChatComponent] Previous messages:', prev.map(m => ({ id: m.id, message: m.message })));
               }
               
-              // Temporarily bypass merge to test immediate UI update
-              const next = [...prev, message];
+              const mergedMessages = safeMergeMessages(prev, [message]);
               if (__DEV__) {
-              console.log('📨 [ChatComponent] Messages after append (bypassing merge):', next.length);
-              console.log('📨 [ChatComponent] New messages array:', next.map(m => ({ id: m.id, message: m.message })));
+              console.log('📨 [ChatComponent] Messages after merge:', mergedMessages.length);
+              console.log('📨 [ChatComponent] New messages array:', mergedMessages.map(m => ({ id: m.id, message: m.message })));
               }
-              return next;
+              return mergedMessages;
             });
             scrollToBottom();
           },

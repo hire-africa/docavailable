@@ -114,8 +114,20 @@ export class WebRTCChatService {
             if (data.type === 'chat-message' && (data.message || data.content)) {
               // Normalize shape whether nested under message or flattened
               const raw = data.message ? data.message : data;
+              const messageId = String(raw.id ?? raw.temp_id ?? raw.tempId ?? `ws_${Date.now()}`);
+              
+              console.log('📨 [WebRTCChat] Processing WebSocket message:', {
+                messageId,
+                type: data.type,
+                hasMessage: !!data.message,
+                hasContent: !!data.content,
+                rawId: raw.id,
+                rawTempId: raw.temp_id,
+                rawTempId2: raw.tempId
+              });
+              
               const normalized: ChatMessage = {
-                id: String(raw.id ?? raw.temp_id ?? raw.tempId ?? `ws_${Date.now()}`),
+                id: messageId,
                 sender_id: String(raw.sender_id ?? raw.senderId ?? ''),
                 sender_name: raw.sender_name ?? raw.senderName ?? '',
                 message: raw.message ?? raw.content ?? '',
@@ -250,11 +262,9 @@ export class WebRTCChatService {
       
       // Trigger the onMessage event so the sender can see their own message immediately
       console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
-      console.log('📤 [WebRTCChat] Events object:', this.events);
-      console.log('📤 [WebRTCChat] onMessage function:', this.events.onMessage);
       if (this.events.onMessage) {
         this.events.onMessage(chatMessage);
-        console.log('✅ [WebRTCChat] onMessage event triggered successfully');
+        console.log('✅ [WebRTCChat] onMessage event triggered successfully for:', messageId);
       } else {
         console.error('❌ [WebRTCChat] onMessage function is not defined!');
       }
