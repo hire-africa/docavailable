@@ -78,6 +78,37 @@ interface TextSessionInfo {
   reason?: string;
 }
 
+// Safe merge helper to always return a new, deduped, sorted array
+function safeMergeMessages(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  try {
+    const map = new Map<string, ChatMessage>();
+    for (const m of prev) {
+      map.set(String((m as any).id), m);
+    }
+    for (const msg of incoming) {
+      const key = String((msg as any).id ?? `ws_${Date.now()}`);
+      const existing = map.get(key) || {} as any;
+      const merged = {
+        ...existing,
+        ...msg,
+        created_at: (msg as any).created_at || (existing as any).created_at || new Date().toISOString(),
+        delivery_status: (msg as any).delivery_status || (existing as any).delivery_status || 'sent'
+      } as ChatMessage;
+      map.set(key, merged);
+    }
+    const arr = Array.from(map.values());
+    arr.sort((a: any, b: any) => {
+      const ta = new Date(a.created_at || 0).getTime();
+      const tb = new Date(b.created_at || 0).getTime();
+      return ta - tb;
+    });
+    return arr;
+  } catch (e) {
+    console.log('⚠️ safeMergeMessages failed, appending fallback', e);
+    return [...prev, ...incoming];
+  }
+}
+
 export default function ChatPage() {
   const params = useLocalSearchParams();
   const appointmentId = params.appointmentId as string;
@@ -556,13 +587,16 @@ export default function ChatPage() {
             setMessages(prev => {
               if (__DEV__) {
               console.log('📨 [ChatComponent] Current messages count before update:', prev.length);
+              console.log('📨 [ChatComponent] Previous messages:', prev.map(m => ({ id: m.id, message: m.message })));
               }
               
-              const mergedMessages = mergeMessages(prev, [message]);
-                if (__DEV__) {
-              console.log('📨 [ChatComponent] Messages after merge:', mergedMessages.length);
+              // Temporarily bypass merge to test immediate UI update
+              const next = [...prev, message];
+              if (__DEV__) {
+              console.log('📨 [ChatComponent] Messages after append (bypassing merge):', next.length);
+              console.log('📨 [ChatComponent] New messages array:', next.map(m => ({ id: m.id, message: m.message })));
               }
-              return mergedMessages;
+              return next;
             });
             scrollToBottom();
           },
@@ -635,7 +669,7 @@ export default function ChatPage() {
               console.log('🔄 [Fallback] Polling messages:', currentMessages.length);
               // Use merge function to prevent duplicates and loops
               setMessages(prev => {
-                const mergedMessages = mergeMessages(prev, currentMessages);
+const mergedMessages = safeMergeMessages(prev, currentMessages);
                 if (mergedMessages.length !== prev.length) {
                   console.log('🔄 [Fallback] New messages merged:', mergedMessages.length - prev.length);
                 }
@@ -1352,7 +1386,7 @@ export default function ChatPage() {
             console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
             // Merge with existing messages to avoid duplicates
             setMessages(prev => {
-              const mergedMessages = mergeMessages(prev, syncedMessages);
+const mergedMessages = safeMergeMessages(prev, syncedMessages);
               console.log('✅ [ChatComponent] Messages merged from server sync:', mergedMessages.length);
               return mergedMessages;
             });
@@ -1431,8 +1465,7 @@ export default function ChatPage() {
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
           isConnected: webrtcChatService.isConnected,
-          hasWebSocket: !!webrtcChatService.getWebSocket(),
-          websocketReadyState: webrtcChatService.getWebSocket()?.readyState
+          connectionStatus: webrtcChatService.getConnectionStatus()
         });
         try {
           const message = await webrtcChatService.sendMessage(newMessage.trim());
@@ -1511,7 +1544,7 @@ export default function ChatPage() {
         
         // Merge message with existing messages to prevent duplicates
         setMessages(prev => {
-          const mergedMessages = mergeMessages(prev, [chatMessage]);
+const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           console.log('✅ [ChatComponent] Message merged with existing messages:', mergedMessages.length);
           console.log('✅ [ChatComponent] New message details:', {
             id: chatMessage.id,

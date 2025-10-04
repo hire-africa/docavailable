@@ -111,10 +111,26 @@ export class WebRTCChatService {
               return;
             }
             
-            if (data.type === 'chat-message' && (data.content || data.message)) {
-              const messageId = data.tempId || data.id;
-              const messageHash = this.createMessageHash(data);
-              console.log('📨 [WebRTCChat] Processing chat message:', messageId, 'hash:', messageHash);
+            if (data.type === 'chat-message' && (data.message || data.content)) {
+              // Normalize shape whether nested under message or flattened
+              const raw = data.message ? data.message : data;
+              const normalized: ChatMessage = {
+                id: String(raw.id ?? raw.temp_id ?? raw.tempId ?? `ws_${Date.now()}`),
+                sender_id: String(raw.sender_id ?? raw.senderId ?? ''),
+                sender_name: raw.sender_name ?? raw.senderName ?? '',
+                message: raw.message ?? raw.content ?? '',
+                message_type: raw.message_type ?? raw.messageType ?? 'text',
+                media_url: raw.media_url ?? raw.mediaUrl,
+                created_at: raw.created_at ?? raw.createdAt ?? raw.timestamp ?? new Date().toISOString(),
+                delivery_status: raw.delivery_status ?? 'delivered'
+              };
+
+              const messageHash = this.createMessageHash({
+                message: normalized.message,
+                sender_id: normalized.sender_id,
+                created_at: normalized.created_at,
+              } as any);
+              console.log('📨 [WebRTCChat] Processing chat message:', normalized.id, 'hash:', messageHash);
               
               // Ensure processedMessageHashes is initialized
               if (!this.processedMessageHashes) {
@@ -127,11 +143,11 @@ export class WebRTCChatService {
                 return;
               }
               
-              console.log('📨 [WebRTCChat] Message sender ID:', data.senderId, 'type:', typeof data.senderId);
+              console.log('📨 [WebRTCChat] Message sender ID:', normalized.sender_id, 'type:', typeof normalized.sender_id);
               console.log('📨 [WebRTCChat] Current user ID:', this.config.userId, 'type:', typeof this.config.userId);
               
               // Convert both IDs to strings for reliable comparison
-              const senderIdStr = String(data.senderId);
+              const senderIdStr = String(normalized.sender_id);
               const userIdStr = String(this.config.userId);
               
               console.log('🔍 [WebRTCChat] Debug - senderIdStr:', senderIdStr, 'userIdStr:', userIdStr);
@@ -147,22 +163,10 @@ export class WebRTCChatService {
                 // Mark message as processed (by hash)
                 this.processedMessageHashes.add(messageHash);
                 
-                // Convert server message to our expected format
-                const message: ChatMessage = {
-                  id: data.tempId || data.id,
-                  sender_id: data.senderId,
-                  sender_name: data.senderName,
-                  message: data.content,
-                  message_type: data.messageType,
-                  media_url: data.mediaUrl,
-                  created_at: data.createdAt,
-                  delivery_status: 'delivered'
-                };
-                
                 // Store the message and trigger event for other participants' messages
-                await this.addMessage(message);
-                console.log('📨 [WebRTCChat] Triggering onMessage event for message:', message.id);
-                this.events.onMessage(message);
+                await this.addMessage(normalized);
+                console.log('📨 [WebRTCChat] Triggering onMessage event for message:', normalized.id);
+                this.events.onMessage(normalized);
               }
             } else if (data.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
@@ -246,7 +250,14 @@ export class WebRTCChatService {
       
       // Trigger the onMessage event so the sender can see their own message immediately
       console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
-      this.events.onMessage(chatMessage);
+      console.log('📤 [WebRTCChat] Events object:', this.events);
+      console.log('📤 [WebRTCChat] onMessage function:', this.events.onMessage);
+      if (this.events.onMessage) {
+        this.events.onMessage(chatMessage);
+        console.log('✅ [WebRTCChat] onMessage event triggered successfully');
+      } else {
+        console.error('❌ [WebRTCChat] onMessage function is not defined!');
+      }
       
       console.log('📤 [WebRTCChat] Message sent successfully:', messageId);
       return chatMessage;
