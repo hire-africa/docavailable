@@ -67,8 +67,9 @@ export class WebRTCChatService {
         // Load existing messages first
         await this.loadMessages();
         
+        const token = await this.getAuthToken();
         const base = this.config.webrtcConfig?.chatSignalingUrl || 'ws://46.101.123.123:8082/chat-signaling';
-        const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}`;
+        const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
         
@@ -110,9 +111,9 @@ export class WebRTCChatService {
               return;
             }
             
-            if (data.type === 'chat-message' && data.message) {
-              const messageId = data.message.id;
-              const messageHash = this.createMessageHash(data.message);
+            if (data.type === 'chat-message' && (data.content || data.message)) {
+              const messageId = data.tempId || data.id;
+              const messageHash = this.createMessageHash(data);
               console.log('📨 [WebRTCChat] Processing chat message:', messageId, 'hash:', messageHash);
               
               // Ensure processedMessageHashes is initialized
@@ -126,11 +127,11 @@ export class WebRTCChatService {
                 return;
               }
               
-              console.log('📨 [WebRTCChat] Message sender ID:', data.message.sender_id, 'type:', typeof data.message.sender_id);
+              console.log('📨 [WebRTCChat] Message sender ID:', data.senderId, 'type:', typeof data.senderId);
               console.log('📨 [WebRTCChat] Current user ID:', this.config.userId, 'type:', typeof this.config.userId);
               
               // Convert both IDs to strings for reliable comparison
-              const senderIdStr = String(data.message.sender_id);
+              const senderIdStr = String(data.senderId);
               const userIdStr = String(this.config.userId);
               
               console.log('🔍 [WebRTCChat] Debug - senderIdStr:', senderIdStr, 'userIdStr:', userIdStr);
@@ -146,10 +147,22 @@ export class WebRTCChatService {
                 // Mark message as processed (by hash)
                 this.processedMessageHashes.add(messageHash);
                 
+                // Convert server message to our expected format
+                const message: ChatMessage = {
+                  id: data.tempId || data.id,
+                  sender_id: data.senderId,
+                  sender_name: data.senderName,
+                  message: data.content,
+                  message_type: data.messageType,
+                  media_url: data.mediaUrl,
+                  created_at: data.createdAt,
+                  delivery_status: 'delivered'
+                };
+                
                 // Store the message and trigger event for other participants' messages
-                await this.addMessage(data.message);
-                console.log('📨 [WebRTCChat] Triggering onMessage event for message:', data.message.id);
-                this.events.onMessage(data.message);
+                await this.addMessage(message);
+                console.log('📨 [WebRTCChat] Triggering onMessage event for message:', message.id);
+                this.events.onMessage(message);
               }
             } else if (data.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
@@ -195,16 +208,13 @@ export class WebRTCChatService {
     
     const messageData = {
       type: 'chat-message',
-      message: {
-        id: messageId,
-        sender_id: this.config.userId,
-        sender_name: this.config.userName,
-        message: message,
-        message_type: 'text',
-        created_at: new Date().toISOString(),
-        delivery_status: 'sending'
-      },
-      authToken: authToken
+      content: message,
+      messageType: 'text',
+      senderId: this.config.userId,
+      senderName: this.config.userName,
+      tempId: messageId,
+      createdAt: new Date().toISOString(),
+      deliveryStatus: 'sending'
     };
 
     try {
@@ -217,18 +227,29 @@ export class WebRTCChatService {
       }
       
       // Mark message as processed to prevent duplicates (by hash)
-      const messageHash = this.createMessageHash(messageData.message);
+      const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
       
+      // Convert to ChatMessage format for storage
+      const chatMessage: ChatMessage = {
+        id: messageId,
+        sender_id: this.config.userId,
+        sender_name: this.config.userName,
+        message: message,
+        message_type: 'text',
+        created_at: new Date().toISOString(),
+        delivery_status: 'sending'
+      };
+      
       // Store the sent message locally and save to AsyncStorage
-      await this.addMessage(messageData.message);
+      await this.addMessage(chatMessage);
       
       // Trigger the onMessage event so the sender can see their own message immediately
       console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
-      this.events.onMessage(messageData.message);
+      this.events.onMessage(chatMessage);
       
       console.log('📤 [WebRTCChat] Message sent successfully:', messageId);
-      return messageData.message;
+      return chatMessage;
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send message:', error);
       throw error;
@@ -261,30 +282,39 @@ export class WebRTCChatService {
       
       const messageData = {
         type: 'chat-message',
-        message: {
-          id: messageId,
-          sender_id: this.config.userId,
-          sender_name: this.config.userName,
-          message: 'Voice message', // Placeholder text
-          message_type: 'voice',
-          media_url: mediaUrl,
-          created_at: new Date().toISOString(),
-          delivery_status: 'sending'
-        },
-        authToken: authToken
+        content: 'Voice message', // Placeholder text
+        messageType: 'voice',
+        senderId: this.config.userId,
+        senderName: this.config.userName,
+        mediaUrl: mediaUrl,
+        tempId: messageId,
+        createdAt: new Date().toISOString(),
+        deliveryStatus: 'sending'
       };
 
       console.log('📤 [WebRTCChat] Sending voice message:', messageId);
       this.websocket.send(JSON.stringify(messageData));
       
-      const messageHash = this.createMessageHash(messageData.message);
+      const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
       
-      await this.addMessage(messageData.message);
-      this.events.onMessage(messageData.message);
+      // Convert to ChatMessage format for storage
+      const chatMessage: ChatMessage = {
+        id: messageId,
+        sender_id: this.config.userId,
+        sender_name: this.config.userName,
+        message: 'Voice message',
+        message_type: 'voice',
+        media_url: mediaUrl,
+        created_at: new Date().toISOString(),
+        delivery_status: 'sending'
+      };
+      
+      await this.addMessage(chatMessage);
+      this.events.onMessage(chatMessage);
       
       console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
-      return messageData.message;
+      return chatMessage;
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send voice message:', error);
       throw error;
@@ -317,30 +347,39 @@ export class WebRTCChatService {
       
       const messageData = {
         type: 'chat-message',
-        message: {
-          id: messageId,
-          sender_id: this.config.userId,
-          sender_name: this.config.userName,
-          message: 'Image', // Placeholder text
-          message_type: 'image',
-          media_url: uploadResult.url,
-          created_at: new Date().toISOString(),
-          delivery_status: 'sending'
-        },
-        authToken: authToken
+        content: 'Image', // Placeholder text
+        messageType: 'image',
+        senderId: this.config.userId,
+        senderName: this.config.userName,
+        mediaUrl: uploadResult.url,
+        tempId: messageId,
+        createdAt: new Date().toISOString(),
+        deliveryStatus: 'sending'
       };
 
       console.log('📤 [WebRTCChat] Sending image message:', messageId);
       this.websocket.send(JSON.stringify(messageData));
       
-      const messageHash = this.createMessageHash(messageData.message);
+      const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
       
-      await this.addMessage(messageData.message);
-      this.events.onMessage(messageData.message);
+      // Convert to ChatMessage format for storage
+      const chatMessage: ChatMessage = {
+        id: messageId,
+        sender_id: this.config.userId,
+        sender_name: this.config.userName,
+        message: 'Image',
+        message_type: 'image',
+        media_url: uploadResult.url,
+        created_at: new Date().toISOString(),
+        delivery_status: 'sending'
+      };
+      
+      await this.addMessage(chatMessage);
+      this.events.onMessage(chatMessage);
       
       console.log('📤 [WebRTCChat] Image message sent successfully:', messageId);
-      return messageData.message;
+      return chatMessage;
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send image message:', error);
       throw error;
@@ -516,15 +555,15 @@ export class WebRTCChatService {
 
   // Create a unique hash for message deduplication based on content and sender
   private createMessageHash(message: any): string {
-    const content = message.message || '';
-    const senderId = message.sender_id || '';
-    const timestamp = message.created_at || message.timestamp || '';
+    const content = message.content || message.message || '';
+    const senderId = message.senderId || message.sender_id || '';
+    const timestamp = message.createdAt || message.created_at || message.timestamp || '';
     
     // Create a hash based on content, sender, and timestamp (rounded to nearest minute to handle small time differences)
     const timeRounded = new Date(timestamp).setSeconds(0, 0).toString();
     const hash = `${senderId}_${content}_${timeRounded}`;
     
-    console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.id);
+    console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.tempId || message.id);
     return hash;
   }
 }
