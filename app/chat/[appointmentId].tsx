@@ -490,7 +490,11 @@ export default function ChatPage() {
 
   // Initialize WebRTC Chat Service
   useEffect(() => {
-    if (!isAuthenticated || !appointmentId) return;
+    console.log('🔍 [WebRTC Chat] useEffect triggered:', { isAuthenticated, appointmentId });
+    if (!isAuthenticated || !appointmentId) {
+      console.log('🔍 [WebRTC Chat] Skipping initialization - missing requirements:', { isAuthenticated, appointmentId });
+      return;
+    }
 
     const initializeWebRTCChat = async () => {
       try {
@@ -526,6 +530,7 @@ export default function ChatPage() {
           webrtcConfig: config.webrtc
         });
         
+        console.log('🔧 [WebRTC Chat] Creating WebRTC chat service...');
         const chatService = new WebRTCChatService({
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
@@ -570,8 +575,10 @@ export default function ChatPage() {
         console.log('🔌 [WebRTC Chat] Attempting to connect...');
         await chatService.connect();
         console.log('✅ [WebRTC Chat] Connected successfully');
+        console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
         setWebrtcChatService(chatService);
         setIsWebRTCServiceActive(true);
+        console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
         
         // Set up typing indicator listener
         chatService.setOnTypingIndicator(handleTypingIndicator);
@@ -652,6 +659,7 @@ export default function ChatPage() {
       }
     };
 
+    console.log('🔧 [WebRTC Chat] Calling initializeWebRTCChat...');
     initializeWebRTCChat();
 
     return () => {
@@ -1411,14 +1419,20 @@ export default function ChatPage() {
         });
       }
       
+      console.log('🔍 [ChatComponent] WebRTC chat service state:', {
+        hasService: !!webrtcChatService,
+        isWebRTCServiceActive: isWebRTCServiceActive,
+        serviceType: webrtcChatService ? typeof webrtcChatService : 'null'
+      });
+      
       if (webrtcChatService) {
         // Use WebRTC chat service if available
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
-          isConnected: webrtcChatService.isConnected,
-          hasWebSocket: !!webrtcChatService.websocket,
-          websocketReadyState: webrtcChatService.websocket?.readyState
+          isConnected: webrtcChatService.isConnected(),
+          hasWebSocket: !!webrtcChatService.getWebSocket(),
+          websocketReadyState: webrtcChatService.getWebSocket()?.readyState
         });
         try {
           const message = await webrtcChatService.sendMessage(newMessage.trim());

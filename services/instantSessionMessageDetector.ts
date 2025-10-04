@@ -63,7 +63,7 @@ export class InstantSessionMessageDetector {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = `${this.getWebRTCSignalingUrl()}/chat-signaling?appointmentId=${encodeURIComponent(this.config.appointmentId)}&authToken=${encodeURIComponent(this.config.authToken || '')}`;
+        const wsUrl = `${this.getWebRTCSignalingUrl()}/chat-signaling?appointmentId=${encodeURIComponent(this.config.appointmentId)}&authToken=${encodeURIComponent(this.config.authToken || '')}&userId=${encodeURIComponent(String(this.config.patientId))}`;
         console.log('🔌 [InstantSessionDetector] Connecting to WebRTC for message detection:', wsUrl);
         console.log('🔌 [InstantSessionDetector] Auth token:', this.config.authToken ? 'Present' : 'Missing');
         
