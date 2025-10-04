@@ -1430,7 +1430,7 @@ export default function ChatPage() {
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
-          isConnected: webrtcChatService.isConnected(),
+          isConnected: webrtcChatService.isConnected,
           hasWebSocket: !!webrtcChatService.getWebSocket(),
           websocketReadyState: webrtcChatService.getWebSocket()?.readyState
         });
