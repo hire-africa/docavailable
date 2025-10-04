@@ -16,7 +16,7 @@ echo ✅ WebRTC server copied successfully
 echo.
 
 echo [2/3] Restarting WebRTC service on production server...
-ssh root@46.101.123.123 "cd /var/www/html && pm2 restart webrtc-signaling || (pm2 start webrtc-signaling-server.js --name webrtc-signaling --port 8080 && pm2 save)"
+ssh root@46.101.123.123 "cd /var/www/html && pm2 restart webrtc-signaling || (WEBRTC_SIGNALING_PORT=8082 pm2 start webrtc-signaling-server.js --name webrtc-signaling && pm2 save)"
 if %errorlevel% neq 0 (
     echo ❌ Failed to restart WebRTC service
     pause
@@ -28,10 +28,10 @@ echo.
 
 echo [3/3] Testing production endpoints...
 echo Testing WebRTC signaling server...
-curl -s http://46.101.123.123:8080/health
+curl -s http://46.101.123.123:8082/health
 echo.
 echo Testing WebRTC chat signaling server...
-curl -s http://46.101.123.123:8081/health
+curl -s http://46.101.123.123:8082/health
 echo.
 
 echo ✅ WebRTC server deployment completed!

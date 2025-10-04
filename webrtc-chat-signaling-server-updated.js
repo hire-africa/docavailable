@@ -240,7 +240,7 @@ async function handleSessionStatusRequest(appointmentId, ws) {
       // Handle text session status
       const sessionId = appointmentId.replace('text_session_', '');
       
-      const response = await axios.get(`${LARAVEL_API_URL}/api/text-sessions/${sessionId}/status`, {
+      const response = await axios.get(`${LARAVEL_API_URL}/api/text-sessions/${sessionId}/check-response`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'

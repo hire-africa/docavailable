@@ -365,15 +365,36 @@ export default function ChatPage() {
       const existing = messageMap.get(msgId);
       if (!existing || new Date(msg.created_at || msg.timestamp) > new Date(existing.created_at || existing.timestamp)) {
         messageMap.set(msgId, msg);
+        if (__DEV__) {
+          console.log('🔄 [mergeMessages] Adding new message:', {
+            id: msg.id,
+            message: msg.message,
+            sender_id: msg.sender_id,
+            timestamp: msg.timestamp
+          });
+        }
+      } else if (__DEV__) {
+        console.log('🔄 [mergeMessages] Message already exists, skipping:', msg.id);
       }
     });
     
     // Convert back to array and sort by timestamp
-    return Array.from(messageMap.values()).sort((a, b) => {
+    const result = Array.from(messageMap.values()).sort((a, b) => {
       const timeA = new Date(a.created_at || a.timestamp).getTime();
       const timeB = new Date(b.created_at || b.timestamp).getTime();
       return timeA - timeB;
     });
+    
+    if (__DEV__) {
+      console.log('🔄 [mergeMessages] Result:', {
+        existingCount: existingMessages.length,
+        newCount: newMessages.length,
+        resultCount: result.length,
+        addedCount: result.length - existingMessages.length
+      });
+    }
+    
+    return result;
   }, []);
   
   // Check if current user is a patient
@@ -496,6 +517,14 @@ export default function ChatPage() {
         
         // Determine session type from appointmentId
         const sessionType = appointmentId.startsWith('text_session_') ? 'text_session' : 'appointment';
+        
+        console.log('🔍 [ChatComponent] Initializing WebRTC chat service with config:', {
+          baseUrl: config.apiUrl,
+          appointmentId: appointmentId,
+          userId: currentUserId,
+          sessionType: sessionType,
+          webrtcConfig: config.webrtc
+        });
         
         const chatService = new WebRTCChatService({
           baseUrl: config.apiUrl,
@@ -1375,7 +1404,7 @@ export default function ChatPage() {
         });
         console.log('👤 [InstantSession] Detector state:', {
           isConnected: instantSessionConnected,
-          finalDoctorId,
+          doctorId,
           currentUserId,
           sessionId,
           appointmentId
@@ -1385,48 +1414,56 @@ export default function ChatPage() {
       if (webrtcChatService) {
         // Use WebRTC chat service if available
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
-        const message = await webrtcChatService.sendMessage(newMessage.trim());
-        if (message) {
-          setNewMessage('');
-          console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
-          
-          // Debug instant session state after message sent
-          if (isInstantSession) {
-            console.log('👤 [InstantSession] Message sent, checking detector state:', {
-              hasPatientSentMessage,
-              hasDoctorResponded,
-              isSessionActivated,
-              isTimerActive,
-              timeRemaining,
-              messageId: message.id,
-              senderId: message.sender_id
-            });
+        console.log('🔍 [ChatComponent] WebRTC connection status:', {
+          hasService: !!webrtcChatService,
+          isConnected: webrtcChatService.isConnected,
+          hasWebSocket: !!webrtcChatService.websocket,
+          websocketReadyState: webrtcChatService.websocket?.readyState
+        });
+        try {
+          const message = await webrtcChatService.sendMessage(newMessage.trim());
+          if (message) {
+            setNewMessage('');
+            console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
             
+            // Debug instant session state after message sent
+            if (isInstantSession) {
+              console.log('👤 [InstantSession] Message sent, checking detector state:', {
+                hasPatientSentMessage,
+                hasDoctorResponded,
+                isSessionActivated,
+                isTimerActive,
+                timeRemaining,
+                messageId: message.id,
+                senderId: message.sender_id
+              });
+              
             // Manually trigger patient message detection for instant sessions
             if (!hasPatientSentMessage && message.sender_id === currentUserId) {
               console.log('👤 [InstantSession] First patient message sent - manually triggering timer');
               triggerPatientMessageDetection(message);
             }
+            }
+          } else {
+            console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
+            // Fallback to backend API
+            console.log('🔄 [ChatComponent] WebRTC returned null, trying backend API fallback');
+            await sendMessageViaBackendAPI();
           }
-        } else {
-          console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
+        } catch (webrtcError) {
+          console.error('❌ [ChatComponent] WebRTC failed:', webrtcError);
+          // Fallback to backend API
+          console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
+          await sendMessageViaBackendAPI();
         }
+        
       } else {
         // Fallback to backend API
         console.log('📤 [ChatComponent] WebRTC not available, using backend API fallback');
         await sendMessageViaBackendAPI();
       }
     } catch (error) {
-      console.error('❌ [ChatComponent] Error sending message:', error);
-      // Try backend API fallback if WebRTC fails
-      if (webrtcChatService) {
-        console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
-        try {
-          await sendMessageViaBackendAPI();
-        } catch (fallbackError) {
-          console.error('❌ [ChatComponent] Backend API fallback also failed:', fallbackError);
-        }
-      }
+      console.error('❌ [ChatComponent] Unexpected error sending message:', error);
     } finally {
       setSending(false);
     }
@@ -1462,6 +1499,12 @@ export default function ChatPage() {
         setMessages(prev => {
           const mergedMessages = mergeMessages(prev, [chatMessage]);
           console.log('✅ [ChatComponent] Message merged with existing messages:', mergedMessages.length);
+          console.log('✅ [ChatComponent] New message details:', {
+            id: chatMessage.id,
+            message: chatMessage.message,
+            sender_id: chatMessage.sender_id,
+            timestamp: chatMessage.timestamp
+          });
           return mergedMessages;
         });
         scrollToBottom();
@@ -2780,6 +2823,17 @@ export default function ChatPage() {
           
           {messages.map((message, index) => {
             // Create a stable unique key using message ID and timestamp
+            if (__DEV__ && index === 0) {
+              console.log('🔍 [ChatComponent] Rendering messages:', {
+                totalMessages: messages.length,
+                firstMessage: {
+                  id: message.id,
+                  message: message.message,
+                  sender_id: message.sender_id,
+                  timestamp: message.timestamp
+                }
+              });
+            }
             const uniqueKey = message.id ? `msg_${message.id}` : `temp_${message.temp_id || index}_${message.created_at}`;
             
             return (
