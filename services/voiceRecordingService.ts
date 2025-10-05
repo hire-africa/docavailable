@@ -165,6 +165,22 @@ class VoiceRecordingService {
         status: error.response?.status,
         data: error.response?.data,
       });
+      
+      // Provide more specific error messages for different scenarios
+      if (error.message?.includes('Authentication required')) {
+        console.error('❌ [VoiceService] Authentication error - user needs to log in again');
+        throw new Error('Please log in again to upload voice messages');
+      } else if (error.response?.status === 401) {
+        console.error('❌ [VoiceService] Unauthorized - token may be expired');
+        throw new Error('Session expired. Please log in again');
+      } else if (error.response?.status === 413) {
+        console.error('❌ [VoiceService] File too large');
+        throw new Error('Voice message is too large. Please record a shorter message');
+      } else if (error.response?.status === 422) {
+        console.error('❌ [VoiceService] Invalid file format or missing data');
+        throw new Error('Invalid voice message format. Please try recording again');
+      }
+      
       return null;
     }
   }

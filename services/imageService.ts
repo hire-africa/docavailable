@@ -168,9 +168,25 @@ class ImageService {
       }
     } catch (error: any) {
       console.error('ImageService: Upload error:', error);
+      
+      // Provide more specific error messages for different scenarios
+      let errorMessage = 'Network error';
+      
+      if (error.message?.includes('Authentication required')) {
+        errorMessage = 'Please log in again to upload images';
+      } else if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please log in again';
+      } else if (error.response?.status === 413) {
+        errorMessage = 'Image is too large. Please select a smaller image';
+      } else if (error.response?.status === 422) {
+        errorMessage = 'Invalid image format. Please select a valid image file';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       return {
         success: false,
-        error: error.message || 'Network error',
+        error: errorMessage,
       };
     }
   }

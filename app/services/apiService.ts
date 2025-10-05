@@ -785,17 +785,25 @@ class ApiService {
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
     console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({ key, type: typeof value })) });
     
-    // Debug: Check token before making request
+    // Check and refresh token proactively before upload
+    const tokenIsValid = await this.checkAndRefreshToken();
+    if (!tokenIsValid) {
+      console.error('❌ [ApiService] Cannot upload file - no valid authentication token');
+      throw new Error('Authentication required. Please log in again.');
+    }
+    
+    // Debug: Check token after refresh
     const token = await this.getAuthToken();
-    console.log('📤 [ApiService] UploadFile token check:', { hasToken: !!token, url });
+    console.log('📤 [ApiService] UploadFile token check:', { hasToken: !!token, url, tokenLength: token?.length });
     
     return this.retryRequest(async () => {
       try {
+        // Don't manually set Content-Type for FormData - let axios handle it with boundary
+        // This is crucial for multipart/form-data to work properly
         const response: AxiosResponse<ApiResponse<T>> = await this.api.post(url, formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
           timeout: 30000, // 30 second timeout for file uploads
+          // Note: We're not setting Content-Type here - axios will set it automatically with boundary
+          // for FormData objects, which is required for proper multipart/form-data handling
         });
         console.log('✅ [ApiService] UploadFile response:', { 
           url, 
@@ -811,6 +819,26 @@ class ApiService {
           status: (error as any)?.response?.status,
           data: (error as any)?.response?.data 
         });
+        
+        // If authentication error, try to refresh token once more and retry
+        if ((error as any)?.response?.status === 401) {
+          console.log('🔄 [ApiService] Upload failed with 401, attempting token refresh...');
+          const refreshed = await this.refreshToken();
+          if (refreshed) {
+            console.log('🔄 [ApiService] Token refreshed, retrying upload...');
+            // Retry the upload once with the new token
+            const retryResponse: AxiosResponse<ApiResponse<T>> = await this.api.post(url, formData, {
+              timeout: 30000,
+            });
+            console.log('✅ [ApiService] UploadFile retry response:', { 
+              url, 
+              status: retryResponse.status, 
+              success: retryResponse.data?.success 
+            });
+            return retryResponse.data;
+          }
+        }
+        
         throw error;
       }
     });
