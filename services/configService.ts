@@ -28,32 +28,60 @@ class ConfigService {
   private loadConfig(): AppConfig {
     const extra = Constants.expoConfig?.extra || {};
     
+    // Detect if running in production build
+    const isProduction = Constants.appOwnership === 'standalone' || 
+                        process.env.NODE_ENV === 'production' ||
+                        Constants.executionEnvironment === 'standalone';
+    
+    console.log('🔧 [ConfigService] Environment detection:', {
+      isProduction,
+      appOwnership: Constants.appOwnership,
+      executionEnvironment: Constants.executionEnvironment,
+      nodeEnv: process.env.NODE_ENV
+    });
+    
     // For EAS builds, environment variables are available directly
     // For development, they come from .env file and are in extra
-    const getEnvVar = (key: string, fallback?: string) => {
+    const getEnvVar = (key: string, fallback?: string, productionFallback?: string) => {
       // First try process.env (works in EAS builds)
       if (process.env[key]) {
+        console.log(`🔧 [ConfigService] Found ${key} in process.env`);
         return process.env[key];
       }
       // Then try Constants.expoConfig.extra (works in development)
       if (extra[key]) {
+        console.log(`🔧 [ConfigService] Found ${key} in extra`);
         return extra[key];
       }
       // Finally try nested structure in extra
       if (extra.webrtc?.[key]) {
+        console.log(`🔧 [ConfigService] Found ${key} in extra.webrtc`);
         return extra.webrtc[key];
       }
       if (extra.features?.[key]) {
+        console.log(`🔧 [ConfigService] Found ${key} in extra.features`);
         return extra.features[key];
       }
-      return fallback;
+      
+      // Use production fallback if in production, otherwise use regular fallback
+      const finalFallback = isProduction && productionFallback ? productionFallback : fallback;
+      console.log(`🔧 [ConfigService] Using fallback for ${key}:`, finalFallback);
+      return finalFallback;
     };
     
-    return {
+    const config = {
       apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
       webrtc: {
-        signalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL') || extra.webrtc?.signalingUrl || 'ws://46.101.123.123:8082/audio-signaling',
-        chatSignalingUrl: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL') || extra.webrtc?.chatSignalingUrl || 'ws://46.101.123.123:8082/chat-signaling',
+        signalingUrl: getEnvVar(
+          'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
+          'ws://46.101.123.123:8082/audio-signaling',
+          'ws://46.101.123.123:8082/audio-signaling'  // Use same HTTP URL for production until SSL is set up
+        ) || extra.webrtc?.signalingUrl,
+        chatSignalingUrl: getEnvVar(
+          'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
+          'ws://46.101.123.123:8082/chat-signaling',
+          'ws://46.101.123.123:8082/chat-signaling'   // Use same HTTP URL for production until SSL is set up
+        ) || extra.webrtc?.chatSignalingUrl,
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',
         turnPassword: extra.webrtc?.turnPassword || '',
@@ -71,6 +99,18 @@ class ConfigService {
         enableChat: extra.features?.enableChat !== false,
       }
     };
+    
+    console.log('🔧 [ConfigService] Final configuration:', {
+      apiUrl: config.apiUrl,
+      signalingUrl: config.webrtc.signalingUrl,
+      chatSignalingUrl: config.webrtc.chatSignalingUrl,
+      stunServers: config.webrtc.stunServers.length,
+      enableAudioCalls: config.webrtc.enableAudioCalls,
+      enableVideoCalls: config.webrtc.enableVideoCalls,
+      isProduction
+    });
+    
+    return config;
   }
 
   getConfig(): AppConfig {

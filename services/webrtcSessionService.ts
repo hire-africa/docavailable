@@ -62,10 +62,21 @@ class WebRTCSessionService {
       });
       
       try {
+        console.log('🔌 [WebRTC] Attempting to connect to:', wsUrl);
         this.signalingChannel = new WebSocket(wsUrl);
         
+        // Set connection timeout
+        const connectionTimeout = setTimeout(() => {
+          if (!this.isConnected) {
+            console.error('❌ [WebRTC] Connection timeout after 10 seconds');
+            this.signalingChannel?.close();
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, 10000);
+        
         this.signalingChannel.onopen = () => {
-          console.log('🔌 Connected to session signaling server');
+          console.log('✅ [WebRTC] Connected to session signaling server successfully');
+          clearTimeout(connectionTimeout);
           this.isConnected = true;
           this.reconnectAttempts = 0;
           resolve();
