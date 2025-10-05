@@ -1,0 +1,19 @@
+name: docavailable-admin
+services:
+- name: admin-dashboard
+  source_dir: /
+  github:
+    repo: hire-africa/docavailable
+    branch: main
+  run_command: npm start
+  build_command: npm run build
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  envs:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: "8080"
+  routes:
+  - path: /

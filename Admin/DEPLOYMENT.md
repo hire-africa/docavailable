@@ -25,13 +25,14 @@ This is the admin dashboard for the DocAvailable application, built with Next.js
    ADMIN_EMAIL=admin@yourdomain.com
    ADMIN_PASSWORD=your-secure-password
    NODE_ENV=production
-   PORT=3000
+   PORT=8080
    ```
 
 3. **Build Settings**
    - Build Command: `npm run build`
    - Run Command: `npm start`
    - Output Directory: `.next`
+   - HTTP Port: `8080` (Digital Ocean default)
 
 4. **Deploy**
    - Click "Create Resources"
