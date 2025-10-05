@@ -6,10 +6,14 @@ const nextConfig = {
     ADMIN_EMAIL: process.env.ADMIN_EMAIL,
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
   },
-  // Disable standalone output for Digital Ocean compatibility
+  // Digital Ocean App Platform configuration
   trailingSlash: false,
-  // Ensure proper asset prefix for production
-  assetPrefix: process.env.NODE_ENV === 'production' ? '' : '',
+  // Ensure proper serving
+  distDir: '.next',
+  // Disable static optimization for API routes
+  experimental: {
+    serverComponentsExternalPackages: ['pg'],
+  },
 }
 
 module.exports = nextConfig
