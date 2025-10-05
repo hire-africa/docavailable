@@ -337,7 +337,8 @@ export class WebRTCChatService {
       // Also persist the voice message to the backend API for consistency and to ensure proper typing/media_url in history
       try {
         if (authToken) {
-          const apiUrl = `${this.config.baseUrl}/api/chat/${numericAppointmentId}/messages`;
+          const appointmentIdForApi = (typeof appointmentId === 'string') ? appointmentId : String(numericAppointmentId);
+          const apiUrl = `${this.config.baseUrl}/api/chat/${appointmentIdForApi}/messages`;
           console.log('📤 [WebRTCChat] Persisting voice message to backend:', apiUrl);
           const resp = await fetch(apiUrl, {
             method: 'POST',
