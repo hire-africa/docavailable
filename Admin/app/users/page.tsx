@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
-import { Search, Filter, MoreVertical, Edit, Trash2, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, Eye, Filter, Search, Trash2, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface User {
@@ -48,6 +48,9 @@ interface UserDetails {
     hospital_affiliation?: string;
     consultation_fee?: number;
     availability_status?: string;
+    is_online_for_instant_sessions?: boolean;
+    google_id?: string;
+    push_token?: string;
     account_age_days?: number;
   };
   currentSubscription?: {

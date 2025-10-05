@@ -24,8 +24,10 @@ export function verifyToken(token: string): AdminUser | null {
     console.log('✅ Token verified successfully for:', decoded.email);
     return decoded;
   } catch (error) {
-    console.log('❌ Token verification failed:', error.message);
-    console.log('Error type:', error.name);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorName = error instanceof Error ? error.name : 'Unknown';
+    console.log('❌ Token verification failed:', errorMessage);
+    console.log('Error type:', errorName);
     return null;
   }
 }

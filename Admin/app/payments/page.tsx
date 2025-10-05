@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
-import { Search, Filter, DollarSign, CreditCard, CheckCircle, XCircle, Clock, Eye } from 'lucide-react';
+import { CheckCircle, Clock, CreditCard, DollarSign, Eye, Filter, Search, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface Payment {
@@ -444,7 +444,7 @@ export default function PaymentsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Gateway Transaction ID</label>
-                    <p className="text-sm text-gray-900 font-mono">{selectedPayment.gateway_transaction_id}</p>
+                    <p className="text-sm text-gray-900 font-mono">{selectedPayment.gateway_reference}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Payment Method</label>
