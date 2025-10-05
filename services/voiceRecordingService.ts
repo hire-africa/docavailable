@@ -150,8 +150,10 @@ class VoiceRecordingService {
 
       console.log('📤 Voice message upload response:', response);
 
-      if (response.success && response.data?.url) {
-        return response.data.url;
+      // Support multiple possible response shapes: { data: { media_url } } or { data: { url } } or flat { media_url | url }
+      const uploadedUrl = response?.data?.media_url || response?.data?.url || response?.media_url || response?.url;
+      if (response.success && uploadedUrl) {
+        return uploadedUrl;
       }
 
       console.error('❌ Voice message upload failed:', response);

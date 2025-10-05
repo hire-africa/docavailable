@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ReadReceipt from './ReadReceipt';
+import { environment } from '../config/environment';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -37,20 +38,17 @@ export default function ImageMessage({
     // });
 
   const getImageUrl = (uri: string) => {
-    // The imageUrl is already a full URL from the server
-    // No need to construct URLs - just use the URI as-is
-    if (uri.startsWith('http')) {
+    // If already a full URL or local file, return as-is
+    if (uri.startsWith('http') || uri.startsWith('file://')) {
       return uri;
     }
-    // Only handle local file:// URLs if they exist
-    if (uri.startsWith('file://')) {
-      return uri;
-    }
+    // If it's an absolute path on device
     if (uri.startsWith('/')) {
       return `file://${uri}`;
     }
-    // For any other case, return as-is (shouldn't happen with current setup)
-    return uri;
+    // Otherwise, treat as relative path from backend and prefix with BASE_URL
+    const needsSlash = uri.startsWith('/') ? '' : '/';
+    return `${environment.BASE_URL}${needsSlash}${uri}`;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);

@@ -359,7 +359,7 @@ export class WebRTCChatService {
       // Upload the image first
       const uploadResult = await imageService.uploadImage(numericAppointmentId, imageUri);
       
-      if (!uploadResult.success || !uploadResult.url) {
+      if (!uploadResult.success || !uploadResult.mediaUrl) {
         throw new Error('Failed to upload image');
       }
 
@@ -372,7 +372,7 @@ export class WebRTCChatService {
         messageType: 'image',
         senderId: this.config.userId,
         senderName: this.config.userName,
-        mediaUrl: uploadResult.url,
+        mediaUrl: uploadResult.mediaUrl,
         tempId: messageId,
         createdAt: new Date().toISOString(),
         deliveryStatus: 'sending'
@@ -391,7 +391,7 @@ export class WebRTCChatService {
         sender_name: this.config.userName,
         message: 'Image',
         message_type: 'image',
-        media_url: uploadResult.url,
+        media_url: uploadResult.mediaUrl,
         created_at: new Date().toISOString(),
         delivery_status: 'sending'
       };

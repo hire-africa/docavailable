@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { environment } from '../config/environment';
 
 interface VoiceMessagePlayerProps {
   audioUri: string;
@@ -33,7 +34,7 @@ export default function VoiceMessagePlayer({
       return uri;
     }
     // Use the new image serving route instead of direct storage access
-    return `https://docavailable-5.onrender.com/api/images/${uri}`;
+    return `https://docavailable-3vbdv.ondigitalocean.app/api/images/${uri}`;
   };
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -55,17 +56,17 @@ export default function VoiceMessagePlayer({
     try {
       setIsLoading(true);
       
-      // The audioUri is already a full URL from the server
-      // No need to construct URLs - just use the URI as-is
+      // Normalize audio URL: if it's not http(s) or file, prefix with BASE_URL
       let audioUrl = audioUri;
-      
+      if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
+        const needsSlash = audioUrl.startsWith('/') ? '' : '/';
+        audioUrl = `${environment.BASE_URL}${needsSlash}${audioUrl}`;
+      }
+
       // Only handle local file:// URLs if they exist
-      if (audioUrl.startsWith('file://')) {
-        audioUrl = audioUrl;
-      } else if (audioUrl.startsWith('/')) {
+      if (audioUrl.startsWith('/')) {
         audioUrl = `file://${audioUrl}`;
       }
-      // For all other cases (http/https URLs), use as-is
       
       console.log('🎵 Loading audio URL:', audioUrl);
       
