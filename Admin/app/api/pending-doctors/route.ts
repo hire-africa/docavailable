@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       ORDER BY u.created_at DESC
       LIMIT $${paramCount} OFFSET $${paramCount + 1}
     `;
-    params.push(limit, offset);
+    params.push(limit.toString(), offset.toString());
 
     const doctorsResult = await query(doctorsQuery, params);
 
