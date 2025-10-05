@@ -263,7 +263,6 @@ temp-apk-extract/
 **/db-config.*
 
 # Local nested repositories and dev-only files (do not commit)
-# Nested Next.js admin project managed separately
-/doc admin/
+# Admin folder is now tracked as regular files
 # Local test script for voice upload debugging
 /test-voice-upload.js
