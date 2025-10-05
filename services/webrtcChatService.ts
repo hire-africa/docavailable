@@ -333,6 +333,37 @@ export class WebRTCChatService {
       
       await this.addMessage(chatMessage);
       this.events.onMessage(chatMessage);
+
+      // Also persist the voice message to the backend API for consistency and to ensure proper typing/media_url in history
+      try {
+        if (authToken) {
+          const apiUrl = `${this.config.baseUrl}/api/chat/${numericAppointmentId}/messages`;
+          console.log('📤 [WebRTCChat] Persisting voice message to backend:', apiUrl);
+          const resp = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: 'Voice message',
+              message_type: 'voice',
+              media_url: mediaUrl,
+              temp_id: messageId,
+            }),
+          });
+          if (!resp.ok) {
+            console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
+          } else {
+            const json = await resp.json().catch(() => null);
+            console.log('✅ [WebRTCChat] Backend persisted voice message:', json?.success);
+          }
+        } else {
+          console.warn('⚠️ [WebRTCChat] No auth token available to persist voice message to backend');
+        }
+      } catch (persistErr) {
+        console.warn('⚠️ [WebRTCChat] Failed to persist voice message to backend:', persistErr);
+      }
       
       console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
       return chatMessage;
