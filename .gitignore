@@ -261,3 +261,9 @@ temp-apk-extract/
 # Database credentials
 **/database-credentials.*
 **/db-config.*
+
+# Local nested repositories and dev-only files (do not commit)
+# Nested Next.js admin project managed separately
+/doc admin/
+# Local test script for voice upload debugging
+/test-voice-upload.js
