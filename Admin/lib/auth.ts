@@ -53,6 +53,12 @@ const ADMIN_ACCOUNTS = [
     password: 'admin123',
     name: 'System Admin',
     role: 'admin'
+  },
+  {
+    email: 'macnyoni4@gmail.com',
+    password: 'MacAdmin2025!',
+    name: 'Mac Nyoni',
+    role: 'admin'
   }
 ];
 

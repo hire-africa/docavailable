@@ -1,0 +1,256 @@
+[33mcommit e6cafca76ea87690e7bfac536f0bee793054ae05[m[33m ([m[1;31morigin/clean-repo[m[33m, [m[1;32mclean-repo[m[33m)[m
+Author: sleeky <161637665+sleekyb@users.noreply.github.com>
+Date:   Mon Sep 15 13:27:50 2025 +0200
+
+    Initial clean commit - DocAvailable project without secrets
+
+ -5
+"-la \357\201\274 grep -i dockerfile"
+.cursorignore
+.do/app.yaml
+.dockerignore
+.env.backup
+.firebaserc
+.gitignore
+.render-buildpacks
+.vscode/settings.json
+ABORT_SIGNAL_TIMEOUT_FIX.md
+ADMIN_SETUP.md
+ANDROID_SETUP_COMPLETE.md
+ANDROID_STUDIO_APPROACH.md
+API_CONNECTIVITY_FIXES.md
+API_STABILITY_FIXES.md
+API_TIMEOUT_OPTIMIZATION.md
+APK_BUILD_GUIDE.md
+APPOINTMENT_WORKING_HOURS_FIX.md
+AUDIO_CALL_SETUP_GUIDE.md
+BACKEND_INTEGRATION_GUIDE.md
+BLOG_SEARCH_SORTING_UPDATE.md
+BOOKING_LOGIC.md
+BUILD_ISSUES_ANALYSIS.md
+BUILD_READINESS_REPORT.md
+CHATBOT_INTEGRATION.md
+CLOUD_BUILD_GUIDE.md
+DEEPSEEK_CUSTOMIZATION_SUMMARY.md
+DEEPSEEK_SETUP.md
+DEPLOYMENT_STATUS_UPDATE.md
+DEPLOYMENT_VERIFICATION.md
+DISCOVER_PAGE_COMPLETE_FIXES.md
+DISCOVER_PAGE_FIXES.md
+DOCKER_DEPLOYMENT.md
+DOCTOR_PROFILE_ONLINE_STATUS_FIX.md
+Dockerfile
+E2E_ENCRYPTION_IMPLEMENTATION.md
+EAS_BUILD_CHECKLIST.md
+EAS_BUILD_STATUS.md
+EMAIL_SETUP_GUIDE.md
+ENCRYPTION_ALWAYS_ENABLED_CHANGES.md
+ENCRYPTION_KEY_GENERATION_FIX.md
+ENCRYPTION_TEXT_SESSION_FIX.md
+END_SESSION_CHAT_SAVING_ANALYSIS.md
+END_SESSION_FIX_SUMMARY.md
+ENHANCED_DOCBOT_UI_SUMMARY.md
+ENHANCED_LOGIN_ERROR_HANDLING.md
+EPHEMERAL_MESSAGE_STORAGE.md
+FINAL_BUILD_READINESS.md
+FINAL_IMAGE_FIX.md
+FIREBASE_SETUP.md
+GOOGLE_AUTH_SETUP.md
+GOOGLE_OAUTH_QUICK_SETUP.md
+GOOGLE_OAUTH_SETUP.md
+GRADLE_ERROR_ANALYSIS.md
+GREETING_RESPONSE_UPDATE.md
+IMAGE_COMPRESSION_FIX.md
+IMAGE_COMPRESSION_FIXES_APPLIED.md
+IMAGE_URL_FIX.md
+JAVA_SETUP_GUIDE.md
+JWT_REFRESH_FIXES.md
+LIVE_BACKEND_DEPLOYMENT_ISSUES.md
+LOCAL_STORAGE_SOLUTION.md
+MESSAGE_DELIVERY_FIXES.md
+MESSAGE_DUPLICATION_FIXES.md
+MESSAGE_ID_SYSTEM_UPDATE.md
+MESSAGE_INTERACTION_DESIGNS.md
+MESSAGE_INTERACTION_SWITCH_GUIDE.md
+NAVIGATION_FLOW_IMPROVEMENTS.md
+NEON_MIGRATION_GUIDE.md
+OPENAI_SETUP.md
+PASSWORD_RESET_IMPLEMENTATION.md
+PATIENT_ACCESS_SOLUTION.md
+PAYCHANGU_INTEGRATION_GUIDE.md
+POSTGRESQL_FIX_SUMMARY.md
+POSTGRESQL_SETUP_GUIDE.md
+PRICING_INFORMATION_UPDATE.md
+PROFILE_PICTURE_CACHING.md
+PROFILE_PICTURE_STORAGE_ISSUE.md
+PULL_TO_REFRESH_IMPLEMENTATION.md
+PUSHER_REMOVAL_SUMMARY.md
+QUICK_422_FIX.md
+QUICK_APK_BUILD.md
+REACT_NATIVE_ENCRYPTION_FIX.md
+README.md
+README_READ_RECEIPTS.md
+RENDER_BACKEND_FIX_SUMMARY.md
+SEARCH_STYLING_UPDATE.md
+SIMPLE_CHAT_CHECKLIST.md
+SMART_POLLING_REMOVAL.md
+SPECIALIZATION_FILTER_IMPLEMENTATION.md
+STREAMING_CONVERSATION_MEMORY_SUMMARY.md
+SYSTEM_TEST_SUMMARY.md
+ULTRA_FAST_IMPLEMENTATION_SUMMARY.md
+UNCOMPRESSED_IMAGE_TEST.md
+UPDATED_SORTING_FUNCTIONALITY.md
+VOICE_RECORDING_IMPLEMENTATION.md
+VOICE_RECORDING_TROUBLESHOOTING.md
+WEB_LOGIN_FIX.md
+WITHDRAWAL_REQUEST_SYSTEM.md
+"able CustomDatabaseServiceProvider to fix driver issue\357\200\242"
+add_postgresql_to_path.bat
+android/.gitignore
+android/app/build.gradle
+android/app/debug.keystore
+android/app/proguard-rules.pro
+android/app/src/debug/AndroidManifest.xml
+android/app/src/main/AndroidManifest.xml
+android/app/src/main/java/com/docavailable/app/MainActivity.kt
+android/app/src/main/java/com/docavailable/app/MainApplication.kt
+android/app/src/main/res/drawable-hdpi/splashscreen_logo.png
+android/app/src/main/res/drawable-mdpi/splashscreen_logo.png
+android/app/src/main/res/drawable-xhdpi/splashscreen_logo.png
+android/app/src/main/res/drawable-xxhdpi/splashscreen_logo.png
+android/app/src/main/res/drawable-xxxhdpi/splashscreen_logo.png
+android/app/src/main/res/drawable/ic_launcher_background.xml
+android/app/src/main/res/drawable/rn_edit_text_material.xml
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+android/app/src/main/res/mipmap-hdpi/ic_launcher.webp
+android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.webp
+android/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp
+android/app/src/main/res/mipmap-mdpi/ic_launcher.webp
+android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.webp
+android/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp
+android/app/src/main/res/mipmap-xhdpi/ic_launcher.webp
+android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.webp
+android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.webp
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.webp
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp
+android/app/src/main/res/values-night/colors.xml
+android/app/src/main/res/values/colors.xml
+android/app/src/main/res/values/strings.xml
+android/app/src/main/res/values/styles.xml
+android/build.gradle
+android/gradle.properties
+android/gradle/wrapper/gradle-wrapper.jar
+android/gradle/wrapper/gradle-wrapper.properties
+android/gradlew
+android/gradlew.bat
+android/settings.gradle
+app.config.js
+app.config.minimal.js
+app/(tabs)/doctor-details/BookAppointmentFlow.tsx
+app/(tabs)/doctor-details/[uid].tsx
+app/+not-found.tsx
+app/JitsiVoiceCall.tsx
+app/_layout.tsx
+app/admin-dashboard.tsx
+app/admin-profile.tsx
+app/admin-signup.tsx
+app/appointment-details/[id].tsx
+app/backend-test.tsx
+app/blog-article-2.tsx
+app/blog-article-3.tsx
+app/blog-article-4.tsx
+app/blog-article-5.tsx
+app/blog-article-6.tsx
+app/blog-article.tsx
+app/blog.tsx
+app/chat/DA.png
+app/chat/[appointmentId].tsx
+app/chat/white_wallpaper.jpg
+app/doctor-approval/[uid].tsx
+app/doctor-dashboard.tsx
+app/doctor-profile.tsx
+app/doctor-profile/[id].tsx
+app/doctor-settings.tsx
+app/doctor-signup.tsx
+app/doctor-withdrawals.tsx
+app/edit-admin-profile.tsx
+app/edit-doctor-profile.tsx
+app/edit-patient-profile.tsx
+app/encryption-settings.tsx
+app/ended-session/[appointmentId].tsx
+app/forgot-password.tsx
+app/help-support.tsx
+app/index.tsx
+app/instant-sessions.tsx
+app/integration-test.tsx
+app/login.tsx
+app/my-appointments.tsx
+app/network-test.tsx
+app/notifications-settings.tsx
+app/password-reset/[token].tsx
+app/patient-dashboard.tsx
+app/patient-profile.tsx
+app/patient-signup.tsx
+app/payments/checkout.tsx
+app/pending-approval.tsx
+app/privacy-settings.tsx
+app/services/apiService.ts
+app/services/sessionService.ts
+app/signup.tsx
+app/text-session-history.tsx
+"appear\357\200\242 -i"
+babel.config.js
+backend/.buildpacks
+backend/.dockerignore
+backend/.editorconfig
+backend/.env.example
+backend/.env.fixed
+backend/.gitattributes
+backend/.github/workflows/issues.yml
+backend/.github/workflows/pull-requests.yml
+backend/.github/workflows/tests.yml
+backend/.github/workflows/update-changelog.yml
+backend/.gitignore
+backend/.styleci.yml
+backend/AUTO_DETECTION_FIX_SUMMARY.md
+backend/AUTO_DETECTION_TEST_RESULTS.md
+backend/BACKEND_CHECKLIST.md
+backend/CHANGELOG.md
+backend/DATABASE_AND_ROUTES_FIX_SUMMARY.md
+backend/DEPLOYMENT.md
+backend/DOC AVAILABLE/Appointments.bru
+backend/DOC AVAILABLE/Create Appointment.bru
+backend/DOC AVAILABLE/Create Review.bru
+backend/DOC AVAILABLE/Create User Subscription.bru
+backend/DOC AVAILABLE/Create Working Hours.bru
+backend/DOC AVAILABLE/Delete Working Hours.bru
+backend/DOC AVAILABLE/Log in.bru
+backend/DOC AVAILABLE/Register.bru
+backend/DOC AVAILABLE/Update Appointments.bru
+backend/DOC AVAILABLE/Update Reviews.bru
+backend/DOC AVAILABLE/Update Subscription.bru
+backend/DOC AVAILABLE/Update Working Hours.bru
+backend/DOC AVAILABLE/User Reviews.bru
+backend/DOC AVAILABLE/User Subscription.bru
+backend/DOC AVAILABLE/Working Hours.bru
+backend/DOC AVAILABLE/bruno.json
+backend/DOCTOR_WALLET_SYSTEM.md
+backend/FREE_QUEUE_PROCESSING_SYSTEM.md
+backend/PAYCHANGU_WEBHOOK_FIX_GUIDE.md
+backend/PERFORMANCE.md
+backend/POSTGRESQL_WINDOWS_SETUP.md
+backend/Procfile
+backend/QUEUE_BASED_SESSION_MANAGEMENT.md
+backend/README.md
+backend/SCHEDULER_BASED_AUTO_DEDUCTION.md
+backend/SESSION_DEDUCTION_SYSTEM.md
+backend/SESSION_PAYMENT_AND_DEDUCTION_SYSTEM.md
+backend/TEXT_SESSION_FLOW_FIXES_SUMMARY.md
+backend/WEBHOOK_COMPLIANCE_SUMMARY.md
+backend/add_correct_plans.php
+backend/add_missing_

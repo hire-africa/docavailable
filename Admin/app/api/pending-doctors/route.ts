@@ -47,9 +47,7 @@ export async function GET(request: NextRequest) {
     const doctorsQuery = `
       SELECT 
         u.id, u.first_name, u.last_name, u.email, u.user_type, u.status,
-        u.created_at, u.is_active, u.rating, u.total_ratings,
-        u.phone_number, u.date_of_birth, u.gender, u.specialization,
-        u.license_number, u.experience_years, u.bio, u.profile_image
+        u.created_at, u.is_active
       FROM users u
       ${whereClause}
       ORDER BY u.created_at DESC
@@ -69,16 +67,17 @@ export async function GET(request: NextRequest) {
       status: row.status,
       created_at: row.created_at,
       is_active: row.is_active,
-      rating: row.rating,
-      total_ratings: row.total_ratings,
-      phone_number: row.phone_number,
-      date_of_birth: row.date_of_birth,
-      gender: row.gender,
-      specialization: row.specialization,
-      license_number: row.license_number,
-      experience_years: row.experience_years,
-      bio: row.bio,
-      profile_image: row.profile_image,
+      // Set default values for missing columns
+      rating: null,
+      total_ratings: 0,
+      phone_number: null,
+      date_of_birth: null,
+      gender: null,
+      specialization: null,
+      license_number: null,
+      experience_years: null,
+      bio: null,
+      profile_image: null,
     }));
 
     return NextResponse.json({

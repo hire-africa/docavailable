@@ -11,40 +11,20 @@ use Google\Auth\Credentials\ServiceAccountCredentials;
 
 class FcmChannel
 {
-    protected $fcmUrl = 'https://fcm.googleapis.com/v1/projects/{project_id}/messages:send';
-    protected $projectId;
-    protected $serviceAccountPath;
+    protected $fcmUrl = 'https://fcm.googleapis.com/fcm/send';
+    protected $serverKey;
 
     public function __construct()
     {
-        $this->projectId = config('services.fcm.project_id');
-        $this->serviceAccountPath = storage_path('app/firebase-service-account.json');
+        $this->serverKey = config('services.fcm.server_key');
     }
 
     /**
-     * Get access token using service account
+     * Get server key for FCM
      */
-    protected function getAccessToken()
+    protected function getServerKey()
     {
-        try {
-            if (!file_exists($this->serviceAccountPath)) {
-                Log::error("❌ FCM Channel: Service account file not found", [
-                    'path' => $this->serviceAccountPath
-                ]);
-                return null;
-            }
-
-            $credentials = new ServiceAccountCredentials(
-                'https://www.googleapis.com/auth/firebase.messaging',
-                $this->serviceAccountPath
-            );
-
-            $token = $credentials->fetchAuthToken();
-            return $token['access_token'] ?? null;
-        } catch (\Exception $e) {
-            Log::error("❌ FCM Channel: Failed to get access token: " . $e->getMessage());
-            return null;
-        }
+        return $this->serverKey;
     }
 
     /**
@@ -57,7 +37,7 @@ class FcmChannel
             'has_push_token' => !empty($notifiable->push_token),
             'push_notifications_enabled' => $notifiable->push_notifications_enabled,
             'notification_type' => get_class($notification),
-            'project_id' => $this->projectId
+            'server_key_configured' => !empty($this->serverKey)
         ]);
 
         if (!$notifiable->push_token || !$notifiable->push_notifications_enabled) {
@@ -71,11 +51,11 @@ class FcmChannel
 
         $message = $notification->toFcm($notifiable);
         
-        Log::info("📤 FCM Channel: Preparing FCM V1 payload", [
+        Log::info("📤 FCM Channel: Preparing FCM payload", [
             'user_id' => $notifiable->id,
             'title' => $message['notification']['title'] ?? 'no title',
             'body' => $message['notification']['body'] ?? 'no body',
-            'project_id' => $this->projectId
+            'server_key_configured' => !empty($this->serverKey)
         ]);
 
         // Determine channel based on notification type
@@ -89,58 +69,53 @@ class FcmChannel
             $channelId = 'appointments';
         }
 
-        // FCM V1 API payload structure
+        // FCM Legacy API payload structure
         $payload = [
-            'message' => [
-                'token' => $notifiable->push_token,
+            'to' => $notifiable->push_token,
+            'notification' => [
+                'title' => $message['notification']['title'] ?? '',
+                'body' => $message['notification']['body'] ?? '',
+                'sound' => 'default',
+                'badge' => 1,
+            ],
+            'data' => $data,
+            'priority' => 'high',
+            'android' => [
+                'priority' => 'high',
                 'notification' => [
-                    'title' => $message['notification']['title'] ?? '',
-                    'body' => $message['notification']['body'] ?? '',
+                    'sound' => 'default',
+                    'channel_id' => $channelId,
+                    'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+                    'visibility' => 1
                 ],
-                'android' => [
-                    // Set overall Android priority at the correct level for FCM v1
-                    'priority' => 'HIGH',
-                    'notification' => [
+            ],
+            'apns' => [
+                'payload' => [
+                    'aps' => [
                         'sound' => 'default',
-                        // Route to appropriate channel based on type
-                        'channel_id' => $channelId,
-                        // Use correct field name for notification-level priority in FCM v1
-                        'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
-                        // Visibility must be an integer enum for some clients (1=Public, 0=Private, -1=Secret)
-                        'visibility' => 1
+                        'badge' => 1,
                     ],
                 ],
-                'apns' => [
-                    'payload' => [
-                        'aps' => [
-                            'sound' => 'default',
-                            'badge' => 1,
-                        ],
-                    ],
-                ],
-                'data' => $data,
-            ]
+            ],
         ];
 
         try {
-            $accessToken = $this->getAccessToken();
-            if (!$accessToken) {
-                Log::error("❌ FCM Channel: Failed to get access token");
+            $serverKey = $this->getServerKey();
+            if (!$serverKey) {
+                Log::error("❌ FCM Channel: Failed to get server key");
                 return false;
             }
-
-            $url = str_replace('{project_id}', $this->projectId, $this->fcmUrl);
             
-            Log::info("🌐 FCM Channel: Sending HTTP request to FCM V1 API", [
+            Log::info("🌐 FCM Channel: Sending HTTP request to FCM Legacy API", [
                 'user_id' => $notifiable->id,
-                'url' => $url,
+                'url' => $this->fcmUrl,
                 'token_length' => strlen($notifiable->push_token)
             ]);
 
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $accessToken,
+                'Authorization' => 'key=' . $serverKey,
                 'Content-Type' => 'application/json',
-            ])->post($url, $payload);
+            ])->post($this->fcmUrl, $payload);
 
             if ($response->successful()) {
                 $result = $response->json();

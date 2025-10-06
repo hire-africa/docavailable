@@ -74,13 +74,13 @@ class ConfigService {
       webrtc: {
         signalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
-          'ws://46.101.123.123:8082/audio-signaling',
-          'ws://46.101.123.123:8082/audio-signaling'  // Use same HTTP URL for production until SSL is set up
+'wss://docavailable-3vbdv.ondigitalocean.app/audio-signaling'
+          'wss://webrtc.docavailable-3vbdv.ondigitalocean.app/audio-signaling'  // Use TLS in production
         ) || extra.webrtc?.signalingUrl,
         chatSignalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
-          'ws://46.101.123.123:8082/chat-signaling',
-          'ws://46.101.123.123:8082/chat-signaling'   // Use same HTTP URL for production until SSL is set up
+'wss://docavailable-3vbdv.ondigitalocean.app/chat-signaling'
+          'wss://webrtc.docavailable-3vbdv.ondigitalocean.app/chat-signaling'   // Use TLS in production
         ) || extra.webrtc?.chatSignalingUrl,
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',

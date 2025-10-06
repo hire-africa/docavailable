@@ -6,15 +6,18 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Appointment;
 use App\Services\AppointmentService;
+use App\Services\NotificationService;
 use App\Http\Requests\AppointmentRequest;
 
 class AppointmentController extends Controller
 {
     protected $appointmentService;
+    protected $notificationService;
 
-    public function __construct(AppointmentService $appointmentService)
+    public function __construct(AppointmentService $appointmentService, NotificationService $notificationService)
     {
         $this->appointmentService = $appointmentService;
+        $this->notificationService = $notificationService;
     }
 
     // Get appointments for current user
@@ -540,6 +543,9 @@ class AppointmentController extends Controller
             // Process payment and deduction using the comprehensive service
             $paymentService = new \App\Services\DoctorPaymentService();
             $paymentResult = $paymentService->processAppointmentEnd($appointment);
+            
+            // Send notifications about appointment end
+            $this->notificationService->sendAppointmentNotification($appointment, 'completed', 'Your appointment has been completed');
 
             // Prepare response message based on payment results
             $responseMessage = 'Session ended successfully';

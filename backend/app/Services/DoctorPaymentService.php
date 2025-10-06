@@ -7,6 +7,8 @@ use App\Models\TextSession;
 use App\Models\Appointment;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Services\NotificationService;
+use Illuminate\Support\Facades\Log;
 
 class DoctorPaymentService
 {
@@ -140,6 +142,14 @@ class DoctorPaymentService
                     'currency' => $currency,
                     'payment_amount' => $paymentAmount,
                 ]
+            );
+
+            // Send notification to doctor about payment
+            $notificationService = new NotificationService();
+            $notificationService->sendWalletNotification(
+                $wallet->transactions()->latest()->first(),
+                'payment_received',
+                "You received {$paymentAmount} {$currency} for completing the {$sessionType} appointment"
             );
 
             return true;
@@ -519,6 +529,14 @@ class DoctorPaymentService
                         $wallet = DoctorWallet::getOrCreate($doctor->id);
                         $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $newDeductions;
                         $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id} ({$newDeductions} sessions)");
+                        
+                        // Send notification to doctor about payment
+                        $notificationService = new NotificationService();
+                        $notificationService->sendWalletNotification(
+                            $wallet->transactions()->latest()->first(),
+                            'payment_received',
+                            "You received {$paymentAmount} for {$newDeductions} session(s) from auto-deduction"
+                        );
                     }
                     
                     // Update session to track processed deductions

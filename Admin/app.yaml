@@ -3,8 +3,8 @@ services:
 - name: admin-dashboard
   source_dir: /
   github:
-    repo: hire-africa/docavailable
-    branch: main
+    repo: hire-africa/docadmin
+    branch: master
   run_command: npm start
   build_command: npm run build
   environment_slug: node-js

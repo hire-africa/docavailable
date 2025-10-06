@@ -6,6 +6,7 @@ use App\Models\TextSession;
 use App\Models\User;
 use App\Models\Subscription;
 use App\Services\MessageStorageService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -15,10 +16,12 @@ use Illuminate\Support\Facades\Log; // Added Log facade
 class TextSessionController extends Controller
 {
     protected $messageStorageService;
+    protected $notificationService;
 
-    public function __construct(MessageStorageService $messageStorageService)
+    public function __construct(MessageStorageService $messageStorageService, NotificationService $notificationService)
     {
         $this->messageStorageService = $messageStorageService;
+        $this->notificationService = $notificationService;
     }
 
     /**
@@ -154,6 +157,9 @@ class TextSessionController extends Controller
 
             // Get the created session to calculate remaining time
             $session = TextSession::find($textSessionId);
+            
+            // Send notifications to both patient and doctor
+            $this->notificationService->sendTextSessionNotification($session, 'started', 'Your text session has started');
             
             return response()->json([
                 'success' => true,
@@ -600,6 +606,9 @@ class TextSessionController extends Controller
                 // Don't fail the session end if payment processing fails
             }
 
+            // Send notifications to both patient and doctor
+            $this->notificationService->sendTextSessionNotification($session, 'ended', 'Your text session has ended');
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Session ended successfully',
@@ -831,6 +840,13 @@ class TextSessionController extends Controller
                         'total_deductions' => $expectedDeductions,
                         'triggered_by' => $request->input('triggered_by', 'api')
                     ]);
+                    
+                    // Send notification about deduction
+                    $this->notificationService->sendTextSessionNotification(
+                        $session, 
+                        'session_deduction', 
+                        "Session deduction: {$newDeductions} session(s) deducted"
+                    );
                     
                     return response()->json([
                         'success' => true,
