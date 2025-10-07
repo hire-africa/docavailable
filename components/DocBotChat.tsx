@@ -2,17 +2,19 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Clipboard,
+  Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
 import DocAIHistory from './DocAvaHistory';
@@ -25,6 +27,8 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   type?: 'symptom' | 'advice' | 'booking' | 'emergency' | 'general';
+  isComplete?: boolean;
+  feedback?: 'thumbs_up' | 'thumbs_down' | null;
 }
 
 interface ChatSession {
@@ -424,10 +428,10 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
               messageType = 'advice';
             }
             
-            // Update the final message with correct type
+            // Update the final message with correct type and mark as complete
             setMessages(prev => prev.map(msg => 
               msg.id === tempBotMessage.id 
-                ? { ...msg, type: messageType }
+                ? { ...msg, type: messageType, isComplete: true }
                 : msg
             ));
             
@@ -521,6 +525,29 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
       default:
         return '#4CAF50';
     }
+  };
+
+  // Copy message to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await Clipboard.setString(text);
+      Alert.alert('Copied!', 'Message copied to clipboard');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      Alert.alert('Error', 'Failed to copy message');
+    }
+  };
+
+  // Handle feedback for bot messages
+  const handleFeedback = (messageId: string, feedbackType: 'thumbs_up' | 'thumbs_down') => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, feedback: feedbackType }
+        : msg
+    ));
+    
+    // You can add analytics or API call here to track feedback
+    console.log(`Feedback for message ${messageId}: ${feedbackType}`);
   };
 
   return (
@@ -630,7 +657,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
                     textAlign: 'center',
                     marginBottom: 8,
                   }}>
-                    Hi, I'm Doc AI! 👋
+                    Hi, I&apos;m Doc AI! 👋
                   </Text>
                   <Text style={{
                     fontSize: 16,
@@ -638,7 +665,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
                     textAlign: 'center',
                     lineHeight: 22,
                   }}>
-                    How can I help you today? I'm here to assist with your health questions and provide medical guidance.
+                    How can I help you today? I&apos;m here to assist with your health questions and provide medical guidance.
                   </Text>
                 </View>
               </View>
@@ -667,12 +694,58 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
                     >
                       {message.text}
                     </Text>
-                    <Text style={[
-                      styles.messageTime,
-                      message.isUser ? styles.userTime : styles.botTime
-                    ]}>
-                      {formatTime(message.timestamp)}
-                    </Text>
+                    
+                    {/* Show time and interaction buttons only after message is complete */}
+                    {message.isComplete && (
+                      <View style={styles.messageFooter}>
+                        <Text style={[
+                          styles.messageTime,
+                          message.isUser ? styles.userTime : styles.botTime
+                        ]}>
+                          {formatTime(message.timestamp)}
+                        </Text>
+                        
+                        {/* Interaction buttons for bot messages only */}
+                        {!message.isUser && (
+                          <View style={styles.interactionButtons}>
+                            <TouchableOpacity
+                              style={styles.interactionButton}
+                              onPress={() => copyToClipboard(message.text)}
+                            >
+                              <FontAwesome name="copy" size={14} color="#666" />
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                              style={[
+                                styles.interactionButton,
+                                message.feedback === 'thumbs_up' && styles.activeFeedbackButton
+                              ]}
+                              onPress={() => handleFeedback(message.id!, 'thumbs_up')}
+                            >
+                              <FontAwesome 
+                                name="thumbs-up" 
+                                size={14} 
+                                color={message.feedback === 'thumbs_up' ? '#4CAF50' : '#666'} 
+                              />
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                              style={[
+                                styles.interactionButton,
+                                message.feedback === 'thumbs_down' && styles.activeFeedbackButton
+                              ]}
+                              onPress={() => handleFeedback(message.id!, 'thumbs_down')}
+                            >
+                              <FontAwesome 
+                                name="thumbs-down" 
+                                size={14} 
+                                color={message.feedback === 'thumbs_down' ? '#FF4444' : '#666'} 
+                              />
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -1115,6 +1188,25 @@ const styles = StyleSheet.create({
   botTime: {
     color: '#999',
     alignSelf: 'flex-start',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  interactionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  interactionButton: {
+    padding: 6,
+    borderRadius: 4,
+    backgroundColor: 'transparent',
+  },
+  activeFeedbackButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
   },
   typingCard: {
     backgroundColor: 'transparent',

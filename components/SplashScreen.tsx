@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Platform, StyleSheet, Text, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');

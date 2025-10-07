@@ -70,15 +70,15 @@ class ConfigService {
     };
     
     const config = {
-      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
+      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable.org',
       webrtc: {
         signalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
-          'wss://docavailable-3vbdv.ondigitalocean.app/audio-signaling'
+          'wss://docavailable.org/audio-signaling'
         ) || extra.webrtc?.signalingUrl,
         chatSignalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
-          'wss://docavailable-3vbdv.ondigitalocean.app/chat-signaling'
+          'wss://docavailable.org/chat-signaling'
         ) || extra.webrtc?.chatSignalingUrl,
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',

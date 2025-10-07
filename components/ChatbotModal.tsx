@@ -1,7 +1,9 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
+    Clipboard,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -18,6 +20,7 @@ interface Message {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  feedback?: 'thumbs_up' | 'thumbs_down' | null;
 }
 
 interface ChatbotModalProps {
@@ -129,6 +132,29 @@ export default function ChatbotModal({ visible, onClose }: ChatbotModalProps) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Copy message to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await Clipboard.setString(text);
+      Alert.alert('Copied!', 'Message copied to clipboard');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      Alert.alert('Error', 'Failed to copy message');
+    }
+  };
+
+  // Handle feedback for bot messages
+  const handleFeedback = (messageId: string, feedbackType: 'thumbs_up' | 'thumbs_down') => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, feedback: feedbackType }
+        : msg
+    ));
+    
+    // You can add analytics or API call here to track feedback
+    console.log(`Feedback for message ${messageId}: ${feedbackType}`);
+  };
+
   return (
     <Modal
       visible={visible}
@@ -180,12 +206,55 @@ export default function ChatbotModal({ visible, onClose }: ChatbotModalProps) {
               ]}>
                 {message.text}
               </Text>
-              <Text style={[
-                styles.messageTime,
-                message.isUser ? styles.userMessageTime : styles.botMessageTime
-              ]}>
-                {formatTime(message.timestamp)}
-              </Text>
+              
+              <View style={styles.messageFooter}>
+                <Text style={[
+                  styles.messageTime,
+                  message.isUser ? styles.userMessageTime : styles.botMessageTime
+                ]}>
+                  {formatTime(message.timestamp)}
+                </Text>
+                
+                {/* Interaction buttons for bot messages only */}
+                {!message.isUser && (
+                  <View style={styles.interactionButtons}>
+                    <TouchableOpacity
+                      style={styles.interactionButton}
+                      onPress={() => copyToClipboard(message.text)}
+                    >
+                      <FontAwesome name="copy" size={12} color="#666" />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.interactionButton,
+                        message.feedback === 'thumbs_up' && styles.activeFeedbackButton
+                      ]}
+                      onPress={() => handleFeedback(message.id!, 'thumbs_up')}
+                    >
+                      <FontAwesome 
+                        name="thumbs-up" 
+                        size={12} 
+                        color={message.feedback === 'thumbs_up' ? '#4CAF50' : '#666'} 
+                      />
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.interactionButton,
+                        message.feedback === 'thumbs_down' && styles.activeFeedbackButton
+                      ]}
+                      onPress={() => handleFeedback(message.id!, 'thumbs_down')}
+                    >
+                      <FontAwesome 
+                        name="thumbs-down" 
+                        size={12} 
+                        color={message.feedback === 'thumbs_down' ? '#FF4444' : '#666'} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
           ))}
           
@@ -315,6 +384,25 @@ const styles = StyleSheet.create({
   botMessageTime: {
     color: '#999',
     alignSelf: 'flex-start',
+  },
+  messageFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  interactionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  interactionButton: {
+    padding: 4,
+    borderRadius: 3,
+    backgroundColor: 'transparent',
+  },
+  activeFeedbackButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
   },
   typingIndicator: {
     flexDirection: 'row',
