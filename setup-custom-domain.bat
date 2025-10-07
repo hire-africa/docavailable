@@ -34,7 +34,7 @@ echo.
 echo     ssl_certificate /etc/letsencrypt/live/docavailable.org/fullchain.pem;
 echo     ssl_certificate_key /etc/letsencrypt/live/docavailable.org/privkey.pem;
 echo.
-echo     # WebSocket proxy for audio signaling
+echo     # WebRTC Audio/Video Call Signaling (Port 8080)
 echo     location /audio-signaling {
 echo         proxy_pass http://localhost:8080;
 echo         proxy_http_version 1.1;
@@ -46,7 +46,7 @@ echo         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 echo         proxy_set_header X-Forwarded-Proto $scheme;
 echo     }
 echo.
-echo     # WebSocket proxy for chat signaling
+echo     # WebRTC Chat Signaling (Port 8081)
 echo     location /chat-signaling {
 echo         proxy_pass http://localhost:8081;
 echo         proxy_http_version 1.1;
@@ -60,7 +60,7 @@ echo     }
 echo.
 echo     # Health check endpoint
 echo     location /health {
-echo         return 200 '{"status":"healthy","domain":"docavailable.org"}';
+echo         return 200 '{"status":"healthy","domain":"docavailable.org","services":["WebRTC Audio Signaling (8080)","WebRTC Chat Signaling (8081)"]}';
 echo         add_header Content-Type application/json;
 echo     }
 echo }
@@ -75,15 +75,17 @@ echo.
 echo # Reload Nginx
 echo systemctl reload nginx
 echo.
-echo # Start WebRTC servers
-echo pm2 start backend/webrtc-signaling-server.js --name webrtc-audio
-echo pm2 start webrtc-chat-signaling-server-updated.js --name webrtc-chat
+echo # Start both WebRTC signaling servers
+echo pm2 start backend/webrtc-signaling-server.js --name webrtc-audio-signaling
+echo pm2 start webrtc-chat-signaling-server-updated.js --name webrtc-chat-signaling
 echo.
 echo # Check status
 echo pm2 status
 echo.
 echo echo "Setup complete! Test with:"
 echo echo "curl https://docavailable.org/health"
+echo echo "curl -i -N -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Key: test' -H 'Sec-WebSocket-Version: 13' https://docavailable.org/audio-signaling"
+echo echo "curl -i -N -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Key: test' -H 'Sec-WebSocket-Version: 13' https://docavailable.org/chat-signaling"
 echo.
 echo Press any key to continue after setting up the domain...
 pause > nul
