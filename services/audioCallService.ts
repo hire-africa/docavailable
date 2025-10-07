@@ -523,7 +523,7 @@ class AudioCallService {
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 
         Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         Constants.expoConfig?.extra?.webRtcSignalingUrl ||
-'wss://docavailable.org:8082/audio-signaling'; // Use production URL as fallback
+'wss://docavailable-3vbdv.ondigitalocean.app/audio-signaling'; // Use production URL as fallback
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       
       console.log('🔧 [AudioCallService] WebSocket URL:', wsUrl);

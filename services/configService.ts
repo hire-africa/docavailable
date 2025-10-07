@@ -74,11 +74,11 @@ class ConfigService {
       webrtc: {
         signalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
-          'wss://docavailable.org:8082/audio-signaling'
+          'wss://docavailable-3vbdv.ondigitalocean.app/audio-signaling'
         ) || extra.webrtc?.signalingUrl,
         chatSignalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
-          'wss://docavailable.org:8082/chat-signaling'
+          'wss://docavailable-3vbdv.ondigitalocean.app/chat-signaling'
         ) || extra.webrtc?.chatSignalingUrl,
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
         turnUsername: extra.webrtc?.turnUsername || '',
