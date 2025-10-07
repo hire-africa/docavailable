@@ -1,5 +1,6 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
+import { SecureWebSocketService } from './secureWebSocketService';
 import {
     mediaDevices,
     MediaStream,
@@ -33,7 +34,7 @@ class VideoCallService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
-  private signalingChannel: WebSocket | null = null;
+  private signalingChannel: SecureWebSocketService | null = null;
   private callTimer: ReturnType<typeof setInterval> | null = null;
   private callStartTime: number = 0;
   private events: VideoCallEvents | null = null;
@@ -402,73 +403,76 @@ class VideoCallService {
       console.log('🔧 [VideoCallService] User ID:', userId);
       
       try {
-        this.signalingChannel = new WebSocket(wsUrl);
-        
-        this.signalingChannel.onopen = () => {
-          console.log('🔌 Connected to video signaling server');
-          resolve();
-        };
-
-        this.signalingChannel.onmessage = async (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            console.log('📨 Video signaling message received:', message.type);
-            
-            switch (message.type) {
-              case 'offer':
-                console.log('📞 [VideoCallService] Received offer');
-                if (this.isIncomingMode && !this.hasAccepted) {
-                  // Buffer the offer until user accepts
-                  this.pendingOffer = message.offer;
-                  console.log('⏸️ [VideoCallService] Buffered incoming offer until accept');
-                } else {
-                  await this.handleOffer(message.offer);
-                }
-                break;
-              case 'answer':
-                console.log('📞 [VideoCallService] Received answer');
-                await this.handleAnswer(message.answer);
-                break;
-              case 'ice-candidate':
-                console.log('📞 [VideoCallService] Received ICE candidate');
-                if (this.isIncomingMode && (!this.peerConnection || !this.peerConnection.remoteDescription)) {
-                  this.pendingCandidates.push(message.candidate);
-                  console.log('⏸️ [VideoCallService] Queued ICE candidate (awaiting remoteDescription)');
-                } else {
-                  await this.handleIceCandidate(message.candidate);
-                }
-                break;
-              case 'call-ended':
-                console.log('📞 [VideoCallService] Received call-ended');
-                this.endCall();
-                break;
-              case 'call-answered':
-                console.log('📞 [VideoCallService] Received call-answered');
-                this.handleCallAnswered();
-                break;
-              case 'call-rejected':
-                console.log('📞 [VideoCallService] Received call-rejected');
-                this.handleCallRejected(message.reason);
-                break;
-              case 'call-timeout':
-                console.log('📞 [VideoCallService] Received call-timeout');
-                this.handleCallTimeout();
-                break;
+        // Create secure WebSocket connection that handles self-signed certificates
+        this.signalingChannel = new SecureWebSocketService({
+          url: wsUrl,
+          ignoreSSLErrors: true, // Allow self-signed certificates
+          onOpen: () => {
+            console.log('🔌 Connected to video signaling server');
+            resolve();
+          },
+          onMessage: async (event) => {
+            try {
+              const message = JSON.parse(event.data);
+              console.log('📨 Video signaling message received:', message.type);
+              
+              switch (message.type) {
+                case 'offer':
+                  console.log('📞 [VideoCallService] Received offer');
+                  if (this.isIncomingMode && !this.hasAccepted) {
+                    // Buffer the offer until user accepts
+                    this.pendingOffer = message.offer;
+                    console.log('⏸️ [VideoCallService] Buffered incoming offer until accept');
+                  } else {
+                    await this.handleOffer(message.offer);
+                  }
+                  break;
+                case 'answer':
+                  console.log('📞 [VideoCallService] Received answer');
+                  await this.handleAnswer(message.answer);
+                  break;
+                case 'ice-candidate':
+                  console.log('📞 [VideoCallService] Received ICE candidate');
+                  if (this.isIncomingMode && (!this.peerConnection || !this.peerConnection.remoteDescription)) {
+                    this.pendingCandidates.push(message.candidate);
+                    console.log('⏸️ [VideoCallService] Queued ICE candidate (awaiting remoteDescription)');
+                  } else {
+                    await this.handleIceCandidate(message.candidate);
+                  }
+                  break;
+                case 'call-ended':
+                  console.log('📞 [VideoCallService] Received call-ended');
+                  this.endCall();
+                  break;
+                case 'call-answered':
+                  console.log('📞 [VideoCallService] Received call-answered');
+                  this.handleCallAnswered();
+                  break;
+                case 'call-rejected':
+                  console.log('📞 [VideoCallService] Received call-rejected');
+                  this.handleCallRejected(message.reason);
+                  break;
+                case 'call-timeout':
+                  console.log('📞 [VideoCallService] Received call-timeout');
+                  this.handleCallTimeout();
+                  break;
+              }
+            } catch (error) {
+              console.error('❌ Error handling video signaling message:', error);
             }
-          } catch (error) {
-            console.error('❌ Error handling video signaling message:', error);
+          },
+          onError: (error) => {
+            console.error('❌ Video signaling WebSocket error:', error);
+            reject(error);
+          },
+          onClose: () => {
+            console.log('🔌 Video signaling connection closed');
+            this.updateState({ connectionState: 'disconnected' });
           }
-        };
+        });
 
-        this.signalingChannel.onerror = (error) => {
-          console.error('❌ Video signaling WebSocket error:', error);
-          reject(error);
-        };
-
-        this.signalingChannel.onclose = () => {
-          console.log('🔌 Video signaling connection closed');
-          this.updateState({ connectionState: 'disconnected' });
-        };
+        // Connect to the WebSocket
+        await this.signalingChannel.connect();
 
       } catch (error) {
         console.error('❌ Failed to create video signaling connection:', error);
@@ -909,7 +913,7 @@ class VideoCallService {
    * Send signaling message
    */
   private sendSignalingMessage(message: any): void {
-    if (this.signalingChannel && this.signalingChannel.readyState === WebSocket.OPEN) {
+    if (this.signalingChannel && this.signalingChannel.readyState === 1) { // WebSocket.OPEN = 1
       this.signalingChannel.send(JSON.stringify({
         ...message,
         appointmentId: this.appointmentId,
