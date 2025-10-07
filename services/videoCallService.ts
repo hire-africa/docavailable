@@ -1,6 +1,5 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
-import { SecureWebSocketService } from './secureWebSocketService';
 import {
     mediaDevices,
     MediaStream,
@@ -9,6 +8,7 @@ import {
     RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
+import { SecureWebSocketService } from './secureWebSocketService';
 
 export interface VideoCallState {
   isConnected: boolean;
@@ -396,7 +396,7 @@ class VideoCallService {
       const signalingUrl = 
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         (Constants as any).expoConfig?.extra?.webrtc?.signalingUrl ||
-        'wss://46.101.123.123:8082/audio-signaling';
+        'wss://docavailable.org:8082/audio-signaling';
       
       const wsUrl = `${signalingUrl}/${appointmentId}`;
       console.log('🔌 [VideoCallService] Connecting to signaling server:', wsUrl);
