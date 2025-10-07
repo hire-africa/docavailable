@@ -108,6 +108,18 @@ export class InstantSessionMessageDetector {
    */
   private handleWebSocketMessage(event: MessageEvent): void {
     try {
+      // Check if the data is valid JSON
+      if (typeof event.data !== 'string') {
+        console.error('❌ [InstantSessionDetector] Received non-string data:', event.data);
+        return;
+      }
+
+      // Check if it looks like HTML or plain text instead of JSON
+      if (event.data.trim().startsWith('<') || event.data.trim().startsWith('DocAvailable')) {
+        console.error('❌ [InstantSessionDetector] Received non-JSON response:', event.data.substring(0, 100));
+        return;
+      }
+
       const data = JSON.parse(event.data);
       console.log('📨 [InstantSessionDetector] Message received:', data.type);
       console.log('📨 [InstantSessionDetector] Full message data:', data);

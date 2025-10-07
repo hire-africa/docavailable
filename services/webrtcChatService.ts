@@ -468,6 +468,15 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         return this.messages;
       }
       
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('❌ [WebRTCChat] Server sync returned non-JSON response:', contentType);
+        const textResponse = await response.text();
+        console.error('❌ [WebRTCChat] Response content:', textResponse);
+        return this.messages;
+      }
+
       const data = await response.json();
       if (!data.success || !data.data) {
         console.error('❌ [WebRTCChat] Server sync returned invalid data');

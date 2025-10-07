@@ -70,7 +70,7 @@ class ConfigService {
     };
     
     const config = {
-      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable.org',
+      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
       webrtc: {
         signalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
