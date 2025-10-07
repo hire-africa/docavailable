@@ -950,9 +950,9 @@ export class InstantSessionMessageDetector {
    * Get WebRTC signaling URL
    */
   private getWebRTCSignalingUrl(): string {
-    // Get the base WebRTC URL without the /audio-signaling path
-    const baseUrl = process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 'ws://46.101.123.123:8082/audio-signaling';
-    // Remove /audio-signaling from the end if it exists
-    return baseUrl.replace(/\/audio-signaling$/, '');
+    // Use the chat signaling URL for instant session detection
+    const chatSignalingUrl = process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'wss://docavailable.org/chat-signaling';
+    // Convert wss:// to ws:// for the base URL
+    return chatSignalingUrl.replace(/^wss:\/\//, 'ws://').replace(/\/chat-signaling$/, '');
   }
 }
