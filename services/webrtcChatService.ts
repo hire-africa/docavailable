@@ -68,7 +68,7 @@ export class WebRTCChatService {
         await this.loadMessages();
         
         const token = await this.getAuthToken();
-const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable-3vbdv.ondigitalocean.app/chat-signaling';
+const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://46.101.123.123:8082/chat-signaling';
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
