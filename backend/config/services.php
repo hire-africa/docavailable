@@ -53,7 +53,8 @@ return [
 
     'fcm' => [
         'project_id' => env('FCM_PROJECT_ID'),
-        'server_key' => env('FCM_SERVER_KEY'),
+        'service_account_json' => env('FIREBASE_SERVICE_ACCOUNT_JSON'),
+        'credentials_path' => env('GOOGLE_APPLICATION_CREDENTIALS', storage_path('app/firebase-service-account.json')),
     ],
     
     'onesignal' => [
