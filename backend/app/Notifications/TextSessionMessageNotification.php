@@ -72,7 +72,7 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
                 'type' => 'chat_message',
                 'appointment_id' => (string)$appointmentId,
                 'sender_name' => $senderName,
-                'message_count' => 1,
+                'message_count' => '1',
                 'timestamp' => now()->toISOString(),
             ],
         ];

@@ -60,9 +60,9 @@ class ChatMessageNotification extends Notification implements ShouldQueue
             ],
             'data' => [
                 'type' => 'chat_message',
-                'appointment_id' => $this->appointment->id,
+                'appointment_id' => (string) $this->appointment->id,
                 'sender_name' => $senderName,
-                'message_count' => 1, // Just indicate there's a new message
+                'message_count' => '1', // Just indicate there's a new message
                 'timestamp' => now()->toISOString(),
                 'click_action' => 'OPEN_CHAT', // Add click action for frontend handling
                 // NO MESSAGE CONTENT - PRIVACY FIRST
