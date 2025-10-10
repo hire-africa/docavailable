@@ -106,61 +106,10 @@ export default function PayChanguCheckout() {
       setLoadingTimeout(null);
     }
 
-    // Start periodic payment checking after page loads
-    if (txRef && !hasDetectedPayment) {
-      console.log('🔄 Starting periodic payment check for txRef:', txRef);
-      let checkCount = 0;
-      const maxChecks = 20; // Check for 1 minute (20 * 3 seconds)
-      
-      const timer = setInterval(async () => {
-        try {
-          checkCount++;
-          console.log(`🔄 Checking payment status periodically (${checkCount}/${maxChecks})...`);
-          
-          const statusData = await checkPaymentStatus();
-          
-          if (statusData && statusData.success && statusData.status === 'success') {
-            console.log('✅ Payment detected as successful via periodic check');
-            setHasDetectedPayment(true);
-            clearInterval(timer);
-            setPaymentCheckTimer(null);
-            
-            // Refresh user data
-            await handlePaymentSuccess();
-            
-            Alert.alert(
-              'Payment Successful!',
-              'Your payment has been completed successfully.',
-              [
-                { text: 'OK', onPress: () => router.back() }
-              ]
-            );
-          } else if (checkCount >= maxChecks) {
-            // After 1 minute, assume payment was successful if we haven't detected failure
-            console.log('⏰ Payment check timeout - assuming payment successful');
-            setHasDetectedPayment(true);
-            clearInterval(timer);
-            setPaymentCheckTimer(null);
-            
-            // Refresh user data
-            await handlePaymentSuccess();
-            
-            Alert.alert(
-              'Payment Completed',
-              'Your payment has been processed. Please check your subscription status.',
-              [
-                { text: 'OK', onPress: () => router.back() }
-              ]
-            );
-          }
-        } catch (error) {
-          console.log('🔄 Periodic payment check failed:', error);
-        }
-      }, 3000); // Check every 3 seconds
-      
-      setPaymentCheckTimer(timer);
-    }
-  }, [loadingTimeout, txRef, hasDetectedPayment, checkPaymentStatus, handlePaymentSuccess]);
+    // Don't start periodic checking - let PayChangu handle the flow naturally
+    // Only check if user navigates away or PayChangu redirects
+    console.log('🔄 WebView loaded - waiting for PayChangu to complete payment flow');
+  }, [loadingTimeout]);
 
   const handleWebViewError = useCallback((syntheticEvent: any) => {
     const { nativeEvent } = syntheticEvent;
@@ -197,32 +146,38 @@ export default function PayChanguCheckout() {
       loading: navState.loading
     });
 
-    // Check if we're on a success page and haven't detected payment yet
+    // Only show success when PayChangu's official success page is reached
+    // or when user navigates away from PayChangu domain
     if (navState.url && !hasDetectedPayment) {
       const url = navState.url.toLowerCase();
-      if (url.includes('success') || url.includes('completed') || url.includes('paid') || 
-          url.includes('payment-success') || url.includes('thank-you')) {
-        console.log('✅ Success page detected via navigation change:', navState.url);
+      
+      // Check if we're leaving PayChangu domain (user completed payment)
+      if (!url.includes('paychangu.com') && !url.includes('checkout.paychangu.com')) {
+        console.log('✅ User navigated away from PayChangu - payment likely completed');
         
-        // Refresh user data and show success
-        handlePaymentSuccess().then(() => {
-          console.log('✅ User data refreshed after success page detection');
-        }).catch((error) => {
-          console.error('❌ Error refreshing user data after success page detection:', error);
+        // Check payment status before showing success
+        checkPaymentStatus().then(async (statusData) => {
+          if (statusData && statusData.success) {
+            console.log('✅ Payment confirmed successful after navigation');
+            setHasDetectedPayment(true);
+            
+            // Refresh user data
+            await handlePaymentSuccess();
+            
+            Alert.alert(
+              'Payment Successful!',
+              'Your payment has been completed successfully.',
+              [
+                { text: 'OK', onPress: () => router.back() }
+              ]
+            );
+          } else {
+            console.log('⚠️ Payment not confirmed - user may have cancelled');
+          }
         });
-        
-        setHasDetectedPayment(true);
-        
-        Alert.alert(
-          'Payment Successful!',
-          'Your payment has been completed successfully.',
-          [
-            { text: 'OK', onPress: () => router.back() }
-          ]
-        );
       }
     }
-  }, [hasDetectedPayment, handlePaymentSuccess]);
+  }, [hasDetectedPayment, handlePaymentSuccess, checkPaymentStatus]);
 
   useEffect(() => {
     console.log('🔍 Checkout Debug:', {
@@ -410,7 +365,11 @@ export default function PayChanguCheckout() {
           }
           
           // Handle payment completion redirects with success indicators
-          if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) && !hasDetectedPayment) {
+          // Only show success if we're leaving PayChangu domain
+          if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) && 
+              !hasDetectedPayment && 
+              !request.url.includes('paychangu.com')) {
+            console.log('✅ Success URL detected outside PayChangu domain:', request.url);
             setHasDetectedPayment(true);
             
             // Refresh user data to get updated subscription
