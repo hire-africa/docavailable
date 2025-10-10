@@ -23,9 +23,9 @@ export const environment = {
   BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
   LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
   
-  // WebRTC Configuration (Fixed URLs with correct port - using localhost for testing)
-  WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'ws://localhost:8080/audio-signaling'),
-  WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'ws://localhost:8080/chat-signaling'),
+  // WebRTC Configuration (Production URLs with correct port)
+  WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://46.101.123.123:8080/audio-signaling'),
+  WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'wss://46.101.123.123:8080/chat-signaling'),
   
   // App Configuration
   APP_NAME: getEnvVar('EXPO_PUBLIC_APP_NAME', 'DocAvailable'),
