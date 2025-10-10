@@ -780,7 +780,7 @@ class AudioCallService {
         this.markConnectedOnce();
       } else if (state === 'disconnected' || state === 'failed') {
         // Only start grace timer if call is not being answered and not already ended
-        if (!this.isCallAnswered && !this.hasEnded) {
+        if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
           console.log('🔗 WebRTC disconnected/failed - starting grace timer');
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
@@ -788,8 +788,8 @@ class AudioCallService {
           }
           this.disconnectGraceTimer = setTimeout(() => {
             const cs = this.peerConnection?.connectionState;
-            // Only end call if still disconnected/failed AND not answered AND not already ended
-            if ((cs === 'disconnected' || cs === 'failed') && !this.isCallAnswered && !this.hasEnded) {
+            // Only end call if still disconnected/failed AND not answered AND not already ended AND not accepted
+            if ((cs === 'disconnected' || cs === 'failed') && !this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
               console.log('🔗 Grace timer expired - ending call due to persistent disconnection');
               this.updateState({ 
                 isConnected: false, 
@@ -800,7 +800,7 @@ class AudioCallService {
             }
           }, 5000); // Increased grace period to 5 seconds
         } else {
-          console.log('🔗 WebRTC disconnected/failed but call is answered or already ended - ignoring');
+          console.log('🔗 WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
         }
       }
     });
@@ -1179,6 +1179,13 @@ class AudioCallService {
   async processIncomingCall(): Promise<void> {
     try {
       console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
+      
+      // Clear any pending disconnect grace timer since we're actively answering
+      if (this.disconnectGraceTimer) {
+        console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
       
       const pendingOffer = (global as any).pendingOffer;
       console.log('📞 [AudioCallService] Checking for pending offer:', {

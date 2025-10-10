@@ -41,6 +41,7 @@ class VideoCallService {
   private events: VideoCallEvents | null = null;
   private callTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private reofferTimer: ReturnType<typeof setInterval> | null = null;
+  private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
@@ -369,15 +370,15 @@ class VideoCallService {
           });
           this.startCallTimer();
         } else if (state === 'disconnected' || state === 'failed') {
-          // Only update state if call is not answered and not already ended
-          if (!this.isCallAnswered && !this.hasEnded) {
+          // Only update state if call is not answered and not already ended and not being accepted
+          if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
             console.log('🔗 Video WebRTC disconnected/failed - updating state');
             this.updateState({ 
               isConnected: false, 
               connectionState: 'disconnected' 
             });
           } else {
-            console.log('🔗 Video WebRTC disconnected/failed but call is answered or already ended - ignoring');
+            console.log('🔗 Video WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
           }
         }
       });
@@ -608,6 +609,13 @@ class VideoCallService {
   async processIncomingCall(): Promise<void> {
     try {
       console.log('📞 [VideoCallService] Processing incoming call after user acceptance...');
+      
+      // Clear any pending disconnect grace timer since we're actively answering
+      if (this.disconnectGraceTimer) {
+        console.log('📞 [VideoCallService] Clearing disconnect grace timer - call is being answered');
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
       
       // Check both global and local pending offers
       const globalPendingOffer = (global as any).pendingOffer;
