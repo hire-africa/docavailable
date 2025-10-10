@@ -396,9 +396,17 @@ class PaymentController extends Controller
             Log::info('PayChangu callback received', ['data' => $request->all()]);
             
             $txRef = $request->query('tx_ref');
+            $status = $request->query('status');
+            
             if (!$txRef) {
                 return response()->json(['error' => 'Missing tx_ref parameter'], 400);
             }
+            
+            Log::info('PayChangu callback parameters', [
+                'tx_ref' => $txRef,
+                'status' => $status,
+                'all_params' => $request->all()
+            ]);
             
             // Find transaction
             $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
@@ -410,36 +418,53 @@ class PaymentController extends Controller
                 return response()->json(['error' => 'Transaction not found'], 404);
             }
             
-            // Verify payment with PayChangu
-            $payChanguService = new \App\Services\PayChanguService();
-            $verification = $payChanguService->verify($txRef);
-            
-            if ($verification['status'] === 'success') {
-                $transaction->update([
-                    'status' => 'completed',
-                    'metadata' => array_merge($transaction->metadata ?? [], [
-                        'verification_response' => $verification,
-                        'completed_at' => now()->toISOString()
-                    ])
-                ]);
+            // Check status from PayChangu callback first
+            if ($status === 'success') {
+                Log::info('PayChangu callback indicates success', ['tx_ref' => $txRef]);
                 
-                // Process the successful payment
-                $meta = json_decode($verification['meta'] ?? '{}', true);
-                return $this->processSuccessfulPayment($verification, $meta);
+                // Verify payment with PayChangu API to be sure
+                $payChanguService = new \App\Services\PayChanguService();
+                $verification = $payChanguService->verify($txRef);
+                
+                if ($verification['ok'] && ($verification['data']['status'] ?? '') === 'success') {
+                    $transaction->update([
+                        'status' => 'completed',
+                        'metadata' => array_merge($transaction->metadata ?? [], [
+                            'verification_response' => $verification['data'],
+                            'callback_status' => $status,
+                            'completed_at' => now()->toISOString()
+                        ])
+                    ]);
+                    
+                    // Process the successful payment
+                    $meta = json_decode($verification['data']['meta'] ?? '{}', true);
+                    $this->processSuccessfulPayment($verification['data'], $meta);
+                    
+                    // Return success response to PayChangu
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Payment processed successfully',
+                        'tx_ref' => $txRef
+                    ]);
+                } else {
+                    Log::error('PayChangu verification failed despite success status', [
+                        'tx_ref' => $txRef,
+                        'verification' => $verification
+                    ]);
+                    return response()->json(['error' => 'Payment verification failed'], 400);
+                }
             } else {
+                Log::info('PayChangu callback indicates failure', ['tx_ref' => $txRef, 'status' => $status]);
+                
                 $transaction->update([
                     'status' => 'failed',
                     'metadata' => array_merge($transaction->metadata ?? [], [
-                        'verification_response' => $verification,
+                        'callback_status' => $status,
                         'failed_at' => now()->toISOString()
                     ])
                 ]);
                 
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payment verification failed',
-                    'status' => $verification['status']
-                ], 400);
+                return response()->json(['error' => 'Payment failed'], 400);
             }
             
         } catch (\Exception $e) {
