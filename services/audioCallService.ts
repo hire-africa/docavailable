@@ -431,10 +431,25 @@ class AudioCallService {
         return;
       }
 
-      // Get user media (audio only)
+      // Get user media (audio only) with specific constraints
       this.localStream = await mediaDevices.getUserMedia({
         video: false,
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 44100,
+          channelCount: 1,
+        },
+      });
+
+      // Log audio stream details
+      console.log('🎵 [AudioCallService] Local audio stream captured:', {
+        streamId: this.localStream.id,
+        audioTracks: this.localStream.getAudioTracks().length,
+        audioTrackLabel: this.localStream.getAudioTracks()[0]?.label,
+        audioTrackSettings: this.localStream.getAudioTracks()[0]?.getSettings(),
+        audioTrackConstraints: this.localStream.getAudioTracks()[0]?.getConstraints()
       });
 
       // Configure audio routing for phone calls
@@ -452,7 +467,12 @@ class AudioCallService {
 
       // Handle remote stream
       this.peerConnection.addEventListener('track', (event) => {
-        console.log('🎵 Remote audio stream received');
+        console.log('🎵 [AudioCallService] Remote audio stream received:', {
+          streamId: event.streams[0].id,
+          audioTracks: event.streams[0].getAudioTracks().length,
+          audioTrackLabel: event.streams[0].getAudioTracks()[0]?.label,
+          audioTrackSettings: event.streams[0].getAudioTracks()[0]?.getSettings()
+        });
         this.remoteStream = event.streams[0];
         this.events?.onRemoteStream(event.streams[0]);
       });
@@ -1198,7 +1218,16 @@ class AudioCallService {
         console.warn('⚠️ [AudioCallService] No pending offer found - requesting re-offer from caller');
         // Prepare media and PC so we can immediately process the re-offer when it arrives
         if (!this.localStream) {
-          this.localStream = await mediaDevices.getUserMedia({ video: false, audio: true });
+          this.localStream = await mediaDevices.getUserMedia({ 
+            video: false, 
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 44100,
+              channelCount: 1,
+            }
+          });
           await this.configureAudioRouting();
         }
         if (!this.peerConnection) {
@@ -1217,7 +1246,16 @@ class AudioCallService {
       
       // On accept, prepare media and create PC if needed
       if (!this.localStream) {
-        this.localStream = await mediaDevices.getUserMedia({ video: false, audio: true });
+        this.localStream = await mediaDevices.getUserMedia({ 
+          video: false, 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,
+            channelCount: 1,
+          }
+        });
         await this.configureAudioRouting();
       }
       if (!this.peerConnection) {
