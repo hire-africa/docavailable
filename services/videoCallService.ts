@@ -431,7 +431,8 @@ class VideoCallService {
               case 'offer':
                 console.log('📞 [VideoCallService] Received offer');
                 if (this.isIncomingMode && !this.hasAccepted) {
-                  // Buffer the offer until user accepts
+                  // Store offer globally for consistency with AudioCallService
+                  (global as any).pendingOffer = message.offer;
                   this.pendingOffer = message.offer;
                   console.log('⏸️ [VideoCallService] Buffered incoming offer until accept');
                 } else {
@@ -466,6 +467,31 @@ class VideoCallService {
               case 'call-timeout':
                 console.log('📞 [VideoCallService] Received call-timeout');
                 this.handleCallTimeout();
+                break;
+              case 'resend-offer-request':
+                console.log('📞 [VideoCallService] Received resend offer request');
+                if (this.peerConnection) {
+                  if (!this.peerConnection.localDescription) {
+                    try {
+                      console.log('📨 [VideoCallService] Resend requested but no localDescription; creating fresh offer');
+                      await this.createOffer();
+                    } catch (e) {
+                      console.warn('⚠️ [VideoCallService] Failed to create fresh offer on resend request:', e);
+                    }
+                  }
+                  if (this.peerConnection?.localDescription) {
+                    console.log('📨 [VideoCallService] Received resend-offer-request; resending offer');
+                    this.sendSignalingMessage({
+                      type: 'offer',
+                      offer: this.peerConnection.localDescription,
+                      senderId: this.userId,
+                      appointmentId: this.appointmentId,
+                      userId: this.userId,
+                    });
+                  } else {
+                    console.warn('⚠️ [VideoCallService] Cannot resend offer - still no localDescription available');
+                  }
+                }
                 break;
             }
           } catch (error) {
@@ -583,16 +609,36 @@ class VideoCallService {
     try {
       console.log('📞 [VideoCallService] Processing incoming call after user acceptance...');
       
-      const pendingOffer = (global as any).pendingOffer;
+      // Check both global and local pending offers
+      const globalPendingOffer = (global as any).pendingOffer;
+      const localPendingOffer = this.pendingOffer;
+      const pendingOffer = globalPendingOffer || localPendingOffer;
+      
+      console.log('📞 [VideoCallService] Checking for pending offer:', {
+        hasGlobalOffer: !!globalPendingOffer,
+        hasLocalOffer: !!localPendingOffer,
+        offerType: pendingOffer?.type,
+        offerSdpLength: pendingOffer?.sdp?.length
+      });
+      
       if (!pendingOffer) {
-        throw new Error('No pending offer found');
+        console.warn('⚠️ [VideoCallService] No pending offer found - requesting re-offer from caller');
+        // Ask caller to resend the current offer
+        this.sendSignalingMessage({
+          type: 'resend-offer-request',
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
+        this.hasAccepted = true;
+        return;
       }
       
       console.log('📞 [VideoCallService] Processing pending offer...');
       await this.handleOffer(pendingOffer);
       
-      // Clear the pending offer
+      // Clear both global and local pending offers
       (global as any).pendingOffer = null;
+      this.pendingOffer = null;
       console.log('✅ [VideoCallService] Incoming call processed successfully');
       
     } catch (error) {

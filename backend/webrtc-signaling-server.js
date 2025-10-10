@@ -264,6 +264,9 @@ function handleConnection(ws, req, connectionType) {
         case 'session-end-request':
           handleSessionEndRequest(message, ws);
           break;
+        case 'resend-offer-request':
+          handleResendOfferRequest(message, ws);
+          break;
         default:
           broadcastToOthers(ws, appointmentId, message);
       }
@@ -502,6 +505,21 @@ async function handleSessionEndRequest(message, ws) {
       details: error.message
     });
   }
+}
+
+function handleResendOfferRequest(message, ws) {
+  const appointmentId = message.appointmentId;
+  const userId = message.userId;
+  
+  log('INFO', 'Handling resend offer request', { appointmentId, userId });
+  
+  // Broadcast to all participants to resend their offers
+  broadcastToAll(appointmentId, {
+    type: 'resend-offer-request',
+    appointmentId: appointmentId,
+    userId: userId,
+    timestamp: new Date().toISOString()
+  });
 }
 
 // Set up WebSocket server event handlers

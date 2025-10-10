@@ -161,6 +161,12 @@ class AudioCallService {
         console.log('📞 Pending offer found - waiting for user acceptance');
       } else {
         console.warn('⚠️ No pending offer found for incoming call');
+        // Request re-offer from caller
+        this.sendSignalingMessage({
+          type: 'resend-offer-request',
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
       }
 
       // Do not auto-create PC or answer yet; will proceed on accept
