@@ -471,12 +471,11 @@ export default function AudioCall({
 
         {/* Status */}
         <View style={styles.statusContainer}>
-          <Text style={[styles.statusText, { color: getStatusColor() }]}>
-            {getStatusText()}
-          </Text>
           <View style={styles.connectionStatus}>
             <View style={[styles.connectionDot, { backgroundColor: getConnectionIndicatorColor() }]} />
-            <Text style={styles.connectionText}>{getStatusText()}</Text>
+            <Text style={[styles.connectionText, { color: getStatusColor() }]}>
+              {getStatusText()}
+            </Text>
           </View>
           {isEffectivelyConnected && (
             <Text style={styles.durationText}>
