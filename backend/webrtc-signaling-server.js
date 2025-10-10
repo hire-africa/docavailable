@@ -62,7 +62,7 @@ const audioWss = new WebSocket.Server({
   perMessageDeflate: false, // Disable compression completely
   maxPayload: CONFIG.MAX_PAYLOAD,
   noServer: false,
-  skipUTF8Validation: false // Keep validation for security
+  skipUTF8Validation: true // Skip UTF-8 validation to avoid compression issues
 });
 
 const chatWss = new WebSocket.Server({
@@ -71,7 +71,7 @@ const chatWss = new WebSocket.Server({
   perMessageDeflate: false, // Disable compression completely
   maxPayload: CONFIG.MAX_PAYLOAD,
   noServer: false,
-  skipUTF8Validation: false // Keep validation for security
+  skipUTF8Validation: true // Skip UTF-8 validation to avoid compression issues
 });
 
 // Utility functions
