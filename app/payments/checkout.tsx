@@ -66,7 +66,7 @@ export default function PayChanguCheckout() {
   const checkPaymentStatus = useCallback(async () => {
     console.log('🔍 Checking payment status for transaction:', txRef);
     try {
-      const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/status?tx_ref=${txRef}`);
+      const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${txRef}`);
       
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
