@@ -396,9 +396,9 @@ class VideoCallService {
       const signalingUrl = 
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         (Constants as any).expoConfig?.extra?.webrtc?.signalingUrl ||
-        'wss://docavailable.org/audio-signaling';
+        environment.WEBRTC_SIGNALING_URL;
       
-      const wsUrl = `${signalingUrl}/${appointmentId}`;
+      const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
       console.log('🔌 [VideoCallService] Connecting to signaling server:', wsUrl);
       console.log('🔧 [VideoCallService] User ID:', userId);
       

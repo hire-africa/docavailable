@@ -147,6 +147,10 @@ class ApiService {
     // Placeholder implementation
     return false;
   }
+
+  getBaseURL(): string {
+    return baseURL;
+  }
 }
 
 export const apiService = new ApiService(); 

@@ -193,11 +193,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setToken(storedToken);
           // After cold-start login, also try to register/sync FCM token
           try {
+            console.log('🔄 [AuthContext] Initial FCM token sync...');
             const { default: pushNotificationService } = await import('../services/pushNotificationService');
+            console.log('🔄 [AuthContext] Registering for push notifications...');
             await pushNotificationService.registerForPushNotifications();
+            console.log('🔄 [AuthContext] Syncing pending token...');
             await pushNotificationService.syncPendingToken();
+            console.log('✅ [AuthContext] Initial FCM token sync completed');
           } catch (e) {
-            console.error('AuthContext: Failed to sync FCM token during init:', e);
+            console.error('❌ [AuthContext] Failed to sync FCM token during init:', e);
           }
         } else {
           console.log('AuthContext: No authenticated user found');
@@ -229,12 +233,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setToken(storedToken);
           // After login, sync any pending FCM token
           try {
+            console.log('🔄 [AuthContext] Syncing FCM token after login...');
             const { default: pushNotificationService } = await import('../services/pushNotificationService');
             // Re-register (ensures current token) and sync queued token
+            console.log('🔄 [AuthContext] Re-registering for push notifications...');
             await pushNotificationService.registerForPushNotifications();
+            console.log('🔄 [AuthContext] Syncing pending token...');
             await pushNotificationService.syncPendingToken();
+            console.log('✅ [AuthContext] FCM token sync completed');
           } catch (e) {
-            console.error('AuthContext: Failed to sync FCM token after login:', e);
+            console.error('❌ [AuthContext] Failed to sync FCM token after login:', e);
           }
         }).catch(error => {
           console.error('AuthContext: Error getting stored token:', error);

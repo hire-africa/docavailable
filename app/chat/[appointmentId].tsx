@@ -1725,7 +1725,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     }
     
     // Create WebSocket connection for incoming calls
-    const wsUrl = `ws://46.101.123.123:8080/audio-signaling/${appointmentId}`;
+    const wsUrl = `wss://docavailable.org/audio-signaling?appointmentId=${appointmentId}&userId=${userId}`;
     const signalingChannel = new WebSocket(wsUrl);
     
     // Store reference for cleanup

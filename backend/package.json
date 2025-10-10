@@ -8,12 +8,19 @@
     "dev": "nodemon webrtc-signaling-server.js"
   },
   "dependencies": {
-    "ws": "^8.14.2"
+    "axios": "^1.12.2",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["webrtc", "signaling", "websocket", "audio", "healthcare"],
+  "keywords": [
+    "webrtc",
+    "signaling",
+    "websocket",
+    "audio",
+    "healthcare"
+  ],
   "author": "DocAvailable Team",
   "license": "MIT"
 }

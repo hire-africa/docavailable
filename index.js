@@ -1,3 +1,28 @@
+// Import polyfills first
+import 'react-native-get-random-values';
+
+// Import crypto polyfill early to ensure it's loaded before any encryption services
+import './services/cryptoPolyfill';
+
+// Set up global error handler
+if (typeof global !== 'undefined') {
+  global.ErrorUtils?.setGlobalHandler((error, isFatal) => {
+    console.error('Global error:', error, 'isFatal:', isFatal);
+  });
+}
+
+// Import Firebase app first to ensure proper initialization
+import '@react-native-firebase/app';
+import firebase from '@react-native-firebase/app';
+
+// Ensure Firebase is initialized before importing messaging
+if (firebase.apps.length === 0) {
+  console.log('🔥 Firebase not initialized, this should not happen with RN Firebase');
+} else {
+  console.log('🔥 Firebase app initialized:', firebase.apps[0].name);
+}
+
+// Import Firebase messaging after app initialization
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 
@@ -79,8 +104,10 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     }
   } catch (e) {
     // headless errors must be swallowed
+    console.error('Background message handler error:', e);
   }
 });
 
 // Keep expo-router entry after handlers are set
 export * from 'expo-router/entry';
+

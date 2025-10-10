@@ -1,7 +1,6 @@
 // Secure WebSocket Service for handling self-signed certificates
 // This service provides a way to connect to WebSocket servers with self-signed certificates
 
-import { Platform } from 'react-native';
 
 export interface SecureWebSocketOptions {
   url: string;
@@ -11,6 +10,9 @@ export interface SecureWebSocketOptions {
   onClose?: (event: CloseEvent) => void;
   onError?: (event: Event) => void;
   ignoreSSLErrors?: boolean;
+  // WebSocket options to disable compression
+  perMessageDeflate?: boolean;
+  compression?: boolean;
 }
 
 export class SecureWebSocketService {
@@ -20,6 +22,8 @@ export class SecureWebSocketService {
   constructor(options: SecureWebSocketOptions) {
     this.options = {
       ignoreSSLErrors: true, // Default to ignoring SSL errors for self-signed certs
+      perMessageDeflate: false, // Disable compression to avoid frame issues
+      compression: false, // Explicitly disable compression
       ...options
     };
   }
@@ -29,7 +33,8 @@ export class SecureWebSocketService {
       try {
         console.log('🔌 [SecureWebSocket] Connecting to:', this.options.url);
         
-        // Create WebSocket connection
+        // Create WebSocket connection - React Native WebSocket doesn't support compression options
+        // The server must be configured to not use compression
         this.ws = new WebSocket(this.options.url, this.options.protocols);
         
         this.ws.onopen = () => {

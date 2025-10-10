@@ -952,7 +952,7 @@ export class InstantSessionMessageDetector {
   private getWebRTCSignalingUrl(): string {
     // Use the chat signaling URL for instant session detection
     const chatSignalingUrl = process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'wss://docavailable.org/chat-signaling';
-    // Convert wss:// to ws:// for the base URL
-    return chatSignalingUrl.replace(/^wss:\/\//, 'ws://').replace(/\/chat-signaling$/, '');
+    // Keep wss:// for secure connections (don't convert to ws://)
+    return chatSignalingUrl.replace(/\/chat-signaling$/, '');
   }
 }

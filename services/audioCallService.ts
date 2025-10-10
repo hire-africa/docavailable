@@ -175,27 +175,45 @@ class AudioCallService {
    */
   private async checkCallAvailability(): Promise<boolean> {
     try {
-      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/check-availability`, {
+      const authToken = await this.getAuthToken();
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/check-availability`;
+      
+      console.log('🔍 [AudioCallService] Checking call availability:', {
+        apiUrl,
+        hasToken: !!authToken,
+        tokenLength: authToken ? authToken.length : 0
+      });
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await this.getAuthToken()}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           call_type: 'voice'
         })
       });
 
+      console.log('📡 [AudioCallService] API Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       let data: any = null;
       try {
         const text = await response.text();
+        console.log('📄 [AudioCallService] Raw response:', text);
         data = JSON.parse(text);
       } catch (parseErr) {
-        console.error('❌ Failed to parse availability response as JSON');
+        console.error('❌ Failed to parse availability response as JSON:', parseErr);
         const errorMessage = 'Failed to check call availability. Please try again.';
         this.events?.onError(errorMessage);
         return false;
       }
+      
+      console.log('📊 [AudioCallService] Parsed response:', data);
       
       if (data.success && data.can_make_call) {
         console.log('✅ Voice call availability confirmed:', data.remaining_calls, 'calls remaining');
@@ -220,7 +238,7 @@ class AudioCallService {
    */
   private async getAuthToken(): Promise<string> {
     try {
-      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
       const token = await AsyncStorage.getItem('auth_token');
       console.log('🔑 [AudioCallService] Retrieved auth token:', token ? 'Present' : 'Missing');
       return token || '';
@@ -523,8 +541,10 @@ class AudioCallService {
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL || 
         Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         Constants.expoConfig?.extra?.webRtcSignalingUrl ||
-'wss://docavailable.org/audio-signaling'; // Use production URL as fallback
-      const wsUrl = `${signalingUrl}/${appointmentId}`;
+        environment.WEBRTC_SIGNALING_URL; // Use environment configuration
+      
+      // Use query parameters instead of path parameters for consistency with chat
+      const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
       
       console.log('🔧 [AudioCallService] WebSocket URL:', wsUrl);
       console.log('🔧 [AudioCallService] Signaling URL:', signalingUrl);

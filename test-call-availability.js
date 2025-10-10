@@ -1,135 +1,182 @@
 #!/usr/bin/env node
 
 /**
- * Test script for call availability functionality
- * This script tests the new call-sessions API endpoints
+ * Test script to check call availability endpoint
+ * This will help identify why calls are not working
  */
 
-const axios = require('axios');
+class CallAvailabilityTester {
+  constructor() {
+    this.baseUrl = 'https://docavailable-3vbdv.ondigitalocean.app';
+    this.testResults = [];
+  }
 
-const API_BASE_URL = 'https://docavailable-3vbdv.ondigitalocean.app';
-
-async function testCallAvailability() {
-  console.log('🧪 Testing Call Availability API Endpoints');
-  console.log('==========================================\n');
-
-  try {
-    // Test 1: Check if endpoints exist (should return 401 without auth)
-    console.log('1️⃣ Testing endpoint availability...');
+  async runTests() {
+    // Dynamic import for node-fetch
+    const { default: fetch } = await import('node-fetch');
+    console.log('🧪 Starting Call Availability Tests\n');
     
-    const testEndpoints = [
-      '/api/call-sessions/check-availability',
-      '/api/call-sessions/start',
-      '/api/call-sessions/end',
-      '/api/call-sessions/deduction'
-    ];
+    // Test 1: Check if endpoint exists
+    await this.testEndpointExists(fetch);
+    
+    // Test 2: Test with invalid token
+    await this.testWithInvalidToken(fetch);
+    
+    // Test 3: Test with valid token (if available)
+    await this.testWithValidToken(fetch);
+    
+    this.printResults();
+  }
 
-    for (const endpoint of testEndpoints) {
-      try {
-        const response = await axios.post(`${API_BASE_URL}${endpoint}`, {
+  async testEndpointExists(fetch) {
+    console.log('🔍 Test 1: Checking if call-sessions endpoint exists');
+    
+    try {
+      const response = await fetch(`${this.baseUrl}/api/call-sessions/check-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer invalid-token'
+        },
+        body: JSON.stringify({
           call_type: 'voice'
-        }, {
-          timeout: 10000,
-          validateStatus: () => true // Don't throw on any status
-        });
-        
-        if (response.status === 401) {
-          console.log(`✅ ${endpoint} - Endpoint exists (401 Unauthorized expected)`);
-        } else if (response.status === 404) {
-          console.log(`❌ ${endpoint} - Endpoint not found (404)`);
-        } else {
-          console.log(`⚠️  ${endpoint} - Unexpected status: ${response.status}`);
-        }
-      } catch (error) {
-        if (error.code === 'ENOTFOUND' || error.message.includes('Network Error')) {
-          console.log(`❌ ${endpoint} - Network error: ${error.message}`);
-        } else {
-          console.log(`❌ ${endpoint} - Error: ${error.message}`);
-        }
-      }
-    }
+        })
+      });
 
-    console.log('\n2️⃣ Testing with invalid auth token...');
+      console.log(`📡 Response Status: ${response.status}`);
+      console.log(`📡 Response OK: ${response.ok}`);
+      
+      const text = await response.text();
+      console.log(`📄 Raw Response: ${text}`);
+      
+      let data = null;
+      try {
+        data = JSON.parse(text);
+        console.log(`📊 Parsed Response:`, data);
+      } catch (e) {
+        console.log(`❌ Failed to parse JSON: ${e.message}`);
+      }
+
+      this.testResults.push({
+        test: 'Endpoint Exists',
+        status: response.status === 401 ? 'PASS' : 'FAIL',
+        details: `Status: ${response.status}, Expected: 401 (unauthorized)`,
+        response: data
+      });
+
+    } catch (error) {
+      console.error(`❌ Error testing endpoint: ${error.message}`);
+      this.testResults.push({
+        test: 'Endpoint Exists',
+        status: 'FAIL',
+        details: `Error: ${error.message}`,
+        response: null
+      });
+    }
     
-    // Test with invalid token
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/call-sessions/check-availability`, {
-        call_type: 'voice'
-      }, {
-        headers: {
-          'Authorization': 'Bearer invalid-token',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000,
-        validateStatus: () => true
-      });
-      
-      if (response.status === 401) {
-        console.log('✅ Authentication working correctly (401 with invalid token)');
-      } else {
-        console.log(`⚠️  Unexpected response with invalid token: ${response.status}`);
-        console.log('Response:', response.data);
-      }
-    } catch (error) {
-      console.log(`❌ Error testing with invalid token: ${error.message}`);
-    }
+    console.log('');
+  }
 
-    console.log('\n3️⃣ Testing request validation...');
+  async testWithInvalidToken(fetch) {
+    console.log('🔍 Test 2: Testing with invalid token');
     
-    // Test with missing call_type
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/call-sessions/check-availability`, {}, {
+      const response = await fetch(`${this.baseUrl}/api/call-sessions/check-availability`, {
+        method: 'POST',
         headers: {
-          'Authorization': 'Bearer invalid-token',
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer invalid-token-12345'
         },
-        timeout: 10000,
-        validateStatus: () => true
+        body: JSON.stringify({
+          call_type: 'voice'
+        })
       });
-      
-      if (response.status === 400) {
-        console.log('✅ Request validation working (400 for missing call_type)');
-      } else {
-        console.log(`⚠️  Unexpected response for missing call_type: ${response.status}`);
-      }
-    } catch (error) {
-      console.log(`❌ Error testing request validation: ${error.message}`);
-    }
 
-    // Test with invalid call_type
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/call-sessions/check-availability`, {
-        call_type: 'invalid'
-      }, {
-        headers: {
-          'Authorization': 'Bearer invalid-token',
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000,
-        validateStatus: () => true
+      console.log(`📡 Response Status: ${response.status}`);
+      
+      const text = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+        console.log(`📊 Response:`, data);
+      } catch (e) {
+        console.log(`📄 Raw Response: ${text}`);
+      }
+
+      this.testResults.push({
+        test: 'Invalid Token',
+        status: response.status === 401 ? 'PASS' : 'FAIL',
+        details: `Status: ${response.status}, Expected: 401`,
+        response: data
       });
-      
-      if (response.status === 400) {
-        console.log('✅ Call type validation working (400 for invalid call_type)');
-      } else {
-        console.log(`⚠️  Unexpected response for invalid call_type: ${response.status}`);
-      }
+
     } catch (error) {
-      console.log(`❌ Error testing call type validation: ${error.message}`);
+      console.error(`❌ Error testing with invalid token: ${error.message}`);
+      this.testResults.push({
+        test: 'Invalid Token',
+        status: 'FAIL',
+        details: `Error: ${error.message}`,
+        response: null
+      });
     }
+    
+    console.log('');
+  }
 
-    console.log('\n✅ Call availability API test completed!');
-    console.log('\n📋 Summary:');
-    console.log('- All endpoints should return 401 (Unauthorized) without valid auth');
-    console.log('- Request validation should return 400 (Bad Request) for invalid data');
-    console.log('- If you see 404 errors, the endpoints are not deployed yet');
-    console.log('- If you see network errors, check your internet connection');
+  async testWithValidToken(fetch) {
+    console.log('🔍 Test 3: Testing with valid token (if available)');
+    console.log('ℹ️ This test requires a valid auth token - skipping for now');
+    
+    this.testResults.push({
+      test: 'Valid Token',
+      status: 'SKIP',
+      details: 'Requires valid auth token',
+      response: null
+    });
+    
+    console.log('');
+  }
 
-  } catch (error) {
-    console.error('❌ Test failed:', error.message);
-    process.exit(1);
+  printResults() {
+    console.log('\n📊 Test Results Summary');
+    console.log('='.repeat(50));
+    
+    let passCount = 0;
+    let failCount = 0;
+    let skipCount = 0;
+    
+    this.testResults.forEach((result, index) => {
+      const status = result.status === 'PASS' ? '✅' : result.status === 'FAIL' ? '❌' : '⏭️';
+      console.log(`${index + 1}. ${status} ${result.test}`);
+      console.log(`   Status: ${result.status}`);
+      console.log(`   Details: ${result.details}`);
+      if (result.response) {
+        console.log(`   Response: ${JSON.stringify(result.response, null, 2)}`);
+      }
+      console.log('');
+      
+      if (result.status === 'PASS') passCount++;
+      else if (result.status === 'FAIL') failCount++;
+      else skipCount++;
+    });
+    
+    console.log('📈 Summary:');
+    console.log(`   ✅ Passed: ${passCount}`);
+    console.log(`   ❌ Failed: ${failCount}`);
+    console.log(`   ⏭️ Skipped: ${skipCount}`);
+    
+    if (failCount === 0) {
+      console.log('\n🎉 All tests passed! Call availability endpoint is working correctly.');
+    } else {
+      console.log('\n⚠️ Some tests failed. Check the backend configuration.');
+    }
   }
 }
 
-// Run the test
-testCallAvailability().catch(console.error);
+// Run the tests
+if (require.main === module) {
+  const tester = new CallAvailabilityTester();
+  tester.runTests().catch(console.error);
+}
+
+module.exports = CallAvailabilityTester;

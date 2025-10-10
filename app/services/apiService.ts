@@ -843,6 +843,10 @@ class ApiService {
       }
     });
   }
+
+  getBaseURL(): string {
+    return this.api.defaults.baseURL || '';
+  }
 }
 
 // Export singleton instance

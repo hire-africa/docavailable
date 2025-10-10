@@ -14,7 +14,6 @@ import {
     Modal,
     Platform,
     RefreshControl,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -22,6 +21,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
@@ -89,6 +89,7 @@ const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
 export default function DoctorDashboard() {
   const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -1871,7 +1872,7 @@ export default function DoctorDashboard() {
 
       <View style={styles.mainContent}>
         {renderContent()}
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           <Tab
             icon="home"
             label="Home"

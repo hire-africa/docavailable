@@ -1,6 +1,6 @@
 {
   "name": "docavailable-minimal",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -13,6 +13,7 @@
     "build:apk": "cd android && gradlew.bat assembleRelease",
     "build:apk-debug": "cd android && gradlew.bat assembleDebug",
     "build:apk-bundle": "cd android && gradlew.bat bundleRelease",
+    "build:apk-preview": "node -e \"process.env.NODE_ENV='production'; require('child_process').execSync('cd android && gradlew.bat assembleRelease', {stdio: 'inherit'})\"",
     "clean:android": "cd android && gradlew.bat clean",
     "build:cloud-preview": "eas build --platform android --profile preview",
     "build:cloud-production": "eas build --platform android --profile production",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.28.2",
+    "@expo/cli": "^54.0.10",
     "@expo/vector-icons": "^14.1.0",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/datetimepicker": "8.4.1",

@@ -26,7 +26,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon, { IconName } from '../components/Icon';
 
 import AlertDialog from '../components/AlertDialog';
@@ -102,6 +102,7 @@ export default function PatientDashboard() {
   const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -2452,21 +2453,21 @@ export default function PatientDashboard() {
                 <TouchableOpacity 
                   style={{
                     backgroundColor: '#4CAF50',
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 10,
+                    paddingHorizontal: 20,
+                    paddingVertical: 12,
+                    borderRadius: 12,
                     alignSelf: 'flex-start',
                     shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 3,
-                    elevation: 2,
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 4,
+                    elevation: 3,
                   }}
                   onPress={() => handleViewDoctorDetails(doctor)}
                 >
                   <Text style={{
                     color: '#FFFFFF',
-                    fontSize: 13,
+                    fontSize: 15,
                     fontWeight: 'bold',
                   }}>View Profile</Text>
                 </TouchableOpacity>
@@ -3612,7 +3613,7 @@ export default function PatientDashboard() {
   // Place this at the top of your main render, above the main content
   // You can adjust the placement as needed for your layout
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Hide header for DocBot tab */}
       {activeTab !== 'docbot' && (
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#F8F9FA', zIndex: 10 }}>
@@ -3656,6 +3657,7 @@ export default function PatientDashboard() {
       <Animated.View 
         style={[
           styles.bottomNav,
+          { paddingBottom: Math.max(insets.bottom, 12) },
           activeTab === 'docbot' && {
             transform: [{
               translateY: bottomNavAnim.interpolate({
@@ -4998,9 +5000,9 @@ const styles = StyleSheet.create({
   },
   viewProfileButton: {
     backgroundColor: '#E0F2E9',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: '#4CAF50',
@@ -5008,7 +5010,7 @@ const styles = StyleSheet.create({
   viewProfileButtonText: {
     color: '#4CAF50',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 15,
   },
   doctorImageNew: {
     width: 90,

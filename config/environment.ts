@@ -23,7 +23,7 @@ export const environment = {
   BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
   LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
   
-  // WebRTC Configuration (New Domain with SSL)
+  // WebRTC Configuration (New Domain with SSL - no port)
   WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://docavailable.org/audio-signaling'),
   WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'wss://docavailable.org/chat-signaling'),
   

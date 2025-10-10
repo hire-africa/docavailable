@@ -52,7 +52,9 @@ class WebRTCSessionService {
       // Use config service to get WebRTC signaling URL
       const config = configService.getWebRTCConfig();
       const signalingUrl = config.signalingUrl;
-      const wsUrl = `${signalingUrl}/${this.appointmentId}`;
+      
+      // Use query parameters instead of path parameters for consistency with chat
+      const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(this.appointmentId)}`;
       
       console.log('🔧 [WebRTC] Configuration check:', {
         signalingUrl,

@@ -539,7 +539,7 @@ class AuthService {
     try {
       console.log('AuthService: Sending verification code to:', email);
       
-      const response = await this.api.post('/send-verification-code', { email });
+      const response = await this.api.post('/auth/send-verification-code', { email });
       
       console.log('AuthService: Verification code response:', {
         success: response.data?.success,
@@ -573,7 +573,7 @@ class AuthService {
       // Add a small delay to prevent race conditions
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const response = await this.api.post('/verify-email', { email, code });
+      const response = await this.api.post('/auth/verify-email', { email, code });
       
       console.log('AuthService: Email verification response:', {
         success: response.data?.success,
