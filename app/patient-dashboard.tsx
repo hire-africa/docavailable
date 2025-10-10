@@ -2857,7 +2857,41 @@ export default function PatientDashboard() {
   const renderSubscriptionsContent = () => {
     // Find the selected plan object
     const selectedPlan = subscriptionPlans.find(plan => plan.id === selectedPlanId) || null;
-    const activePlan = currentSubscription ? subscriptionPlans.find(plan => plan.id === currentSubscription.plan_id) : null;
+    
+    // Use subscription data directly for active plan pricing instead of searching in plans array
+    let activePlan = null;
+    
+    if (currentSubscription) {
+      // Try to get plan data from subscription first
+      activePlan = {
+        id: currentSubscription.plan_id,
+        name: currentSubscription.planName || 'Current Plan',
+        price: currentSubscription.plan_price || 0,
+        currency: currentSubscription.plan_currency || 'MWK',
+        textSessions: currentSubscription.totalTextSessions || 0,
+        voiceCalls: currentSubscription.totalVoiceCalls || 0,
+        videoCalls: currentSubscription.totalVideoCalls || 0,
+        features: [] // We'll populate this if needed
+      };
+      
+      // If subscription data is missing price info, try to find it in plans array as fallback
+      if (!currentSubscription.plan_price || currentSubscription.plan_price === 0) {
+        const planFromArray = subscriptionPlans.find(plan => plan.id === currentSubscription.plan_id);
+        if (planFromArray) {
+          activePlan.price = planFromArray.price;
+          activePlan.currency = planFromArray.currency;
+          activePlan.features = planFromArray.features || [];
+        }
+      }
+    }
+    
+    // Debug logging
+    console.log('PatientDashboard: Active plan data:', {
+      currentSubscription,
+      activePlan,
+      planPrice: currentSubscription?.plan_price,
+      planCurrency: currentSubscription?.plan_currency
+    });
   return (
       <View style={{
         position: 'absolute',
@@ -3161,78 +3195,6 @@ export default function PatientDashboard() {
           )}
           
           
-          {currentSubscription && (
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 16,
-              padding: 20,
-              marginBottom: 20,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 3,
-              borderLeftWidth: 4,
-              borderLeftColor: '#4CAF50',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                <View style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: '#E8F5E8',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 12,
-                }}>
-                  <Icon name="check" size={20} color="#4CAF50" />
-                </View>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222', flex: 1 }}>
-                  Current Plan: {currentSubscription.planName}
-                </Text>
-              </View>
-              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#4CAF50', marginBottom: 16 }}>
-                {LocationService.getCurrencySymbol(currentSubscription.plan_currency)}{currentSubscription.plan_price.toLocaleString()}/month
-              </Text>
-              <View style={{
-                backgroundColor: '#F8F9FA',
-                borderRadius: 12,
-                padding: 16,
-              }}>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#666', marginBottom: 12 }}>Remaining Sessions</Text>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 14, color: '#222' }}>Text Sessions</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: '#4CAF50' }}>
-                    {currentSubscription.textSessionsRemaining} remaining
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 14, color: '#222' }}>Voice Calls</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: '#4CAF50' }}>
-                    {currentSubscription.voiceCallsRemaining} remaining
-                  </Text>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 14, color: '#222' }}>Video Calls</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '600', color: '#4CAF50' }}>
-                    {currentSubscription.videoCallsRemaining} remaining
-                  </Text>
-                </View>
-                {currentSubscription.expiresAt && (
-                  <View style={{ 
-                    borderTopWidth: 1, 
-                    borderTopColor: '#E0E0E0', 
-                    paddingTop: 8, 
-                    marginTop: 8 
-                  }}>
-                    <Text style={{ fontSize: 12, color: '#666' }}>
-                      Expires: {new Date(currentSubscription.expiresAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
           
           
 

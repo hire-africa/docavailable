@@ -4,12 +4,12 @@ import { notificationApiService } from '@/services/notificationApiService';
 import { walletApiService } from '@/services/walletApiService';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { apiService } from '../app/services/apiService';
 
@@ -309,7 +309,7 @@ export default function BackendTestPage() {
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Integration Status</Text>
         <Text style={styles.infoText}>
-          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000/api'}
+          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000/api'}
         </Text>
         <Text style={styles.infoText}>
           • Backend Enabled: {process.env.EXPO_PUBLIC_BACKEND_ENABLED || 'true'}

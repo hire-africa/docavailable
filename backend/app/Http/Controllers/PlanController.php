@@ -15,11 +15,21 @@ class PlanController extends Controller
     {
         try {
             $user = auth()->user();
-            $country = $user ? $user->country : $request->get('country', 'Zambia');
+            $country = $user ? $user->country : $request->get('country', 'Malawi');
             
-            // Fallback to default country if country is null
+            // Fallback to default country if country is null or empty
             if (empty($country)) {
-                $country = 'Zambia';
+                $country = 'Malawi';
+                
+                // If user exists but has no country, update them with default
+                if ($user) {
+                    $user->update(['country' => 'Malawi']);
+                    \Illuminate\Support\Facades\Log::info('Updated user with missing country data', [
+                        'user_id' => $user->id,
+                        'email' => $user->email,
+                        'new_country' => 'Malawi'
+                    ]);
+                }
             }
             
             $plans = LocationService::getPlansForCountry($country);

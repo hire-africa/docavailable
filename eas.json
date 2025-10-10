@@ -26,8 +26,8 @@
           "buildType": "apk"
         },
         "env": {
-          "EXPO_PUBLIC_API_BASE_URL": "https://docavailable.org",
-          "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable.org",
+          "EXPO_PUBLIC_API_BASE_URL": "https://docavailable-3vbdv.ondigitalocean.app",
+          "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable-3vbdv.ondigitalocean.app",
           "EXPO_PUBLIC_APP_NAME": "DocAvailable",
           "EXPO_PUBLIC_APP_VERSION": "1.0.0",
           "EXPO_PUBLIC_USE_BACKEND_CHAT": "true",
@@ -47,8 +47,8 @@
           "buildType": "app-bundle"
         },
         "env": {
-          "EXPO_PUBLIC_API_BASE_URL": "https://docavailable.org",
-          "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable.org",
+          "EXPO_PUBLIC_API_BASE_URL": "https://docavailable-3vbdv.ondigitalocean.app",
+          "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable-3vbdv.ondigitalocean.app",
           "EXPO_PUBLIC_APP_NAME": "DocAvailable",
           "EXPO_PUBLIC_APP_VERSION": "1.0.0",
           "EXPO_PUBLIC_USE_BACKEND_CHAT": "true",

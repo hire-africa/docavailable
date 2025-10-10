@@ -17,12 +17,22 @@ export class WebRTCChatService {
   private onTypingIndicator?: (isTyping: boolean) => void;
 
   constructor(config: ChatConfig, events: ChatEvents) {
+    console.log('🔧 [WebRTCChat] Constructor called with config:', {
+      appointmentId: config.appointmentId,
+      userId: config.userId,
+      userName: config.userName,
+      sessionType: config.sessionType,
+      webrtcConfig: config.webrtcConfig
+    });
+    
     this.config = config;
     this.events = events;
     // Include session type in storage key to prevent conflicts between text sessions and appointments
     const sessionType = config.sessionType || 'appointment';
     this.storageKey = `webrtc_messages_${sessionType}_${config.appointmentId}`;
     this.processedMessageHashes = new Set();
+    
+    console.log('✅ [WebRTCChat] Constructor completed successfully');
   }
 
   // Load messages from AsyncStorage

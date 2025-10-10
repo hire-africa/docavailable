@@ -37,7 +37,7 @@ export default function NetworkTestPage() {
     try {
       // Test 1: Environment Variable Check
       addTestResult('Environment Variable', 'pending', 'Checking environment configuration...');
-      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000';
       addTestResult(
         'Environment Variable',
         'success',
@@ -135,7 +135,7 @@ export default function NetworkTestPage() {
         const corsResponse = await fetch(`${apiUrl}/health`, {
           method: 'OPTIONS',
           headers: {
-            'Origin': 'http://172.20.10.11:3000',
+            'Origin': 'http://docavailable-3vbdv.ondigitalocean.app:3000',
             'Access-Control-Request-Method': 'GET',
             'Access-Control-Request-Headers': 'Content-Type',
           },
@@ -224,7 +224,7 @@ export default function NetworkTestPage() {
     addTestResult(testName, 'pending', 'Running test...');
 
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000';
       
       switch (testName) {
         case 'Basic Connectivity':
@@ -367,7 +367,7 @@ export default function NetworkTestPage() {
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Network Configuration</Text>
         <Text style={styles.infoText}>
-          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000/api'}
+          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000/api'}
         </Text>
         <Text style={styles.infoText}>
           • Platform: {Platform.OS}

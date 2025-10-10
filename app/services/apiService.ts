@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { environment } from '../../config/environment';
 
 // Types
 export interface User {
@@ -70,8 +71,8 @@ class ApiService {
   // };
 
   constructor() {
-    // Get base URL without /api suffix
-    const rawBaseURL = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.EXPO_PUBLIC_LARAVEL_API_URL || 'https://docavailable-3vbdv.ondigitalocean.app';
+    // Use environment configuration for consistent URL handling
+    const rawBaseURL = environment.LARAVEL_API_URL;
     
     // Remove trailing /api if it exists to avoid double /api/api/
     this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL.slice(0, -4) : rawBaseURL;
@@ -118,9 +119,7 @@ class ApiService {
         const protectedEndpoints = [
           '/subscription',
           '/appointments',
-          '/plans',
           '/text-sessions/active-sessions',
-          '/available-doctors',
           '/user',
           '/upload/profile-picture',
           '/upload/id-document',

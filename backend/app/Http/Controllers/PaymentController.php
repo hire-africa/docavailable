@@ -290,15 +290,19 @@ class PaymentController extends Controller
             $lastName = $user->last_name ?? (count(explode(' ', $user->display_name ?? $user->name ?? 'User')) > 1 ? explode(' ', $user->display_name ?? $user->name ?? 'User')[1] : 'User');
             $phone = $user->phone ?? '+265000000000'; // Default phone if not set
             
+            // Generate unique transaction ID with microtime for better uniqueness
+            $timestamp = microtime(true);
+            $transactionId = 'TXN_' . str_replace('.', '', $timestamp) . '_' . $user->id;
+            
             // Create transaction record
             $transaction = \App\Models\PaymentTransaction::create([
-                'transaction_id' => 'TXN_' . time() . '_' . $user->id,
+                'transaction_id' => $transactionId,
                 'user_id' => $user->id,
                 'amount' => $amount,
                 'currency' => $currency,
                 'gateway' => 'paychangu',
                 'status' => 'pending',
-                'reference' => 'TXN_' . time() . '_' . $user->id,
+                'reference' => $transactionId,
                 'metadata' => [
                     'plan_id' => $plan->id,
                     'plan_name' => $plan->name,
@@ -740,6 +744,10 @@ class PaymentController extends Controller
             if ($existingSubscription) {
                 // Update existing subscription with new sessions
                 $subscriptionData = [
+                    'plan_id' => $planId,
+                    'plan_name' => $plan->name,
+                    'plan_price' => $plan->price,
+                    'plan_currency' => $plan->currency,
                     'text_sessions_remaining' => $existingSubscription->text_sessions_remaining + $plan->text_sessions,
                     'voice_calls_remaining' => $existingSubscription->voice_calls_remaining + $plan->voice_calls,
                     'video_calls_remaining' => $existingSubscription->video_calls_remaining + $plan->video_calls,

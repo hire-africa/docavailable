@@ -49,7 +49,7 @@ export default function IntegrationTestPage() {
 
       // Test 2: API Configuration
       addTestResult('API Configuration', 'pending', 'Checking API configuration...');
-      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000/api';
+      const apiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000/api';
       addTestResult(
         'API Configuration',
         'success',
@@ -94,7 +94,7 @@ export default function IntegrationTestPage() {
         const response = await fetch(`${apiUrl}/api/health`, {
           method: 'OPTIONS',
           headers: {
-            'Origin': 'http://172.20.10.11:3000',
+            'Origin': 'http://docavailable-3vbdv.ondigitalocean.app:3000',
             'Access-Control-Request-Method': 'GET',
             'Access-Control-Request-Headers': 'Content-Type',
           },
@@ -227,7 +227,7 @@ export default function IntegrationTestPage() {
       <View style={styles.infoContainer}>
         <Text style={styles.infoTitle}>Integration Status</Text>
         <Text style={styles.infoText}>
-          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://172.20.10.11:8000/api'}
+          • Backend URL: {process.env.EXPO_PUBLIC_API_BASE_URL || 'http://docavailable-3vbdv.ondigitalocean.app:8000/api'}
         </Text>
         <Text style={styles.infoText}>
           • Backend Enabled: {process.env.EXPO_PUBLIC_BACKEND_ENABLED || 'true'}

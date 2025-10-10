@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { environment } from '../config/environment';
 
-const baseURL = 'https://docavailable-3vbdv.ondigitalocean.app/api';
+const baseURL = `${environment.LARAVEL_API_URL}/api`;
 
 class ApiService {
   private async getAuthHeaders() {

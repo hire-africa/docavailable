@@ -221,13 +221,13 @@ class SessionService {
       console.log('✅ [SessionService] Rating submission response:', response.data);
       
       // Validate response structure
-      if (!response.data || !response.data.success) {
-        throw new Error(response.data?.message || 'Invalid response from rating service');
+      if (!response.success) {
+        throw new Error(response.message || 'Invalid response from rating service');
       }
       
       return {
-        reviewId: response.data.data?.id || 'unknown',
-        rating: response.data.data?.rating || rating
+        reviewId: response.data?.id || 'unknown',
+        rating: response.data?.rating || rating
       };
     } catch (error: any) {
       console.error('❌ [SessionService] Error submitting rating:', error);

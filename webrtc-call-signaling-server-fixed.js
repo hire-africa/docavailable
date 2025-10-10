@@ -120,6 +120,21 @@ wss.on('connection', (ws, req) => {
   connections.set(ws, { appointmentId, userId, userType });
   userConnections.set(userId, ws);
 
+  // Create or update session
+  if (!callSessions.has(appointmentId)) {
+    callSessions.set(appointmentId, {
+      participants: new Map(),
+      offers: new Map(),
+      answers: new Map(),
+      iceCandidates: new Map()
+    });
+    console.log(`🆕 [WebSocket] Created new session for appointment ${appointmentId}`);
+  }
+  
+  const session = callSessions.get(appointmentId);
+  session.participants.set(userId, { ws, userType });
+  console.log(`🔄 [WebSocket] Updated session for appointment ${appointmentId} - participants: ${session.participants.size}`);
+
   // Send connection confirmation
   ws.send(JSON.stringify({
     type: 'connection-established',
@@ -155,6 +170,9 @@ wss.on('connection', (ws, req) => {
           break;
         case 'call-timeout':
           await handleCallTimeout(ws, data, appointmentId, userId, userType);
+          break;
+        case 'resend-offer-request':
+          await handleResendOfferRequest(ws, data, appointmentId, userId, userType);
           break;
         default:
           console.log(`⚠️ [WebSocket] Unknown message type: ${data.type}`);
@@ -202,12 +220,17 @@ async function handleOffer(ws, data, appointmentId, userId, userType) {
   }
   
   const session = callSessions.get(appointmentId);
-  session.participants.set(userId, { ws, userType });
-  session.offers.set(userId, data.offer);
+  if (session) {
+    session.participants.set(userId, { ws, userType });
+    session.offers.set(userId, data.offer);
+    console.log(`📝 [Offer] Updated session participants: ${session.participants.size}`);
+  }
 
   // Forward offer to other participants
+  console.log(`📤 [Offer] Forwarding offer to ${session.participants.size - 1} other participants`);
   for (const [participantId, participant] of session.participants) {
     if (participantId !== userId) {
+      console.log(`📤 [Offer] Sending offer to ${participant.userType} ${participantId}`);
       participant.ws.send(JSON.stringify({
         type: 'offer',
         from: userId,
@@ -344,6 +367,28 @@ async function handleCallTimeout(ws, data, appointmentId, userId, userType) {
     }
   }
 }
+
+// Handle resend offer request
+async function handleResendOfferRequest(ws, data, appointmentId, userId, userType) {
+  console.log(`🔄 [Resend Offer Request] ${userType} ${userId} requesting offer resend for appointment ${appointmentId}`);
+  
+  const session = callSessions.get(appointmentId);
+  if (session) {
+    // Find the other participant and ask them to resend their offer
+    for (const [participantId, participant] of session.participants) {
+      if (participantId !== userId) {
+        participant.ws.send(JSON.stringify({
+          type: 'resend-offer-request',
+          from: userId,
+          fromType: userType,
+          appointmentId,
+          timestamp: new Date().toISOString()
+        }));
+      }
+    }
+  }
+}
+
 
 // Start the server
 server.listen(PORT, () => {

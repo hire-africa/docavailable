@@ -541,6 +541,8 @@ export default function ChatPage() {
     const initializeWebRTCChat = async () => {
       try {
         console.log('🔌 [WebRTC Chat] Initializing WebRTC chat for appointment:', appointmentId);
+        console.log('🔍 [WebRTC Chat] Current user info:', { currentUserId, user: user?.first_name });
+        
         const config = await configService.getConfig();
         console.log('🔧 [WebRTC Chat] Config loaded:', {
           apiUrl: config.apiUrl,
@@ -573,6 +575,15 @@ export default function ChatPage() {
         });
         
         console.log('🔧 [WebRTC Chat] Creating WebRTC chat service...');
+        console.log('🔍 [WebRTC Chat] Service config:', {
+          baseUrl: config.apiUrl,
+          appointmentId: appointmentId,
+          userId: currentUserId,
+          userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+          sessionType: sessionType,
+          webrtcConfig: config.webrtc
+        });
+        
         const chatService = new WebRTCChatService({
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
@@ -642,12 +653,17 @@ export default function ChatPage() {
         });
 
         console.log('🔌 [WebRTC Chat] Attempting to connect...');
-        await chatService.connect();
-        console.log('✅ [WebRTC Chat] Connected successfully');
-        console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
-        setWebrtcChatService(chatService);
-        setIsWebRTCServiceActive(true);
-        console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
+        try {
+          await chatService.connect();
+          console.log('✅ [WebRTC Chat] Connected successfully');
+          console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
+          setWebrtcChatService(chatService);
+          setIsWebRTCServiceActive(true);
+          console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
+        } catch (connectError) {
+          console.error('❌ [WebRTC Chat] Connection failed:', connectError);
+          throw connectError; // Re-throw to trigger the catch block below
+        }
         
         // Set up typing indicator listener
         chatService.setOnTypingIndicator(handleTypingIndicator);

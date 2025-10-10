@@ -48,22 +48,34 @@ class WebRTCSessionService {
   }
 
   private async connectSignaling(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Use config service to get WebRTC signaling URL
-      const config = configService.getWebRTCConfig();
-      const signalingUrl = config.signalingUrl;
-      
-      // Use query parameters instead of path parameters for consistency with chat
-      const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(this.appointmentId)}`;
-      
-      console.log('🔧 [WebRTC] Configuration check:', {
-        signalingUrl,
-        wsUrl,
-        appointmentId: this.appointmentId,
-        config: config
-      });
-      
+    return new Promise(async (resolve, reject) => {
       try {
+        // Get current user ID from auth service
+        const { apiService } = await import('../app/services/apiService');
+        const currentUser = await apiService.getCurrentUser();
+        const userId = currentUser?.id;
+        
+        if (!userId) {
+          console.error('❌ [WebRTC] No user ID available for signaling connection');
+          reject(new Error('User not authenticated'));
+          return;
+        }
+
+        // Use config service to get WebRTC signaling URL
+        const config = configService.getWebRTCConfig();
+        const signalingUrl = config.signalingUrl;
+        
+        // Use query parameters with both appointmentId and userId as required by server
+        const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(this.appointmentId!)}&userId=${encodeURIComponent(String(userId))}&userType=doctor`;
+        
+        console.log('🔧 [WebRTC] Configuration check:', {
+          signalingUrl,
+          wsUrl,
+          appointmentId: this.appointmentId,
+          userId,
+          config: config
+        });
+        
         console.log('🔌 [WebRTC] Attempting to connect to:', wsUrl);
         this.signalingChannel = new WebSocket(wsUrl);
         
