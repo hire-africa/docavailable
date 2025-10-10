@@ -25,6 +25,7 @@ export interface VideoCallEvents {
   onCallEnded: () => void;
   onCallRejected: () => void;
   onCallTimeout: () => void;
+  onCallAnswered?: () => void;
 }
 
 class VideoCallService {
@@ -354,18 +355,30 @@ class VideoCallService {
       this.peerConnection.addEventListener('connectionstatechange', () => {
         const state = this.peerConnection?.connectionState;
         console.log('🔗 Video call connection state:', state);
+        console.log('🔗 Current video call state:', {
+          connectionState: this.state.connectionState,
+          isCallAnswered: this.isCallAnswered,
+          hasEnded: this.hasEnded
+        });
         
         if (state === 'connected') {
+          console.log('🔗 Video WebRTC connected - updating call state');
           this.updateState({ 
             isConnected: true, 
             connectionState: 'connected' 
           });
           this.startCallTimer();
         } else if (state === 'disconnected' || state === 'failed') {
-          this.updateState({ 
-            isConnected: false, 
-            connectionState: 'disconnected' 
-          });
+          // Only update state if call is not answered and not already ended
+          if (!this.isCallAnswered && !this.hasEnded) {
+            console.log('🔗 Video WebRTC disconnected/failed - updating state');
+            this.updateState({ 
+              isConnected: false, 
+              connectionState: 'disconnected' 
+            });
+          } else {
+            console.log('🔗 Video WebRTC disconnected/failed but call is answered or already ended - ignoring');
+          }
         }
       });
 
@@ -522,12 +535,25 @@ class VideoCallService {
       this.peerConnection.addEventListener('connectionstatechange', () => {
         const state = this.peerConnection?.connectionState;
         console.log('🔗 Video call connection state:', state);
+        console.log('🔗 Current video call state:', {
+          connectionState: this.state.connectionState,
+          isCallAnswered: this.isCallAnswered,
+          hasEnded: this.hasEnded
+        });
+        
         if (state === 'connected') {
+          console.log('🔗 Video WebRTC connected - updating call state');
           this.clearReofferLoop();
           this.updateState({ isConnected: true, connectionState: 'connected' });
           this.startCallTimer();
         } else if (state === 'disconnected' || state === 'failed') {
-          this.updateState({ isConnected: false, connectionState: 'disconnected' });
+          // Only update state if call is not answered and not already ended
+          if (!this.isCallAnswered && !this.hasEnded) {
+            console.log('🔗 Video WebRTC disconnected/failed - updating state');
+            this.updateState({ isConnected: false, connectionState: 'disconnected' });
+          } else {
+            console.log('🔗 Video WebRTC disconnected/failed but call is answered or already ended - ignoring');
+          }
         }
       });
 

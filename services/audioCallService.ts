@@ -65,6 +65,10 @@ class AudioCallService {
   private creatingOffer: boolean = false;
   // Backend start/re-notify guard per call attempt
   private callStartAttempted: boolean = false;
+  // Additional state properties
+  private isInitializing: boolean = false;
+  private offerCreated: boolean = false;
+  private connectionState: 'connecting' | 'connected' | 'disconnected' | 'failed' = 'disconnected';
   constructor() {
     this.instanceId = ++AudioCallService.instanceCounter;
     console.log(`🏗️ [AudioCallService] Instance ${this.instanceId} created`);
@@ -754,6 +758,11 @@ class AudioCallService {
     this.peerConnection.addEventListener('connectionstatechange', () => {
       const state = this.peerConnection?.connectionState;
       console.log('🔗 Connection state changed:', state);
+      console.log('🔗 Current call state:', {
+        connectionState: this.state.connectionState,
+        isCallAnswered: this.isCallAnswered,
+        hasEnded: this.hasEnded
+      });
       
       if (state === 'connected') {
         console.log('🔗 WebRTC connected - updating call state');
@@ -764,22 +773,29 @@ class AudioCallService {
         }
         this.markConnectedOnce();
       } else if (state === 'disconnected' || state === 'failed') {
-        console.log('🔗 WebRTC disconnected/failed - starting grace timer');
-        if (this.disconnectGraceTimer) {
-          clearTimeout(this.disconnectGraceTimer);
-          this.disconnectGraceTimer = null;
-        }
-        this.disconnectGraceTimer = setTimeout(() => {
-          const cs = this.peerConnection?.connectionState;
-          if (cs === 'disconnected' || cs === 'failed') {
-            this.updateState({ 
-              isConnected: false, 
-              connectionState: 'disconnected' 
-            });
-            this.stopCallTimer();
-            this.endCall();
+        // Only start grace timer if call is not being answered and not already ended
+        if (!this.isCallAnswered && !this.hasEnded) {
+          console.log('🔗 WebRTC disconnected/failed - starting grace timer');
+          if (this.disconnectGraceTimer) {
+            clearTimeout(this.disconnectGraceTimer);
+            this.disconnectGraceTimer = null;
           }
-        }, 2500);
+          this.disconnectGraceTimer = setTimeout(() => {
+            const cs = this.peerConnection?.connectionState;
+            // Only end call if still disconnected/failed AND not answered AND not already ended
+            if ((cs === 'disconnected' || cs === 'failed') && !this.isCallAnswered && !this.hasEnded) {
+              console.log('🔗 Grace timer expired - ending call due to persistent disconnection');
+              this.updateState({ 
+                isConnected: false, 
+                connectionState: 'disconnected' 
+              });
+              this.stopCallTimer();
+              this.endCall();
+            }
+          }, 5000); // Increased grace period to 5 seconds
+        } else {
+          console.log('🔗 WebRTC disconnected/failed but call is answered or already ended - ignoring');
+        }
       }
     });
   }
@@ -1213,6 +1229,14 @@ class AudioCallService {
       // Clear the pending offer
       (global as any).pendingOffer = null;
       this.hasAccepted = true;
+      
+      // Clear any existing disconnect grace timer since we're actively answering
+      if (this.disconnectGraceTimer) {
+        console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
+      
       console.log('✅ [AudioCallService] Incoming call processed successfully');
       // Additional fallback after full processing
       this.ensureConnectedSoon(1000);
@@ -1571,6 +1595,13 @@ n   */
         console.log('ℹ️ [AudioCallService] endCall already processed');
         return;
       }
+      
+      // Prevent ending call if it's being actively answered
+      if (this.isCallAnswered && this.state.connectionState === 'connecting') {
+        console.log('⚠️ [AudioCallService] Preventing call end - call is being answered and connecting');
+        return;
+      }
+      
       this.hasEnded = true;
       console.log('📞 Ending audio call...');
       console.log('📞 Call state when ending:', {
