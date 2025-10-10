@@ -613,6 +613,31 @@ export default function ChatPage() {
           onError: (error) => {
             console.error('❌ [WebRTCChat] Error:', error);
             // Error logged to console only - no modal shown
+          },
+          onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
+            console.log('🏁 [ChatComponent] Session ended via WebRTC:', sessionId, reason, sessionType);
+            
+            // For doctors, show the session ended message
+            if (!isPatient) {
+              console.log('👨‍⚕️ [ChatComponent] Doctor received session end notification');
+              setSessionEnded(true);
+              
+              // Add a system message to show that the session was ended by the patient
+              const systemMessage: ChatMessage = {
+                id: `session_ended_${Date.now()}`,
+                message: 'Session has been ended by patient',
+                sender_id: 0, // System message
+                sender_name: 'System',
+                created_at: new Date().toISOString(),
+                message_type: 'text',
+                is_own_message: false,
+                delivery_status: 'sent',
+                temp_id: undefined
+              };
+              
+              setMessages(prev => [...prev, systemMessage]);
+              scrollToBottom();
+            }
           }
         });
 
@@ -2022,8 +2047,17 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       const doctorId = chatInfo?.doctor_id || 0;
       const patientId = user?.id || 0;
       
-      // console.log('🔍 Submitting rating with doctorId:', doctorId, 'patientId:', patientId);
-      await sessionService.submitRating(sessionId, rating, comment, doctorId, patientId);
+      console.log('🔍 [Rating] Submitting rating with:', {
+        sessionId,
+        doctorId,
+        patientId,
+        rating,
+        comment: comment.substring(0, 50) + '...'
+      });
+      
+      const result = await sessionService.submitRating(sessionId, rating, comment, doctorId, patientId);
+      
+      console.log('✅ [Rating] Rating submitted successfully:', result);
       
       // Show success message and navigate back
       Alert.alert(
@@ -2039,9 +2073,41 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           }
         ]
       );
-    } catch (error) {
-      console.error('Error submitting rating:', error);
-      // Rating submission error logged to console only - no modal shown
+    } catch (error: any) {
+      console.error('❌ [Rating] Error submitting rating:', error);
+      
+      // Show user-friendly error message
+      let errorMessage = 'Failed to submit rating. Please try again.';
+      
+      if (error?.response?.status === 400) {
+        errorMessage = 'Rating already exists for this session.';
+      } else if (error?.response?.status === 403) {
+        errorMessage = 'You are not authorized to rate this session.';
+      } else if (error?.response?.status === 404) {
+        errorMessage = 'Session not found.';
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+      
+      Alert.alert(
+        'Rating Submission Failed',
+        errorMessage,
+        [
+          {
+            text: 'Try Again',
+            onPress: () => {
+              // Keep the rating modal open for retry
+            }
+          },
+          {
+            text: 'Skip',
+            onPress: () => {
+              setShowRatingModal(false);
+              router.back();
+            }
+          }
+        ]
+      );
     } finally {
       setSubmittingRating(false);
     }
@@ -3160,6 +3226,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         onSubmit={handleSubmitRating}
         doctorName={isPatient ? (chatInfo?.other_participant_name || 'Doctor') : (user?.display_name || `${user?.first_name} ${user?.last_name}` || 'Doctor')}
         sessionType={isTextSession ? 'instant' : 'appointment'}
+        submitting={submittingRating}
       />
 
       {/* Incoming Call Screen - Now using unified AudioCall */}

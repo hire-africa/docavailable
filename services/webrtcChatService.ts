@@ -97,11 +97,23 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             console.log('📨 [WebRTCChat] Message received:', data.type);
             console.log('📨 [WebRTCChat] Message data:', JSON.stringify(data, null, 2));
             
-            // Ignore session-related messages - these should be handled by the session service
+            // Handle session-ended messages for real-time notifications
+            if (data.type === 'session-ended') {
+              console.log('🏁 [WebRTCChat] Session ended message received:', data);
+              if (this.events.onSessionEnded) {
+                this.events.onSessionEnded(
+                  this.config.appointmentId, 
+                  data.reason || 'manual_end', 
+                  this.config.sessionType || 'appointment'
+                );
+              }
+              return;
+            }
+            
+            // Ignore other session-related messages - these should be handled by the session service
             if (data.type === 'session-end-request' || 
                 data.type === 'session-end-success' || 
                 data.type === 'session-end-error' ||
-                data.type === 'session-ended' ||
                 data.type === 'session-activated' ||
                 data.type === 'session-expired' ||
                 data.type === 'session-deduction' ||
@@ -191,6 +203,21 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         
         this.websocket.onerror = (error) => {
           console.error('❌ [WebRTCChat] WebRTC chat error:', error);
+          console.error('❌ [WebRTCChat] Error details:', {
+            type: error.type,
+            target: error.target?.url,
+            readyState: error.target?.readyState
+          });
+          
+          // Check if it's a connection error (HTTP 200 instead of 101)
+          if (error.message && error.message.includes('Expected HTTP 101')) {
+            console.error('❌ [WebRTCChat] WebSocket server not properly configured - getting HTTP 200 instead of 101');
+            this.events.onError('WebSocket server not available. Using fallback mode.');
+            // Don't try to reconnect if server is misconfigured
+            reject(new Error('WebSocket server not properly configured'));
+            return;
+          }
+          
           this.events.onError('WebRTC connection error');
           reject(error);
         };

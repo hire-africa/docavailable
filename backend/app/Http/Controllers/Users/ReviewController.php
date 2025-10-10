@@ -65,6 +65,14 @@ class ReviewController extends Controller
     public function createDoctorRating(Request $request, $doctorId, $patientId)
     {
         try {
+            \Log::info('🔍 [Rating] Starting rating submission', [
+                'doctor_id' => $doctorId,
+                'patient_id' => $patientId,
+                'rating' => $request->rating,
+                'comment' => $request->comment,
+                'chat_id' => $request->chatId
+            ]);
+
             $request->validate([
                 'rating' => 'required|integer|min:1|max:5',
                 'comment' => 'nullable|string|max:500',
@@ -75,6 +83,10 @@ class ReviewController extends Controller
             
             // Verify the patient is the one making the request
             if ($user->id != $patientId) {
+                \Log::warning('❌ [Rating] Unauthorized rating attempt', [
+                    'user_id' => $user->id,
+                    'patient_id' => $patientId
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized'
@@ -87,6 +99,11 @@ class ReviewController extends Controller
                 ->first();
 
             if ($existingRating) {
+                \Log::warning('❌ [Rating] Duplicate rating attempt', [
+                    'chat_id' => $request->chatId,
+                    'patient_id' => $patientId,
+                    'existing_rating_id' => $existingRating->id
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Rating already exists for this session'
@@ -94,12 +111,19 @@ class ReviewController extends Controller
             }
 
             $rating = Reviews::create([
+                'reviewer_id' => $patientId, // The patient is the reviewer
+                'user_id' => $doctorId, // The doctor being reviewed
                 'doctor_id' => $doctorId,
                 'patient_id' => $patientId,
                 'rating' => $request->rating,
                 'comment' => $request->comment,
                 'chat_id' => $request->chatId,
                 'status' => 'approved'
+            ]);
+
+            \Log::info('✅ [Rating] Rating created successfully', [
+                'rating_id' => $rating->id,
+                'rating' => $rating->rating
             ]);
 
             // Update doctor's average rating
@@ -113,9 +137,24 @@ class ReviewController extends Controller
                     ->where('status', 'approved')
                     ->count();
                 
+                $oldRating = $doctor->rating;
+                $oldTotalRatings = $doctor->total_ratings;
+                
                 $doctor->update([
                     'rating' => round($avgRating, 1),
                     'total_ratings' => $totalRatings
+                ]);
+
+                \Log::info('✅ [Rating] Doctor rating updated', [
+                    'doctor_id' => $doctorId,
+                    'old_rating' => $oldRating,
+                    'new_rating' => round($avgRating, 1),
+                    'old_total_ratings' => $oldTotalRatings,
+                    'new_total_ratings' => $totalRatings
+                ]);
+            } else {
+                \Log::error('❌ [Rating] Doctor not found', [
+                    'doctor_id' => $doctorId
                 ]);
             }
 
@@ -125,6 +164,12 @@ class ReviewController extends Controller
                 'data' => $rating
             ]);
         } catch (\Exception $e) {
+            \Log::error('❌ [Rating] Rating submission failed', [
+                'error' => $e->getMessage(),
+                'doctor_id' => $doctorId,
+                'patient_id' => $patientId,
+                'rating' => $request->rating ?? 'unknown'
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to submit rating: ' . $e->getMessage()

@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     Alert,
     Modal,
@@ -16,6 +16,7 @@ interface RatingModalProps {
   onSubmit: (rating: number, comment: string) => void;
   doctorName: string;
   sessionType: 'instant' | 'appointment';
+  submitting?: boolean;
 }
 
 export default function RatingModal({
@@ -24,6 +25,7 @@ export default function RatingModal({
   onSubmit,
   doctorName,
   sessionType,
+  submitting = false,
 }: RatingModalProps) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
@@ -32,6 +34,10 @@ export default function RatingModal({
     if (rating === 0) {
       Alert.alert('Rating Required', 'Please select a rating before submitting.');
       return;
+    }
+
+    if (submitting) {
+      return; // Prevent multiple submissions
     }
 
     onSubmit(rating, comment);
@@ -118,11 +124,13 @@ export default function RatingModal({
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.submitButton, rating === 0 && styles.submitButtonDisabled]} 
+              style={[styles.submitButton, (rating === 0 || submitting) && styles.submitButtonDisabled]} 
               onPress={handleSubmit}
-              disabled={rating === 0}
+              disabled={rating === 0 || submitting}
             >
-              <Text style={styles.submitButtonText}>Submit Rating</Text>
+              <Text style={styles.submitButtonText}>
+                {submitting ? 'Submitting...' : 'Submit Rating'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

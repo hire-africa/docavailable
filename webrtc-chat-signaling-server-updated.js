@@ -12,9 +12,22 @@ const wss = new WebSocket.Server({
   path: '/chat-signaling'
 });
 
+// WebSocket connection handling
+wss.on('connection', (ws, request) => {
+  console.log('🔌 [WebSocket] New connection established');
+});
+
+// Error handling for WebSocket server
+wss.on('error', (error) => {
+  console.error('❌ [WebSocket] Server error:', error);
+});
+
 // Store active connections by appointment ID
 const connections = new Map();
 const userConnections = new Map(); // Track users by connection
+
+// Store processed offers to prevent duplicates
+const processedOffers = new Map();
 
 // Configuration
 const LARAVEL_API_URL = process.env.LARAVEL_API_URL || 'https://docavailable-3vbdv.ondigitalocean.app';
@@ -126,6 +139,92 @@ wss.on('connection', (ws, req) => {
             senderId: message.senderId || getUserIdFromConnection(ws)
           };
           broadcastToOthers(ws, appointmentId, typingData);
+          break;
+          
+        // WebRTC Call Signaling Messages
+        case 'offer':
+          console.log(`📞 [WebRTC] Processing offer for appointment: ${appointmentId}`);
+          console.log(`📞 [WebRTC] Offer details:`, {
+            senderId: message.senderId || message.userId,
+            hasOffer: !!message.offer,
+            offerType: message.offer?.type,
+            appointmentId: appointmentId,
+            callType: message.callType || 'audio'
+          });
+          
+          // Check for duplicate offers
+          const offerKey = `${appointmentId}_${message.senderId || message.userId}_${message.offer?.sdp?.substring(0, 50) || 'unknown'}`;
+          if (processedOffers && processedOffers.has(offerKey)) {
+            console.log(`⚠️ [WebRTC] Duplicate offer detected and ignored: ${offerKey}`);
+            break;
+          }
+          if (processedOffers) {
+            processedOffers.set(offerKey, Date.now());
+            
+            // Clean up old offers (older than 5 minutes)
+            const now = Date.now();
+            for (const [key, timestamp] of processedOffers.entries()) {
+              if (now - timestamp > 300000) { // 5 minutes
+                processedOffers.delete(key);
+              }
+            }
+          }
+          
+          // Send global incoming call notification
+          sendGlobalIncomingCallNotification(appointmentId, message);
+          
+          // Broadcast to others
+          console.log(`📤 [WebRTC] Broadcasting offer to other participants for appointment: ${appointmentId}`);
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'answer':
+          console.log(`📞 [WebRTC] Processing answer for appointment: ${appointmentId}`);
+          console.log(`📞 [WebRTC] Answer details:`, {
+            senderId: message.senderId || message.userId,
+            hasAnswer: !!message.answer,
+            answerType: message.answer?.type,
+            appointmentId: appointmentId
+          });
+          
+          // Broadcast to others
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'ice-candidate':
+          console.log(`📞 [WebRTC] Processing ICE candidate for appointment: ${appointmentId}`);
+          console.log(`📞 [WebRTC] ICE candidate details:`, {
+            senderId: message.senderId || message.userId,
+            hasCandidate: !!message.candidate,
+            appointmentId: appointmentId
+          });
+          
+          // Broadcast to others
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'call-answered':
+          console.log(`📞 [WebRTC] Call answered for appointment: ${appointmentId}`);
+          handleCallAnswered(appointmentId, message, ws);
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'call-rejected':
+          console.log(`📞 [WebRTC] Call rejected for appointment: ${appointmentId}`);
+          handleCallRejected(appointmentId, message, ws);
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'call-ended':
+          console.log(`📞 [WebRTC] Call ended for appointment: ${appointmentId}`);
+          handleCallEnded(appointmentId, message, ws);
+          broadcastToOthers(ws, appointmentId, message);
+          break;
+          
+        case 'call-timeout':
+          console.log(`📞 [WebRTC] Call timeout for appointment: ${appointmentId}`);
+          handleCallTimeout(appointmentId, message, ws);
+          broadcastToOthers(ws, appointmentId, message);
           break;
           
         default:
@@ -424,7 +523,9 @@ server.on('request', (req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       connections: connections.size,
-      totalConnections: Array.from(connections.values()).reduce((sum, conns) => sum + conns.length, 0)
+      totalConnections: Array.from(connections.values()).reduce((sum, conns) => sum + conns.length, 0),
+      websocketPath: '/chat-signaling',
+      port: process.env.PORT || 8081
     }));
   } else if (req.url === '/stats') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -442,12 +543,147 @@ server.on('request', (req, res) => {
 // Start server
 const PORT = process.env.PORT || 8081;
 server.listen(PORT, () => {
-  console.log(`🚀 WebRTC Chat Signaling Server running on port ${PORT}`);
-  console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}/chat-signaling/{appointmentId}`);
+  console.log(`🚀 WebRTC Unified Signaling Server running on port ${PORT}`);
+  console.log(`💬 Chat WebSocket endpoint: ws://localhost:${PORT}/chat-signaling/{appointmentId}`);
+  console.log(`📞 Call WebSocket endpoint: ws://localhost:${PORT}/chat-signaling/{appointmentId} (same endpoint for calls)`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log(`📊 Stats: http://localhost:${PORT}/stats`);
   console.log(`🌐 Laravel API: ${LARAVEL_API_URL}`);
+  console.log(`✅ Server handles both chat messages and WebRTC call signaling`);
 });
+
+// ========================================
+// WEBRTC CALL HANDLING FUNCTIONS
+// ========================================
+
+// Send global incoming call notification
+function sendGlobalIncomingCallNotification(appointmentId, data) {
+  try {
+    console.log(`📞 [Global] Sending incoming call notification for appointment: ${appointmentId}`);
+    
+    // Find global connections (connections with appointmentId 'global_signaling_session')
+    const globalConnections = connections.get('global_signaling_session') || [];
+    console.log(`📞 [Global] Found ${globalConnections.length} global connections`);
+    
+    // Prepare notification data
+    const notificationData = {
+      type: 'incoming_call_notification',
+      appointmentId: appointmentId,
+      callType: data.callType || 'audio',
+      doctorName: data.doctorName || 'Unknown',
+      doctorProfilePicture: data.doctorProfilePicture || '',
+      callerId: data.senderId || data.userId,
+      doctorId: data.doctorId || '',
+      timestamp: Date.now()
+    };
+    
+    // Send to all global connections
+    globalConnections.forEach((connection, index) => {
+      try {
+        if (connection && connection.readyState === WebSocket.OPEN) {
+          connection.send(JSON.stringify(notificationData));
+          console.log(`📞 [Global] Notification sent to global connection ${index + 1}`);
+        }
+      } catch (error) {
+        console.error(`❌ [Global] Error sending notification to global connection ${index + 1}:`, error);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ [Global] Error sending global incoming call notification:', error);
+  }
+}
+
+// Handle call answered
+async function handleCallAnswered(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call answered for appointment: ${appointmentId}`);
+    
+    // Extract call type and user info from the data
+    const callType = data.callType || 'voice'; // Default to voice if not specified
+    const userId = data.userId || data.senderId;
+    
+    if (!userId) {
+      console.error('❌ No user ID provided for call session');
+      return;
+    }
+    
+    console.log(`✅ Call answered by user ${userId}, type: ${callType}`);
+    
+    // You can add call session management here if needed
+    // For now, just log the successful answer
+    
+  } catch (error) {
+    console.error('❌ Error handling call answered:', error);
+  }
+}
+
+// Handle call rejected
+async function handleCallRejected(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call rejected for appointment: ${appointmentId}`);
+    
+    // Notify all participants that call was rejected
+    broadcastToAll(appointmentId, {
+      type: 'call-not-answered',
+      reason: 'rejected',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error handling call rejected:', error);
+  }
+}
+
+// Handle call ended
+async function handleCallEnded(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call ended for appointment: ${appointmentId}`);
+    
+    const callType = data.callType || 'voice';
+    const userId = data.userId || data.senderId;
+    const sessionDuration = data.sessionDuration || 0;
+    
+    console.log(`📞 Call ended by user ${userId}, type: ${callType}, duration: ${sessionDuration}s`);
+    
+    // You can add call session cleanup here if needed
+    
+  } catch (error) {
+    console.error('❌ Error handling call ended:', error);
+  }
+}
+
+// Handle call timeout
+async function handleCallTimeout(appointmentId, data, ws) {
+  try {
+    console.log(`📞 Call timeout for appointment: ${appointmentId}`);
+    
+    // Notify all participants that call timed out
+    broadcastToAll(appointmentId, {
+      type: 'call-not-answered',
+      reason: 'timeout',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error handling call timeout:', error);
+  }
+}
+
+// Broadcast message to all connections for the same appointment
+function broadcastToAll(appointmentId, message) {
+  const appointmentConnections = connections.get(appointmentId) || [];
+  let sentCount = 0;
+  
+  appointmentConnections.forEach((ws) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+      sentCount++;
+    }
+  });
+  
+  console.log(`📤 Broadcasted to ${sentCount} connections for appointment ${appointmentId}`);
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

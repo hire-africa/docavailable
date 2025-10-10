@@ -304,8 +304,7 @@ export default function BookAppointmentFlow() {
 
   // Native time picker for Android
   const showAndroidTimePicker = () => {
-    // TODO: Fix DateTimePicker Android usage
-    Alert.alert('Time Selection', 'Please use the time input field to select your preferred time.');
+    setShowNativeTimePicker(true);
   };
 
   // Native time picker for iOS
@@ -313,10 +312,33 @@ export default function BookAppointmentFlow() {
     setShowNativeTimePicker(true);
   };
 
-  // Handle time picker change for iOS
+  // Handle time picker change for both Android and iOS
   const handleTimeChange = (event: any, selectedTime?: Date) => {
-    if (selectedTime && event.type === 'set') {
+    if (Platform.OS === 'android') {
+      // On Android, the picker closes automatically after selection
+      setShowNativeTimePicker(false);
+    }
+    
+    if (selectedTime && event.type !== 'dismissed') {
       setTempTime(selectedTime);
+      
+      // On Android, automatically save the time when selected
+      if (Platform.OS === 'android') {
+        const timeStr = formatTime12Hour(selectedTime);
+        const time24Hour = to24HourFormat(timeStr);
+        
+        // Check if time is within available slots
+        if (isTimeInAvailableSlots(selectedTime) && isTimeNotPastForSelectedDay(selectedTime)) {
+          setCustomTime(timeStr);
+          setSelectedTime(time24Hour);
+        } else {
+          Alert.alert(
+            'Invalid Time',
+            'Please select a time within the doctor\'s working hours. For today, the time must be in the future.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
     }
   };
 
@@ -440,18 +462,29 @@ export default function BookAppointmentFlow() {
           )}
         </View>
         {/* Custom Time Picker Button and Modal */}
-        {getAvailableSlots().length > 0 && (
-          <View style={{ marginHorizontal: 24, marginBottom: 8 }}>
-            <TouchableOpacity
-              style={styles.timePickerBtn}
-              onPress={showTimePickerModal}
-            >
-              <Text style={styles.timePickerBtnText}>{customTime ? `Change Time (${customTime})` : 'Pick a time'}</Text>
-            </TouchableOpacity>
-            {customTime ? (
-              <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
-            ) : null}
-            <Modal
+        <View style={{ marginHorizontal: 24, marginBottom: 8 }}>
+          {getAvailableSlots().length > 0 ? (
+            <>
+              <TouchableOpacity
+                style={styles.timePickerBtn}
+                onPress={showTimePickerModal}
+              >
+                <Text style={styles.timePickerBtnText}>{customTime ? `Change Time (${customTime})` : 'Pick a time'}</Text>
+              </TouchableOpacity>
+              {customTime ? (
+                <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
+              ) : null}
+            </>
+          ) : (
+            <View style={styles.noAvailabilityContainer}>
+              <Text style={styles.noAvailabilityText}>
+                {loadingHours ? 'Loading availability...' : 'No available time slots for this day'}
+              </Text>
+            </View>
+          )}
+        </View>
+        
+        <Modal
               visible={showNativeTimePicker}
               animationType="slide"
               transparent={true}
@@ -504,29 +537,31 @@ export default function BookAppointmentFlow() {
                     </Text>
                   </View>
                   
-                  <View style={styles.modalFooter}>
-                    <TouchableOpacity 
-                      style={styles.cancelModalBtn} 
-                      onPress={() => setShowNativeTimePicker(false)}
-                    >
-                      <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[
-                        styles.continueModalBtn, 
-                        !isCurrentTimeValid() && styles.continueModalBtnDisabled
-                      ]} 
-                      onPress={handleContinueTimeSelection}
-                      disabled={!isCurrentTimeValid()}
-                    >
-                      <Text style={[
-                        styles.continueModalBtnText,
-                        !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
-                      ]}>
-                        Confirm Time
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
+                  {Platform.OS !== 'android' && (
+                    <View style={styles.modalFooter}>
+                      <TouchableOpacity 
+                        style={styles.cancelModalBtn} 
+                        onPress={() => setShowNativeTimePicker(false)}
+                      >
+                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[
+                          styles.continueModalBtn, 
+                          !isCurrentTimeValid() && styles.continueModalBtnDisabled
+                        ]} 
+                        onPress={handleContinueTimeSelection}
+                        disabled={!isCurrentTimeValid()}
+                      >
+                        <Text style={[
+                          styles.continueModalBtnText,
+                          !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
+                        ]}>
+                          Confirm Time
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                   
                   {!isCurrentTimeValid() && (
                     <View style={styles.validationMessage}>
@@ -539,8 +574,6 @@ export default function BookAppointmentFlow() {
                 </View>
               </View>
             </Modal>
-          </View>
-        )}
         {/* Remove selectable time slots UI */}
         <Text style={styles.sectionLabel}>Consultation type</Text>
         <View style={styles.consultationTypesContainer}>
@@ -1358,5 +1391,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 17,
+  },
+  noAvailabilityContainer: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFB74D',
+  },
+  noAvailabilityText: {
+    color: '#E65100',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 }); 

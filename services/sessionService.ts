@@ -196,6 +196,15 @@ class SessionService {
     rating: number;
   }> {
     try {
+      // Validate required parameters
+      if (!doctorId || !patientId) {
+        throw new Error('Doctor ID and Patient ID are required for rating submission');
+      }
+      
+      if (rating < 1 || rating > 5) {
+        throw new Error('Rating must be between 1 and 5');
+      }
+      
       // Use the doctor rating endpoint for both text sessions and appointments
       const endpoint = `/doctor-ratings/${doctorId}/${patientId}`;
       const payload = {
@@ -204,13 +213,37 @@ class SessionService {
         chatId: sessionId
       };
       
-      console.log('🔍 Submitting rating to endpoint:', endpoint);
-      console.log('🔍 Payload:', payload);
+      console.log('🔍 [SessionService] Submitting rating to endpoint:', endpoint);
+      console.log('🔍 [SessionService] Payload:', payload);
+      
       const response = await apiService.post(endpoint, payload);
-      return (response.data as any);
-    } catch (error) {
-      console.error('Error submitting rating:', error);
-      throw error;
+      
+      console.log('✅ [SessionService] Rating submission response:', response.data);
+      
+      // Validate response structure
+      if (!response.data || !response.data.success) {
+        throw new Error(response.data?.message || 'Invalid response from rating service');
+      }
+      
+      return {
+        reviewId: response.data.data?.id || 'unknown',
+        rating: response.data.data?.rating || rating
+      };
+    } catch (error: any) {
+      console.error('❌ [SessionService] Error submitting rating:', error);
+      
+      // Re-throw with more context
+      if (error.response) {
+        // Server responded with error status
+        const errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        throw new Error(errorMessage);
+      } else if (error.request) {
+        // Request was made but no response received
+        throw new Error('Network error: Unable to connect to server');
+      } else {
+        // Something else happened
+        throw new Error(error.message || 'Unknown error occurred');
+      }
     }
   }
 
