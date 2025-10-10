@@ -74,7 +74,7 @@ class ConfigService {
       webrtc: {
         signalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
-          'wss://docavailable.org/audio-signaling'
+          'wss://docavailable.org/call-signaling'
         ) || extra.webrtc?.signalingUrl,
         chatSignalingUrl: getEnvVar(
           'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
