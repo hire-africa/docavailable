@@ -47,12 +47,12 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
 
             
 
-            // Launch image picker with compression to keep file size under 2MB
+            // Launch image picker with compression for faster uploads
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsEditing: true,
                 aspect: [1, 1],
-                quality: 0.9, // Increase from 0.7 to 0.9 (90% quality)
+                quality: 0.7, // Optimized for faster uploads (70% quality)
                 base64: false,
             });
 
@@ -64,13 +64,8 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
                 //   fileSize: result.assets[0].fileSize
                 // });
                 
-                // Remove the aggressive re-compression for large files
-                if (result.assets[0].fileSize && result.assets[0].fileSize > 1500000) { // 1.5MB
-                    // Don't re-compress, just use the image as is
-                    onImageSelected(result.assets[0].uri);
-                } else {
-                    onImageSelected(result.assets[0].uri);
-                }
+                // Use the image as selected (already compressed by ImagePicker)
+                onImageSelected(result.assets[0].uri);
             }
         } catch (error) {
             console.error('Error picking image:', error);
