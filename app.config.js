@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 export default {
   expo: {
     name: "DocAvailable",
@@ -30,7 +32,7 @@ export default {
     web: {
       favicon: "./assets/images/favicon.png"
     },
-    scheme: "docavailable",
+    scheme: "com.docavailable.app",
     plugins: [
       "expo-router",
       "@react-native-firebase/app",
@@ -39,7 +41,9 @@ export default {
     extra: {
       eas: {
         projectId: "1296f2d3-ce36-44a9-a320-8c6f6a9ccf85"
-      }
+      },
+      googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+      googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,
     },
   }
 };

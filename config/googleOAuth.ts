@@ -1,22 +1,20 @@
 // Google OAuth Configuration for DocAvailable
 // This file contains Google OAuth settings and error handling
 
-import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 export const GOOGLE_OAUTH_CONFIG = {
   // Google OAuth Client ID
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
+  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.googleClientId || '',
   
   // Google OAuth Client Secret (for server-side token exchange)
-  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || '',
+  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.googleClientSecret || '',
   
   // Dynamic redirect URI for OAuth flow (production-ready)
   get redirectUri() {
-    return AuthSession.makeRedirectUri({
-      scheme: Platform.OS === 'ios' ? 'com.docavailable.minimal' : 'com.docavailable.app',
-      path: 'oauth2redirect'
-    });
+    // Use web-based redirect URI for all platforms (Google OAuth requirement)
+    return 'https://docavailable-3vbdv.ondigitalocean.app/oauth/callback';
   },
   
   // Scopes for Google OAuth

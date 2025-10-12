@@ -1320,6 +1320,45 @@ Route::middleware(['auth:api'])->group(function () {
 Route::get('/payments/paychangu/callback', [PaymentController::class, 'callback'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 Route::get('/payments/paychangu/return', [PaymentController::class, 'returnHandler'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
+// OAuth Callback Route
+Route::get('/oauth/callback', function (Request $request) {
+    try {
+        $code = $request->query('code');
+        $error = $request->query('error');
+        
+        if ($error) {
+            return response()->view('oauth.error', [
+                'error' => $error,
+                'error_description' => $request->query('error_description', 'Unknown error')
+            ]);
+        }
+        
+        if (!$code) {
+            return response()->view('oauth.error', [
+                'error' => 'missing_code',
+                'error_description' => 'Authorization code not provided'
+            ]);
+        }
+        
+        // Return a simple HTML page that redirects back to the app
+        return response()->view('oauth.success', [
+            'code' => $code,
+            'state' => $request->query('state', '')
+        ]);
+        
+    } catch (\Exception $e) {
+        \Log::error('OAuth callback error', [
+            'error' => $e->getMessage(),
+            'request' => $request->all()
+        ]);
+        
+        return response()->view('oauth.error', [
+            'error' => 'server_error',
+            'error_description' => 'An error occurred processing the OAuth callback'
+        ]);
+    }
+})->withoutMiddleware(['auth:sanctum', 'auth:api']);
+
 // Manual queue processing endpoint (for testing and backup)
 Route::post('/admin/process-queue', function () {
     try {
