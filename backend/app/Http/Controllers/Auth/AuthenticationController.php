@@ -187,10 +187,8 @@ class AuthenticationController extends Controller
             // Generate JWT token
             $token = auth('api')->login($user);
 
-            // Dispatch profile picture processing job if profile picture was uploaded
-            if ($profilePicturePath) {
-                \App\Jobs\ProcessFileUpload::dispatch($profilePicturePath, 'profile_picture', $user->id);
-            }
+            // Note: Profile picture processing job is not needed when using DigitalOcean Spaces
+            // as images are already compressed and stored directly in the cloud
 
             Log::info('User registered successfully', [
                 'user_id' => $user->id,
