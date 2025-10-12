@@ -808,12 +808,13 @@ class AppointmentController extends Controller
                 ->get()
                 ->map(function ($stat) {
                     // Convert week number to readable format
-                    $year = substr($stat->week, 0, 4);
-                    $week = substr($stat->week, 4, 2);
-                    $date = \Carbon\Carbon::now()->setISODate($year, $week)->startOfWeek();
+                    $weekNumber = (int) $stat->week;
+                    $year = intval($weekNumber / 100);
+                    $week = $weekNumber % 100;
                     
                     return [
                         'week' => "Week {$week}",
+                        'year' => $year,
                         'appointments' => (int) $stat->appointments,
                         'confirmed' => (int) $stat->confirmed,
                         'completed' => (int) $stat->completed,
