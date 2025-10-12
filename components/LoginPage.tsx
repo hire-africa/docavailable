@@ -2,7 +2,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -14,7 +14,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
+import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG, getGoogleOAuthConfig, getGoogleOAuthDiscovery } from '../config/googleOAuth';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 
@@ -176,10 +176,8 @@ export default function LoginPage() {
                 return;
             }
 
-            // Google OAuth configuration - use web-only redirect
-            const redirectUri = Platform.OS === 'web' 
-                ? 'https://docavailable-3vbdv.ondigitalocean.app/oauth-success.html'
-                : 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html';
+            // Use dynamic redirect URI (production-ready)
+            const redirectUri = GOOGLE_OAUTH_CONFIG.redirectUri;
             
             console.log('Using redirect URI:', redirectUri);
 
@@ -210,9 +208,11 @@ export default function LoginPage() {
 
             const request = new AuthSession.AuthRequest(requestConfig);
 
-            console.log('OAuth Discovery Config:', GOOGLE_OAUTH_CONFIG.discovery);
+            const discovery = getGoogleOAuthDiscovery();
+            console.log('OAuth Discovery Config:', discovery);
 
-            const result = await request.promptAsync(GOOGLE_OAUTH_CONFIG.discovery);
+            // Use in-app browser for production builds
+            const result = await request.promptAsync(discovery);
 
             console.log('Google OAuth Result:', {
                 type: result.type,
@@ -223,17 +223,18 @@ export default function LoginPage() {
 
             if (result.type === 'success') {
                 // Exchange authorization code for tokens
+                const oauthConfig = getGoogleOAuthConfig();
                 const tokenResponse = await AuthSession.exchangeCodeAsync(
                     {
-                        clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                        clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
+                        clientId: oauthConfig.clientId,
+                        clientSecret: oauthConfig.clientSecret,
                         code: result.params.code,
                         redirectUri,
                         extraParams: {
                             code_verifier: request.codeVerifier,
                         },
                     },
-                    GOOGLE_OAUTH_CONFIG.discovery
+                    discovery
                 );
 
                 // Get user info from Google

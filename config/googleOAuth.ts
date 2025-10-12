@@ -1,12 +1,23 @@
 // Google OAuth Configuration for DocAvailable
 // This file contains Google OAuth settings and error handling
 
+import * as AuthSession from 'expo-auth-session';
+import { Platform } from 'react-native';
+
 export const GOOGLE_OAUTH_CONFIG = {
   // Google OAuth Client ID
   clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '',
   
-  // Redirect URI for OAuth flow
-  redirectUri: process.env.EXPO_PUBLIC_GOOGLE_REDIRECT_URI || 'https://auth.expo.io/@your-expo-username/docavailable',
+  // Google OAuth Client Secret (for server-side token exchange)
+  clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || '',
+  
+  // Dynamic redirect URI for OAuth flow (production-ready)
+  get redirectUri() {
+    return AuthSession.makeRedirectUri({
+      scheme: Platform.OS === 'ios' ? 'com.docavailable.minimal' : 'com.docavailable.app',
+      path: 'oauth2redirect'
+    });
+  },
   
   // Scopes for Google OAuth
   scopes: [
@@ -18,8 +29,8 @@ export const GOOGLE_OAUTH_CONFIG = {
   // Additional parameters
   additionalParameters: {},
   
-  // Custom URL scheme
-  customUrlScheme: 'com.docavailable.app'
+  // Custom URL schemes for both platforms
+  customUrlScheme: Platform.OS === 'ios' ? 'com.docavailable.minimal' : 'com.docavailable.app'
 };
 
 export const GOOGLE_API_ENDPOINTS = {
@@ -47,6 +58,7 @@ export const GOOGLE_AUTH_ERRORS = {
   NETWORK_ERROR: 'Network error occurred during authentication',
   CONFIGURATION_ERROR: 'OAuth configuration is missing or invalid',
   TOKEN_EXPIRED: 'Authentication token has expired',
+  USER_INFO_FAILED: 'Failed to fetch user information from Google',
   UNKNOWN_ERROR: 'An unknown error occurred during authentication'
 };
 
@@ -63,10 +75,21 @@ export const getGoogleOAuthConfig = () => {
   
   return {
     clientId: GOOGLE_OAUTH_CONFIG.clientId,
+    clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
     redirectUri: GOOGLE_OAUTH_CONFIG.redirectUri,
     scopes: GOOGLE_OAUTH_CONFIG.scopes,
     additionalParameters: GOOGLE_OAUTH_CONFIG.additionalParameters,
     customUrlScheme: GOOGLE_OAUTH_CONFIG.customUrlScheme
+  };
+};
+
+// Helper function to get discovery configuration for AuthSession
+export const getGoogleOAuthDiscovery = () => {
+  return {
+    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenEndpoint: 'https://oauth2.googleapis.com/token',
+    revocationEndpoint: 'https://oauth2.googleapis.com/revoke',
+    userInfoEndpoint: 'https://www.googleapis.com/oauth2/v2/userinfo',
   };
 };
 

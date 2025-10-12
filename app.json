@@ -16,7 +16,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.docavailable.minimal"
+      "bundleIdentifier": "com.docavailable.minimal",
+      "scheme": "com.docavailable.minimal"
     },
     "android": {
       "package": "com.docavailable.app",
@@ -30,7 +31,7 @@
     "web": {
       "favicon": "./assets/images/favicon.png"
     },
-    "scheme": "docavailable",
+    "scheme": "com.docavailable.app",
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
