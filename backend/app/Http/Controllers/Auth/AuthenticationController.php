@@ -102,9 +102,18 @@ class AuthenticationController extends Controller
                 
                 // Validate that the decoded data is not empty and is actually an image
                 if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
+                    // Compress image before storing
+                    $compressedImage = $this->compressImage($image);
+                    
                     $filename = \Illuminate\Support\Str::uuid() . '.jpg';
-                    \Illuminate\Support\Facades\Storage::disk('public')->put('profile-pictures/' . $filename, $image);
-                    $profilePicturePath = 'profile-pictures/' . $filename;
+                    $path = 'profile_pictures/' . $filename;
+                    
+                    // Store compressed image in DigitalOcean Spaces
+                    \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                    
+                    // Get the public URL from DigitalOcean Spaces
+                    $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                    $profilePicturePath = $publicUrl;
                 }
             }
 
@@ -1150,5 +1159,73 @@ class AuthenticationController extends Controller
         }
 
         return null; // No status issues
+    }
+
+    /**
+     * Compress image data for faster loading
+     */
+    private function compressImage($imageData, $quality = 75, $maxWidth = 800, $maxHeight = 800)
+    {
+        try {
+            // If Intervention Image is available, use it for compression
+            if (class_exists('Intervention\Image\Facades\Image')) {
+                $image = \Intervention\Image\Facades\Image::make($imageData);
+                
+                // Resize if too large
+                if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
+                    $image->resize($maxWidth, $maxHeight, function ($constraint) {
+                        $constraint->aspectRatio();
+                        $constraint->upsize();
+                    });
+                }
+                
+                // Compress and return as JPEG
+                return $image->encode('jpg', $quality);
+            } else {
+                // Fallback: basic compression using GD
+                $sourceImage = imagecreatefromstring($imageData);
+                if (!$sourceImage) {
+                    return $imageData; // Return original if GD fails
+                }
+                
+                $width = imagesx($sourceImage);
+                $height = imagesy($sourceImage);
+                
+                // Calculate new dimensions maintaining aspect ratio
+                $ratio = min($maxWidth / $width, $maxHeight / $height);
+                if ($ratio < 1) {
+                    $newWidth = (int)($width * $ratio);
+                    $newHeight = (int)($height * $ratio);
+                } else {
+                    $newWidth = $width;
+                    $newHeight = $height;
+                }
+                
+                // Create new image
+                $compressedImage = imagecreatetruecolor($newWidth, $newHeight);
+                
+                // Preserve transparency for PNG
+                imagealphablending($compressedImage, false);
+                imagesavealpha($compressedImage, true);
+                
+                // Resize
+                imagecopyresampled($compressedImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+                
+                // Output as JPEG with compression
+                ob_start();
+                imagejpeg($compressedImage, null, $quality);
+                $compressedData = ob_get_contents();
+                ob_end_clean();
+                
+                // Clean up
+                imagedestroy($sourceImage);
+                imagedestroy($compressedImage);
+                
+                return $compressedData;
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Image compression failed, using original: ' . $e->getMessage());
+            return $imageData; // Return original if compression fails
+        }
     }
 } 
