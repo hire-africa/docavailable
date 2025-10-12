@@ -477,6 +477,7 @@ export default function DoctorSignUp() {
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [isResending, setIsResending] = useState(false);
+    const [isSendingVerification, setIsSendingVerification] = useState(false);
 
     const [errors, setErrors] = useState<any>({});
 
@@ -588,7 +589,8 @@ export default function DoctorSignUp() {
             const response = await authService.sendVerificationCode(email);
             
             if (response.success) {
-                Alert.alert('Success', 'Verification code sent to your email!');
+                // No modal - just proceed silently
+                console.log('Verification code sent successfully');
             } else {
                 throw new Error(response.message || 'Failed to send verification code');
             }
@@ -633,11 +635,14 @@ export default function DoctorSignUp() {
             if (validateStep2()) {
                 // Send verification code when moving to step 3
                 try {
+                    setIsSendingVerification(true);
                     await sendVerificationCode();
                     setStep(3);
                 } catch (error) {
                     console.error('Failed to send verification code:', error);
                     // Don't move to step 3 if email sending fails
+                } finally {
+                    setIsSendingVerification(false);
                 }
             }
         } else if (step === 3) {
@@ -966,15 +971,22 @@ export default function DoctorSignUp() {
                     )}
                     
                     <TouchableOpacity
-                        style={[styles.continueButton, loading && styles.continueButtonDisabled]}
+                        style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]}
                         onPress={handleContinue}
-                        disabled={loading}
+                        disabled={loading || isSendingVerification}
                     >
                         {loading ? (
                             <>
                                 <ActivityIndicator color="#FFFFFF" size="small" />
                                 <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
                                     {step === 3 ? 'Creating Account...' : 'Processing...'}
+                                </Text>
+                            </>
+                        ) : isSendingVerification ? (
+                            <>
+                                <ActivityIndicator color="#FFFFFF" size="small" />
+                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                    Sending verification code...
                                 </Text>
                             </>
                         ) : (
