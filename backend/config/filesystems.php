@@ -71,6 +71,7 @@ return [
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
+            'url' => 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION', 'fra1') . '.digitaloceanspaces.com',
         ],
 
     ],
