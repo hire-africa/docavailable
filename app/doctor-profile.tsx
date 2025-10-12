@@ -292,7 +292,7 @@ export default function DoctorProfile() {
 
                     {/* Statistics Section */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Appointment Statistics</Text>
+                        <Text style={styles.sectionTitle}>Consultation Statistics</Text>
                         
                         {/* Time Frame Toggle */}
                         <View style={styles.toggleContainer}>
