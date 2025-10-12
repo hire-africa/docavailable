@@ -779,6 +779,29 @@ class AppointmentController extends Controller
                 ->orderBy('month')
                 ->get();
             
+            // Get call sessions from call_sessions table
+            $callSessionQuery = $user->user_type === 'doctor' 
+                ? $user->doctorCallSessions()
+                : $user->callSessions();
+            
+            $callSessionStats = $callSessionQuery->whereBetween('started_at', [$startDate, $endDate])
+                ->selectRaw('
+                    TO_CHAR(started_at, \'YYYY-MM\') as month,
+                    COUNT(*) as call_sessions_count,
+                    SUM(CASE WHEN call_type = ? THEN 1 ELSE 0 END) as voice_calls_count,
+                    SUM(CASE WHEN call_type = ? THEN 1 ELSE 0 END) as video_calls_count,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as call_active,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as call_ended
+                ', [
+                    \App\Models\CallSession::CALL_TYPE_VOICE,
+                    \App\Models\CallSession::CALL_TYPE_VIDEO,
+                    \App\Models\CallSession::STATUS_ACTIVE,
+                    \App\Models\CallSession::STATUS_ENDED
+                ])
+                ->groupBy('month')
+                ->orderBy('month')
+                ->get();
+            
             // Combine the results
             $combinedStats = [];
             
@@ -798,6 +821,11 @@ class AppointmentController extends Controller
                         'text_sessions_count' => 0,
                         'text_active' => 0,
                         'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
                         'total_consultations' => 0
                     ];
                 }
@@ -827,6 +855,11 @@ class AppointmentController extends Controller
                         'text_sessions_count' => 0,
                         'text_active' => 0,
                         'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
                         'total_consultations' => 0
                     ];
                 }
@@ -836,9 +869,41 @@ class AppointmentController extends Controller
                 $combinedStats[$month]['text_ended'] = (int) $stat->text_ended;
             }
             
+            // Process call session stats
+            foreach ($callSessionStats as $stat) {
+                $month = $stat->month;
+                if (!isset($combinedStats[$month])) {
+                    $combinedStats[$month] = [
+                        'month' => $month,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
+                        'total_consultations' => 0
+                    ];
+                }
+                
+                $combinedStats[$month]['call_sessions_count'] = (int) $stat->call_sessions_count;
+                $combinedStats[$month]['voice_calls_count'] = (int) $stat->voice_calls_count;
+                $combinedStats[$month]['video_calls_count'] = (int) $stat->video_calls_count;
+                $combinedStats[$month]['call_active'] = (int) $stat->call_active;
+                $combinedStats[$month]['call_ended'] = (int) $stat->call_ended;
+            }
+            
             // Calculate total consultations and convert to array
             $monthlyStats = array_values(array_map(function ($stat) {
-                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'];
+                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'] + $stat['call_sessions_count'];
                 return $stat;
             }, $combinedStats));
             
@@ -913,6 +978,29 @@ class AppointmentController extends Controller
                 ->orderBy('week')
                 ->get();
             
+            // Get call sessions from call_sessions table
+            $callSessionQuery = $user->user_type === 'doctor' 
+                ? $user->doctorCallSessions()
+                : $user->callSessions();
+            
+            $callSessionStats = $callSessionQuery->whereBetween('started_at', [$startDate, $endDate])
+                ->selectRaw('
+                    EXTRACT(YEAR FROM started_at) * 100 + EXTRACT(WEEK FROM started_at) as week,
+                    COUNT(*) as call_sessions_count,
+                    SUM(CASE WHEN call_type = ? THEN 1 ELSE 0 END) as voice_calls_count,
+                    SUM(CASE WHEN call_type = ? THEN 1 ELSE 0 END) as video_calls_count,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as call_active,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as call_ended
+                ', [
+                    \App\Models\CallSession::CALL_TYPE_VOICE,
+                    \App\Models\CallSession::CALL_TYPE_VIDEO,
+                    \App\Models\CallSession::STATUS_ACTIVE,
+                    \App\Models\CallSession::STATUS_ENDED
+                ])
+                ->groupBy('week')
+                ->orderBy('week')
+                ->get();
+            
             // Combine the results
             $combinedStats = [];
             
@@ -932,6 +1020,11 @@ class AppointmentController extends Controller
                         'text_sessions_count' => 0,
                         'text_active' => 0,
                         'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
                         'total_consultations' => 0
                     ];
                 }
@@ -961,6 +1054,11 @@ class AppointmentController extends Controller
                         'text_sessions_count' => 0,
                         'text_active' => 0,
                         'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
                         'total_consultations' => 0
                     ];
                 }
@@ -968,6 +1066,38 @@ class AppointmentController extends Controller
                 $combinedStats[$week]['text_sessions_count'] = (int) $stat->text_sessions_count;
                 $combinedStats[$week]['text_active'] = (int) $stat->text_active;
                 $combinedStats[$week]['text_ended'] = (int) $stat->text_ended;
+            }
+            
+            // Process call session stats
+            foreach ($callSessionStats as $stat) {
+                $week = $stat->week;
+                if (!isset($combinedStats[$week])) {
+                    $combinedStats[$week] = [
+                        'week' => $week,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'call_sessions_count' => 0,
+                        'voice_calls_count' => 0,
+                        'video_calls_count' => 0,
+                        'call_active' => 0,
+                        'call_ended' => 0,
+                        'total_consultations' => 0
+                    ];
+                }
+                
+                $combinedStats[$week]['call_sessions_count'] = (int) $stat->call_sessions_count;
+                $combinedStats[$week]['voice_calls_count'] = (int) $stat->voice_calls_count;
+                $combinedStats[$week]['video_calls_count'] = (int) $stat->video_calls_count;
+                $combinedStats[$week]['call_active'] = (int) $stat->call_active;
+                $combinedStats[$week]['call_ended'] = (int) $stat->call_ended;
             }
             
             // Calculate total consultations and convert to array with readable week format
@@ -978,7 +1108,7 @@ class AppointmentController extends Controller
                 
                 $stat['week'] = "Week {$week}";
                 $stat['year'] = $year;
-                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'];
+                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'] + $stat['call_sessions_count'];
                 return $stat;
             }, $combinedStats));
             

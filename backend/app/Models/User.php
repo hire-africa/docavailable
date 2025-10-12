@@ -287,6 +287,22 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
+     * Get call sessions where user is the patient.
+     */
+    public function callSessions()
+    {
+        return $this->hasMany(CallSession::class, 'patient_id');
+    }
+
+    /**
+     * Get call sessions where user is the doctor.
+     */
+    public function doctorCallSessions()
+    {
+        return $this->hasMany(CallSession::class, 'doctor_id');
+    }
+
+    /**
      * Get reviews for this user (as the reviewed person).
      */
     public function reviews()
