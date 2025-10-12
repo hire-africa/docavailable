@@ -9,7 +9,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use Intervention\Image\Facades\Image;
+// use Intervention\Image\Facades\Image; // Commented out to handle missing package gracefully
 
 class ProcessFileUpload implements ShouldQueue
 {
@@ -177,17 +177,26 @@ class ProcessFileUpload implements ShouldQueue
                 mkdir($directory, 0755, true);
             }
 
-            // Process image
-            $image = Image::make($fullOriginalPath);
-            
-            // Resize maintaining aspect ratio
-            $image->resize($width, $height, function ($constraint) {
-                $constraint->aspectRatio();
-                $constraint->upsize();
-            });
+            // Process image (only if Intervention Image is available)
+            if (class_exists('Intervention\Image\Facades\Image')) {
+                $image = \Intervention\Image\Facades\Image::make($fullOriginalPath);
+                
+                // Resize maintaining aspect ratio
+                $image->resize($width, $height, function ($constraint) {
+                    $constraint->aspectRatio();
+                    $constraint->upsize();
+                });
 
-            // Save with quality setting
-            $image->save($fullNewPath, $quality);
+                // Save with quality setting
+                $image->save($fullNewPath, $quality);
+            } else {
+                // Fallback: just copy the original file if Intervention Image is not available
+                copy($fullOriginalPath, $fullNewPath);
+                Log::info('ProcessFileUpload: Intervention Image not available, copied original file', [
+                    'original' => $fullOriginalPath,
+                    'new' => $fullNewPath
+                ]);
+            }
 
             Log::info("Image resized: {$newPath} ({$width}x{$height})");
         } catch (\Exception $e) {
