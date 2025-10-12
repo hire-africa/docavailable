@@ -29,6 +29,9 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
     showEditButton = true,
 }) => {
     const [isUploading, setIsUploading] = useState(false);
+    
+    // Debug logging
+    console.log('ProfilePicturePicker: Received imageUri:', imageUri);
 
     const pickImage = async () => {
         try {

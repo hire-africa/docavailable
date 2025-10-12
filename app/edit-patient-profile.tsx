@@ -184,13 +184,17 @@ export default function EditPatientProfile() {
 
             if (response.success) {
                 const newProfilePictureUrl = response.data?.profile_picture_url || imageUri;
+                console.log('EditPatientProfile: Upload response data:', response.data);
+                console.log('EditPatientProfile: New profile picture URL:', newProfilePictureUrl);
                 setProfilePicture(newProfilePictureUrl);
-                // console.log('EditPatientProfile: Profile picture updated successfully:', newProfilePictureUrl);
                 
                 // Refresh user data to update the profile picture in AuthContext
                 try {
                     await refreshUserData();
-                    // console.log('EditPatientProfile: User data refreshed after upload');
+                    console.log('EditPatientProfile: User data after refresh:', {
+                        profile_picture: user?.profile_picture,
+                        profile_picture_url: user?.profile_picture_url
+                    });
                     
                     // Force a re-render by updating local state
                     setTimeout(() => {
