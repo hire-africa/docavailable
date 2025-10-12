@@ -723,28 +723,29 @@ class AppointmentController extends Controller
         return response()->json(['message' => 'Appointment cancelled']);
     }
 
-    // Get monthly appointment statistics
+    // Get monthly consultation statistics
     public function getMonthlyStatistics(Request $request)
     {
         try {
             $user = auth()->user();
             
-            // Get appointments for the last 12 months
+            // Get consultations for the last 12 months
             $startDate = now()->subMonths(11)->startOfMonth();
             $endDate = now()->endOfMonth();
             
-            $query = $user->user_type === 'doctor' 
+            // Get appointments
+            $appointmentQuery = $user->user_type === 'doctor' 
                 ? $user->doctorAppointments()
                 : $user->appointments();
             
-            $monthlyStats = $query->whereBetween('appointment_date', [$startDate, $endDate])
+            $appointmentStats = $appointmentQuery->whereBetween('appointment_date', [$startDate, $endDate])
                 ->selectRaw('
                     TO_CHAR(appointment_date, \'YYYY-MM\') as month,
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled,
-                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as text_sessions,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as appointment_text_sessions,
                     SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as audio_calls,
                     SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as video_calls
                 ', [
@@ -757,20 +758,89 @@ class AppointmentController extends Controller
                 ])
                 ->groupBy('month')
                 ->orderBy('month')
-                ->get()
-                ->map(function ($stat) {
-                    return [
-                        'month' => $stat->month,
-                        'appointments' => (int) $stat->appointments,
-                        'confirmed' => (int) $stat->confirmed,
-                        'completed' => (int) $stat->completed,
-                        'cancelled' => (int) $stat->cancelled,
-                        'text_sessions' => (int) $stat->text_sessions,
-                        'audio_calls' => (int) $stat->audio_calls,
-                        'video_calls' => (int) $stat->video_calls,
-                        'total_consultations' => (int) $stat->appointments
+                ->get();
+            
+            // Get text sessions from text_sessions table
+            $textSessionQuery = $user->user_type === 'doctor' 
+                ? $user->doctorTextSessions()
+                : $user->textSessions();
+            
+            $textSessionStats = $textSessionQuery->whereBetween('started_at', [$startDate, $endDate])
+                ->selectRaw('
+                    TO_CHAR(started_at, \'YYYY-MM\') as month,
+                    COUNT(*) as text_sessions_count,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as text_active,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as text_ended
+                ', [
+                    \App\Models\TextSession::STATUS_ACTIVE,
+                    \App\Models\TextSession::STATUS_ENDED
+                ])
+                ->groupBy('month')
+                ->orderBy('month')
+                ->get();
+            
+            // Combine the results
+            $combinedStats = [];
+            
+            // Process appointment stats
+            foreach ($appointmentStats as $stat) {
+                $month = $stat->month;
+                if (!isset($combinedStats[$month])) {
+                    $combinedStats[$month] = [
+                        'month' => $month,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'total_consultations' => 0
                     ];
-                });
+                }
+                
+                $combinedStats[$month]['appointments'] = (int) $stat->appointments;
+                $combinedStats[$month]['confirmed'] = (int) $stat->confirmed;
+                $combinedStats[$month]['completed'] = (int) $stat->completed;
+                $combinedStats[$month]['cancelled'] = (int) $stat->cancelled;
+                $combinedStats[$month]['appointment_text_sessions'] = (int) $stat->appointment_text_sessions;
+                $combinedStats[$month]['audio_calls'] = (int) $stat->audio_calls;
+                $combinedStats[$month]['video_calls'] = (int) $stat->video_calls;
+            }
+            
+            // Process text session stats
+            foreach ($textSessionStats as $stat) {
+                $month = $stat->month;
+                if (!isset($combinedStats[$month])) {
+                    $combinedStats[$month] = [
+                        'month' => $month,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'total_consultations' => 0
+                    ];
+                }
+                
+                $combinedStats[$month]['text_sessions_count'] = (int) $stat->text_sessions_count;
+                $combinedStats[$month]['text_active'] = (int) $stat->text_active;
+                $combinedStats[$month]['text_ended'] = (int) $stat->text_ended;
+            }
+            
+            // Calculate total consultations and convert to array
+            $monthlyStats = array_values(array_map(function ($stat) {
+                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'];
+                return $stat;
+            }, $combinedStats));
             
             return response()->json([
                 'success' => true,
@@ -778,7 +848,7 @@ class AppointmentController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Error fetching monthly appointment statistics: ' . $e->getMessage());
+            \Log::error('Error fetching monthly consultation statistics: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch monthly statistics',
@@ -787,28 +857,29 @@ class AppointmentController extends Controller
         }
     }
 
-    // Get weekly appointment statistics
+    // Get weekly consultation statistics
     public function getWeeklyStatistics(Request $request)
     {
         try {
             $user = auth()->user();
             
-            // Get appointments for the last 12 weeks
+            // Get consultations for the last 12 weeks
             $startDate = now()->subWeeks(11)->startOfWeek();
             $endDate = now()->endOfWeek();
             
-            $query = $user->user_type === 'doctor' 
+            // Get appointments
+            $appointmentQuery = $user->user_type === 'doctor' 
                 ? $user->doctorAppointments()
                 : $user->appointments();
             
-            $weeklyStats = $query->whereBetween('appointment_date', [$startDate, $endDate])
+            $appointmentStats = $appointmentQuery->whereBetween('appointment_date', [$startDate, $endDate])
                 ->selectRaw('
                     EXTRACT(YEAR FROM appointment_date) * 100 + EXTRACT(WEEK FROM appointment_date) as week,
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled,
-                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as text_sessions,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as appointment_text_sessions,
                     SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as audio_calls,
                     SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as video_calls
                 ', [
@@ -821,26 +892,95 @@ class AppointmentController extends Controller
                 ])
                 ->groupBy('week')
                 ->orderBy('week')
-                ->get()
-                ->map(function ($stat) {
-                    // Convert week number to readable format
-                    $weekNumber = (int) $stat->week;
-                    $year = intval($weekNumber / 100);
-                    $week = $weekNumber % 100;
-                    
-                    return [
-                        'week' => "Week {$week}",
-                        'year' => $year,
-                        'appointments' => (int) $stat->appointments,
-                        'confirmed' => (int) $stat->confirmed,
-                        'completed' => (int) $stat->completed,
-                        'cancelled' => (int) $stat->cancelled,
-                        'text_sessions' => (int) $stat->text_sessions,
-                        'audio_calls' => (int) $stat->audio_calls,
-                        'video_calls' => (int) $stat->video_calls,
-                        'total_consultations' => (int) $stat->appointments
+                ->get();
+            
+            // Get text sessions from text_sessions table
+            $textSessionQuery = $user->user_type === 'doctor' 
+                ? $user->doctorTextSessions()
+                : $user->textSessions();
+            
+            $textSessionStats = $textSessionQuery->whereBetween('started_at', [$startDate, $endDate])
+                ->selectRaw('
+                    EXTRACT(YEAR FROM started_at) * 100 + EXTRACT(WEEK FROM started_at) as week,
+                    COUNT(*) as text_sessions_count,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as text_active,
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as text_ended
+                ', [
+                    \App\Models\TextSession::STATUS_ACTIVE,
+                    \App\Models\TextSession::STATUS_ENDED
+                ])
+                ->groupBy('week')
+                ->orderBy('week')
+                ->get();
+            
+            // Combine the results
+            $combinedStats = [];
+            
+            // Process appointment stats
+            foreach ($appointmentStats as $stat) {
+                $week = $stat->week;
+                if (!isset($combinedStats[$week])) {
+                    $combinedStats[$week] = [
+                        'week' => $week,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'total_consultations' => 0
                     ];
-                });
+                }
+                
+                $combinedStats[$week]['appointments'] = (int) $stat->appointments;
+                $combinedStats[$week]['confirmed'] = (int) $stat->confirmed;
+                $combinedStats[$week]['completed'] = (int) $stat->completed;
+                $combinedStats[$week]['cancelled'] = (int) $stat->cancelled;
+                $combinedStats[$week]['appointment_text_sessions'] = (int) $stat->appointment_text_sessions;
+                $combinedStats[$week]['audio_calls'] = (int) $stat->audio_calls;
+                $combinedStats[$week]['video_calls'] = (int) $stat->video_calls;
+            }
+            
+            // Process text session stats
+            foreach ($textSessionStats as $stat) {
+                $week = $stat->week;
+                if (!isset($combinedStats[$week])) {
+                    $combinedStats[$week] = [
+                        'week' => $week,
+                        'appointments' => 0,
+                        'confirmed' => 0,
+                        'completed' => 0,
+                        'cancelled' => 0,
+                        'appointment_text_sessions' => 0,
+                        'audio_calls' => 0,
+                        'video_calls' => 0,
+                        'text_sessions_count' => 0,
+                        'text_active' => 0,
+                        'text_ended' => 0,
+                        'total_consultations' => 0
+                    ];
+                }
+                
+                $combinedStats[$week]['text_sessions_count'] = (int) $stat->text_sessions_count;
+                $combinedStats[$week]['text_active'] = (int) $stat->text_active;
+                $combinedStats[$week]['text_ended'] = (int) $stat->text_ended;
+            }
+            
+            // Calculate total consultations and convert to array with readable week format
+            $weeklyStats = array_values(array_map(function ($stat) {
+                $weekNumber = (int) $stat['week'];
+                $year = intval($weekNumber / 100);
+                $week = $weekNumber % 100;
+                
+                $stat['week'] = "Week {$week}";
+                $stat['year'] = $year;
+                $stat['total_consultations'] = $stat['appointments'] + $stat['text_sessions_count'];
+                return $stat;
+            }, $combinedStats));
             
             return response()->json([
                 'success' => true,
@@ -848,7 +988,7 @@ class AppointmentController extends Controller
             ]);
             
         } catch (\Exception $e) {
-            \Log::error('Error fetching weekly appointment statistics: ' . $e->getMessage());
+            \Log::error('Error fetching weekly consultation statistics: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch weekly statistics',
