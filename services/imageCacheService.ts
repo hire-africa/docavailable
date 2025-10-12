@@ -279,20 +279,26 @@ class ImageCacheService {
 
   /**
    * Normalize image URLs to stable, processed variants and route
-   * - Force /api/images route (converts /storage to /api/images)
+   * - For DigitalOcean Spaces URLs, use them directly
+   * - For relative paths, convert to DigitalOcean Spaces URLs
    * - For profile pictures, prefer the processed _medium variant
    */
   private normalizeImageUrl(url: string): string {
     if (!url) return url;
 
     try {
-      // If it's a relative path like "profile_pictures/abc.jpg", turn into full /api/images URL
-      if (!/^https?:\/\//i.test(url)) {
-        const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
-        return `https://docavailable-5.onrender.com/api/images/${this.appendMediumIfProfilePicture(clean)}`;
+      // If it's already a DigitalOcean Spaces URL, use it directly
+      if (url.includes('digitaloceanspaces.com')) {
+        return url;
       }
 
-      // Convert any /storage/... to /api/images/...
+      // If it's a relative path like "profile_pictures/abc.jpg", turn into full DigitalOcean Spaces URL
+      if (!/^https?:\/\//i.test(url)) {
+        const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
+        return `https://docavailable-storage.fra1.digitaloceanspaces.com/${this.appendMediumIfProfilePicture(clean)}`;
+      }
+
+      // Convert any /storage/... or /api/images/... to DigitalOcean Spaces URLs
       const parsed = new URL(url);
       let path = parsed.pathname;
       if (path.startsWith('/storage/')) {
@@ -305,21 +311,26 @@ class ImageCacheService {
 
       // If the path refers to profile_pictures, ensure _medium suffix
       const normalizedPath = this.appendMediumIfProfilePicture(path);
-      return `https://docavailable-5.onrender.com/api/images/${normalizedPath}`;
+      return `https://docavailable-storage.fra1.digitaloceanspaces.com/${normalizedPath}`;
     } catch (_e) {
       // If URL parsing fails, fall back to heuristic
       const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
       const normalizedPath = this.appendMediumIfProfilePicture(clean.replace(/^\/+/, ''));
-      return `https://docavailable-5.onrender.com/api/images/${normalizedPath}`;
+      return `https://docavailable-storage.fra1.digitaloceanspaces.com/${normalizedPath}`;
     }
   }
 
   private normalizeImageUrlWithoutMedium(url: string): string {
     if (!url) return url;
     try {
+      // If it's already a DigitalOcean Spaces URL, use it directly
+      if (url.includes('digitaloceanspaces.com')) {
+        return url;
+      }
+
       if (!/^https?:\/\//i.test(url)) {
         const clean = url.replace(/^\/+/, '').replace(/^storage\//, '');
-        return `https://docavailable-5.onrender.com/api/images/${clean}`;
+        return `https://docavailable-storage.fra1.digitaloceanspaces.com/${clean}`;
       }
       const parsed = new URL(url);
       let path = parsed.pathname;
@@ -330,10 +341,10 @@ class ImageCacheService {
       } else if (path.startsWith('/')) {
         path = path.substring(1);
       }
-      return `https://docavailable-5.onrender.com/api/images/${path}`;
+      return `https://docavailable-storage.fra1.digitaloceanspaces.com/${path}`;
     } catch (_e) {
       const clean = url.replace(/^https?:\/\/[^/]+\//, '').replace(/^storage\//, '');
-      return `https://docavailable-5.onrender.com/api/images/${clean.replace(/^\/+/, '')}`;
+      return `https://docavailable-storage.fra1.digitaloceanspaces.com/${clean.replace(/^\/+/, '')}`;
     }
   }
 

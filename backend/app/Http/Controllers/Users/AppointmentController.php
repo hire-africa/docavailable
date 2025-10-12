@@ -739,7 +739,7 @@ class AppointmentController extends Controller
             
             $monthlyStats = $query->whereBetween('appointment_date', [$startDate, $endDate])
                 ->selectRaw('
-                    DATE_FORMAT(appointment_date, "%Y-%m") as month,
+                    TO_CHAR(appointment_date, \'YYYY-MM\') as month,
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
@@ -793,7 +793,7 @@ class AppointmentController extends Controller
             
             $weeklyStats = $query->whereBetween('appointment_date', [$startDate, $endDate])
                 ->selectRaw('
-                    YEARWEEK(appointment_date, 1) as week,
+                    EXTRACT(YEAR FROM appointment_date) * 100 + EXTRACT(WEEK FROM appointment_date) as week,
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,

@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
+    FlatList,
+    Modal,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -13,9 +15,7 @@ import {
     View
 } from 'react-native';
 import { apiService } from '../app/services/apiService';
-import DatePickerField from '../components/DatePickerField';
 import { Icon } from '../components/Icon';
-import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -23,6 +23,30 @@ const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 const maxWidth = isWeb ? 800 : width;
 const isLargeScreen = width > 768;
+
+// Complete list of all countries in the world
+const countryList = [
+    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
+    'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
+    'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia',
+    'Cameroon', 'Canada', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica',
+    'Croatia', 'Cuba', 'Cyprus', 'Czech Republic', 'Democratic Republic of the Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador',
+    'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France',
+    'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau',
+    'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland',
+    'Israel', 'Italy', 'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kuwait',
+    'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg',
+    'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico',
+    'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru',
+    'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman',
+    'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal',
+    'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe',
+    'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia',
+    'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria',
+    'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey',
+    'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu',
+    'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
+].sort();
 
 export default function EditPatientProfile() {
     const { user, userData, refreshUserData } = useAuth();
@@ -42,6 +66,9 @@ export default function EditPatientProfile() {
     
     // Validation errors
     const [errors, setErrors] = useState<any>({});
+    
+    // Country picker modal state
+    const [showCountryPicker, setShowCountryPicker] = useState(false);
 
     useEffect(() => {
         if (!user) {
@@ -256,34 +283,18 @@ export default function EditPatientProfile() {
 
         setSaving(true);
         try {
-            // console.log('EditPatientProfile: Starting profile update...');
+            console.log('EditPatientProfile: Starting profile update...');
             
             const updateData: any = {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
             };
 
-            if (dateOfBirth) {
-                updateData.date_of_birth = dateOfBirth;
-            }
+            // Convert empty strings to null for optional fields to match backend validation
+            updateData.country = country && country.trim() ? country.trim() : null;
+            updateData.city = city && city.trim() ? city.trim() : null;
 
-            if (gender) {
-                updateData.gender = gender;
-            }
-
-            if (bio) {
-                updateData.bio = bio.trim();
-            }
-
-            if (country) {
-                updateData.country = country.trim();
-            }
-
-            if (city) {
-                updateData.city = city.trim();
-            }
-
-            // console.log('EditPatientProfile: Update data:', updateData);
+            console.log('EditPatientProfile: Update data:', updateData);
 
             const response = await apiService.patch('/profile', updateData);
 
@@ -317,7 +328,17 @@ export default function EditPatientProfile() {
             });
             
             let errorMessage = 'Failed to update profile. Please try again.';
-            if (error.response?.data?.message) {
+            
+            // Handle validation errors specifically
+            if (error.response?.status === 422 && error.response?.data?.errors) {
+                const validationErrors = error.response.data.errors;
+                const errorFields = Object.keys(validationErrors);
+                const errorMessages = errorFields.map(field => 
+                    `${field.replace('_', ' ')}: ${validationErrors[field][0]}`
+                ).join('\n');
+                errorMessage = `Validation failed:\n${errorMessages}`;
+                console.error('EditPatientProfile: Validation errors:', validationErrors);
+            } else if (error.response?.data?.message) {
                 errorMessage = error.response.data.message;
             } else if (error.message) {
                 errorMessage = error.message;
@@ -328,6 +349,21 @@ export default function EditPatientProfile() {
             setSaving(false);
         }
     };
+
+    const handleCountrySelect = (selectedCountry: string) => {
+        setCountry(selectedCountry);
+        setShowCountryPicker(false);
+    };
+
+    const renderPickerItem = ({ item }: { item: string }) => (
+        <TouchableOpacity
+            style={styles.pickerItem}
+            onPress={() => handleCountrySelect(item)}
+        >
+            <Text style={styles.pickerItemText}>{item}</Text>
+        </TouchableOpacity>
+    );
+
 
     if (loading) {
         return (
@@ -412,76 +448,40 @@ export default function EditPatientProfile() {
                         </View>
                     </View>
 
-                    {/* Personal Information */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Personal Information</Text>
-                        
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Date of Birth</Text>
-                            <DatePickerField
-                                value={dateOfBirth}
-                                onChange={setDateOfBirth}
-                                error={errors.dateOfBirth}
-                                minimumDate={new Date(1900, 0, 1)}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Gender</Text>
-                            <View style={styles.genderContainer}>
-                                {['Male', 'Female', 'Other'].map((option) => (
-                                    <TouchableOpacity
-                                        key={option}
-                                        style={[
-                                            styles.genderOption,
-                                            gender === option && styles.genderOptionSelected
-                                        ]}
-                                        onPress={() => setGender(option)}
-                                    >
-                                        <Text style={[
-                                            styles.genderOptionText,
-                                            gender === option && styles.genderOptionTextSelected
-                                        ]}>
-                                            {option}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                            {errors.gender && (
-                                <Text style={styles.errorText}>{errors.gender}</Text>
-                            )}
-                        </View>
-                    </View>
 
                     {/* Location Information */}
                     <View style={styles.section}>
-                        <LocationPicker
-                            country={country}
-                            setCountry={setCountry}
-                            city={city}
-                            setCity={setCity}
-                            errors={errors}
-                        />
-                    </View>
-
-                    {/* Bio */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>About Me</Text>
+                        <Text style={styles.sectionTitle}>Location</Text>
                         
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Personal Bio</Text>
-                            <TextInput
-                                style={[styles.input, styles.textArea]}
-                                value={bio}
-                                onChangeText={setBio}
-                                placeholder="Tell us about yourself, your health concerns, or any relevant information..."
-                                placeholderTextColor="#999"
-                                multiline
-                                numberOfLines={4}
-                                textAlignVertical="top"
-                            />
+                        <View style={styles.row}>
+                            <View style={styles.halfInput}>
+                                <Text style={styles.inputLabel}>Country</Text>
+                                <TouchableOpacity
+                                    style={[styles.pickerButton, errors?.country && styles.inputError]}
+                                    onPress={() => setShowCountryPicker(true)}
+                                >
+                                    <Text style={[styles.pickerButtonText, !country && styles.placeholderText]}>
+                                        {country || 'Select Country'}
+                                    </Text>
+                                    <Icon name="chevron-down" size={16} color="#666" />
+                                </TouchableOpacity>
+                                {errors?.country && <Text style={styles.errorText}>{errors.country}</Text>}
+                            </View>
+
+                            <View style={styles.halfInput}>
+                                <Text style={styles.inputLabel}>City</Text>
+                                <TextInput
+                                    style={[styles.input, errors?.city && styles.inputError]}
+                                    placeholder={city || "Enter your city"}
+                                    placeholderTextColor="#999"
+                                    value={city}
+                                    onChangeText={setCity}
+                                />
+                                {errors?.city && <Text style={styles.errorText}>{errors.city}</Text>}
+                            </View>
                         </View>
                     </View>
+
 
                     {/* Save Button */}
                     <View style={styles.saveSection}>
@@ -498,6 +498,34 @@ export default function EditPatientProfile() {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Country Picker Modal */}
+            <Modal
+                visible={showCountryPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowCountryPicker(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select Country</Text>
+                            <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
+                                <Icon name="times" size={20} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+                        <FlatList
+                            data={countryList}
+                            keyExtractor={(item) => item}
+                            renderItem={renderPickerItem}
+                            showsVerticalScrollIndicator={false}
+                            initialNumToRender={20}
+                            maxToRenderPerBatch={20}
+                            windowSize={10}
+                        />
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -679,5 +707,81 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    // Read-only field styles
+    readOnlyField: {
+        height: 50,
+        borderColor: '#E0E0E0',
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        backgroundColor: '#F5F5F5',
+        justifyContent: 'center',
+    },
+    readOnlyText: {
+        fontSize: 16,
+        color: '#666',
+    },
+    // Location picker styles
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    halfInput: {
+        width: '48%',
+    },
+    pickerButton: {
+        height: 50,
+        borderColor: '#E0E0E0',
+        borderWidth: 1,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#FFFFFF',
+    },
+    pickerButtonText: {
+        fontSize: 16,
+        color: '#333',
+        flex: 1,
+    },
+    placeholderText: {
+        color: '#999',
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '70%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    pickerItem: {
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    pickerItemText: {
+        fontSize: 16,
+        color: '#333',
     },
 }); 

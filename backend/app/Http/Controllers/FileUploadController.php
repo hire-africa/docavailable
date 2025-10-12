@@ -92,14 +92,116 @@ class FileUploadController extends Controller
     // Upload ID document
     public function uploadIdDocument(Request $request)
     {
-        $request->validate([
-            'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096', // max 4MB
-        ]);
         $user = $request->user();
-        $path = $request->file('document')->store('id_documents', 'public');
-        $url = Storage::disk('public')->url($path);
-        // Optionally, save $url to user's id_document field
-        return response()->json(['url' => $url]);
+        
+        // Debug logging
+        \Log::info('ID document upload request:', [
+            'has_file' => $request->hasFile('document'),
+            'has_document' => $request->has('document'),
+            'document_type' => gettype($request->input('document')),
+            'type' => $request->input('type'),
+            'all_data' => $request->all(),
+            'files' => $request->allFiles(),
+            'headers' => $request->headers->all()
+        ]);
+        
+        // Handle base64 image upload (from React Native)
+        if ($request->has('document') && is_string($request->input('document'))) {
+            $base64Image = $request->input('document');
+            $documentType = $request->input('type', 'government_id');
+            
+            // Validate base64 image
+            if (strlen($base64Image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid document data provided.'
+                ], 422);
+            }
+            
+            // Decode base64 image
+            $image = preg_replace('/^data:image\/\w+;base64,/', '', $base64Image);
+            $image = base64_decode($image);
+            
+            if (!$image || strlen($image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to decode document data.'
+                ], 422);
+            }
+            
+            // Generate filename based on document type
+            $filename = $documentType . '_' . \Illuminate\Support\Str::uuid() . '.jpg';
+            $path = 'id_documents/' . $filename;
+            
+            // Store in DigitalOcean Spaces
+            Storage::disk('spaces')->put($path, $image);
+            
+            // Get the public URL from DigitalOcean Spaces
+            $publicUrl = Storage::disk('spaces')->url($path);
+            
+            // Update user's document field based on type
+            switch ($documentType) {
+                case 'government_id':
+                    $user->id_document = $publicUrl;
+                    break;
+                case 'address_proof':
+                    $user->address_proof = $publicUrl;
+                    break;
+                case 'selfie':
+                    $user->selfie_verification = $publicUrl;
+                    break;
+            }
+            $user->save();
+            
+            \Log::info('ID document uploaded to DigitalOcean Spaces:', [
+                'user_id' => $user->id,
+                'type' => $documentType,
+                'path' => $path,
+                'public_url' => $publicUrl
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document uploaded successfully.',
+                'data' => [
+                    'document_url' => $publicUrl,
+                    'type' => $documentType
+                ]
+            ]);
+        } else {
+            // Handle file upload (fallback)
+            $request->validate([
+                'document' => 'required|file|mimes:jpg,jpeg,png,pdf|max:4096', // max 4MB
+            ]);
+            
+            $documentType = $request->input('type', 'government_id');
+            $user = $request->user();
+            $path = $request->file('document')->store('id_documents', 'spaces');
+            $url = Storage::disk('spaces')->url($path);
+            
+            // Update user's document field based on type
+            switch ($documentType) {
+                case 'government_id':
+                    $user->id_document = $url;
+                    break;
+                case 'address_proof':
+                    $user->address_proof = $url;
+                    break;
+                case 'selfie':
+                    $user->selfie_verification = $url;
+                    break;
+            }
+            $user->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Document uploaded successfully.',
+                'data' => [
+                    'document_url' => $url,
+                    'type' => $documentType
+                ]
+            ]);
+        }
     }
 
     // Upload chat image

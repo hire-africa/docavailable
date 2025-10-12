@@ -59,6 +59,9 @@ class User extends Authenticatable implements JWTSubject
         'email_notifications_enabled',
         'push_notifications_enabled',
         'sms_notifications_enabled',
+        'id_document',
+        'address_proof',
+        'selfie_verification',
     ];
 
     /**

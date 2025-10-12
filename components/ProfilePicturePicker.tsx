@@ -30,8 +30,6 @@ const ProfilePicturePicker: React.FC<ProfilePicturePickerProps> = ({
 }) => {
     const [isUploading, setIsUploading] = useState(false);
     
-    // Debug logging
-    console.log('ProfilePicturePicker: Received imageUri:', imageUri);
 
     const pickImage = async () => {
         try {

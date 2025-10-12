@@ -269,7 +269,7 @@ export default function EditDoctorProfile() {
 
         setSaving(true);
         try {
-            // console.log('EditDoctorProfile: Starting profile update...');
+            console.log('EditDoctorProfile: Starting profile update...');
             
             const updateData: any = {
                 first_name: firstName.trim(),
@@ -277,39 +277,17 @@ export default function EditDoctorProfile() {
                 specialization: specialization.trim(),
             };
 
-            if (dateOfBirth) {
-                updateData.date_of_birth = dateOfBirth;
-            }
+            // Convert empty strings to null for optional fields to match backend validation
+            updateData.date_of_birth = dateOfBirth && dateOfBirth.trim() ? dateOfBirth : null;
+            updateData.gender = gender && gender.trim() ? gender.toLowerCase() : null;
+            updateData.sub_specialization = subSpecialization && subSpecialization.trim() ? subSpecialization.trim() : null;
+            updateData.years_of_experience = yearsOfExperience && yearsOfExperience.trim() ? parseInt(yearsOfExperience) : null;
+            updateData.bio = bio && bio.trim() ? bio.trim() : null;
+            updateData.country = country && country.trim() ? country.trim() : null;
+            updateData.city = city && city.trim() ? city.trim() : null;
+            updateData.languages_spoken = languagesSpoken.length > 0 ? JSON.stringify(languagesSpoken) : null;
 
-            if (gender) {
-                updateData.gender = gender.toLowerCase();
-            }
-
-            if (subSpecialization) {
-                updateData.sub_specialization = subSpecialization.trim();
-            }
-
-            if (yearsOfExperience) {
-                updateData.years_of_experience = parseInt(yearsOfExperience);
-            }
-
-            if (bio) {
-                updateData.bio = bio.trim();
-            }
-
-            if (country) {
-                updateData.country = country.trim();
-            }
-
-            if (city) {
-                updateData.city = city.trim();
-            }
-
-            if (languagesSpoken.length > 0) {
-                updateData.languages_spoken = JSON.stringify(languagesSpoken);
-            }
-
-            // console.log('EditDoctorProfile: Update data:', updateData);
+            console.log('EditDoctorProfile: Update data:', updateData);
 
             const response = await apiService.patch('/profile', updateData);
 
@@ -343,7 +321,17 @@ export default function EditDoctorProfile() {
             });
             
             let errorMessage = 'Failed to update profile. Please try again.';
-            if (error.response?.data?.message) {
+            
+            // Handle validation errors specifically
+            if (error.response?.status === 422 && error.response?.data?.errors) {
+                const validationErrors = error.response.data.errors;
+                const errorFields = Object.keys(validationErrors);
+                const errorMessages = errorFields.map(field => 
+                    `${field.replace('_', ' ')}: ${validationErrors[field][0]}`
+                ).join('\n');
+                errorMessage = `Validation failed:\n${errorMessages}`;
+                console.error('EditDoctorProfile: Validation errors:', validationErrors);
+            } else if (error.response?.data?.message) {
                 errorMessage = error.response.data.message;
             } else if (error.message) {
                 errorMessage = error.message;
