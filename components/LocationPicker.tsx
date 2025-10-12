@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
     FlatList,
     Modal,
