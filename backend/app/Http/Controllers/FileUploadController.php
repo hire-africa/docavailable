@@ -24,36 +24,33 @@ class FileUploadController extends Controller
         ]);
         
         $user = $request->user();
-        $path = $request->file('profile_picture')->store('profile_pictures', 'public');
         
-        // Store PATH only, not a full storage URL
-        $user->profile_picture = $path;
+        // Store in DigitalOcean Spaces
+        $path = $request->file('profile_picture')->store('profile_pictures', 'spaces');
+        
+        // Get the public URL from DigitalOcean Spaces
+        $publicUrl = Storage::disk('spaces')->url($path);
+        
+        // Store the full URL in the database
+        $user->profile_picture = $publicUrl;
         $user->save();
         
-        // Dispatch job to process image asynchronously
+        // Dispatch job to process image asynchronously (optional for Spaces)
         \App\Jobs\ProcessFileUpload::dispatch($path, 'profile_picture', $user->id);
         
-        // Predict processed URL that the job will set (_medium variant)
-        $extension = pathinfo($path, PATHINFO_EXTENSION);
-        $filename = pathinfo($path, PATHINFO_FILENAME);
-        $directory = dirname($path);
-        $expectedProcessedPath = ($directory === '.' ? '' : ($directory . '/')) . $filename . '_medium.' . $extension;
-        $expectedUrl = url("/api/images/{$expectedProcessedPath}");
-
-        \Log::info('Profile picture uploaded successfully:', [
+        \Log::info('Profile picture uploaded to DigitalOcean Spaces:', [
             'user_id' => $user->id,
             'path' => $path,
-            'expected_processed_path' => $expectedProcessedPath,
-            'url' => $expectedUrl
+            'public_url' => $publicUrl
         ]);
-        
+
         return response()->json([
             'success' => true,
-            'message' => 'Profile picture uploaded successfully. Processing in background.',
+            'message' => 'Profile picture uploaded successfully to DigitalOcean Spaces.',
             'data' => [
-                'profile_picture_url' => $expectedUrl
+                'profile_picture_url' => $publicUrl
             ],
-            'processing' => true
+            'processing' => false
         ]);
     }
 
