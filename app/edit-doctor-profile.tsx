@@ -170,11 +170,24 @@ export default function EditDoctorProfile() {
             
             // Create form data for image upload
             const formData = new FormData();
-            formData.append('profile_picture', {
-                uri: imageUri,
-                type: 'image/jpeg',
-                name: 'profile_picture.jpg'
-            } as any);
+            
+            // Convert image to base64 (same approach as signup forms)
+            try {
+                const response = await fetch(imageUri);
+                const blob = await response.blob();
+                const base64 = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64String = reader.result as string;
+                        resolve(base64String);
+                    };
+                    reader.readAsDataURL(blob);
+                });
+                formData.append('profile_picture', base64);
+            } catch (conversionError) {
+                console.error('Profile picture conversion failed:', conversionError);
+                throw new Error('Failed to process profile picture. Please try again.');
+            }
 
             // console.log('EditDoctorProfile: FormData created, making API request...');
 

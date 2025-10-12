@@ -14,33 +14,68 @@ class FileUploadController extends Controller
         // Debug logging
         \Log::info('Profile picture upload request:', [
             'has_file' => $request->hasFile('profile_picture'),
+            'has_profile_picture' => $request->has('profile_picture'),
+            'profile_picture_type' => gettype($request->input('profile_picture')),
             'all_data' => $request->all(),
             'files' => $request->allFiles(),
             'headers' => $request->headers->all()
         ]);
         
-        $request->validate([
-            'profile_picture' => 'required|image|max:2048', // max 2MB
-        ]);
-        
         $user = $request->user();
         
-        // Store in DigitalOcean Spaces
-        $path = $request->file('profile_picture')->store('profile_pictures', 'spaces');
-        
-        // Get the public URL from DigitalOcean Spaces
-        $publicUrl = Storage::disk('spaces')->url($path);
+        // Handle base64 image upload (from React Native)
+        if ($request->has('profile_picture') && is_string($request->input('profile_picture'))) {
+            $base64Image = $request->input('profile_picture');
+            
+            // Validate base64 image
+            if (strlen($base64Image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid image data provided.'
+                ], 422);
+            }
+            
+            // Decode base64 image
+            $image = preg_replace('/^data:image\/\w+;base64,/', '', $base64Image);
+            $image = base64_decode($image);
+            
+            if (!$image || strlen($image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to decode image data.'
+                ], 422);
+            }
+            
+            // Generate filename
+            $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+            $path = 'profile_pictures/' . $filename;
+            
+            // Store in DigitalOcean Spaces
+            Storage::disk('spaces')->put($path, $image);
+            
+            // Get the public URL from DigitalOcean Spaces
+            $publicUrl = Storage::disk('spaces')->url($path);
+            
+        } else {
+            // Handle file upload (fallback)
+            $request->validate([
+                'profile_picture' => 'required|image|max:2048', // max 2MB
+            ]);
+            
+            // Store in DigitalOcean Spaces
+            $path = $request->file('profile_picture')->store('profile_pictures', 'spaces');
+            
+            // Get the public URL from DigitalOcean Spaces
+            $publicUrl = Storage::disk('spaces')->url($path);
+        }
         
         // Store the full URL in the database
         $user->profile_picture = $publicUrl;
         $user->save();
         
-        // Dispatch job to process image asynchronously (optional for Spaces)
-        \App\Jobs\ProcessFileUpload::dispatch($path, 'profile_picture', $user->id);
-        
         \Log::info('Profile picture uploaded to DigitalOcean Spaces:', [
             'user_id' => $user->id,
-            'path' => $path,
+            'path' => $path ?? 'unknown',
             'public_url' => $publicUrl
         ]);
 
