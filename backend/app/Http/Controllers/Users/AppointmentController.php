@@ -743,11 +743,17 @@ class AppointmentController extends Controller
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as text_sessions,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as audio_calls,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as video_calls
                 ', [
                     \App\Models\Appointment::STATUS_CONFIRMED,
                     \App\Models\Appointment::STATUS_COMPLETED,
-                    \App\Models\Appointment::STATUS_CANCELLED
+                    \App\Models\Appointment::STATUS_CANCELLED,
+                    \App\Models\Appointment::TYPE_TEXT,
+                    \App\Models\Appointment::TYPE_AUDIO,
+                    \App\Models\Appointment::TYPE_VIDEO
                 ])
                 ->groupBy('month')
                 ->orderBy('month')
@@ -758,7 +764,11 @@ class AppointmentController extends Controller
                         'appointments' => (int) $stat->appointments,
                         'confirmed' => (int) $stat->confirmed,
                         'completed' => (int) $stat->completed,
-                        'cancelled' => (int) $stat->cancelled
+                        'cancelled' => (int) $stat->cancelled,
+                        'text_sessions' => (int) $stat->text_sessions,
+                        'audio_calls' => (int) $stat->audio_calls,
+                        'video_calls' => (int) $stat->video_calls,
+                        'total_consultations' => (int) $stat->appointments
                     ];
                 });
             
@@ -797,11 +807,17 @@ class AppointmentController extends Controller
                     COUNT(*) as appointments,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled
+                    SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as cancelled,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as text_sessions,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as audio_calls,
+                    SUM(CASE WHEN appointment_type = ? THEN 1 ELSE 0 END) as video_calls
                 ', [
                     \App\Models\Appointment::STATUS_CONFIRMED,
                     \App\Models\Appointment::STATUS_COMPLETED,
-                    \App\Models\Appointment::STATUS_CANCELLED
+                    \App\Models\Appointment::STATUS_CANCELLED,
+                    \App\Models\Appointment::TYPE_TEXT,
+                    \App\Models\Appointment::TYPE_AUDIO,
+                    \App\Models\Appointment::TYPE_VIDEO
                 ])
                 ->groupBy('week')
                 ->orderBy('week')
@@ -818,7 +834,11 @@ class AppointmentController extends Controller
                         'appointments' => (int) $stat->appointments,
                         'confirmed' => (int) $stat->confirmed,
                         'completed' => (int) $stat->completed,
-                        'cancelled' => (int) $stat->cancelled
+                        'cancelled' => (int) $stat->cancelled,
+                        'text_sessions' => (int) $stat->text_sessions,
+                        'audio_calls' => (int) $stat->audio_calls,
+                        'video_calls' => (int) $stat->video_calls,
+                        'total_consultations' => (int) $stat->appointments
                     ];
                 });
             
