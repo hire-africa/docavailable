@@ -1,7 +1,7 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
