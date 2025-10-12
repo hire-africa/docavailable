@@ -133,12 +133,6 @@ export default function DoctorProfilePage() {
   const handleDirectBooking = async () => {
     if (!doctor || !userData) return;
     
-    // Check if user has subscription with text sessions (only for text sessions)
-    if (selectedSessionType === 'text' && (!currentSubscription || (currentSubscription.textSessionsRemaining || 0) <= 0)) {
-      setShowSubscriptionModal(true);
-      return;
-    }
-    
     // Show the session type selection modal
     setShowSessionTypeModal(true);
   };
@@ -146,12 +140,6 @@ export default function DoctorProfilePage() {
   const handleSessionTypeSelect = (sessionType: SessionType) => {
     setSelectedSessionType(sessionType);
     setShowSessionTypeModal(false);
-    
-    // Check subscription for text sessions only
-    if (sessionType === 'text' && (!currentSubscription || (currentSubscription.textSessionsRemaining || 0) <= 0)) {
-      setShowSubscriptionModal(true);
-      return;
-    }
     
     // Show the booking modal with selected session type
     setShowDirectBookingModal(true);

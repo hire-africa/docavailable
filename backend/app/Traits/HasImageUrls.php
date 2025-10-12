@@ -46,14 +46,20 @@ trait HasImageUrls
         if ($user->profile_picture) {
             $userData['profile_picture_url'] = $this->buildImageUrl($user->profile_picture);
         }
+        
+        // For private documents, we don't generate direct URLs
+        // Instead, we indicate they exist and require a secure endpoint
         if ($user->national_id) {
-            $userData['national_id_url'] = $this->buildImageUrl($user->national_id);
+            $userData['national_id_exists'] = true;
+            $userData['national_id_url'] = null; // Will be generated via secure endpoint
         }
         if ($user->medical_degree) {
-            $userData['medical_degree_url'] = $this->buildImageUrl($user->medical_degree);
+            $userData['medical_degree_exists'] = true;
+            $userData['medical_degree_url'] = null; // Will be generated via secure endpoint
         }
         if ($user->medical_licence) {
-            $userData['medical_licence_url'] = $this->buildImageUrl($user->medical_licence);
+            $userData['medical_licence_exists'] = true;
+            $userData['medical_licence_url'] = null; // Will be generated via secure endpoint
         }
         
         return $userData;

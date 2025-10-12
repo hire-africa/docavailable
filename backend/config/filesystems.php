@@ -74,6 +74,20 @@ return [
             'url' => 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION', 'fra1') . '.digitaloceanspaces.com',
         ],
 
+        'spaces_private' => [
+            'driver' => 's3',
+            'key' => env('DO_SPACES_KEY'),
+            'secret' => env('DO_SPACES_SECRET'),
+            'region' => env('DO_SPACES_REGION', 'fra1'),
+            'bucket' => env('DO_SPACES_BUCKET'),
+            'endpoint' => env('DO_SPACES_ENDPOINT'),
+            'use_path_style_endpoint' => false,
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+            'url' => 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION', 'fra1') . '.digitaloceanspaces.com',
+        ],
+
     ],
 
     /*

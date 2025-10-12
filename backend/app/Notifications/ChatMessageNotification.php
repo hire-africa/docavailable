@@ -55,8 +55,6 @@ class ChatMessageNotification extends Notification implements ShouldQueue
             'notification' => [
                 'title' => "New message from {$senderName}",
                 'body' => "You have a new message", // Generic message - no content for privacy
-                'sound' => 'default',
-                'badge' => 1,
             ],
             'data' => [
                 'type' => 'chat_message',

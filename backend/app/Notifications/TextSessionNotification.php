@@ -46,8 +46,10 @@ class TextSessionNotification extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         return [
-            'title' => $this->getSubject(),
-            'body' => $this->getContent(),
+            'notification' => [
+                'title' => $this->getSubject(),
+                'body' => $this->getContent(),
+            ],
             'data' => [
                 'type' => 'text_session',
                 'session_id' => $this->textSession->id,

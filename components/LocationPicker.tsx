@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     FlatList,
     Modal,
@@ -40,9 +40,10 @@ interface LocationPickerProps {
     city: string;
     setCity: (city: string) => void;
     errors?: any;
+    fieldRefs?: any;
 }
 
-export default function LocationPicker({ country, setCountry, city, setCity, errors }: LocationPickerProps) {
+export default function LocationPicker({ country, setCountry, city, setCity, errors, fieldRefs }: LocationPickerProps) {
     const [showCountryPicker, setShowCountryPicker] = useState(false);
 
     const handleCountrySelect = (selectedCountry: string) => {
@@ -67,6 +68,7 @@ export default function LocationPicker({ country, setCountry, city, setCity, err
                 <View style={styles.halfInput}>
                     <Text style={styles.inputLabel}>Country</Text>
                     <TouchableOpacity
+                        ref={fieldRefs?.country}
                         style={[styles.pickerButton, errors?.country && styles.inputError]}
                         onPress={() => setShowCountryPicker(true)}
                     >
@@ -81,6 +83,7 @@ export default function LocationPicker({ country, setCountry, city, setCity, err
                 <View style={styles.halfInput}>
                     <Text style={styles.inputLabel}>City</Text>
                     <TextInput
+                        ref={fieldRefs?.city}
                         style={[styles.input, errors?.city && styles.inputError]}
                         placeholder="Enter your city"
                         placeholderTextColor="#999"

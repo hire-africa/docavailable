@@ -3,7 +3,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,6 +22,7 @@ import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { navigateToLogin } from '../utils/navigationUtils';
+import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -54,6 +55,7 @@ interface Step1Props {
     idDocument: string | null;
     setIdDocument: (uri: string | null) => void;
     errors: any;
+    fieldRefs: any;
 }
 
 interface Step3Props {
@@ -63,6 +65,7 @@ interface Step3Props {
     isVerifying: boolean;
     onResendCode: () => void;
     errors: any;
+    fieldRefs: any;
 }
 
 const Step1: React.FC<Step1Props> = ({
@@ -91,6 +94,7 @@ const Step1: React.FC<Step1Props> = ({
     idDocument,
     setIdDocument,
     errors,
+    fieldRefs,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
     const [isUploading, setIsUploading] = useState(false);
@@ -186,6 +190,7 @@ const Step1: React.FC<Step1Props> = ({
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>First Name</Text>
                         <TextInput
+                            ref={fieldRefs.firstName}
                             style={[styles.input, errors?.firstName && styles.inputError]}
                             placeholder="First name"
                             placeholderTextColor="#999"
@@ -198,6 +203,7 @@ const Step1: React.FC<Step1Props> = ({
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>Surname</Text>
                         <TextInput
+                            ref={fieldRefs.surname}
                             style={[styles.input, errors.surname && styles.inputError]}
                             placeholder="Surname"
                             placeholderTextColor="#999"
@@ -211,6 +217,7 @@ const Step1: React.FC<Step1Props> = ({
 
                 <Text style={styles.inputLabel}>Date of Birth</Text>
                 <DatePickerField
+                    ref={fieldRefs.dob}
                     value={dob}
                     onChange={setDob}
                     error={errors.dob}
@@ -220,7 +227,7 @@ const Step1: React.FC<Step1Props> = ({
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Gender</Text>
-                <View style={styles.genderContainer}>
+                <View ref={fieldRefs.gender} style={styles.genderContainer}>
                     {genderOptions.map(option => (
                         <TouchableOpacity
                             key={option}
@@ -242,6 +249,7 @@ const Step1: React.FC<Step1Props> = ({
                 
                 <Text style={styles.inputLabel}>Email Address</Text>
                 <TextInput
+                    ref={fieldRefs.email}
                     style={[styles.input, errors.email && styles.inputError]}
                     placeholder="Enter your email address"
                     placeholderTextColor="#999"
@@ -254,6 +262,7 @@ const Step1: React.FC<Step1Props> = ({
                 
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
+                    ref={fieldRefs.password}
                     style={[styles.input, errors.password && styles.inputError]}
                     placeholder="Create a secure password"
                     placeholderTextColor="#999"
@@ -273,6 +282,7 @@ const Step1: React.FC<Step1Props> = ({
                     city={city}
                     setCity={setCity}
                     errors={errors}
+                    fieldRefs={fieldRefs}
                 />
             </View>
 
@@ -411,6 +421,7 @@ const Step1: React.FC<Step1Props> = ({
             <View style={styles.formSection}>
                 <View style={styles.policyContainer}>
                     <TouchableOpacity
+                        ref={fieldRefs.acceptPolicies}
                         style={styles.checkboxContainer}
                         onPress={() => setAcceptPolicies(!acceptPolicies)}
                     >
@@ -440,6 +451,7 @@ const Step3: React.FC<Step3Props> = ({
     isVerifying,
     onResendCode,
     errors,
+    fieldRefs,
 }) => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
@@ -458,6 +470,7 @@ const Step3: React.FC<Step3Props> = ({
                 
                 <Text style={styles.inputLabel}>Enter Verification Code</Text>
                 <TextInput
+                    ref={fieldRefs.verificationCode}
                     style={[styles.input, errors.verificationCode && styles.inputError]}
                     placeholder="Enter 6-digit code"
                     placeholderTextColor="#999"
@@ -504,6 +517,13 @@ export default function PatientSignUp() {
     const [city, setCity] = useState('');
     const [acceptPolicies, setAcceptPolicies] = useState(false);
     const [loading, setLoading] = useState(false);
+    
+    // Create refs for scrolling to errors
+    const scrollViewRef = useRef<ScrollView>(null);
+    const fieldRefs = createFieldRefs([
+        'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
+        'country', 'city', 'acceptPolicies', 'verificationCode'
+    ]);
     
     // ID verification state (formerly Step 2)
     const [idType, setIdType] = useState<string | null>(null);
@@ -619,6 +639,14 @@ export default function PatientSignUp() {
         }
 
         setErrors(newErrors);
+        
+        // Scroll to first error if validation fails
+        if (!isValid) {
+            setTimeout(() => {
+                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+            }, 100);
+        }
+        
         return isValid;
     };
 
@@ -635,6 +663,14 @@ export default function PatientSignUp() {
         }
 
         setErrors(newErrors);
+        
+        // Scroll to first error if validation fails
+        if (!isValid) {
+            setTimeout(() => {
+                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+            }, 100);
+        }
+        
         return isValid;
     };
 
@@ -880,6 +916,7 @@ export default function PatientSignUp() {
                         idDocument={idDocument}
                         setIdDocument={setIdDocument}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
             case 2:
@@ -891,6 +928,7 @@ export default function PatientSignUp() {
                         isVerifying={isVerifying}
                         onResendCode={sendVerificationCode}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
             default:
@@ -921,6 +959,7 @@ export default function PatientSignUp() {
                         idDocument={idDocument}
                         setIdDocument={setIdDocument}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
         }
@@ -928,7 +967,7 @@ export default function PatientSignUp() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollViewRef} style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>

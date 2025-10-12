@@ -750,6 +750,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/logout', [AuthenticationController::class, 'logout']);
     Route::post('/refresh', [AuthenticationController::class, 'refresh']);
     Route::patch('/profile', [AuthenticationController::class, 'updateProfile']);
+    Route::get('/private-document-url', [AuthenticationController::class, 'getPrivateDocumentUrl']);
     Route::post('/change-password', [AuthenticationController::class, 'changePassword']);
     
     // User & Subscription routes

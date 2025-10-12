@@ -1,17 +1,19 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 
 export default function AdminSignUp() {
   const [firstName, setFirstName] = useState('');
@@ -23,6 +25,12 @@ export default function AdminSignUp() {
   const [country, setCountry] = useState('');
   const [city, setCity] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Create refs for scrolling to errors
+  const scrollViewRef = useRef<ScrollView>(null);
+  const fieldRefs = createFieldRefs([
+    'firstName', 'lastName', 'email', 'password', 'dateOfBirth', 'gender', 'country', 'city'
+  ]);
   const [errors, setErrors] = useState({
     firstName: null,
     lastName: null,
@@ -72,6 +80,14 @@ export default function AdminSignUp() {
     }
 
     setErrors(newErrors);
+    
+    // Scroll to first error if validation fails
+    if (!isValid) {
+      setTimeout(() => {
+        scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+      }, 100);
+    }
+    
     return isValid;
   };
 
@@ -124,53 +140,58 @@ export default function AdminSignUp() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Create Admin Account</Text>
-        </View>
+      <ScrollView ref={scrollViewRef} style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
+            </TouchableOpacity>
+            <Text style={styles.title}>Create Admin Account</Text>
+          </View>
 
-        <View style={styles.form}>
-          <TextInput
-            style={[styles.input, errors.firstName && styles.inputError]}
-            placeholder="First Name"
-            placeholderTextColor="#666"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+          <View style={styles.form}>
+            <TextInput
+              ref={fieldRefs.firstName}
+              style={[styles.input, errors.firstName && styles.inputError]}
+              placeholder="First Name"
+              placeholderTextColor="#666"
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+            {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
 
-          <TextInput
-            style={[styles.input, errors.lastName && styles.inputError]}
-            placeholder="Last Name"
-            placeholderTextColor="#666"
-            value={lastName}
-            onChangeText={setLastName}
-          />
-          {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
+            <TextInput
+              ref={fieldRefs.lastName}
+              style={[styles.input, errors.lastName && styles.inputError]}
+              placeholder="Last Name"
+              placeholderTextColor="#666"
+              value={lastName}
+              onChangeText={setLastName}
+            />
+            {errors.lastName && <Text style={styles.errorText}>{errors.lastName}</Text>}
 
-          <TextInput
-            style={[styles.input, errors.email && styles.inputError]}
-            placeholder="Email"
-            placeholderTextColor="#666"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+            <TextInput
+              ref={fieldRefs.email}
+              style={[styles.input, errors.email && styles.inputError]}
+              placeholder="Email"
+              placeholderTextColor="#666"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+            />
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-          <TextInput
-            style={[styles.input, errors.password && styles.inputError]}
-            placeholder="Password"
-            placeholderTextColor="#666"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+            <TextInput
+              ref={fieldRefs.password}
+              style={[styles.input, errors.password && styles.inputError]}
+              placeholder="Password"
+              placeholderTextColor="#666"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
 
           <TouchableOpacity 
             style={[styles.signUpButton, loading && styles.signUpButtonDisabled]} 
@@ -188,15 +209,16 @@ export default function AdminSignUp() {
               <Text style={styles.signUpButtonText}>Create Admin Account</Text>
             )}
           </TouchableOpacity>
-        </View>
+          </View>
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account?</Text>
-          <TouchableOpacity onPress={() => router.push('/login')}>
-            <Text style={styles.loginLink}>Sign In</Text>
-          </TouchableOpacity>
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <TouchableOpacity onPress={() => router.push('/login')}>
+              <Text style={styles.loginLink}>Sign In</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -205,6 +227,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  scrollContainer: {
+    flex: 1,
   },
   content: {
     flex: 1,

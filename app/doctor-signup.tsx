@@ -2,7 +2,7 @@ import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -22,6 +22,7 @@ import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { navigateToLogin } from '../utils/navigationUtils';
+import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -59,6 +60,7 @@ interface Step1Props {
     acceptPolicies: boolean;
     setAcceptPolicies: (accept: boolean) => void;
     errors: any;
+    fieldRefs: any;
 }
 
 interface Step2Props {
@@ -70,6 +72,7 @@ interface Step2Props {
     setSpecialistCertificate: (uri: string | null) => void;
     isUploading: boolean;
     errors: any;
+    fieldRefs: any;
 }
 
 interface Step3Props {
@@ -79,6 +82,7 @@ interface Step3Props {
     isVerifying: boolean;
     onResendCode: () => void;
     errors: any;
+    fieldRefs: any;
 }
 
 // Step 1 Component: Personal and Professional Information
@@ -89,7 +93,7 @@ const Step1: React.FC<Step1Props> = ({
     email, setEmail, password, setPassword, yearsOfExperience, setYearsOfExperience,
     specializations, setSpecializations,
     professionalBio, setProfessionalBio, country, setCountry, city, setCity,
-    languagesSpoken, setLanguagesSpoken, acceptPolicies, setAcceptPolicies, errors,
+    languagesSpoken, setLanguagesSpoken, acceptPolicies, setAcceptPolicies, errors, fieldRefs,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
 
@@ -118,26 +122,26 @@ const Step1: React.FC<Step1Props> = ({
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>First Name</Text>
                         <TextInput
+                            ref={fieldRefs.firstName}
                             style={[styles.input, errors.firstName && styles.inputError]}
                             placeholder="First name"
                             placeholderTextColor="#999"
                             value={firstName}
                             onChangeText={setFirstName}
                             numberOfLines={1}
-                            ellipsizeMode="tail"
                         />
                         {errors.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                     </View>
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>Surname</Text>
                         <TextInput
+                            ref={fieldRefs.surname}
                             style={[styles.input, errors.surname && styles.inputError]}
                             placeholder="Surname"
                             placeholderTextColor="#999"
                             value={surname}
                             onChangeText={setSurname}
                             numberOfLines={1}
-                            ellipsizeMode="tail"
                         />
                         {errors.surname && <Text style={styles.errorText}>{errors.surname}</Text>}
                     </View>
@@ -145,6 +149,7 @@ const Step1: React.FC<Step1Props> = ({
 
                 <Text style={styles.inputLabel}>Date of Birth</Text>
                 <DatePickerField
+                    ref={fieldRefs.dob}
                     value={dob}
                     onChange={setDob}
                     error={errors.dob}
@@ -152,7 +157,7 @@ const Step1: React.FC<Step1Props> = ({
                 />
 
                 <Text style={styles.inputLabel}>Gender</Text>
-                <View style={styles.genderContainer}>
+                <View ref={fieldRefs.gender} style={styles.genderContainer}>
                     {genderOptions.map((option) => (
                         <TouchableOpacity
                             key={option}
@@ -179,6 +184,7 @@ const Step1: React.FC<Step1Props> = ({
 
                 <Text style={styles.inputLabel}>Years of Experience</Text>
                 <TextInput
+                    ref={fieldRefs.yearsOfExperience}
                     style={[styles.input, errors.yearsOfExperience && styles.inputError]}
                     placeholder="Enter years of experience"
                     placeholderTextColor="#999"
@@ -198,6 +204,7 @@ const Step1: React.FC<Step1Props> = ({
 
                 <Text style={styles.inputLabel}>Professional Bio</Text>
                 <TextInput
+                    ref={fieldRefs.professionalBio}
                     style={[styles.textArea, errors.professionalBio && styles.inputError]}
                     placeholder="Tell us about your professional background"
                     placeholderTextColor="#999"
@@ -214,6 +221,7 @@ const Step1: React.FC<Step1Props> = ({
                 
                 <Text style={styles.inputLabel}>Email Address</Text>
                 <TextInput
+                    ref={fieldRefs.email}
                     style={[styles.input, errors.email && styles.inputError]}
                     placeholder="Enter your email address"
                     placeholderTextColor="#999"
@@ -226,6 +234,7 @@ const Step1: React.FC<Step1Props> = ({
                 
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
+                    ref={fieldRefs.password}
                     style={[styles.input, errors.password && styles.inputError]}
                     placeholder="Create a secure password"
                     placeholderTextColor="#999"
@@ -254,12 +263,14 @@ const Step1: React.FC<Step1Props> = ({
                     city={city}
                     setCity={setCity}
                     errors={errors}
+                    fieldRefs={fieldRefs}
                 />
             </View>
 
             <View style={styles.formSection}>
                 <View style={styles.policyContainer}>
                     <TouchableOpacity
+                        ref={fieldRefs.acceptPolicies}
                         style={styles.checkboxContainer}
                         onPress={() => setAcceptPolicies(!acceptPolicies)}
                     >
@@ -290,6 +301,7 @@ const Step2: React.FC<Step2Props> = ({
     setSpecialistCertificate,
     isUploading,
     errors,
+    fieldRefs,
 }) => {
     const handleFileUpload = async (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate', setter: (uri: string | null) => void) => {
         try {
@@ -315,27 +327,83 @@ const Step2: React.FC<Step2Props> = ({
         }
     };
 
+    const handleCameraCapture = async (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate', setter: (uri: string | null) => void) => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Sorry, we need camera permissions to take photos!');
+                return;
+            }
+
+            const result = await ImagePicker.launchCameraAsync({
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 1.0, // No compression - maximum quality
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setter(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('Error taking photo:', error);
+            Alert.alert('Error', 'Failed to take photo. Please try again.');
+        }
+    };
+
+    const showUploadOptions = (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate', setter: (uri: string | null) => void) => {
+        Alert.alert(
+            'Upload Document',
+            'Choose how you want to upload your document',
+            [
+                {
+                    text: 'Camera',
+                    onPress: () => handleCameraCapture(type, setter),
+                },
+                {
+                    text: 'Photo Library',
+                    onPress: () => handleFileUpload(type, setter),
+                },
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+            ]
+        );
+    };
+
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
                 <FontAwesome name="file-text" size={40} color="#4CAF50" />
                 <Text style={styles.stepTitle}>Required Documents</Text>
                 <Text style={styles.stepSubtitle}>Upload your credentials</Text>
+                <Text style={styles.uploadInstruction}>
+                    Tap any upload button to choose between camera or photo library
+                </Text>
             </View>
 
             <View style={styles.formSection}>
                 <View style={styles.documentUpload}>
                     <Text style={styles.documentLabel}>National ID / Passport *</Text>
                     <TouchableOpacity
+                        ref={fieldRefs?.nationalIdPassport}
                         style={[styles.uploadButton, nationalIdPassport && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('nationalIdPassport', setNationalIdPassport)}
+                        onPress={() => showUploadOptions('nationalIdPassport', setNationalIdPassport)}
                         disabled={isUploading}
                     >
-                        <FontAwesome
-                            name={nationalIdPassport ? "check-circle" : "upload"}
-                            size={24}
-                            color={nationalIdPassport ? "#4CAF50" : "#666"}
-                        />
+                        <View style={styles.uploadIconContainer}>
+                            <FontAwesome
+                                name={nationalIdPassport ? "check-circle" : "camera"}
+                                size={20}
+                                color={nationalIdPassport ? "#4CAF50" : "#666"}
+                            />
+                            <FontAwesome
+                                name={nationalIdPassport ? "check-circle" : "photo"}
+                                size={20}
+                                color={nationalIdPassport ? "#4CAF50" : "#666"}
+                                style={{ marginLeft: 8 }}
+                            />
+                        </View>
                         <Text style={styles.uploadButtonText}>
                             {nationalIdPassport ? 'Document uploaded' : 'Upload National ID or Passport'}
                         </Text>
@@ -346,15 +414,24 @@ const Step2: React.FC<Step2Props> = ({
                 <View style={styles.documentUpload}>
                     <Text style={styles.documentLabel}>Highest Medical Certificate *</Text>
                     <TouchableOpacity
+                        ref={fieldRefs?.highestMedicalCertificate}
                         style={[styles.uploadButton, highestMedicalCertificate && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('highestMedicalCertificate', setHighestMedicalCertificate)}
+                        onPress={() => showUploadOptions('highestMedicalCertificate', setHighestMedicalCertificate)}
                         disabled={isUploading}
                     >
-                        <FontAwesome
-                            name={highestMedicalCertificate ? "check-circle" : "upload"}
-                            size={24}
-                            color={highestMedicalCertificate ? "#4CAF50" : "#666"}
-                        />
+                        <View style={styles.uploadIconContainer}>
+                            <FontAwesome
+                                name={highestMedicalCertificate ? "check-circle" : "camera"}
+                                size={20}
+                                color={highestMedicalCertificate ? "#4CAF50" : "#666"}
+                            />
+                            <FontAwesome
+                                name={highestMedicalCertificate ? "check-circle" : "photo"}
+                                size={20}
+                                color={highestMedicalCertificate ? "#4CAF50" : "#666"}
+                                style={{ marginLeft: 8 }}
+                            />
+                        </View>
                         <Text style={styles.uploadButtonText}>
                             {highestMedicalCertificate ? 'Document uploaded' : 'Upload Highest Medical Certificate'}
                         </Text>
@@ -366,14 +443,22 @@ const Step2: React.FC<Step2Props> = ({
                     <Text style={styles.documentLabel}>Specialist Certificate (Optional)</Text>
                     <TouchableOpacity
                         style={[styles.uploadButton, specialistCertificate && styles.uploadButtonSuccess]}
-                        onPress={() => handleFileUpload('specialistCertificate', setSpecialistCertificate)}
+                        onPress={() => showUploadOptions('specialistCertificate', setSpecialistCertificate)}
                         disabled={isUploading}
                     >
-                        <FontAwesome
-                            name={specialistCertificate ? "check-circle" : "upload"}
-                            size={24}
-                            color={specialistCertificate ? "#4CAF50" : "#666"}
-                        />
+                        <View style={styles.uploadIconContainer}>
+                            <FontAwesome
+                                name={specialistCertificate ? "check-circle" : "camera"}
+                                size={20}
+                                color={specialistCertificate ? "#4CAF50" : "#666"}
+                            />
+                            <FontAwesome
+                                name={specialistCertificate ? "check-circle" : "photo"}
+                                size={20}
+                                color={specialistCertificate ? "#4CAF50" : "#666"}
+                                style={{ marginLeft: 8 }}
+                            />
+                        </View>
                         <Text style={styles.uploadButtonText}>
                             {specialistCertificate ? 'Document uploaded' : 'Upload Specialist Certificate'}
                         </Text>
@@ -393,6 +478,7 @@ const Step3: React.FC<Step3Props> = ({
     isVerifying,
     onResendCode,
     errors,
+    fieldRefs,
 }) => {
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
@@ -411,6 +497,7 @@ const Step3: React.FC<Step3Props> = ({
                 
                 <Text style={styles.inputLabel}>Enter Verification Code</Text>
                 <TextInput
+                    ref={fieldRefs.verificationCode}
                     style={[styles.input, errors.verificationCode && styles.inputError]}
                     placeholder="Enter 6-digit code"
                     placeholderTextColor="#999"
@@ -449,6 +536,15 @@ export default function DoctorSignUp() {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    
+    // Create refs for scrolling to errors
+    const scrollViewRef = useRef<ScrollView>(null);
+    const fieldRefs = createFieldRefs([
+        'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
+        'yearsOfExperience', 'specializations', 'professionalBio', 'country', 'city', 
+        'languagesSpoken', 'acceptPolicies', 'nationalIdPassport', 'highestMedicalCertificate',
+        'verificationCode'
+    ]);
 
     // Step 1 state
     const [firstName, setFirstName] = useState('');
@@ -549,6 +645,14 @@ export default function DoctorSignUp() {
         }
 
         setErrors(newErrors);
+        
+        // Scroll to first error if validation fails
+        if (Object.keys(newErrors).length > 0) {
+            setTimeout(() => {
+                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+            }, 100);
+        }
+        
         return Object.keys(newErrors).length === 0;
     };
 
@@ -564,6 +668,14 @@ export default function DoctorSignUp() {
         }
 
         setErrors(newErrors);
+        
+        // Scroll to first error if validation fails
+        if (Object.keys(newErrors).length > 0) {
+            setTimeout(() => {
+                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+            }, 100);
+        }
+        
         return Object.keys(newErrors).length === 0;
     };
 
@@ -580,6 +692,14 @@ export default function DoctorSignUp() {
         }
 
         setErrors(newErrors);
+        
+        // Scroll to first error if validation fails
+        if (!isValid) {
+            setTimeout(() => {
+                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
+            }, 100);
+        }
+        
         return isValid;
     };
 
@@ -871,6 +991,7 @@ export default function DoctorSignUp() {
                         acceptPolicies={acceptPolicies}
                         setAcceptPolicies={setAcceptPolicies}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
             case 2:
@@ -884,6 +1005,7 @@ export default function DoctorSignUp() {
                         setSpecialistCertificate={setSpecialistCertificate}
                         isUploading={isUploading}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
             case 3:
@@ -895,6 +1017,7 @@ export default function DoctorSignUp() {
                         isVerifying={isVerifying}
                         onResendCode={sendVerificationCode}
                         errors={errors}
+                        fieldRefs={fieldRefs}
                     />
                 );
             default:
@@ -904,7 +1027,7 @@ export default function DoctorSignUp() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollViewRef} style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>
@@ -1238,6 +1361,13 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 22,
     },
+    uploadInstruction: {
+        fontSize: 12,
+        color: '#999',
+        textAlign: 'center',
+        marginTop: 8,
+        fontStyle: 'italic',
+    },
     formSection: {
         marginBottom: 30,
         backgroundColor: '#fff',
@@ -1372,6 +1502,10 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#666',
         fontWeight: '500',
+    },
+    uploadIconContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     footer: {
         flexDirection: 'row',

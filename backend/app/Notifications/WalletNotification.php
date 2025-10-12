@@ -66,8 +66,10 @@ class WalletNotification extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         return [
-            'title' => $this->getSubject(),
-            'body' => $this->getContent(),
+            'notification' => [
+                'title' => $this->getSubject(),
+                'body' => $this->getContent(),
+            ],
             'data' => [
                 'type' => 'wallet',
                 'transaction_id' => $this->transaction->id,

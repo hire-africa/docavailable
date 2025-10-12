@@ -61,8 +61,10 @@ class CustomNotification extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         return [
-            'title' => $this->title,
-            'body' => $this->message,
+            'notification' => [
+                'title' => $this->title,
+                'body' => $this->message,
+            ],
             'data' => array_merge($this->data, [
                 'type' => 'custom',
                 'click_action' => 'OPEN_APP',

@@ -70,8 +70,6 @@ class AppointmentNotification extends Notification implements ShouldQueue
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
-                'sound' => 'default',
-                'badge' => 1,
             ],
             'data' => [
                 'type' => 'appointment_' . $this->type,

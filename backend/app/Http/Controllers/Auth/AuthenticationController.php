@@ -130,8 +130,9 @@ class AuthenticationController extends Controller
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_national_id.jpg';
-                        \Illuminate\Support\Facades\Storage::disk('public')->put('documents/' . $filename, $image);
-                        $nationalIdPath = 'documents/' . $filename;
+                        $path = 'private_documents/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
+                        $nationalIdPath = $path; // Store the full path for private access
                     }
                 }
 
@@ -142,8 +143,9 @@ class AuthenticationController extends Controller
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_degree.jpg';
-                        \Illuminate\Support\Facades\Storage::disk('public')->put('documents/' . $filename, $image);
-                        $medicalDegreePath = 'documents/' . $filename;
+                        $path = 'private_documents/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
+                        $medicalDegreePath = $path; // Store the full path for private access
                     }
                 }
 
@@ -154,8 +156,9 @@ class AuthenticationController extends Controller
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_licence.jpg';
-                        \Illuminate\Support\Facades\Storage::disk('public')->put('documents/' . $filename, $image);
-                        $medicalLicencePath = 'documents/' . $filename;
+                        $path = 'private_documents/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
+                        $medicalLicencePath = $path; // Store the full path for private access
                     }
                 }
             }
@@ -907,6 +910,69 @@ class AuthenticationController extends Controller
     /**
      * Send verification code to email
      */
+    /**
+     * Get a secure URL for accessing private documents
+     */
+    public function getPrivateDocumentUrl(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $documentType = $request->input('type'); // 'national_id', 'medical_degree', 'medical_licence'
+            
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 401);
+            }
+            
+            // Get the document path from user
+            $documentPath = null;
+            switch ($documentType) {
+                case 'national_id':
+                    $documentPath = $user->national_id;
+                    break;
+                case 'medical_degree':
+                    $documentPath = $user->medical_degree;
+                    break;
+                case 'medical_licence':
+                    $documentPath = $user->medical_licence;
+                    break;
+                default:
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid document type'
+                    ], 400);
+            }
+            
+            if (!$documentPath) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Document not found'
+                ], 404);
+            }
+            
+            // Generate a temporary signed URL (valid for 1 hour)
+            $url = \Illuminate\Support\Facades\Storage::disk('spaces_private')->temporaryUrl(
+                $documentPath, 
+                now()->addHour()
+            );
+            
+            return response()->json([
+                'success' => true,
+                'url' => $url,
+                'expires_at' => now()->addHour()->toISOString()
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error generating private document URL: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate document URL'
+            ], 500);
+        }
+    }
+
     public function sendVerificationCode(Request $request): JsonResponse
     {
         try {

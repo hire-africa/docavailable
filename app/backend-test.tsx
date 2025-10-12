@@ -4,12 +4,12 @@ import { notificationApiService } from '@/services/notificationApiService';
 import { walletApiService } from '@/services/walletApiService';
 import { useState } from 'react';
 import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { apiService } from '../app/services/apiService';
 

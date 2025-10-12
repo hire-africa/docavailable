@@ -66,8 +66,10 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
             : 'text_session_' . $sessionId;
 
         return [
-            'title' => "New message from {$senderName}",
-            'body' => 'You have a new message',
+            'notification' => [
+                'title' => "New message from {$senderName}",
+                'body' => 'You have a new message',
+            ],
             'data' => [
                 'type' => 'chat_message',
                 'appointment_id' => (string)$appointmentId,

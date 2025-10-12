@@ -35,9 +35,11 @@ class IncomingCallNotification extends Notification
         $callType = $this->callSession->call_type === 'video' ? 'video' : 'audio';
 
         return [
-            'title' => $callType === 'video' ? 'Incoming video call' : 'Incoming voice call',
-            'body' => $callerName . ' is calling…',
-'data' => [
+            'notification' => [
+                'title' => $callType === 'video' ? 'Incoming video call' : 'Incoming voice call',
+                'body' => $callerName . ' is calling…',
+            ],
+            'data' => [
                 'type' => 'incoming_call',
                 'appointment_id' => (string)($this->callSession->appointment_id ?? $this->callSession->id),
                 'call_type' => $callType,

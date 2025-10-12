@@ -1,5 +1,5 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import React, { useState } from 'react';
+import { forwardRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const styles = StyleSheet.create({
@@ -168,14 +168,14 @@ function parseDate(str: string): Date | null {
     return null;
 }
 
-export const DatePickerField: React.FC<DatePickerFieldProps> = ({ 
+export const DatePickerField = forwardRef<View, DatePickerFieldProps>(({ 
     value, 
     onChange, 
     label, 
     error, 
     minimumDate,
     outputFormat = 'YYYY-MM-DD'
-}) => {
+}, ref) => {
     const [show, setShow] = useState(false);
     const [tempDate, setTempDate] = useState<Date>(new Date());
     const [isProcessing, setIsProcessing] = useState(false);
@@ -266,7 +266,7 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
     };
 
     return (
-        <View style={{ marginBottom: 16 }}>
+        <View ref={ref} style={{ marginBottom: 16 }}>
             {label && <Text style={styles.label}>{label}</Text>}
             <TouchableOpacity
                 style={[
@@ -323,6 +323,6 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
             )}
         </View>
     );
-};
+});
 
 export default DatePickerField; 
