@@ -1377,9 +1377,20 @@ export default function DoctorDashboard() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
                   <TouchableOpacity
                     style={{ flex: 1, backgroundColor: '#ADB5BD', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
-                    onPress={() => { if (selectedRequest) handleRejectBooking(selectedRequest); setShowRequestModal(false); }}
+                    onPress={() => { 
+                      if (selectedRequest) {
+                        if (isAppointmentExpired(selectedRequest.date, selectedRequest.time)) {
+                          handleDeleteExpiredAppointment(selectedRequest);
+                        } else {
+                          handleRejectBooking(selectedRequest);
+                        }
+                      }
+                      setShowRequestModal(false); 
+                    }}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Reject</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>
+                      {isAppointmentExpired(selectedRequest.date, selectedRequest.time) ? 'Delete' : 'Reject'}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={{ flex: 1, backgroundColor: isAppointmentExpired(selectedRequest.date, selectedRequest.time) ? '#E0E0E0' : '#4CAF50', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
