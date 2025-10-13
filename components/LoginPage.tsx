@@ -1,7 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
+import { authorize, refresh, revoke } from 'react-native-app-auth';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -15,7 +14,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { GOOGLE_API_ENDPOINTS, GOOGLE_AUTH_ERRORS, GOOGLE_OAUTH_CONFIG, getGoogleOAuthConfig, getGoogleOAuthDiscovery } from '../config/googleOAuth';
+import { APP_AUTH_CONFIG, isAppAuthConfigured } from '../config/appAuthConfig';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 
@@ -167,8 +166,8 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         try {
-            // Check if Google OAuth is configured
-            if (!GOOGLE_OAUTH_CONFIG.clientId || GOOGLE_OAUTH_CONFIG.clientId === 'YOUR_GOOGLE_CLIENT_ID') {
+            // Check if app auth is configured
+            if (!isAppAuthConfigured()) {
                 Alert.alert(
                     'Google OAuth Not Configured',
                     'Please configure your Google OAuth credentials in the environment variables.',
@@ -177,69 +176,26 @@ export default function LoginPage() {
                 return;
             }
 
-            // Use dynamic redirect URI (production-ready)
-            const redirectUri = GOOGLE_OAUTH_CONFIG.redirectUri;
-            
-            console.log('Using redirect URI:', redirectUri);
-
-            console.log('Platform Detection:', {
-                PlatformOS: Platform.OS,
-                windowLocation: typeof window !== 'undefined' ? window.location.origin : 'undefined',
-                isWeb: Platform.OS === 'web'
-            });
-
-            console.log('Google OAuth Config:', {
-                clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                redirectUri,
+            console.log('App Auth Config:', {
+                clientId: APP_AUTH_CONFIG.clientId,
+                redirectUrl: APP_AUTH_CONFIG.redirectUrl,
                 platform: Platform.OS,
-                scopes: GOOGLE_OAUTH_CONFIG.scopes
+                scopes: APP_AUTH_CONFIG.scopes
             });
 
-            const requestConfig = {
-                clientId: GOOGLE_OAUTH_CONFIG.clientId,
-                scopes: GOOGLE_OAUTH_CONFIG.scopes,
-                redirectUri,
-                responseType: AuthSession.ResponseType.Code,
-                extraParams: {
-                    access_type: 'offline',
-                },
-            };
+            // Use react-native-app-auth for in-app OAuth
+            const result = await authorize(APP_AUTH_CONFIG);
 
-            console.log('AuthRequest Config:', requestConfig);
+            console.log('App Auth Result:', result);
 
-            const request = new AuthSession.AuthRequest(requestConfig);
-
-            const discovery = getGoogleOAuthDiscovery();
-            console.log('OAuth Discovery Config:', discovery);
-
-            // Use expo-auth-session with proper configuration for in-app browser
-            const result = await request.promptAsync(discovery);
-
-            console.log('AuthSession Result:', result);
-
-            if (result.type === 'success') {
-                // Exchange authorization code for tokens
-                const oauthConfig = getGoogleOAuthConfig();
-                const tokenResponse = await AuthSession.exchangeCodeAsync(
-                    {
-                        clientId: oauthConfig.clientId,
-                        clientSecret: oauthConfig.clientSecret,
-                        code: result.params.code,
-                        redirectUri,
-                        extraParams: {
-                            code_verifier: request.codeVerifier,
-                        },
-                    },
-                    discovery
-                );
-
-                // Get user info from Google
+            if (result.accessToken) {
+                // Get user info from Google using the access token
                 const userInfoResponse = await fetch(
-                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
+                    `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${result.accessToken}`
                 );
                 
                 if (!userInfoResponse.ok) {
-                    throw new Error(GOOGLE_AUTH_ERRORS.USER_INFO_FAILED);
+                    throw new Error('Failed to fetch user information from Google');
                 }
                 
                 const userInfo = await userInfoResponse.json();
@@ -284,10 +240,8 @@ export default function LoginPage() {
                     Alert.alert('Login Failed', 'Google authentication failed.');
                     await authService.signOut();
                 }
-            } else if (result.type === 'cancel') {
-                console.log('Google OAuth cancelled by user');
             } else {
-                console.error('Google OAuth error:', result);
+                console.error('App Auth error: No access token received');
                 Alert.alert('Authentication Error', 'Failed to authenticate with Google. Please try again.');
             }
         } catch (error: any) {
