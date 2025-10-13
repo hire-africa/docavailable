@@ -540,6 +540,8 @@ export default function DoctorDashboard() {
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
+        // Optimistically remove from booking requests and refresh data
+        setBookingRequests(prev => prev.filter(req => req.id !== request.id));
         // Refresh both booking requests and confirmed appointments
         await Promise.all([
           fetchBookingRequests(),
@@ -582,6 +584,8 @@ export default function DoctorDashboard() {
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
+        // Optimistically remove from booking requests and refresh data
+        setBookingRequests(prev => prev.filter(req => req.id !== request.id));
         // Refresh both booking requests and confirmed appointments
         await Promise.all([
           fetchBookingRequests(),
@@ -1326,7 +1330,7 @@ export default function DoctorDashboard() {
           <ActivityIndicator size="large" color="#4CAF50" />
           <Text style={styles.loadingText}>Loading booking requests...</Text>
         </View>
-      ) : bookingRequests.filter(request => request.status === 'pending' || isAppointmentExpired(request.date, request.time)).length === 0 ? (
+      ) : bookingRequests.filter(request => request.status === 'pending' && !isAppointmentExpired(request.date, request.time)).length === 0 ? (
         <View style={{alignItems: 'center', marginTop: 60}}>
           <View style={{width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18}}>
             <Icon name="calendar" size={20} color="#666" />
@@ -1336,7 +1340,7 @@ export default function DoctorDashboard() {
         </View>
       ) : (
         <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
-            {bookingRequests.filter(request => !request.reschedulePending && (request.status === 'pending' || isAppointmentExpired(request.date, request.time))).map((request) => {
+            {bookingRequests.filter(request => !request.reschedulePending && request.status === 'pending' && !isAppointmentExpired(request.date, request.time)).map((request) => {
               const isExpired = isAppointmentExpired(request.date, request.time);
               // // console.log('📋 [DoctorDashboard] Rendering appointment:', {
               //   id: request.id,
@@ -1377,6 +1381,56 @@ export default function DoctorDashboard() {
         </View>
         )
       )}
+      
+      {/* Expired Appointments Section */}
+      {appointmentsTab === 'requests' && bookingRequests.filter(request => isAppointmentExpired(request.date, request.time)).length > 0 && (
+        <View style={{marginTop: 24}}>
+          <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 16, marginLeft: 4}}>Expired Appointments</Text>
+          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
+            {bookingRequests.filter(request => isAppointmentExpired(request.date, request.time)).map((request) => {
+              const isExpired = isAppointmentExpired(request.date, request.time);
+              return (
+                <TouchableOpacity
+                  key={request.id}
+                  style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1, borderLeftWidth: 4, borderLeftColor: '#FF9800'}}
+                  onPress={() => setSelectedRequest(request)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+                    <DoctorProfilePicture
+                      profilePictureUrl={request.patientProfilePictureUrl}
+                      profilePicture={request.patientProfilePicture}
+                      size={48}
+                      name={request.patient_name}
+                    />
+                  </View>
+                  <View style={{flex: 1}}>
+                    <Text style={{fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4}} numberOfLines={1}>{request.patient_name}</Text>
+                    <Text style={{fontSize: 14, color: '#7CB18F', marginBottom: 2}}>{formatDate(request.date)} • {formatTime(request.time)}</Text>
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                      <View style={{backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, marginRight: 8}}>
+                        <Text style={{color: '#2E7D32', fontWeight: '600', fontSize: 12}}>{getConsultationTypeLabel(request.appointment_type)}</Text>
+                      </View>
+                      <View style={{backgroundColor: '#FFE0B2', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
+                        <Text style={{color: '#E65100', fontWeight: '600', fontSize: 12}}>Expired</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={{alignItems: 'center', justifyContent: 'center'}}>
+                    <TouchableOpacity
+                      style={{backgroundColor: '#FF5722', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12}}
+                      onPress={() => handleDeleteExpiredAppointment(request)}
+                    >
+                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 12}}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+      
       {/* Accepted Sessions Tab */}
       {appointmentsTab === 'accepted' && (
         loadingConfirmed ? (
