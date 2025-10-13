@@ -1,6 +1,7 @@
 // Google OAuth Configuration for DocAvailable
 // This file contains Google OAuth settings and error handling
 
+import * as AuthSession from 'expo-auth-session';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
@@ -13,9 +14,17 @@ export const GOOGLE_OAUTH_CONFIG = {
   
   // Dynamic redirect URI for OAuth flow (production-ready)
   get redirectUri() {
-    // Use web-based redirect URI for all platforms (Google OAuth requirement)
-    // The callback page will handle redirecting back to the mobile app
-    return 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
+    // Use custom URL scheme for mobile apps to stay within the app
+    if (Platform.OS === 'web') {
+      // For web platform, use the web domain
+      return 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
+    } else {
+      // For mobile platforms, use custom scheme to stay in app
+      return AuthSession.makeRedirectUri({
+        scheme: Platform.OS === 'ios' ? 'com.docavailable.minimal' : 'com.docavailable.app',
+        path: 'oauth2redirect'
+      });
+    }
   },
   
   // Scopes for Google OAuth

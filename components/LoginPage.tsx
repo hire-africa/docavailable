@@ -212,69 +212,30 @@ export default function LoginPage() {
             const discovery = getGoogleOAuthDiscovery();
             console.log('OAuth Discovery Config:', discovery);
 
-            // Use expo-web-browser for proper in-app OAuth
-            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-                `client_id=${encodeURIComponent(GOOGLE_OAUTH_CONFIG.clientId)}&` +
-                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-                `response_type=code&` +
-                `scope=${encodeURIComponent(GOOGLE_OAUTH_CONFIG.scopes.join(' '))}&` +
-                `access_type=offline&` +
-                `state=google_oauth_${Date.now()}`;
+            // Use expo-auth-session with proper configuration for in-app browser
+            const result = await request.promptAsync(discovery);
 
-            console.log('Opening OAuth URL:', authUrl);
+            console.log('AuthSession Result:', result);
 
-            const result = await WebBrowser.openAuthSessionAsync(
-                authUrl,
-                redirectUri,
-                {
-                    showInRecents: true,
-                    preferEphemeralSession: false,
-                }
-            );
-
-            console.log('WebBrowser Result:', result);
-
-            if (result.type === 'success' && result.url) {
-                // Extract authorization code from URL
-                const url = new URL(result.url);
-                const code = url.searchParams.get('code');
-                const error = url.searchParams.get('error');
-
-                if (error) {
-                    throw new Error(`OAuth error: ${error}`);
-                }
-
-                if (!code) {
-                    throw new Error('No authorization code received');
-                }
-
-                console.log('Authorization code received:', code);
-
-                // Exchange code for tokens
-                const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+            if (result.type === 'success') {
+                // Exchange authorization code for tokens
+                const oauthConfig = getGoogleOAuthConfig();
+                const tokenResponse = await AuthSession.exchangeCodeAsync(
+                    {
+                        clientId: oauthConfig.clientId,
+                        clientSecret: oauthConfig.clientSecret,
+                        code: result.params.code,
+                        redirectUri,
+                        extraParams: {
+                            code_verifier: request.codeVerifier,
+                        },
                     },
-                    body: new URLSearchParams({
-                        client_id: GOOGLE_OAUTH_CONFIG.clientId,
-                        client_secret: GOOGLE_OAUTH_CONFIG.clientSecret,
-                        code: code,
-                        grant_type: 'authorization_code',
-                        redirect_uri: redirectUri,
-                    }),
-                });
-
-                if (!tokenResponse.ok) {
-                    throw new Error('Failed to exchange code for tokens');
-                }
-
-                const tokenData = await tokenResponse.json();
-                console.log('Token response:', tokenData);
+                    discovery
+                );
 
                 // Get user info from Google
                 const userInfoResponse = await fetch(
-                    `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenData.access_token}`
+                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
                 );
                 
                 if (!userInfoResponse.ok) {
@@ -282,6 +243,7 @@ export default function LoginPage() {
                 }
                 
                 const userInfo = await userInfoResponse.json();
+                console.log('Google User Info:', userInfo);
 
                 // Create a JWT-like token for your backend
                 const googleToken = {
