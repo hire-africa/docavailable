@@ -200,6 +200,17 @@ export default function DoctorDashboard() {
     }
   }, [user, activeTab]);
 
+  // Refresh appointments when appointments tab becomes active
+  useFocusEffect(
+    useCallback(() => {
+      if (user && activeTab === 'appointments') {
+        // console.log('🔄 [DoctorDashboard] Appointments tab focused, refreshing data...');
+        fetchBookingRequests();
+        fetchConfirmedAppointments();
+      }
+    }, [user, activeTab])
+  );
+
   // Fetch confirmed appointments immediately when user logs in
   useEffect(() => {
     if (user && user.id) { // Add user.id check
@@ -526,9 +537,14 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Booking request accepted successfully!');
+        // Close the modal immediately
+        setShowRequestModal(false);
+        setSelectedRequest(null);
         // Refresh both booking requests and confirmed appointments
-        fetchBookingRequests();
-        fetchConfirmedAppointments();
+        await Promise.all([
+          fetchBookingRequests(),
+          fetchConfirmedAppointments()
+        ]);
       } else {
         // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to accept booking request. Please try again.');
@@ -563,9 +579,14 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Booking request rejected.');
+        // Close the modal immediately
+        setShowRequestModal(false);
+        setSelectedRequest(null);
         // Refresh both booking requests and confirmed appointments
-        fetchBookingRequests();
-        fetchConfirmedAppointments();
+        await Promise.all([
+          fetchBookingRequests(),
+          fetchConfirmedAppointments()
+        ]);
       } else {
         // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to reject booking request. Please try again.');
@@ -612,8 +633,11 @@ export default function DoctorDashboard() {
 
               if (response.success) {
                 showSuccess('Success', 'Expired appointment deleted successfully.');
-                // Refresh the booking requests
-                await fetchBookingRequests();
+                // Refresh all appointment data
+                await Promise.all([
+                  fetchBookingRequests(),
+                  fetchConfirmedAppointments()
+                ]);
                 // // console.log('🗑️ [DoctorDashboard] List refreshed after deletion');
               } else {
                 // console.error('❌ [DoctorDashboard] Delete failed - API returned success: false', {
@@ -995,9 +1019,15 @@ export default function DoctorDashboard() {
     setShowRescheduleModal(true);
   };
 
-  const handleRescheduleSuccess = () => {
-    fetchBookingRequests();
-    fetchConfirmedAppointments();
+  const handleRescheduleSuccess = async () => {
+    // Close the reschedule modal
+    setShowRescheduleModal(false);
+    setSelectedAppointment(null);
+    // Refresh all appointment data
+    await Promise.all([
+      fetchBookingRequests(),
+      fetchConfirmedAppointments()
+    ]);
   };
 
   // Accept handler
@@ -1061,7 +1091,13 @@ export default function DoctorDashboard() {
         showSuccess('Success', 'Appointment cancelled successfully.');
         setShowCancelReasonModal(false);
         setShowCancelConfirm(false);
-        await fetchBookingRequests();
+        setAppointmentToCancel(null);
+        setCancelReason('');
+        // Refresh all appointment data
+        await Promise.all([
+          fetchBookingRequests(),
+          fetchConfirmedAppointments()
+        ]);
       } else {
         showError('Error', 'Failed to cancel appointment. Please try again.');
       }
@@ -1076,12 +1112,16 @@ export default function DoctorDashboard() {
   const handleCancelAcceptedAppointment = async (appointmentId: number) => {
     try {
       await apiService.delete(`/appointments/${appointmentId}`);
-      Alert.alert('Success', 'Appointment cancelled successfully');
+      showSuccess('Success', 'Appointment cancelled successfully');
       setSelectedAcceptedRequest(null);
-      fetchConfirmedAppointments();
+      // Refresh all appointment data
+      await Promise.all([
+        fetchBookingRequests(),
+        fetchConfirmedAppointments()
+      ]);
     } catch (error) {
       console.error('Error cancelling appointment:', error);
-      Alert.alert('Error', 'Failed to cancel appointment');
+      showError('Error', 'Failed to cancel appointment');
     }
   };
 
@@ -1227,7 +1267,25 @@ export default function DoctorDashboard() {
   );
 
   const renderAppointmentsContent = () => (
-    <ScrollView style={{...styles.content, backgroundColor: '#F8F9FA'}} showsVerticalScrollIndicator={false}>
+    <ScrollView 
+      style={{...styles.content, backgroundColor: '#F8F9FA'}} 
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshingAppointments}
+          onRefresh={async () => {
+            setRefreshingAppointments(true);
+            await Promise.all([
+              fetchBookingRequests(),
+              fetchConfirmedAppointments()
+            ]);
+            setRefreshingAppointments(false);
+          }}
+          colors={['#4CAF50']}
+          tintColor="#4CAF50"
+        />
+      }
+    >
       {/* Header */}
       <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
         <Text style={{fontSize: 28, fontWeight: 'bold', color: '#222', textAlign: 'center', marginBottom: 8}}>Appointments</Text>
