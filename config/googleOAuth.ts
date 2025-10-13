@@ -14,7 +14,8 @@ export const GOOGLE_OAUTH_CONFIG = {
   // Dynamic redirect URI for OAuth flow (production-ready)
   get redirectUri() {
     // Use web-based redirect URI for all platforms (Google OAuth requirement)
-    return 'https://docavailable-3vbdv.ondigitalocean.app/oauth/callback';
+    // Note: Backend uses /api/ prefix for all routes
+    return 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
   },
   
   // Scopes for Google OAuth
