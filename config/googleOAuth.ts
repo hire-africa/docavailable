@@ -5,8 +5,8 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 export const GOOGLE_OAUTH_CONFIG = {
-  // Google OAuth Client ID
-  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.googleClientId || '',
+  // Google OAuth Client ID (Web application)
+  clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.googleClientId || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com',
   
   // Google OAuth Client Secret (for server-side token exchange)
   clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.googleClientSecret || '',
