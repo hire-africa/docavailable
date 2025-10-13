@@ -1,6 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authorize, refresh, revoke } from 'react-native-app-auth';
+import { authorize } from 'react-native-app-auth';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -220,16 +220,16 @@ export default function LoginPage() {
                     if (user.user_type === 'admin') {
                         router.replace('/admin-dashboard');
                     } else if (user.user_type === 'doctor') {
-                    if (user.status === 'pending') {
+                        if (user.status === 'pending') {
                             Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
                             await authService.signOut();
                             return;
                         }
-                    if (user.status === 'suspended') {
-                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
-                        await authService.signOut();
-                        return;
-                    }
+                        if (user.status === 'suspended') {
+                            Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                            await authService.signOut();
+                            return;
+                        }
                         router.replace('/doctor-dashboard');
                     } else if (user.user_type === 'patient') {
                         router.replace('/patient-dashboard');
