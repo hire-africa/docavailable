@@ -354,7 +354,7 @@ export default function DoctorDashboard() {
           appointment_date: request.appointment_date || request.date,
           appointment_time: request.appointment_time || request.time,
           appointment_type: request.appointment_type || 'text',
-          reason: request.reason || '',
+          reason: request.reason || null,
           status: request.status === 0 ? 'pending' : 
                   request.status === 1 ? 'confirmed' : 
                   request.status === 2 ? 'cancelled' : 
@@ -640,7 +640,18 @@ export default function DoctorDashboard() {
                   errorMessage = 'Cannot delete this appointment. It may not be expired or in a deletable state (only pending or cancelled appointments can be deleted).';
                 }
               } else if (error?.response?.status === 404) {
-                errorMessage = 'Appointment not found. It may have already been deleted.';
+                // Appointment not found - treat as success since it's already gone
+                showSuccess('Success', 'Appointment has been removed.');
+                await fetchBookingRequests();
+                return;
+              } else if (error?.response?.status === 500) {
+                const backendMessage = error?.response?.data?.message;
+                if (backendMessage && backendMessage.includes('No query results for model')) {
+                  // Appointment doesn't exist - treat as success since it's already gone
+                  showSuccess('Success', 'Appointment has been removed.');
+                  await fetchBookingRequests();
+                  return;
+                }
               } else if (error?.response?.status === 403) {
                 errorMessage = 'You do not have permission to delete this appointment.';
               }
@@ -1366,7 +1377,11 @@ export default function DoctorDashboard() {
                   </View>
                   <View style={{ marginTop: 8 }}>
                     <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                    <Text style={{ color: '#666' }}>{selectedRequest.reason || 'No reason provided'}</Text>
+                    <Text style={{ color: '#666' }}>
+                      {selectedRequest.reason && selectedRequest.reason.trim() !== '' 
+                        ? selectedRequest.reason 
+                        : 'No reason provided'}
+                    </Text>
                   </View>
                   <View style={{ marginTop: 12, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
                     <Text style={{ color: '#8D6E63', fontSize: 12 }}>

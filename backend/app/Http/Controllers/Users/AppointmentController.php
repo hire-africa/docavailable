@@ -177,6 +177,7 @@ class AppointmentController extends Controller
                 'appointment_date' => $request->appointment_date,
                 'appointment_time' => $request->appointment_time,
                 'appointment_type' => $request->appointment_type ?? 'text',
+                'reason' => $request->reason ?? null,
                 'status' => $request->status ?? 0
             ];
 

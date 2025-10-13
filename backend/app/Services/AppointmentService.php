@@ -230,7 +230,17 @@ class AppointmentService
 
         try {
             $doctor = $request->user();
-            $appointment = $doctor->doctorAppointments()->findOrFail($id);
+            $appointment = $doctor->doctorAppointments()->find($id);
+            
+            if (!$appointment) {
+                \Log::warning('⚠️ [AppointmentService] Appointment not found for deletion', [
+                    'appointment_id' => $id,
+                    'doctor_id' => $doctor->id
+                ]);
+                
+                // Return success since the appointment is already gone
+                return true;
+            }
             
             \Log::info('✅ [AppointmentService] Found appointment for deletion', [
                 'appointment_id' => $appointment->id,

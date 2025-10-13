@@ -1,6 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { Colors } from '../constants/Colors';
@@ -327,7 +327,11 @@ const MyAppointments = () => {
                   )}
                   <View style={{ marginTop: 8 }}>
                     <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                    <Text style={{ color: '#666' }}>{selectedAppointment.reason || 'No reason provided'}</Text>
+                    <Text style={{ color: '#666' }}>
+                      {selectedAppointment.reason && selectedAppointment.reason.trim() !== '' 
+                        ? selectedAppointment.reason 
+                        : 'No reason provided'}
+                    </Text>
                   </View>
                 </View>
                 

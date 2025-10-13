@@ -2730,11 +2730,11 @@ export default function PatientDashboard() {
                 </View>
                 ) : null}
               </View>
-              {appt.reason ? (
+              {appt.reason && appt.reason.trim() !== '' ? (
                 <View style={{ marginTop: 8 }}>
                   <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
                   <Text style={{ color: '#666' }}>{String(appt.reason)}</Text>
-        </View>
+                </View>
               ) : null}
                   </View>
                 </View>

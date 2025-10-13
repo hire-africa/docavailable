@@ -18,6 +18,7 @@ class Appointment extends Model
         'appointment_type',
         'duration_minutes',
         'status',
+        'reason',
         'reschedule_proposed_date',
         'reschedule_proposed_time',
         'reschedule_reason',

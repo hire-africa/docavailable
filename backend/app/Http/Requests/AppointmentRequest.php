@@ -18,6 +18,7 @@ class AppointmentRequest extends FormRequest
             'appointment_date' => 'required|date',
             'appointment_time' => 'required|string',
             'appointment_type' => 'sometimes|string|in:text,voice,video,audio',
+            'reason' => 'nullable|string|max:500',
             'status' => 'sometimes|integer|in:0,1,2,3'
         ];
 
@@ -33,6 +34,7 @@ class AppointmentRequest extends FormRequest
                 'appointment_date' => 'sometimes|date',
                 'appointment_time' => 'sometimes|string',
                 'appointment_type' => 'sometimes|string|in:text,voice,video,audio',
+                'reason' => 'nullable|string|max:500',
                 'status' => 'sometimes|integer|in:0,1,2,3'
             ];
         }
