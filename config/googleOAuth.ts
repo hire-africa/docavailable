@@ -56,7 +56,6 @@ export const GOOGLE_AUTH_ERRORS = {
   NETWORK_ERROR: 'Network error occurred during authentication',
   CONFIGURATION_ERROR: 'OAuth configuration is missing or invalid',
   TOKEN_EXPIRED: 'Authentication token has expired',
-  USER_INFO_FAILED: 'Failed to fetch user information from Google',
   UNKNOWN_ERROR: 'An unknown error occurred during authentication'
 };
 
