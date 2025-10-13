@@ -1,6 +1,7 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -211,35 +212,69 @@ export default function LoginPage() {
             const discovery = getGoogleOAuthDiscovery();
             console.log('OAuth Discovery Config:', discovery);
 
-            // Use in-app browser for production builds
-            const result = await request.promptAsync(discovery);
+            // Use expo-web-browser for proper in-app OAuth
+            const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+                `client_id=${encodeURIComponent(GOOGLE_OAUTH_CONFIG.clientId)}&` +
+                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+                `response_type=code&` +
+                `scope=${encodeURIComponent(GOOGLE_OAUTH_CONFIG.scopes.join(' '))}&` +
+                `access_type=offline&` +
+                `state=google_oauth_${Date.now()}`;
 
-            console.log('Google OAuth Result:', {
-                type: result.type,
-                params: (result as any).params,
-                error: (result as any).error,
-                errorCode: (result as any).errorCode
-            });
+            console.log('Opening OAuth URL:', authUrl);
 
-            if (result.type === 'success') {
-                // Exchange authorization code for tokens
-                const oauthConfig = getGoogleOAuthConfig();
-                const tokenResponse = await AuthSession.exchangeCodeAsync(
-                    {
-                        clientId: oauthConfig.clientId,
-                        clientSecret: oauthConfig.clientSecret,
-                        code: result.params.code,
-                        redirectUri,
-                        extraParams: {
-                            code_verifier: request.codeVerifier,
-                        },
+            const result = await WebBrowser.openAuthSessionAsync(
+                authUrl,
+                redirectUri,
+                {
+                    showInRecents: true,
+                    preferEphemeralSession: false,
+                }
+            );
+
+            console.log('WebBrowser Result:', result);
+
+            if (result.type === 'success' && result.url) {
+                // Extract authorization code from URL
+                const url = new URL(result.url);
+                const code = url.searchParams.get('code');
+                const error = url.searchParams.get('error');
+
+                if (error) {
+                    throw new Error(`OAuth error: ${error}`);
+                }
+
+                if (!code) {
+                    throw new Error('No authorization code received');
+                }
+
+                console.log('Authorization code received:', code);
+
+                // Exchange code for tokens
+                const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    discovery
-                );
+                    body: new URLSearchParams({
+                        client_id: GOOGLE_OAUTH_CONFIG.clientId,
+                        client_secret: GOOGLE_OAUTH_CONFIG.clientSecret,
+                        code: code,
+                        grant_type: 'authorization_code',
+                        redirect_uri: redirectUri,
+                    }),
+                });
+
+                if (!tokenResponse.ok) {
+                    throw new Error('Failed to exchange code for tokens');
+                }
+
+                const tokenData = await tokenResponse.json();
+                console.log('Token response:', tokenData);
 
                 // Get user info from Google
                 const userInfoResponse = await fetch(
-                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
+                    `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenData.access_token}`
                 );
                 
                 if (!userInfoResponse.ok) {
@@ -287,42 +322,11 @@ export default function LoginPage() {
                     Alert.alert('Login Failed', 'Google authentication failed.');
                     await authService.signOut();
                 }
-            } else if (result.type === 'error') {
-                // Handle OAuth errors
-                const errorResult = result as any;
-                console.error('Google OAuth Error Details:', {
-                    error: errorResult.error,
-                    errorCode: errorResult.errorCode,
-                    params: errorResult.params,
-                    fullResult: result
-                });
-                
-                let errorMessage = 'Google sign-in failed. Please try again.';
-                let errorTitle = 'Google Sign-In Error';
-                
-                // More specific error handling
-                if (errorResult.errorCode === '400') {
-                    errorMessage = `Invalid Google OAuth configuration. Error: ${errorResult.error || 'Unknown 400 error'}`;
-                    errorTitle = 'Configuration Error';
-                } else if (errorResult.errorCode === '403') {
-                    errorMessage = 'Google sign-in is not enabled or configured properly.';
-                    errorTitle = 'Access Denied';
-                } else if (errorResult.errorCode === 'redirect_uri_mismatch') {
-                    errorMessage = 'Redirect URI mismatch. Please check your Google Cloud Console redirect URIs.';
-                    errorTitle = 'Redirect URI Error';
-                } else if (errorResult.error === 'invalid_request') {
-                    errorMessage = `Invalid request: ${errorResult.errorCode || 'Unknown error'}`;
-                    errorTitle = 'Invalid Request';
-                } else if (errorResult.error === 'unauthorized_client') {
-                    errorMessage = 'Client not authorized for this request type.';
-                    errorTitle = 'Unauthorized Client';
-                }
-                
-                console.error('Final Error Message:', errorMessage);
-                Alert.alert(errorTitle, errorMessage);
+            } else if (result.type === 'cancel') {
+                console.log('Google OAuth cancelled by user');
             } else {
-                // User cancelled the sign-in
-                console.log('Google sign-in was cancelled');
+                console.error('Google OAuth error:', result);
+                Alert.alert('Authentication Error', 'Failed to authenticate with Google. Please try again.');
             }
         } catch (error: any) {
             console.error('Google login error:', error);
