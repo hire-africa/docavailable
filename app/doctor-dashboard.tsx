@@ -22,13 +22,14 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomNavigation from '../components/BottomNavigation';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
-import Icon from '../components/Icon';
+import Icon, { IconNames } from '../components/Icon';
 import { RescheduleModal } from '../components/RescheduleModal';
 import WorkingHours from '../components/WorkingHours';
 import WorkingHoursCard from '../components/WorkingHoursCard';
@@ -40,7 +41,7 @@ const maxWidth = isWeb ? 1200 : width;
 const isLargeScreen = width > 768;
 
 interface TabProps {
-  icon: IconName;
+  icon: keyof typeof IconNames;
   label: string;
   isActive: boolean;
   onPress: () => void;
@@ -56,11 +57,16 @@ interface BookingRequest {
   patientCountry?: string;
   patientCity?: string;
   patientDateOfBirth?: string;
+  // Support both old and new field names for compatibility
+  date?: string;
+  time?: string;
   appointment_date: string;
   appointment_time: string;
   appointment_type: string;
   reason?: string;
   status: string;
+  createdAt?: string;
+  reschedulePending?: boolean;
 }
 
 // Add DoctorType interface
@@ -312,7 +318,8 @@ export default function DoctorDashboard() {
     try {
       const response = await apiService.get('/appointments');
       if (response.success && response.data) {
-        setAppointments(response.data.data || response.data);
+        const responseData = response.data as any;
+        setAppointments((responseData.data || responseData) as any[]);
       }
     } catch (error) {
       console.error('Error fetching appointments:', error);
@@ -326,8 +333,9 @@ export default function DoctorDashboard() {
     try {
       const response = await apiService.get('/appointments');
       if (response.success && response.data) {
-        const rawRequests = response.data.data || response.data;
-        // // console.log('📋 [fetchBookingRequests] Raw appointment data:', rawRequests);
+        const responseData = response.data as any;
+        const rawRequests = responseData.data || responseData;
+        console.log('📋 [fetchBookingRequests] Raw appointment data:', rawRequests);
         
         // Transform the data to match the BookingRequest interface
         const requests = rawRequests.map((request: any) => ({
@@ -340,8 +348,11 @@ export default function DoctorDashboard() {
           patientCountry: request.patient?.country,
           patientCity: request.patient?.city,
           patientDateOfBirth: request.patient?.date_of_birth,
-          appointment_date: request.appointment_date,
-          appointment_time: request.appointment_time,
+          // Map both old and new field names for compatibility
+          date: request.appointment_date || request.date,
+          time: request.appointment_time || request.time,
+          appointment_date: request.appointment_date || request.date,
+          appointment_time: request.appointment_time || request.time,
           appointment_type: request.appointment_type || 'text',
           reason: request.reason || '',
           status: request.status === 0 ? 'pending' : 
@@ -354,13 +365,17 @@ export default function DoctorDashboard() {
         
         // Log each transformed appointment's date and time
         requests.forEach((request: any, index: number) => {
-          // // console.log(`📅 [fetchBookingRequests] Transformed Appointment ${index + 1}:`, {
-          //   id: request.id,
-          //   date: request.date,
-          //   time: request.time,
-          //   patientName: request.patientName,
-          //   status: request.status
-          // });
+          console.log(`📅 [fetchBookingRequests] Transformed Appointment ${index + 1}:`, {
+            id: request.id,
+            date: request.date,
+            time: request.time,
+            appointment_date: request.appointment_date,
+            appointment_time: request.appointment_time,
+            patientName: request.patient_name,
+            reason: request.reason,
+            patientGender: request.patientGender,
+            status: request.status
+          });
         });
         
         setBookingRequests(requests);
@@ -380,7 +395,8 @@ export default function DoctorDashboard() {
       // Fetch both confirmed and completed appointments for record keeping
       const response = await apiService.get('/appointments');
       if (response.success && response.data) {
-        const rawConfirmed = response.data.data || response.data;
+        const responseData = response.data as any;
+        const rawConfirmed = responseData.data || responseData;
         
         // Transform the data to match the BookingRequest interface and filter for confirmed/completed only
         // // console.log('📋 [fetchConfirmedAppointments] Raw appointments before filtering:', rawConfirmed.map((r: any) => ({
@@ -436,7 +452,7 @@ export default function DoctorDashboard() {
       // Get active text sessions for this doctor
       const response = await apiService.get('/text-sessions/active-sessions');
       if (response.success && response.data) {
-        setActiveTextSessions(response.data);
+        setActiveTextSessions(response.data as any[]);
       } else {
         setActiveTextSessions([]);
       }
@@ -457,7 +473,8 @@ export default function DoctorDashboard() {
     try {
       const response = await apiService.get('/reviews');
       if (response.success && response.data) {
-        setRatings(response.data.data || response.data);
+        const responseData = response.data as any;
+        setRatings((responseData.data || responseData) as any[]);
       }
     } catch (error) {
       console.error('Error fetching ratings:', error);
@@ -473,8 +490,9 @@ export default function DoctorDashboard() {
     try {
       const response = await apiService.get('/doctor/wallet');
       if (response.success && response.data) {
-        setWalletInfo(response.data);
-        setEarnings(response.data.balance || 0);
+        const responseData = response.data as any;
+        setWalletInfo(responseData);
+        setEarnings(responseData.balance || 0);
       }
     } catch (error) {
       console.error('Error fetching wallet info:', error);
@@ -576,7 +594,7 @@ export default function DoctorDashboard() {
     // Show confirmation dialog
     Alert.alert(
       'Delete Expired Appointment',
-      `Are you sure you want to delete this expired appointment with ${request.patientName}? This action cannot be undone.`,
+      `Are you sure you want to delete this expired appointment with ${request.patient_name}? This action cannot be undone.`,
       [
         {
           text: 'Cancel',
@@ -677,7 +695,7 @@ export default function DoctorDashboard() {
     }
 
     setShowWithdrawalModal(false);
-    showProcessing('Processing withdrawal...');
+    showProcessing('Processing withdrawal...', 'Please wait while we process your withdrawal request.');
 
     try {
       const response = await apiService.post('/doctor/wallet/withdraw', {
@@ -812,7 +830,12 @@ export default function DoctorDashboard() {
 
   const formatDate = (dateString: string) => {
     try {
-
+      console.log('🔍 [formatDate] Input dateString:', dateString);
+      
+      if (!dateString) {
+        console.log('❌ [formatDate] No date string provided');
+        return 'No date provided';
+      }
       
       // Handle different date formats
       let date: Date;
@@ -829,9 +852,11 @@ export default function DoctorDashboard() {
           if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year > 1900) {
             date = new Date(year, month, day);
           } else {
+            console.error('❌ [formatDate] Invalid date components:', { month, day, year });
             return 'Invalid Date';
           }
         } else {
+          console.error('❌ [formatDate] Invalid date format (not 3 parts):', dateString);
           return 'Invalid Date';
         }
       } else if (dateString && dateString.includes('-')) {
@@ -841,11 +866,13 @@ export default function DoctorDashboard() {
         // Try parsing as ISO string or other formats
         date = new Date(dateString);
       } else {
+        console.error('❌ [formatDate] No date string provided');
         return 'Invalid Date';
       }
       
       // Check if the date is valid
       if (isNaN(date.getTime())) {
+        console.error('❌ [formatDate] Invalid date after parsing:', dateString);
         return 'Invalid Date';
       }
       
@@ -855,16 +882,21 @@ export default function DoctorDashboard() {
         day: 'numeric'
       });
       
+      console.log('✅ [formatDate] Formatted date:', formattedDate);
       return formattedDate;
     } catch (error) {
+      console.error('❌ [formatDate] Error formatting date:', error, 'Input:', dateString);
       return 'Invalid Date';
     }
   };
 
   const formatTime = (timeString: string) => {
     try {
+      console.log('🔍 [formatTime] Input timeString:', timeString);
+      
       if (!timeString) {
-        return 'Invalid Time';
+        console.log('❌ [formatTime] No time string provided');
+        return 'No time provided';
       }
       
       // Handle different time formats
@@ -876,10 +908,13 @@ export default function DoctorDashboard() {
         const hour = parseInt(hours);
         const minute = parseInt(minutes);
         
+        console.log('🔍 [formatTime] Parsed time components:', { hour, minute });
+        
         if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
           time = new Date();
           time.setHours(hour, minute, 0, 0);
         } else {
+          console.error('❌ [formatTime] Invalid time components:', { hour, minute });
           return 'Invalid Time';
         }
       } else {
@@ -889,6 +924,7 @@ export default function DoctorDashboard() {
       
       // Check if the time is valid
       if (isNaN(time.getTime())) {
+        console.error('❌ [formatTime] Invalid time after parsing:', timeString);
         return 'Invalid Time';
       }
       
@@ -898,7 +934,7 @@ export default function DoctorDashboard() {
         hour12: true
       });
       
-      // // console.log('✅ [formatTime] Formatted time:', formattedTime);
+      console.log('✅ [formatTime] Formatted time:', formattedTime);
       return formattedTime;
     } catch (error) {
       console.error('❌ [formatTime] Error formatting time:', error, 'Input:', timeString);
@@ -1159,7 +1195,7 @@ export default function DoctorDashboard() {
               <Text style={styles.activityTime}>Just now</Text>
             </View>
             <Text style={styles.activityDescription}>
-              {bookingRequests[0].patientName} requested a {getConsultationTypeLabel(bookingRequests[0].consultationType)} appointment
+              {bookingRequests[0].patient_name} requested a {getConsultationTypeLabel(bookingRequests[0].appointment_type)} appointment
             </Text>
           </View>
         ) : (
@@ -1477,7 +1513,7 @@ export default function DoctorDashboard() {
             return (
               <View style={styles.emptyState}>
                 <View style={styles.emptyStateIcon}>
-                  <Icon name="users" size={20} color="#666" />
+                  <Icon name="user" size={20} color="#666" />
                 </View>
                 <Text style={styles.emptyStateTitle}>No Active Chats</Text>
                 <Text style={styles.emptyStateSubtitle}>
@@ -1872,61 +1908,41 @@ export default function DoctorDashboard() {
 
       <View style={styles.mainContent}>
         {renderContent()}
-        <View style={[styles.bottomNav, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Tab
-            icon="home"
-            label="Home"
-            isActive={activeTab === 'home'}
-            onPress={() => setActiveTab('home')}
-          />
-          <View style={{ position: 'relative', flex: 1 }}>
-          <Tab
-            icon="calendar"
-            label="Appointments"
-            isActive={activeTab === 'appointments'}
-            onPress={() => setActiveTab('appointments')}
-          />
-            {bookingRequests.length > 0 && (
-              <View style={{
-                position: 'absolute',
-                top: 2,
-                right: 32,
-                backgroundColor: '#4CAF50',
-                borderRadius: 12,
-                minWidth: 24,
-                height: 24,
-                justifyContent: 'center',
-                alignItems: 'center',
-                paddingHorizontal: 6,
-                zIndex: 10
-              }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
-                  {bookingRequests.length}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Tab
-            icon="comments"
-            label="Messages"
-            isActive={activeTab === 'messages'}
-            onPress={() => setActiveTab('messages')}
-          />
-          <Tab
-            icon="clock"
-            label="Working Hours"
-            isActive={activeTab === 'working-hours'}
-            onPress={() => setActiveTab('working-hours')}
-          />
-          {activeTab === 'accepted' && (
-            <Tab
-              icon="calendar"
-              label="Accepted"
-              isActive={activeTab === 'accepted'}
-              onPress={() => setActiveTab('accepted')}
-            />
-          )}
-        </View>
+        <BottomNavigation
+          tabs={[
+            {
+              icon: "home",
+              label: "Home",
+              isActive: activeTab === 'home',
+              onPress: () => setActiveTab('home')
+            },
+            {
+              icon: "calendar",
+              label: "Appointments",
+              isActive: activeTab === 'appointments',
+              onPress: () => setActiveTab('appointments'),
+              badge: bookingRequests.length > 0 ? bookingRequests.length : undefined
+            },
+            {
+              icon: "comments",
+              label: "Messages",
+              isActive: activeTab === 'messages',
+              onPress: () => setActiveTab('messages')
+            },
+            {
+              icon: "clock",
+              label: "Working Hours",
+              isActive: activeTab === 'working-hours',
+              onPress: () => setActiveTab('working-hours')
+            },
+            ...(activeTab === 'accepted' ? [{
+              icon: "calendar",
+              label: "Accepted",
+              isActive: activeTab === 'accepted',
+              onPress: () => setActiveTab('accepted')
+            }] : [])
+          ]}
+        />
       </View>
 
       {/* Sidebar */}
@@ -2051,7 +2067,7 @@ export default function DoctorDashboard() {
           setShowRescheduleModal(false);
           setSelectedAppointment(null);
         }}
-        onSuccess={handleRescheduleSuccess}
+        onConfirm={handleRescheduleSuccess}
       />
       {showAcceptedRequestDetailsModal()}
     </SafeAreaView>
@@ -2070,6 +2086,7 @@ const styles = StyleSheet.create({
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
+    paddingBottom: 80, // Space for bottom navigation
   },
   loadingContainer: {
     flex: 1,
@@ -2380,41 +2397,6 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#FF3B30',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  activeTab: {
-    // Active state styling is handled by color changes
-  },
-  tabLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  activeTabLabel: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
   },
   pendingRequestsCard: {
     backgroundColor: '#FFFFFF',

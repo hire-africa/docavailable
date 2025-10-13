@@ -27,6 +27,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomNavigation from '../components/BottomNavigation';
 import Icon, { IconName } from '../components/Icon';
 
 import AlertDialog from '../components/AlertDialog';
@@ -3575,7 +3576,7 @@ export default function PatientDashboard() {
   // Place this at the top of your main render, above the main content
   // You can adjust the placement as needed for your layout
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Hide header for DocBot tab */}
       {activeTab !== 'docbot' && (
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#F8F9FA', zIndex: 10 }}>
@@ -3618,8 +3619,6 @@ export default function PatientDashboard() {
       
       <Animated.View 
         style={[
-          styles.bottomNav,
-          { paddingBottom: Math.max(insets.bottom, 12) },
           activeTab === 'docbot' && {
             transform: [{
               translateY: bottomNavAnim.interpolate({
@@ -3636,35 +3635,39 @@ export default function PatientDashboard() {
           }
         ]}
       >
-        <Tab
-          icon="home"
-          label="Home"
-          isActive={activeTab === 'home'}
-          onPress={() => setActiveTab('home')}
-        />
-        <Tab
-          icon="search"
-          label="Discover"
-          isActive={activeTab === 'discover'}
-          onPress={() => setActiveTab('discover')}
-        />
-        <Tab
-          icon="message"
-          label="Messages"
-          isActive={activeTab === 'messages'}
-          onPress={() => setActiveTab('messages')}
-        />
-        <Tab
-          icon="file"
-          label="Blogs"
-          isActive={activeTab === 'blogs'}
-          onPress={() => setActiveTab('blogs')}
-        />
-        <Tab
-          icon="userMd"
-          label="Doc AI"
-          isActive={activeTab === 'docbot'}
-          onPress={() => setActiveTab('docbot')}
+        <BottomNavigation
+          tabs={[
+            {
+              icon: "home",
+              label: "Home",
+              isActive: activeTab === 'home',
+              onPress: () => setActiveTab('home')
+            },
+            {
+              icon: "search",
+              label: "Discover",
+              isActive: activeTab === 'discover',
+              onPress: () => setActiveTab('discover')
+            },
+            {
+              icon: "message",
+              label: "Messages",
+              isActive: activeTab === 'messages',
+              onPress: () => setActiveTab('messages')
+            },
+            {
+              icon: "file",
+              label: "Blogs",
+              isActive: activeTab === 'blogs',
+              onPress: () => setActiveTab('blogs')
+            },
+            {
+              icon: "userMd",
+              label: "Doc AI",
+              isActive: activeTab === 'docbot',
+              onPress: () => setActiveTab('docbot')
+            }
+          ]}
         />
       </Animated.View>
 
@@ -3835,6 +3838,7 @@ const styles = StyleSheet.create({
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
+    paddingBottom: 80, // Space for bottom navigation
   },
   content: {
     flex: 1,
@@ -4255,39 +4259,6 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#FF3B30',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  activeTab: {
-    // Active state styling
-  },
-  tabLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  activeTabLabel: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
   },
   loadingContainer: {
     flex: 1,

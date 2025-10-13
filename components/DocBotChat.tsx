@@ -2,19 +2,19 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Clipboard,
-  Dimensions,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Animated,
+    Clipboard,
+    Dimensions,
+    Keyboard,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
 import DocAIHistory from './DocAvaHistory';
@@ -1279,7 +1279,7 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
     marginHorizontal: 16,
     marginVertical: 16,
-    marginBottom: Platform.OS === 'android' ? 20 : 16,
+    marginBottom: Platform.OS === 'android' ? 40 : 36,
     position: 'relative',
     zIndex: 1000,
     flexShrink: 0,

@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomNavigation from '../components/BottomNavigation';
 import Icon from '../components/Icon';
 
 
@@ -83,6 +85,7 @@ interface BlogProps {
 
 export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [bookmarkedArticles, setBookmarkedArticles] = useState<number[]>([]);
@@ -353,28 +356,40 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       </ScrollView>
       {/* Bottom Navigation */}
       {!hideBottomNav && (
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/')}> 
-          <Icon name="home" size={16} color="#888" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/my-appointments')}> 
-          <Icon name="calendar" size={14} color="#888" />
-          <Text style={styles.navLabel}>Appointments</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/chat/123')}> 
-          <Icon name="message" size={16} color="#888" />
-          <Text style={styles.navLabel}>Messages</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.navItem, styles.activeNavItem]} onPress={() => router.push('/blog')}> 
-          <Icon name="file" size={16} color="#4CAF50" />
-          <Text style={[styles.navLabel, styles.activeNavLabel]}>Blog</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/patient-profile')}> 
-          <Icon name="user" size={14} color="#888" />
-          <Text style={styles.navLabel}>Profile</Text>
-        </TouchableOpacity>
-      </View>
+        <BottomNavigation
+          tabs={[
+            {
+              icon: "home",
+              label: "Home",
+              isActive: false,
+              onPress: () => router.push('/')
+            },
+            {
+              icon: "calendar",
+              label: "Appointments",
+              isActive: false,
+              onPress: () => router.push('/my-appointments')
+            },
+            {
+              icon: "message",
+              label: "Messages",
+              isActive: false,
+              onPress: () => router.push('/chat/123')
+            },
+            {
+              icon: "file",
+              label: "Blog",
+              isActive: true,
+              onPress: () => router.push('/blog')
+            },
+            {
+              icon: "user",
+              label: "Profile",
+              isActive: false,
+              onPress: () => router.push('/patient-profile')
+            }
+          ]}
+        />
       )}
     </View>
   );
@@ -384,6 +399,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+    paddingBottom: 80, // Space for bottom navigation
   },
   searchContainer: {
     paddingHorizontal: 20,
@@ -578,35 +594,6 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 16,
     resizeMode: 'cover',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E8F5E8',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-  activeNavItem: {},
-  activeNavLabel: {
-    color: '#4CAF50',
-    fontWeight: '700',
   },
   searchResultsContainer: {
     paddingHorizontal: 20,

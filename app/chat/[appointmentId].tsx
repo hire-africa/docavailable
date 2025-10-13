@@ -2,15 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Image,
-    KeyboardAvoidingView,
     Modal,
-    Platform,
-    SafeAreaView,
     ScrollView,
     StatusBar,
     Text,
@@ -18,6 +15,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
@@ -2387,7 +2385,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
         <StatusBar barStyle="dark-content" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#4CAF50" />
@@ -2398,7 +2396,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
       
       {/* Header */}
@@ -2735,14 +2733,13 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
 
       {/* Messages */}
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
+      <ScrollView
           ref={scrollViewRef}
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16 }}
+          contentContainerStyle={{ 
+            padding: 16,
+            paddingBottom: 20, // Extra padding to ensure messages are visible above input
+          }}
           showsVerticalScrollIndicator={false}
         >
           {/* End-to-End Encryption Message */}
@@ -2862,17 +2859,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           })}
         </ScrollView>
 
-
-        {/* Input */}
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center',
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderTopWidth: 1,
-          borderTopColor: '#E5E5E5',
-          backgroundColor: '#fff',
-        }}>
+      {/* Input - Fixed at bottom with proper keyboard handling */}
+      <View style={{ 
+        flexDirection: 'row', 
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#E5E5E5',
+        backgroundColor: '#fff',
+      }}>
           {/* Session Ended Message for Doctors */}
           {sessionEnded && !isPatient && (
             <View style={{
@@ -3122,7 +3118,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </TouchableOpacity>
           </View>
         )}
-      </KeyboardAvoidingView>
 
       {/* End Session Modal */}
       <Modal

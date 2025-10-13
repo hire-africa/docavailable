@@ -1,6 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authorize } from 'react-native-app-auth';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -14,6 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { authorize } from 'react-native-app-auth';
 import { APP_AUTH_CONFIG, isAppAuthConfigured } from '../config/appAuthConfig';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';

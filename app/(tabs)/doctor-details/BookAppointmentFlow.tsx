@@ -68,16 +68,21 @@ export default function BookAppointmentFlow() {
   useEffect(() => {
     const fetchWorkingHours = async () => {
       if (!doctorId) return;
+      console.log('🔍 [fetchWorkingHours] Fetching for doctorId:', doctorId);
       setLoadingHours(true);
       try {
         const response = await apiService.get(`/doctors/${doctorId}/availability`);
+        console.log('🔍 [fetchWorkingHours] API response:', response);
+        
         if (response.success && response.data && (response.data as any).working_hours) {
+          console.log('✅ [fetchWorkingHours] Setting working hours:', (response.data as any).working_hours);
           setWorkingHours((response.data as any).working_hours);
         } else {
+          console.log('❌ [fetchWorkingHours] No working hours data in response');
           setWorkingHours(null);
         }
       } catch (e) {
-        console.error('Error fetching working hours:', e);
+        console.error('❌ [fetchWorkingHours] Error fetching working hours:', e);
         setWorkingHours(null);
       } finally {
         setLoadingHours(false);
@@ -161,11 +166,28 @@ export default function BookAppointmentFlow() {
 
   // Helper to get available slots for selected day
   const getAvailableSlots = () => {
-    if (!workingHours) return [];
+    console.log('🔍 [getAvailableSlots] workingHours:', workingHours);
+    console.log('🔍 [getAvailableSlots] selectedDate:', selectedDate);
+    console.log('🔍 [getAvailableSlots] selectedDate.getDay():', selectedDate.getDay());
+    
+    if (!workingHours) {
+      console.log('❌ [getAvailableSlots] No workingHours data');
+      return [];
+    }
+    
     const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
     const dayKey = days[selectedDate.getDay()];
+    console.log('🔍 [getAvailableSlots] dayKey:', dayKey);
+    
     const dayHours = workingHours[dayKey];
-    if (!dayHours || !dayHours.enabled) return [];
+    console.log('🔍 [getAvailableSlots] dayHours:', dayHours);
+    
+    if (!dayHours || !dayHours.enabled) {
+      console.log('❌ [getAvailableSlots] No dayHours or not enabled');
+      return [];
+    }
+    
+    console.log('✅ [getAvailableSlots] Returning slots:', dayHours.slots);
     return dayHours.slots;
   };
 
@@ -304,11 +326,13 @@ export default function BookAppointmentFlow() {
 
   // Native time picker for Android
   const showAndroidTimePicker = () => {
+    console.log('🔍 [showAndroidTimePicker] Setting showNativeTimePicker to true');
     setShowNativeTimePicker(true);
   };
 
   // Native time picker for iOS
   const showIOSTimePicker = () => {
+    console.log('🔍 [showIOSTimePicker] Setting showNativeTimePicker to true');
     setShowNativeTimePicker(true);
   };
 
@@ -363,9 +387,15 @@ export default function BookAppointmentFlow() {
 
   // Show appropriate time picker based on platform
   const showTimePickerModal = () => {
+    console.log('🔍 [showTimePickerModal] Called');
+    console.log('🔍 [showTimePickerModal] Platform.OS:', Platform.OS);
+    console.log('🔍 [showTimePickerModal] getAvailableSlots().length:', getAvailableSlots().length);
+    
     if (Platform.OS === 'android') {
+      console.log('🔍 [showTimePickerModal] Calling showAndroidTimePicker');
       showAndroidTimePicker();
     } else {
+      console.log('🔍 [showTimePickerModal] Calling showIOSTimePicker');
       showIOSTimePicker();
     }
   };
@@ -395,14 +425,41 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        <View style={{ marginHorizontal: 24, marginTop: 12 }}>
-          <Text style={styles.doctorName}>{doctorName}</Text>
-          <Text style={styles.doctorSpecialization}>{specialization}</Text>
+        {/* Enhanced Doctor Profile Card */}
+        <View style={styles.doctorProfileCard}>
+          <View style={styles.doctorProfileHeader}>
+            {doctorPicUrl || doctorPic ? (
+              <DoctorProfilePicture
+                profilePictureUrl={doctorPicUrl || undefined}
+                profilePicture={doctorPic || undefined}
+                size={80}
+                name={doctorName}
+                style={styles.doctorProfileImage}
+              />
+            ) : (
+              <View style={styles.doctorProfileImagePlaceholder}>
+                <FontAwesome name="user-md" size={32} color="#4CAF50" />
+              </View>
+            )}
+            <View style={styles.doctorProfileInfo}>
+              <Text style={styles.doctorProfileName}>{doctorName}</Text>
+              <Text style={styles.doctorProfileSpecialization}>{specialization}</Text>
+              <View style={styles.doctorProfileStatus}>
+                <View style={styles.statusDot} />
+                <Text style={styles.statusText}>Available for consultation</Text>
+              </View>
+            </View>
+          </View>
         </View>
-        {/* Calendar - show current month and year */}
-        <View style={styles.calendarContainer}>
-          <Text style={styles.monthLabel}>{monthNames[currentMonth]} {currentYear}</Text>
-          <View style={styles.calendarRowContainer}>
+        {/* Enhanced Calendar Section */}
+        <View style={styles.calendarSection}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="calendar" size={20} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>Select Date</Text>
+          </View>
+          <View style={styles.calendarContainer}>
+            <Text style={styles.monthLabel}>{monthNames[currentMonth]} {currentYear}</Text>
+            <View style={styles.calendarRowContainer}>
             <View style={styles.calendarRow}>
               {[...'SMTWTFS'].map((d, i) => (
                 <View key={i} style={styles.calendarCell}>
@@ -450,19 +507,27 @@ export default function BookAppointmentFlow() {
                 return daysArray;
               })()}
             </View>
+            </View>
           </View>
         </View>
-        {/* Show doctor's availability for the selected day */}
-        <Text style={styles.sectionLabel}>Doctor's Availability</Text>
-        <View style={{ marginHorizontal: 24, marginBottom: 8 }}>
-          {loadingHours ? (
-            <Text>Loading availability...</Text>
-          ) : (
-            <Text>{getAvailabilityInfo()}</Text>
-          )}
-        </View>
-        {/* Custom Time Picker Button and Modal */}
-        <View style={{ marginHorizontal: 24, marginBottom: 8 }}>
+        {/* Enhanced Time Selection Section */}
+        <View style={styles.timeSection}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="clock-o" size={20} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>Select Time</Text>
+          </View>
+          <View style={styles.availabilityCard}>
+            <View style={styles.availabilityHeader}>
+              <FontAwesome name="info-circle" size={16} color="#4CAF50" />
+              <Text style={styles.availabilityTitle}>Doctor's Availability</Text>
+            </View>
+            {loadingHours ? (
+              <Text style={styles.availabilityText}>Loading availability...</Text>
+            ) : (
+              <Text style={styles.availabilityText}>{getAvailabilityInfo()}</Text>
+            )}
+          </View>
+          <View style={styles.timePickerCard}>
           {getAvailableSlots().length > 0 ? (
             <>
               <TouchableOpacity
@@ -474,6 +539,10 @@ export default function BookAppointmentFlow() {
               {customTime ? (
                 <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
               ) : null}
+              {/* Debug info */}
+              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                Debug: showNativeTimePicker = {showNativeTimePicker.toString()}
+              </Text>
             </>
           ) : (
             <View style={styles.noAvailabilityContainer}>
@@ -482,101 +551,15 @@ export default function BookAppointmentFlow() {
               </Text>
             </View>
           )}
+          </View>
         </View>
-        
-        <Modal
-              visible={showNativeTimePicker}
-              animationType="slide"
-              transparent={true}
-              onRequestClose={() => setShowNativeTimePicker(false)}
-            >
-              <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                  <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Select Time</Text>
-                    <Text style={styles.modalSubtitle}>
-                      {selectedDate.toLocaleDateString(undefined, { 
-                        weekday: 'long', 
-                        month: 'long', 
-                        day: 'numeric' 
-                      })}
-                    </Text>
-                  </View>
-
-                  {/* Doctor Availability Info */}
-                  <View style={styles.availabilityContainer}>
-                    <View style={styles.availabilityHeader}>
-                      <FontAwesome name="clock-o" size={16} color="#4CAF50" />
-                      <Text style={styles.availabilityTitle}>Doctor's Availability</Text>
-                    </View>
-                    {loadingHours ? (
-                      <Text style={styles.availabilityText}>Loading availability...</Text>
-                    ) : (
-                      <Text style={styles.availabilityText}>{getAvailabilityInfo()}</Text>
-                    )}
-                  </View>
-                  
-                  <View style={styles.timePickerContainer}>
-                    <DateTimePicker
-                      value={tempTime}
-                      mode="time"
-                      display="spinner"
-                      onChange={handleTimeChange}
-                      minuteInterval={1}
-                      style={styles.nativeTimePicker}
-                      textColor="#000000"
-                      themeVariant="light"
-                    />
-                  </View>
-
-                  {/* Selected Time Preview */}
-                  <View style={styles.selectedTimePreview}>
-                    <Text style={styles.selectedTimeLabel}>Selected Time:</Text>
-                    <Text style={styles.selectedTimeValue}>
-                      {formatTime12Hour(tempTime)}
-                    </Text>
-                  </View>
-                  
-                  {Platform.OS !== 'android' && (
-                    <View style={styles.modalFooter}>
-                      <TouchableOpacity 
-                        style={styles.cancelModalBtn} 
-                        onPress={() => setShowNativeTimePicker(false)}
-                      >
-                        <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={[
-                          styles.continueModalBtn, 
-                          !isCurrentTimeValid() && styles.continueModalBtnDisabled
-                        ]} 
-                        onPress={handleContinueTimeSelection}
-                        disabled={!isCurrentTimeValid()}
-                      >
-                        <Text style={[
-                          styles.continueModalBtnText,
-                          !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
-                        ]}>
-                          Confirm Time
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                  
-                  {!isCurrentTimeValid() && (
-                    <View style={styles.validationMessage}>
-                      <FontAwesome name="exclamation-triangle" size={14} color="#D32F2F" />
-                      <Text style={styles.validationText}>
-                        Selected time is outside working hours
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </Modal>
-        {/* Remove selectable time slots UI */}
-        <Text style={styles.sectionLabel}>Consultation type</Text>
-        <View style={styles.consultationTypesContainer}>
+        {/* Enhanced Consultation Types Section */}
+        <View style={styles.consultationSection}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="stethoscope" size={20} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>Consultation Type</Text>
+          </View>
+          <View style={styles.consultationTypesContainer}>
           {consultationTypes.map(type => {
             const available = isTypeAvailable(type.key);
             return (
@@ -602,14 +585,22 @@ export default function BookAppointmentFlow() {
             );
           })}
         </View>
-        <Text style={styles.sectionLabel}>Reason for session</Text>
-        <TextInput
-          style={styles.reasonInput}
-          placeholder="e.g. Rash, Checkup"
-          value={reason}
-          onChangeText={setReason}
-          maxLength={20}
-        />
+        </View>
+        {/* Enhanced Reason Section */}
+        <View style={styles.reasonSection}>
+          <View style={styles.sectionHeader}>
+            <FontAwesome name="file-text-o" size={20} color="#4CAF50" />
+            <Text style={styles.sectionTitle}>Reason for Session</Text>
+          </View>
+          <TextInput
+            style={styles.reasonInput}
+            placeholder="e.g. Rash, Checkup, General consultation"
+            placeholderTextColor="#999"
+            value={reason}
+            onChangeText={setReason}
+            maxLength={50}
+          />
+        </View>
         <TouchableOpacity
           style={[styles.continueBtn, !(customTime && reason) && { opacity: 0.5 }]}
           onPress={() => customTime && reason && setStep(2)}
@@ -670,26 +661,61 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       <View style={styles.confirmCard}>
-        {doctorPicUrl || doctorPic ? (
-          <DoctorProfilePicture
-            profilePictureUrl={doctorPicUrl || undefined}
-            profilePicture={doctorPic || undefined}
-            size={64}
-            name={doctorName}
-          />
-        ) : (
-          <View style={styles.avatarCircle} />
-        )}
-        <Text style={styles.doctorName}>{doctorName}</Text>
-        <Text style={styles.doctorSpecialization}>{specialization}</Text>
-        <Text style={styles.confirmLabel}>Date & Time</Text>
-        <Text style={styles.confirmValue}>
-          {selectedDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} · {selectedTime}
-        </Text>
-        <Text style={styles.confirmLabel}>Consultation Type</Text>
-        <Text style={styles.confirmValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
-        <Text style={styles.confirmLabel}>Reason</Text>
-        <Text style={styles.confirmValue}>{reason}</Text>
+        <View style={styles.confirmHeader}>
+          <View style={styles.confirmDoctorInfo}>
+            {doctorPicUrl || doctorPic ? (
+              <DoctorProfilePicture
+                profilePictureUrl={doctorPicUrl || undefined}
+                profilePicture={doctorPic || undefined}
+                size={80}
+                name={doctorName}
+                style={styles.confirmDoctorImage}
+              />
+            ) : (
+              <View style={styles.confirmAvatarCircle}>
+                <FontAwesome name="user-md" size={32} color="#4CAF50" />
+              </View>
+            )}
+            <View style={styles.confirmDoctorDetails}>
+              <Text style={styles.confirmDoctorName}>{doctorName}</Text>
+              <Text style={styles.confirmDoctorSpecialization}>{specialization}</Text>
+            </View>
+          </View>
+        </View>
+        
+        <View style={styles.confirmDetailsContainer}>
+          <View style={styles.confirmDetailItem}>
+            <View style={styles.confirmDetailIcon}>
+              <FontAwesome name="calendar" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.confirmDetailContent}>
+              <Text style={styles.confirmLabel}>Date & Time</Text>
+              <Text style={styles.confirmValue}>
+                {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.confirmDetailItem}>
+            <View style={styles.confirmDetailIcon}>
+              <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.confirmDetailContent}>
+              <Text style={styles.confirmLabel}>Consultation Type</Text>
+              <Text style={styles.confirmValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.confirmDetailItem}>
+            <View style={styles.confirmDetailIcon}>
+              <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.confirmDetailContent}>
+              <Text style={styles.confirmLabel}>Reason</Text>
+              <Text style={styles.confirmValue}>{reason}</Text>
+            </View>
+          </View>
+        </View>
       </View>
       <View style={{ marginHorizontal: 24, marginTop: -8 }}>
         <View style={{ backgroundColor: '#FFF8E1', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FFE082' }}>
@@ -720,22 +746,50 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       <View style={styles.successCard}>
-        <Text style={styles.successTitle}>Appointment Request Sent!</Text>
-        <Text style={styles.successMsg}>Your appointment request with {doctorName} has been sent and is waiting for doctor approval.</Text>
-        <View style={styles.successCheck}>
-          <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+        <View style={styles.successHeader}>
+          <View style={styles.successIconContainer}>
+            <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+          </View>
+          <Text style={styles.successTitle}>Appointment Request Sent!</Text>
+          <Text style={styles.successMsg}>Your appointment request with {doctorName} has been sent and is waiting for doctor approval.</Text>
         </View>
-        <View style={styles.successDetails}>
-          <Text style={styles.successDetailLabel}>Date & Time</Text>
-          <Text style={styles.successDetailValue}>
-            {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {selectedTime}
-          </Text>
-          <Text style={styles.successDetailLabel}>Consultation Type</Text>
-          <Text style={styles.successDetailValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
-          <Text style={styles.successDetailLabel}>Reason</Text>
-          <Text style={styles.successDetailValue}>{reason}</Text>
+        
+        <View style={styles.successDetailsContainer}>
+          <View style={styles.successDetailItem}>
+            <View style={styles.successDetailIcon}>
+              <FontAwesome name="calendar" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.successDetailContent}>
+              <Text style={styles.successDetailLabel}>Date & Time</Text>
+              <Text style={styles.successDetailValue}>
+                {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={styles.successDetailItem}>
+            <View style={styles.successDetailIcon}>
+              <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.successDetailContent}>
+              <Text style={styles.successDetailLabel}>Consultation Type</Text>
+              <Text style={styles.successDetailValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
+            </View>
+          </View>
+          
+          <View style={styles.successDetailItem}>
+            <View style={styles.successDetailIcon}>
+              <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
+            </View>
+            <View style={styles.successDetailContent}>
+              <Text style={styles.successDetailLabel}>Reason</Text>
+              <Text style={styles.successDetailValue}>{reason}</Text>
+            </View>
+          </View>
         </View>
+        
         <View style={styles.pendingNote}>
+          <FontAwesome name="info-circle" size={16} color="#2E7D32" />
           <Text style={styles.pendingNoteText}>
             You'll receive a notification when the doctor confirms or rejects your appointment.
           </Text>
@@ -839,9 +893,108 @@ export default function BookAppointmentFlow() {
     }
   }
 
-  if (step === 1) return renderStep1();
-  if (step === 2) return renderStep2();
-  return renderStep3();
+  return (
+    <>
+      {step === 1 && renderStep1()}
+      {step === 2 && renderStep2()}
+      {step === 3 && renderStep3()}
+      
+      {/* Time Picker Modal - rendered at component level */}
+      <Modal
+        visible={showNativeTimePicker}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          console.log('🔍 [Modal] onRequestClose called');
+          setShowNativeTimePicker(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Time</Text>
+              <Text style={styles.modalSubtitle}>
+                {selectedDate.toLocaleDateString(undefined, { 
+                  weekday: 'long', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+              </Text>
+            </View>
+
+            {/* Doctor Availability Info */}
+            <View style={styles.availabilityContainer}>
+              <View style={styles.availabilityHeader}>
+                <FontAwesome name="clock-o" size={16} color="#4CAF50" />
+                <Text style={styles.availabilityTitle}>Doctor's Availability</Text>
+              </View>
+              {loadingHours ? (
+                <Text style={styles.availabilityText}>Loading availability...</Text>
+              ) : (
+                <Text style={styles.availabilityText}>{getAvailabilityInfo()}</Text>
+              )}
+            </View>
+            
+            <View style={styles.timePickerContainer}>
+              <DateTimePicker
+                value={tempTime}
+                mode="time"
+                display="spinner"
+                onChange={handleTimeChange}
+                minuteInterval={1}
+                style={styles.nativeTimePicker}
+                textColor="#000000"
+                themeVariant="light"
+              />
+            </View>
+
+            {/* Selected Time Preview */}
+            <View style={styles.selectedTimePreview}>
+              <Text style={styles.selectedTimeLabel}>Selected Time:</Text>
+              <Text style={styles.selectedTimeValue}>
+                {formatTime12Hour(tempTime)}
+              </Text>
+            </View>
+            
+            {Platform.OS !== 'android' && (
+              <View style={styles.modalFooter}>
+                <TouchableOpacity 
+                  style={styles.cancelModalBtn} 
+                  onPress={() => setShowNativeTimePicker(false)}
+                >
+                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[
+                    styles.continueModalBtn, 
+                    !isCurrentTimeValid() && styles.continueModalBtnDisabled
+                  ]} 
+                  onPress={handleContinueTimeSelection}
+                  disabled={!isCurrentTimeValid()}
+                >
+                  <Text style={[
+                    styles.continueModalBtnText,
+                    !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
+                  ]}>
+                    Confirm Time
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {!isCurrentTimeValid() && (
+              <View style={styles.validationMessage}>
+                <FontAwesome name="exclamation-triangle" size={14} color="#D32F2F" />
+                <Text style={styles.validationText}>
+                  Selected time is outside working hours
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1048,33 +1201,78 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     margin: 24,
     padding: 24,
-    alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  avatarCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#E0F2E9',
-    marginBottom: 12,
+  confirmHeader: {
+    marginBottom: 24,
+  },
+  confirmDoctorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  confirmDoctorImage: {
+    marginRight: 16,
+  },
+  confirmAvatarCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  confirmDoctorDetails: {
+    flex: 1,
+  },
+  confirmDoctorName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 4,
+  },
+  confirmDoctorSpecialization: {
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  confirmDetailsContainer: {
+    gap: 20,
+  },
+  confirmDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 8,
+  },
+  confirmDetailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0F8FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  confirmDetailContent: {
+    flex: 1,
   },
   confirmLabel: {
-    fontWeight: '700',
-    fontSize: 15,
-    color: '#222',
-    marginTop: 18,
-    marginBottom: 2,
-    alignSelf: 'flex-start',
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   confirmValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#222',
-    fontWeight: '600',
-    alignSelf: 'flex-start',
+    fontWeight: '500',
+    lineHeight: 22,
   },
   confirmBtnRow: {
     flexDirection: 'row',
@@ -1112,49 +1310,73 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     margin: 24,
     padding: 24,
-    alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#222',
-    marginBottom: 8,
+  successHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
   },
-  successMsg: {
-    fontSize: 16,
-    color: '#222',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  successCheck: {
-    backgroundColor: '#E0F2E9',
-    borderRadius: 32,
-    width: 64,
-    height: 64,
+  successIconContainer: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 40,
+    width: 80,
+    height: 80,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    borderWidth: 3,
+    borderColor: '#4CAF50',
   },
-  successDetails: {
-    width: '100%',
-    marginTop: 12,
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  successMsg: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  successDetailsContainer: {
+    marginBottom: 24,
+  },
+  successDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  successDetailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0F8FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  successDetailContent: {
+    flex: 1,
   },
   successDetailLabel: {
-    fontWeight: '700',
-    fontSize: 15,
-    color: '#222',
-    marginTop: 8,
-    marginBottom: 2,
+    fontWeight: '600',
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   successDetailValue: {
-    fontSize: 15,
+    fontSize: 16,
     color: '#222',
-    fontWeight: '600',
+    fontWeight: '500',
+    lineHeight: 22,
   },
   addCalendarBtn: {
     backgroundColor: '#4CAF50',
@@ -1361,18 +1583,21 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   pendingNote: {
-    backgroundColor: '#E8F5E8',
+    backgroundColor: '#F0F8FF',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    marginTop: 16,
-    alignSelf: 'center',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
   },
   pendingNoteText: {
     color: '#2E7D32',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 20,
   },
   proceedBtn: {
     backgroundColor: '#4CAF50',
@@ -1405,5 +1630,207 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  // Enhanced Doctor Profile Styles
+  doctorProfileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    margin: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  doctorProfileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  doctorProfileImage: {
+    marginRight: 16,
+  },
+  doctorProfileImagePlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  doctorProfileInfo: {
+    flex: 1,
+  },
+  doctorProfileName: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 4,
+  },
+  doctorProfileSpecialization: {
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  doctorProfileStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4CAF50',
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  // Enhanced Section Styles
+  calendarSection: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  consultationSection: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  reasonSection: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  timeSection: {
+    marginHorizontal: 24,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222',
+    marginLeft: 12,
+  },
+  // Enhanced Calendar Styles
+  calendarContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  // Enhanced Consultation Type Styles
+  consultationTypesContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  consultationTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  consultationTypeBtn: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 16,
+    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 56,
+    height: 56,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedConsultationTypeBtn: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+    shadowColor: '#4CAF50',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  consultationTypeTextContainer: {
+    flex: 1,
+  },
+  consultationTypeText: {
+    color: '#222',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  consultationTypeUnavailable: {
+    color: '#999',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  // Enhanced Reason Input Styles
+  reasonInput: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 16,
+    color: '#222',
+    fontWeight: '500',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  // Enhanced Time Selection Styles
+  availabilityCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  availabilityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  availabilityTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginLeft: 8,
+  },
+  availabilityText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  timePickerCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
 }); 

@@ -129,6 +129,19 @@ class ConfigService {
   isFeatureEnabled(feature: keyof AppConfig['features']): boolean {
     return this.getConfig().features[feature];
   }
+
+  // Method to clear cache and force reload configuration
+  clearCache(): void {
+    console.log('🔄 [ConfigService] Clearing configuration cache');
+    this.config = null;
+  }
+
+  // Method to force reload configuration
+  reloadConfig(): AppConfig {
+    console.log('🔄 [ConfigService] Forcing configuration reload');
+    this.config = null;
+    return this.getConfig();
+  }
 }
 
 export default new ConfigService();
