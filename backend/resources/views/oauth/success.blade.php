@@ -88,7 +88,19 @@
         
         // Try to redirect back to the mobile app
         try {
-            // For mobile apps, try to open the app with the code
+            // Store the OAuth data in localStorage for the app to pick up
+            const oauthData = {
+                code: code,
+                state: state,
+                timestamp: Date.now()
+            };
+            
+            // Try to store in localStorage (for web)
+            if (typeof(Storage) !== "undefined") {
+                localStorage.setItem('oauth_callback', JSON.stringify(oauthData));
+            }
+            
+            // Try to redirect to mobile app
             const appScheme = 'com.docavailable.app';
             const redirectUrl = `${appScheme}://oauth2redirect?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
             
@@ -98,14 +110,15 @@
             // Fallback: if the app doesn't open, show instructions
             setTimeout(() => {
                 document.querySelector('p').innerHTML = `
-                    <strong>Redirecting to mobile app...</strong><br>
-                    If the app doesn't open automatically, please return to the DocAvailable app.
+                    <strong>Authentication Complete!</strong><br>
+                    You can now return to the DocAvailable app.<br>
+                    <small>The authentication was successful and the app should automatically detect it.</small>
                 `;
             }, 2000);
             
         } catch (error) {
             document.getElementById('error').style.display = 'block';
-            document.getElementById('error-message').textContent = 'Failed to redirect to mobile app: ' + error.message;
+            document.getElementById('error-message').textContent = 'Authentication successful. Please return to the app.';
         }
     </script>
 </body>

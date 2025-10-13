@@ -14,7 +14,7 @@ export const GOOGLE_OAUTH_CONFIG = {
   // Dynamic redirect URI for OAuth flow (production-ready)
   get redirectUri() {
     // Use web-based redirect URI for all platforms (Google OAuth requirement)
-    // Note: Backend uses /api/ prefix for all routes
+    // The callback page will handle redirecting back to the mobile app
     return 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
   },
   
@@ -57,6 +57,7 @@ export const GOOGLE_AUTH_ERRORS = {
   NETWORK_ERROR: 'Network error occurred during authentication',
   CONFIGURATION_ERROR: 'OAuth configuration is missing or invalid',
   TOKEN_EXPIRED: 'Authentication token has expired',
+  USER_INFO_FAILED: 'Failed to fetch user information from Google',
   UNKNOWN_ERROR: 'An unknown error occurred during authentication'
 };
 
