@@ -1368,6 +1368,7 @@ Route::get('/oauth/callback', function (Request $request) {
     }
 })->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
+
 // OAuth Code Exchange Route
 Route::post('/oauth/exchange-code', function (Request $request) {
     try {
