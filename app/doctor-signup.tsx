@@ -1,8 +1,8 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -533,6 +533,12 @@ const Step3: React.FC<Step3Props> = ({
 
 // Main Component: Doctor Sign-Up Page
 export default function DoctorSignUp() {
+    const { googleData, userType, source } = useLocalSearchParams<{
+        googleData?: string;
+        userType?: string;
+        source?: string;
+    }>();
+    
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
@@ -545,6 +551,33 @@ export default function DoctorSignUp() {
         'languagesSpoken', 'acceptPolicies', 'nationalIdPassport', 'highestMedicalCertificate',
         'verificationCode'
     ]);
+    
+    // Pre-fill form with Google data if available
+    useEffect(() => {
+        if (googleData && source === 'google') {
+            try {
+                const parsedGoogleData = JSON.parse(googleData);
+                console.log('🔐 Doctor Signup: Pre-filling form with Google data:', parsedGoogleData);
+                
+                // Pre-fill form fields with Google data
+                if (parsedGoogleData.name) {
+                    const nameParts = parsedGoogleData.name.split(' ');
+                    setFirstName(nameParts[0] || '');
+                    setSurname(nameParts.slice(1).join(' ') || '');
+                }
+                if (parsedGoogleData.email) {
+                    setEmail(parsedGoogleData.email);
+                }
+                if (parsedGoogleData.profile_picture) {
+                    setProfilePicture(parsedGoogleData.profile_picture);
+                }
+                
+                console.log('🔐 Doctor Signup: Form pre-filled successfully');
+            } catch (error) {
+                console.error('🔐 Doctor Signup: Error parsing Google data:', error);
+            }
+        }
+    }, [googleData, source]);
 
     // Step 1 state
     const [firstName, setFirstName] = useState('');

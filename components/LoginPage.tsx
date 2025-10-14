@@ -177,16 +177,35 @@ export default function LoginPage() {
             if (user.needsSignup && user.signupData) {
                 console.log('🔐 User needs signup, redirecting with Google data:', user.signupData);
                 
-                // Navigate to signup page with Google data pre-filled
+                // Navigate to the correct signup page based on user type
                 const signupParams = {
                     googleData: JSON.stringify(user.signupData.googleData),
                     userType: user.signupData.userType,
                     source: 'google'
                 };
                 
-                // Navigate to signup page with pre-filled data
+                // Determine the correct signup page based on user type
+                let signupPath = '/signup'; // Default fallback
+                switch (user.signupData.userType) {
+                    case 'patient':
+                        signupPath = '/patient-signup';
+                        break;
+                    case 'doctor':
+                        signupPath = '/doctor-signup';
+                        break;
+                    case 'admin':
+                        signupPath = '/admin-signup';
+                        break;
+                    default:
+                        console.warn('🔐 Unknown user type, using default signup page:', user.signupData.userType);
+                        signupPath = '/signup';
+                }
+                
+                console.log('🔐 Redirecting to signup page:', signupPath, 'with params:', signupParams);
+                
+                // Navigate to the appropriate signup page with pre-filled data
                 router.push({
-                    pathname: '/signup',
+                    pathname: signupPath,
                     params: signupParams
                 });
                 return;

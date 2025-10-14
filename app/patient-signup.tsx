@@ -2,7 +2,7 @@ import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -505,6 +505,12 @@ const Step3: React.FC<Step3Props> = ({
 };
 
 export default function PatientSignUp() {
+    const { googleData, userType, source } = useLocalSearchParams<{
+        googleData?: string;
+        userType?: string;
+        source?: string;
+    }>();
+    
     const [step, setStep] = useState(1);
     const [firstName, setFirstName] = useState('');
     const [surname, setSurname] = useState('');
@@ -520,6 +526,33 @@ export default function PatientSignUp() {
     
     // Create refs for scrolling to errors
     const scrollViewRef = useRef<ScrollView>(null);
+    
+    // Pre-fill form with Google data if available
+    useEffect(() => {
+        if (googleData && source === 'google') {
+            try {
+                const parsedGoogleData = JSON.parse(googleData);
+                console.log('🔐 Patient Signup: Pre-filling form with Google data:', parsedGoogleData);
+                
+                // Pre-fill form fields with Google data
+                if (parsedGoogleData.name) {
+                    const nameParts = parsedGoogleData.name.split(' ');
+                    setFirstName(nameParts[0] || '');
+                    setSurname(nameParts.slice(1).join(' ') || '');
+                }
+                if (parsedGoogleData.email) {
+                    setEmail(parsedGoogleData.email);
+                }
+                if (parsedGoogleData.profile_picture) {
+                    setProfilePicture(parsedGoogleData.profile_picture);
+                }
+                
+                console.log('🔐 Patient Signup: Form pre-filled successfully');
+            } catch (error) {
+                console.error('🔐 Patient Signup: Error parsing Google data:', error);
+            }
+        }
+    }, [googleData, source]);
     const fieldRefs = createFieldRefs([
         'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
         'country', 'city', 'acceptPolicies', 'verificationCode'
