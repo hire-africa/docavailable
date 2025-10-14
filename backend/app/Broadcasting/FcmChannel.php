@@ -41,7 +41,14 @@ class FcmChannel
                 );
             } else {
                 // Fallback to file path (for local development)
-                $credentialsPath = config('services.fcm.credentials_path') ?: storage_path('app/firebase-service-account.json');
+                $credentialsPath = config('services.fcm.credentials_path');
+                
+                // If it's a relative path, make it absolute
+                if ($credentialsPath && !str_starts_with($credentialsPath, '/') && !str_starts_with($credentialsPath, 'C:')) {
+                    $credentialsPath = storage_path($credentialsPath);
+                } elseif (!$credentialsPath) {
+                    $credentialsPath = storage_path('app/firebase-service-account.json');
+                }
                 
                 if (!file_exists($credentialsPath)) {
                     Log::error("❌ FCM V1: Service account not found in environment variable or file at: {$credentialsPath}");
