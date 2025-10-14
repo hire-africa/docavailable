@@ -10,7 +10,9 @@ import {
     TouchableOpacity,
     Vibration,
     View,
+    BlurView,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface IncomingCallScreenProps {
   callerName: string;
@@ -31,27 +33,52 @@ export default function IncomingCallScreen({
 }: IncomingCallScreenProps) {
   const slideAnim = useRef(new Animated.Value(height)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (visible) {
       // Vibrate on incoming call
       Vibration.vibrate([0, 1000, 500, 1000]);
       
-      // Simple slide in animation
+      // Enhanced animations
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: 0,
-          duration: 300,
+          duration: 400,
           useNativeDriver: true,
         }),
         Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 300,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
           useNativeDriver: true,
         }),
       ]).start();
+
+      // Start pulsing animation
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseAnimation.start();
     } else {
-      // Simple slide out animation
+      // Enhanced slide out animation
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: height,
@@ -60,6 +87,11 @@ export default function IncomingCallScreen({
         }),
         Animated.timing(fadeAnim, {
           toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.8,
           duration: 300,
           useNativeDriver: true,
         }),
@@ -79,40 +111,68 @@ export default function IncomingCallScreen({
         },
       ]}
     >
-      <StatusBar backgroundColor="#000" barStyle="light-content" />
+      <StatusBar backgroundColor="#1a1a1a" barStyle="light-content" />
       
-      {/* Simple Background */}
-      <View style={styles.background} />
+      {/* Modern Gradient Background */}
+      <LinearGradient
+        colors={['#1a1a1a', '#2d2d2d', '#1a1a1a']}
+        style={styles.background}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       
-      {/* Header */}
+      {/* Header with Status */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Incoming Call</Text>
+        <View style={styles.statusIndicator}>
+          <View style={styles.statusDot} />
+          <Text style={styles.statusText}>Incoming Call</Text>
+        </View>
       </View>
       
-      {/* Content */}
+      {/* Main Content */}
       <View style={styles.content}>
-        {/* Profile Picture - Small and Simple */}
-        <View style={styles.profileContainer}>
-          {callerProfilePicture ? (
-            <Image
-              source={{ uri: callerProfilePicture }}
-              style={styles.profilePicture}
-            />
-          ) : (
-            <View style={styles.defaultProfilePicture}>
-              <Ionicons name="person" size={24} color="white" />
-            </View>
-          )}
-        </View>
+        {/* Profile Picture with Pulse Animation */}
+        <Animated.View 
+          style={[
+            styles.profileContainer,
+            {
+              transform: [{ scale: pulseAnim }],
+            },
+          ]}
+        >
+          <View style={styles.profileRing}>
+            {callerProfilePicture ? (
+              <Image
+                source={{ uri: callerProfilePicture }}
+                style={styles.profilePicture}
+              />
+            ) : (
+              <View style={styles.defaultProfilePicture}>
+                <Ionicons name="person" size={32} color="#4CAF50" />
+              </View>
+            )}
+          </View>
+        </Animated.View>
 
         {/* Caller Information */}
-        <View style={styles.callerInfo}>
+        <Animated.View 
+          style={[
+            styles.callerInfo,
+            {
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
           <Text style={styles.callerName}>{callerName}</Text>
           <Text style={styles.callType}>Audio Call</Text>
-        </View>
+          <View style={styles.callStatus}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusLabel}>Ringing...</Text>
+          </View>
+        </Animated.View>
       </View>
 
-      {/* Bottom Actions - Single Row */}
+      {/* Modern Action Buttons */}
       <View style={styles.controls}>
         {/* Decline Button */}
         <TouchableOpacity
@@ -123,7 +183,7 @@ export default function IncomingCallScreen({
           }}
           activeOpacity={0.8}
         >
-          <Ionicons name="call" size={20} color="white" />
+          <Ionicons name="call" size={24} color="white" />
         </TouchableOpacity>
 
         {/* Accept Button */}
@@ -135,7 +195,7 @@ export default function IncomingCallScreen({
           }}
           activeOpacity={0.8}
         >
-          <Ionicons name="call" size={20} color="white" />
+          <Ionicons name="call" size={24} color="white" />
         </TouchableOpacity>
       </View>
     </Animated.View>
@@ -157,16 +217,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#000',
   },
   header: {
-    paddingTop: 50,
+    paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
     alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backdropFilter: 'blur(10px)',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4CAF50',
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 16,
     fontWeight: '600',
     color: 'white',
   },
@@ -177,54 +252,101 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   profileContainer: {
-    marginBottom: 30,
+    marginBottom: 40,
   },
-  profilePicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  defaultProfilePicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#333',
+  profileRing: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+    shadowColor: '#4CAF50',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  profilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  defaultProfilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
   },
   callerInfo: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 50,
   },
   callerName: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: 'bold',
     color: 'white',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   callType: {
-    fontSize: 16,
-    color: '#999',
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
+    fontWeight: '500',
+    marginBottom: 12,
+  },
+  callStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    backdropFilter: 'blur(10px)',
+  },
+  statusLabel: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '500',
   },
   controls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingBottom: 40,
+    paddingHorizontal: 60,
+    paddingBottom: 60,
   },
   actionButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   declineButton: {
     backgroundColor: '#F44336',
+    transform: [{ rotate: '135deg' }],
   },
   acceptButton: {
     backgroundColor: '#4CAF50',

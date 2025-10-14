@@ -13,6 +13,7 @@ import {
     View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
+import { LinearGradient } from 'expo-linear-gradient';
 import { VideoCallEvents, VideoCallService, VideoCallState } from '../services/videoCallService';
 
 interface VideoCallModalProps {

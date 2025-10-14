@@ -1994,7 +1994,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           // Use the caller information from the WebSocket message if available
           const callerName = message.doctorName || message.doctor_name || 
             (user?.user_type === 'doctor' ? 
-              (chatInfo?.other_participant_name || 'Patient') : 
+            (chatInfo?.other_participant_name || 'Patient') : 
               (chatInfo?.other_participant_name || 'Doctor'));
           const callerProfilePicture = message.doctorProfilePicture || message.doctor_profile_picture || 
             chatInfo?.other_participant_profile_picture;
@@ -3589,8 +3589,18 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         })()}
         otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
         isIncomingCall={!!(global as any).isIncomingCall}
-        onCallTimeout={() => setShowDoctorUnavailableModal(true)}
-        onCallRejected={() => setShowDoctorUnavailableModal(true)}
+        onCallTimeout={() => {
+          // Only show "Doctor Unavailable" modal to patients (callers)
+          if (isPatient) {
+            setShowDoctorUnavailableModal(true);
+          }
+        }}
+        onCallRejected={() => {
+          // Only show "Doctor Unavailable" modal to patients (callers)
+          if (isPatient) {
+            setShowDoctorUnavailableModal(true);
+          }
+        }}
       />
 
       {/* Doctor Unavailable Modal */}
@@ -3602,49 +3612,68 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       >
         <View style={{
           flex: 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
           justifyContent: 'center',
           alignItems: 'center',
           padding: 20
         }}>
           <View style={{
-            backgroundColor: 'white',
-            borderRadius: 12,
-            padding: 24,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 16,
+            padding: 32,
             alignItems: 'center',
-            minWidth: 280,
+            minWidth: 320,
+            maxWidth: 400,
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.25,
+            shadowRadius: 16,
+            elevation: 16
           }}>
-            <Ionicons name="call" size={48} color="#FF4444" style={{ marginBottom: 16 }} />
+            <View style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: '#FFF3E0',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: 24
+            }}>
+              <Ionicons name="call" size={40} color="#FF9800" />
+            </View>
+            
             <Text style={{
-              fontSize: 20,
-              fontWeight: '600',
-              color: '#333',
-              marginBottom: 8,
+              fontSize: 24,
+              fontWeight: '700',
+              color: '#11181C',
+              marginBottom: 12,
               textAlign: 'center'
             }}>
               Doctor Unavailable
             </Text>
+            
             <Text style={{
               fontSize: 16,
-              color: '#666',
+              color: '#687076',
               textAlign: 'center',
-              lineHeight: 22,
-              marginBottom: 24
+              lineHeight: 24,
+              marginBottom: 32
             }}>
               The doctor is currently unavailable. They might be attending another patient. Please try again later or send a message.
             </Text>
+            
             <TouchableOpacity
               style={{
                 backgroundColor: '#4CAF50',
-                paddingHorizontal: 24,
-                paddingVertical: 12,
-                borderRadius: 8,
-                minWidth: 120
+                paddingHorizontal: 32,
+                paddingVertical: 16,
+                borderRadius: 12,
+                minWidth: 140,
+                shadowColor: '#4CAF50',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 8
               }}
               onPress={() => {
                 setShowDoctorUnavailableModal(false);
@@ -3653,9 +3682,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               }}
             >
               <Text style={{
-                color: 'white',
+                color: '#FFFFFF',
                 fontSize: 16,
-                fontWeight: '500',
+                fontWeight: '600',
                 textAlign: 'center'
               }}>
                 OK
@@ -3692,10 +3721,18 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             onCallTimeout={() => {
               setShowVideoCallModal(false);
               setShowVideoCall(false);
+              // Only show "Doctor Unavailable" modal to patients (callers)
+              if (isPatient) {
+                setShowDoctorUnavailableModal(true);
+              }
             }}
             onCallRejected={() => {
               setShowVideoCallModal(false);
               setShowVideoCall(false);
+              // Only show "Doctor Unavailable" modal to patients (callers)
+              if (isPatient) {
+                setShowDoctorUnavailableModal(true);
+              }
             }}
             onCallAnswered={() => {
               console.log('Video call answered');
@@ -3731,10 +3768,18 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             onCallTimeout={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
+              // Only show "Doctor Unavailable" modal to patients (callers)
+              if (isPatient) {
+                setShowDoctorUnavailableModal(true);
+              }
             }}
             onCallRejected={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
+              // Only show "Doctor Unavailable" modal to patients (callers)
+              if (isPatient) {
+                setShowDoctorUnavailableModal(true);
+              }
             }}
             onCallAnswered={() => {
               // Don't create a new modal, just transition the existing one

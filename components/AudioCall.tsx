@@ -12,6 +12,7 @@ import {
     Vibration,
     View
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 
 const { width, height } = Dimensions.get('window');
@@ -426,37 +427,59 @@ export default function AudioCall({
 
   return (
     <View style={styles.container}>
-      <StatusBar backgroundColor="#000" barStyle="light-content" />
+      <StatusBar backgroundColor="#1a1a1a" barStyle="light-content" />
+      
+      {/* Modern Gradient Background */}
+      <LinearGradient
+        colors={['#1a1a1a', '#2d2d2d', '#1a1a1a']}
+        style={styles.background}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
       
       {/* Dynamic Header based on call state */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {shouldShowIncomingUI ? 'Incoming Call' : 'Audio Call'}
-        </Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>
+            {shouldShowIncomingUI ? 'Incoming Call' : 'Audio Call'}
+          </Text>
+          {!shouldShowIncomingUI && (
+            <View style={styles.statusIndicator}>
+              <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
+              <Text style={styles.statusText}>
+                {callState.connectionState === 'connected' ? 'Connected' : 
+                 callState.connectionState === 'connecting' ? 'Connecting...' : 
+                 callState.connectionState === 'disconnected' ? 'Disconnected' : 'Failed'}
+              </Text>
+            </View>
+          )}
+        </View>
         <View style={styles.placeholder} />
       </View>
       
-      {/* Main Content - Simple Layout */}
+      {/* Main Content - Enhanced Layout */}
       <View style={styles.content}>
-        {/* Profile Picture - Small and Simple */}
+        {/* Profile Picture with Modern Ring */}
         <View style={styles.profileContainer}>
-          {otherParticipantProfilePictureUrl ? (
-            <Image
-              source={{ uri: otherParticipantProfilePictureUrl }}
-              style={styles.profilePicture}
-            />
-          ) : (
-            <View style={styles.defaultProfilePicture}>
-              <Ionicons 
-                name={isDoctor ? "medical" : "person"} 
-                size={24} 
-                color="white" 
+          <View style={styles.profileRing}>
+            {otherParticipantProfilePictureUrl ? (
+              <Image
+                source={{ uri: otherParticipantProfilePictureUrl }}
+                style={styles.profilePicture}
               />
-            </View>
-          )}
+            ) : (
+              <View style={styles.defaultProfilePicture}>
+                <Ionicons 
+                  name={isDoctor ? "medical" : "person"} 
+                  size={32} 
+                  color="#4CAF50" 
+                />
+              </View>
+            )}
+          </View>
         </View>
 
         {/* User Info */}
@@ -595,33 +618,75 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: '#000',
     width: '100%',
     height: '100%',
+  },
+  background: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 60,
     paddingBottom: 20,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  headerContent: {
+    flex: 1,
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: 'white',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  statusIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backdropFilter: 'blur(10px)',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
   },
   placeholder: {
-    width: 40,
+    width: 44,
   },
   content: {
     flex: 1,
@@ -630,35 +695,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
   },
   profileContainer: {
-    marginBottom: 30,
+    marginBottom: 40,
   },
-  profilePicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-  },
-  defaultProfilePicture: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#333',
+  profileRing: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
+    shadowColor: '#4CAF50',
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  profilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  defaultProfilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(76, 175, 80, 0.3)',
   },
   userInfo: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 30,
   },
   userName: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: 'bold',
     color: 'white',
-    marginBottom: 4,
+    marginBottom: 8,
     textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   userRole: {
-    fontSize: 16,
-    color: '#999',
+    fontSize: 18,
+    color: 'rgba(255, 255, 255, 0.8)',
     fontWeight: '500',
   },
   statusContainer: {
@@ -700,16 +788,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingBottom: 40,
+    paddingHorizontal: 60,
+    paddingBottom: 60,
   },
   controlButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   disabledButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
@@ -720,9 +816,11 @@ const styles = StyleSheet.create({
   },
   endCallButton: {
     backgroundColor: '#F44336',
+    transform: [{ rotate: '135deg' }],
   },
   declineButton: {
     backgroundColor: '#F44336',
+    transform: [{ rotate: '135deg' }],
   },
   acceptButton: {
     backgroundColor: '#4CAF50',
