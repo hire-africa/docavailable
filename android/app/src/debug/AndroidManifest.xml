@@ -5,13 +5,6 @@
 
     <application android:usesCleartextTraffic="true" tools:targetApi="28" tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic">
         <activity android:name=".MainActivity" android:exported="true">
-            <!-- OAuth redirect intent filter for react-native-app-auth -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-                <data android:scheme="com.docavailable.app"/>
-            </intent-filter>
         </activity>
     </application>
 </manifest>
