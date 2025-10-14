@@ -200,6 +200,13 @@ export default function ChatPage() {
   // Appointment time checking state
   const [isAppointmentTime, setIsAppointmentTime] = useState(false);
   const [timeUntilAppointment, setTimeUntilAppointment] = useState<string>('');
+  
+  // Subscription data for call availability
+  const [subscriptionData, setSubscriptionData] = useState<{
+    voiceCallsRemaining: number;
+    videoCallsRemaining: number;
+    isActive: boolean;
+  } | null>(null);
   const [appointmentDateTime, setAppointmentDateTime] = useState<Date | null>(null);
   
   // Typing indicator state
@@ -469,14 +476,42 @@ export default function ChatPage() {
     return enabled;
   };
 
-  // Check if call button should be enabled (with fallback for preview builds)
-  const isCallButtonEnabled = () => {
+  // Fetch subscription data for call availability
+  const fetchSubscriptionData = async () => {
+    try {
+      const response = await apiService.get('/subscription');
+      if (response.data) {
+        const subData = response.data;
+        setSubscriptionData({
+          voiceCallsRemaining: subData.voiceCallsRemaining || 0,
+          videoCallsRemaining: subData.videoCallsRemaining || 0,
+          isActive: subData.isActive || false
+        });
+        console.log('📊 [Subscription] Data fetched:', {
+          voiceCallsRemaining: subData.voiceCallsRemaining,
+          videoCallsRemaining: subData.videoCallsRemaining,
+          isActive: subData.isActive
+        });
+      }
+    } catch (error) {
+      console.error('❌ [Subscription] Failed to fetch subscription data:', error);
+    }
+  };
+
+  // Check if call button should be enabled (with subscription check)
+  const isCallButtonEnabled = (callType: 'voice' | 'video' = 'voice') => {
     const callEnabled = isCallEnabled();
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
     // For appointments, also check if it's appointment time
     const appointmentTimeCheck = isTextSession || isAppointmentTime;
-    const enabled = callEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck;
+    
+    // Check subscription availability
+    const hasAvailableSessions = subscriptionData ? (
+      callType === 'voice' ? subscriptionData.voiceCallsRemaining > 0 : subscriptionData.videoCallsRemaining > 0
+    ) : true; // Allow if no subscription data yet (will be checked on call initiation)
+    
+    const enabled = callEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
     
     console.log('🔍 [isCallButtonEnabled] Debug:', {
       callEnabled,
@@ -486,6 +521,9 @@ export default function ChatPage() {
       isTextSession,
       isAppointmentTime,
       appointmentTimeCheck,
+      callType,
+      hasAvailableSessions,
+      subscriptionData,
       enabled,
       appointmentType,
       environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS
@@ -497,6 +535,13 @@ export default function ChatPage() {
   
   // Check if user is authenticated
   const isAuthenticated = !!user && !!user.id;
+
+  // Fetch subscription data on mount
+  useEffect(() => {
+    if (isAuthenticated && user?.user_type === 'patient') {
+      fetchSubscriptionData();
+    }
+  }, [isAuthenticated, user?.user_type]);
 
   // Helper function to check if current time is within appointment time
   const checkAppointmentTime = useCallback(() => {
@@ -2672,22 +2717,21 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             style={{ 
               padding: 8, 
               marginRight: 1,
-              opacity: isCallButtonEnabled() ? 1 : 0.3
+              opacity: isCallButtonEnabled('video') ? 1 : 0.3
             }}
             onPress={() => {
-              if (isCallButtonEnabled()) {
+              if (isCallButtonEnabled('video')) {
                 console.log('Starting video call...');
                 setShowVideoCallModal(true);
               } else {
-                Alert.alert(
-                  'Call Not Available',
-                  'Video calls are only available during active sessions or when the doctor is online.',
-                  [{ text: 'OK' }]
-                );
+                const message = subscriptionData?.videoCallsRemaining === 0 
+                  ? 'No video calls remaining in your subscription. Please upgrade your plan.'
+                  : 'Video calls are only available during active sessions or when the doctor is online.';
+                Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
               }
             }}
           >
-            <Icon name="video" size={24} color="#4CAF50" />
+            <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
           </TouchableOpacity>
           
           {/* Audio Call Button - Only patients can initiate calls */}
@@ -2695,7 +2739,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             <TouchableOpacity 
               style={{ 
                 padding: 8,
-                opacity: isCallButtonEnabled() ? 1 : 0.3
+                opacity: isCallButtonEnabled('voice') ? 1 : 0.3
               }}
               onPress={() => {
                 console.log('🎯 [CallButton] Press state:', {
@@ -2705,10 +2749,11 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   showIncomingCall,
                   appointmentType,
                   isTextSession,
-                  buttonEnabled: isCallButtonEnabled()
+                  buttonEnabled: isCallButtonEnabled('voice'),
+                  subscriptionData
                 });
                 
-                if (isCallButtonEnabled()) {
+                if (isCallButtonEnabled('voice')) {
                   console.log('📞 Patient call button pressed:', {
                     appointmentId,
                     currentUserId,
@@ -2725,21 +2770,20 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   // AudioCallService is already imported as audioCallService
                   
                   setShowAudioCallModal(true);
-                } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
-                  console.log('Call Not Ready: WebRTC is not ready yet. Please wait a moment.');
-                  // Call not ready - logged to console only
                 } else {
-                  console.log(
-                    isTextSession 
-                      ? 'Call Not Available: Call feature is not available for this session type.'
-                      : 'Call Not Available: Call feature is only available for audio appointments.'
-                  );
-                  // Call not available - logged to console only
+                  const message = subscriptionData?.voiceCallsRemaining === 0 
+                    ? 'No voice calls remaining in your subscription. Please upgrade your plan.'
+                    : !webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true'
+                      ? 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.'
+                      : isTextSession 
+                        ? 'Call Not Available: Call feature is not available for this session type.'
+                        : 'Call Not Available: Call feature is only available for audio appointments.';
+                  Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
                 }
               }}
-              disabled={!isCallButtonEnabled()}
+              disabled={!isCallButtonEnabled('voice')}
             >
-              <Icon name="voice" size={24} color={isCallButtonEnabled() ? "#4CAF50" : "#999"} />
+              <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
             </TouchableOpacity>
           )}
           

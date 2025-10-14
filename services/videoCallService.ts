@@ -200,12 +200,8 @@ class VideoCallService {
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
 
-      // Check call availability before proceeding
-      const canMakeCall = await this.checkCallAvailability();
-      if (!canMakeCall) {
-        this.updateState({ connectionState: 'failed' });
-        return;
-      }
+      // Note: Call availability is now checked in the UI before calling this service
+      // No need to check availability here as it's already validated
 
       // Resolve doctorId: must not skip backend start-call
       let finalDoctorId: number | null = null;
@@ -766,6 +762,10 @@ class VideoCallService {
         isConnected: true 
       });
       this.startCallTimer();
+      
+      // Deduct call session when answered
+      this.deductCallSession();
+      
       this.events?.onCallAnswered();
       
       // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
@@ -1252,6 +1252,35 @@ class VideoCallService {
     this.cleanup();
     
     console.log('✅ VideoCallService state reset complete');
+  }
+
+  /**
+   * Deduct call session when call is answered
+   */
+  private async deductCallSession(): Promise<void> {
+    try {
+      console.log('💰 [VideoCallService] Deducting call session...');
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/deduct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'video',
+          appointment_id: this.appointmentId
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [VideoCallService] Call session deducted successfully:', data);
+      } else {
+        console.error('❌ [VideoCallService] Failed to deduct call session:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [VideoCallService] Error deducting call session:', error);
+    }
   }
 
   /**

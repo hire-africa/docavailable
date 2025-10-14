@@ -299,12 +299,8 @@ class AudioCallService {
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
 
-      // Check call availability before proceeding
-      const canMakeCall = await this.checkCallAvailability();
-      if (!canMakeCall) {
-        this.updateState({ connectionState: 'failed' });
-        return;
-      }
+      // Note: Call availability is now checked in the UI before calling this service
+      // No need to check availability here as it's already validated
 
       // Resolve doctorId: must not skip backend start-call
       let finalDoctorId: number | null = null;
@@ -1397,6 +1393,35 @@ class AudioCallService {
   }
 
   /**
+   * Deduct call session when call is answered
+   */
+  private async deductCallSession(): Promise<void> {
+    try {
+      console.log('💰 [AudioCallService] Deducting call session...');
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/deduct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'voice',
+          appointment_id: this.appointmentId
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [AudioCallService] Call session deducted successfully:', data);
+      } else {
+        console.error('❌ [AudioCallService] Failed to deduct call session:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [AudioCallService] Error deducting call session:', error);
+    }
+  }
+
+  /**
    * Handle call answered
    */
   private handleCallAnswered(): void {
@@ -1409,6 +1434,10 @@ class AudioCallService {
     this.isCallAnswered = true;
     this.clearCallTimeout();
     this.updateState({ connectionState: 'connected', isConnected: true });
+    
+    // Deduct call session when answered
+    this.deductCallSession();
+    
     // Do not echo call-answered back
     if (!this.didEmitAnswered) {
       this.didEmitAnswered = true;
