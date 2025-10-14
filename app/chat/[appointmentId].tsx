@@ -1980,18 +1980,27 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             callType: message.callType || 'audio',
             isReceivingCall: true,
             senderId: message.senderId,
-            currentUserId
+            currentUserId,
+            doctorName: message.doctorName,
+            doctor_name: message.doctor_name,
+            doctorProfilePicture: message.doctorProfilePicture,
+            doctor_profile_picture: message.doctor_profile_picture
           });
           
           // Store the offer for the appropriate service to use
           (global as any).pendingOffer = message.offer;
           
           // Set caller information for the incoming call screen
-          const callerName = user?.user_type === 'doctor' ? 
-            (chatInfo?.other_participant_name || 'Patient') : 
-            (chatInfo?.other_participant_name || 'Doctor');
+          // Use the caller information from the WebSocket message if available
+          const callerName = message.doctorName || message.doctor_name || 
+            (user?.user_type === 'doctor' ? 
+              (chatInfo?.other_participant_name || 'Patient') : 
+              (chatInfo?.other_participant_name || 'Doctor'));
+          const callerProfilePicture = message.doctorProfilePicture || message.doctor_profile_picture || 
+            chatInfo?.other_participant_profile_picture;
+          
           setIncomingCallerName(callerName);
-          setIncomingCallerProfilePicture(chatInfo?.other_participant_profile_picture);
+          setIncomingCallerProfilePicture(callerProfilePicture);
           
           // Determine call type and show appropriate incoming call screen
           const callType = message.callType || 'audio';
