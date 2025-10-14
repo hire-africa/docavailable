@@ -13,8 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { authorize } from 'react-native-app-auth';
-import { APP_AUTH_CONFIG, isAppAuthConfigured } from '../config/appAuthConfig';
+import * as WebBrowser from 'expo-web-browser';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 
@@ -166,188 +165,49 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setLoading(true);
         try {
-            // Check if app auth is configured
-            if (!isAppAuthConfigured()) {
-                Alert.alert(
-                    'Google OAuth Not Configured',
-                    'Please configure your Google OAuth credentials in the environment variables.',
-                    [{ text: 'OK' }]
-                );
-                return;
-            }
+            // Simple web-based OAuth approach
+            const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
+            const redirectUri = 'https://docavailable.org/oauth/callback';
+            const scope = 'openid profile email';
+            
+            const authUrl = `https://accounts.google.com/oauth/authorize?` +
+                `client_id=${clientId}&` +
+                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+                `response_type=code&` +
+                `scope=${encodeURIComponent(scope)}&` +
+                `access_type=offline`;
 
-            console.log('App Auth Config:', {
-                clientId: APP_AUTH_CONFIG.clientId,
-                redirectUrl: APP_AUTH_CONFIG.redirectUrl,
-                platform: Platform.OS,
-                scopes: APP_AUTH_CONFIG.scopes
-            });
+            console.log('Opening Google OAuth URL:', authUrl);
 
-            // Use react-native-app-auth for in-app OAuth
-            const result = await authorize(APP_AUTH_CONFIG);
+            // Open the OAuth URL in a web browser
+            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
-            console.log('App Auth Result:', result);
-
-            if (result.accessToken) {
-                // Get user info from Google using the access token
-                const userInfoResponse = await fetch(
-                    `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${result.accessToken}`
-                );
+            console.log('OAuth Result:', result);
+            
+            if (result.type === 'success' && result.url) {
+                // Extract the authorization code from the URL
+                const url = new URL(result.url);
+                const code = url.searchParams.get('code');
                 
-                if (!userInfoResponse.ok) {
-                    throw new Error('Failed to fetch user information from Google');
-                }
-                
-                const userInfo = await userInfoResponse.json();
-                console.log('Google User Info:', userInfo);
-
-                // Create a JWT-like token for your backend
-                const googleToken = {
-                    sub: userInfo.id,
-                    email: userInfo.email,
-                    name: userInfo.name,
-                    given_name: userInfo.given_name,
-                    family_name: userInfo.family_name,
-                    picture: userInfo.picture,
-                };
-
-                // Send to your backend
-                const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
-                
-                if (authState.success && authState.data.user) {
-                    const user = authState.data.user;
+                if (code) {
+                    console.log('Authorization code received:', code);
                     
-                    if (user.user_type === 'admin') {
-                        router.replace('/admin-dashboard');
-                    } else if (user.user_type === 'doctor') {
-                        if (user.status === 'pending') {
-                            Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
-                            await authService.signOut();
-                            return;
-                        }
-                        if (user.status === 'suspended') {
-                            Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
-                            await authService.signOut();
-                            return;
-                        }
-                        router.replace('/doctor-dashboard');
-                    } else if (user.user_type === 'patient') {
-                        router.replace('/patient-dashboard');
-                    } else {
-                        router.replace('/');
-                    }
+                    // For now, show a message that Google OAuth needs backend implementation
+                    Alert.alert(
+                        'Google OAuth',
+                        'Google OAuth is not fully implemented yet. Please use email/password login for now.',
+                        [{ text: 'OK' }]
+                    );
                 } else {
-                    Alert.alert('Login Failed', 'Google authentication failed.');
-                    await authService.signOut();
+                    Alert.alert('Authentication Error', 'Failed to get authorization code from Google.');
                 }
             } else {
-                console.error('App Auth error: No access token received');
-                Alert.alert('Authentication Error', 'Failed to authenticate with Google. Please try again.');
+                console.log('OAuth cancelled or failed:', result);
+                Alert.alert('Sign-In Cancelled', 'Google sign-in was cancelled.');
             }
         } catch (error: any) {
             console.error('Google login error:', error);
-            
-            // Enhanced Google sign-in error handling
-            let errorMessage = 'Failed to sign in with Google. Please try again.';
-            let errorTitle = 'Google Login Failed';
-            let errorSuggestion = '';
-            
-            // Check if we have detailed error information from the backend
-            if (error.response?.data) {
-                const errorData = error.response.data;
-                errorMessage = errorData.message || errorMessage;
-                
-                if (errorData.error_type) {
-                    switch (errorData.error_type) {
-                        case 'user_not_registered':
-                            // Handle unregistered user - redirect to patient signup
-                            errorTitle = 'Account Not Found';
-                            errorMessage = errorData.message || 'This email is not registered.';
-                            errorSuggestion = errorData.suggestion || 'Please complete the patient registration process.';
-                            
-                            // Store Google user data for pre-filling signup form
-                            if (errorData.google_user_data) {
-                                try {
-                                    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                                        sessionStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
-                                    } else {
-                                        await AsyncStorage.setItem('google_user_data', JSON.stringify(errorData.google_user_data));
-                                    }
-                                } catch (storageError) {
-                                    console.warn('Could not store Google user data:', storageError);
-                                }
-                            }
-                            
-                            // Show alert and redirect to patient signup
-                            Alert.alert(
-                                errorTitle,
-                                `${errorMessage}\n\nSuggestion: ${errorSuggestion}`,
-                                [
-                                    {
-                                        text: 'Sign Up',
-                                        onPress: () => router.push('/patient-signup')
-                                    },
-                                    {
-                                        text: 'Cancel',
-                                        style: 'cancel'
-                                    }
-                                ]
-                            );
-                            return; // Exit early to avoid showing another alert
-                            
-                        case 'invalid_google_token':
-                            errorTitle = 'Invalid Google Token';
-                            break;
-                        case 'google_verification_failed':
-                            errorTitle = 'Google Verification Failed';
-                            break;
-                        case 'account_suspended':
-                            errorTitle = 'Account Suspended';
-                            break;
-                        case 'account_pending':
-                            errorTitle = 'Account Pending';
-                            break;
-                        default:
-                            errorTitle = 'Google Login Error';
-                    }
-                }
-                
-                if (errorData.suggestion) {
-                    errorSuggestion = errorData.suggestion;
-                }
-            } else if (error.message) {
-                // Fallback to message-based error handling
-                if (error.message.includes('Firebase configuration not available')) {
-                    errorMessage = 'Google authentication is not configured. Please contact support.';
-                    errorSuggestion = 'This is a configuration issue. Please contact our support team.';
-                } else if (error.message.includes('Google sign-in was cancelled')) {
-                    errorMessage = 'Google sign-in was cancelled.';
-                    errorSuggestion = 'You can try signing in again or use email/password login.';
-                } else if (error.message.includes('Firebase Auth not initialized')) {
-                    errorMessage = 'Authentication service is not ready. Please try again.';
-                    errorSuggestion = 'Please wait a moment and try again.';
-                } else if (error.message.includes('Google authentication failed')) {
-                    errorMessage = 'Google authentication failed. Please check your internet connection and try again.';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else if (error.message.includes('Network error')) {
-                    errorMessage = 'Network error during Google sign-in. Please check your internet connection.';
-                    errorTitle = 'Network Error';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else if (error.message.includes('Request timed out')) {
-                    errorMessage = 'Google sign-in request timed out. Please try again.';
-                    errorTitle = 'Timeout Error';
-                    errorSuggestion = 'Check your internet connection and try again.';
-                } else {
-                    errorMessage = error.message;
-                }
-            }
-            
-            // Show error with suggestion if available
-            if (errorSuggestion) {
-                Alert.alert(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
-            } else {
-                Alert.alert(errorTitle, errorMessage);
-            }
+            Alert.alert('Google Sign-In Error', 'An error occurred during Google sign-in. Please try again.');
         } finally {
             setLoading(false);
         }
