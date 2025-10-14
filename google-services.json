@@ -1,29 +1,42 @@
 {
-    "project_info": {
-      "project_number": "327624693503",
-      "project_id": "doc-push",
-      "storage_bucket": "doc-push.firebasestorage.app"
-    },
-    "client": [
-      {
-        "client_info": {
-          "mobilesdk_app_id": "1:327624693503:android:c5161ae5476505b5861eca",
-          "android_client_info": {
-            "package_name": "com.docavailable.app"
+  "project_info": {
+    "project_number": "327624693503",
+    "project_id": "doc-push",
+    "storage_bucket": "doc-push.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:327624693503:android:c5161ae5476505b5861eca",
+        "android_client_info": {
+          "package_name": "com.docavailable.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.docavailable.app",
+            "certificate_hash": "31df3956872b514fe671ae6da89ddec741eb5082"
           }
         },
-        "oauth_client": [],
-        "api_key": [
-          {
-            "current_key": "AIzaSyAfRKBWJ8otf8VEo5nVZv5cG7qDX-t4ksc"
-          }
-        ],
-        "services": {
-          "appinvite_service": {
-            "other_platform_oauth_client": []
-          }
+        {
+          "client_id": "449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEiLGH4ew9Pvgy5-HNrGxmnNa7brlJlPw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
         }
       }
-    ],
-    "configuration_version": "1"
-  }
+    }
+  ],
+  "configuration_version": "1"
+}

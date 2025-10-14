@@ -12,7 +12,20 @@
             "package_name": "com.docavailable.app"
           }
         },
-        "oauth_client": [],
+        "oauth_client": [
+          {
+            "client_id": "449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com",
+            "client_type": 1,
+            "android_info": {
+              "package_name": "com.docavailable.app",
+              "certificate_hash": "31df3956872b514fe671ae6da89ddec741eb5082"
+            }
+          },
+          {
+            "client_id": "449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com",
+            "client_type": 3
+          }
+        ],
         "api_key": [
           {
             "current_key": "AIzaSyAfRKBWJ8otf8VEo5nVZv5cG7qDX-t4ksc"

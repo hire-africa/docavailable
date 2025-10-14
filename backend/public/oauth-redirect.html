@@ -82,38 +82,33 @@
                 <p>If you don't see the app open, please check your mobile device.</p>
             `;
 
-            // Redirect back to the mobile app
+            // For WebView, send the code back via postMessage
             setTimeout(() => {
-                // Try to redirect back to the mobile app
-                const redirectUrl = 'com.docavailable.app://oauth2redirect?code=' + encodeURIComponent(code);
-                
                 try {
-                    // Try direct redirect first
-                    window.location.href = redirectUrl;
-                } catch (e) {
-                    console.log('Direct redirect failed:', e);
-                    
-                    // Try creating a link and clicking it
-                    try {
-                        const link = document.createElement('a');
-                        link.href = redirectUrl;
-                        link.style.display = 'none';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    } catch (e2) {
-                        console.log('Link redirect failed:', e2);
-                        
-                        // Final fallback: show instructions
-                        detailsEl.innerHTML = `
-                            <p>Authentication successful!</p>
-                            <p>Please return to the DocAvailable app on your mobile device.</p>
-                            <p>If the app doesn't open automatically, please close this window and try again.</p>
-                            <p>You can also try refreshing the app.</p>
-                        `;
+                    // Send the OAuth code back to the WebView
+                    if (window.ReactNativeWebView) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'oauth_callback',
+                            code: code,
+                            state: state
+                        }));
+                    } else {
+                        // Fallback: try to redirect back to the mobile app
+                        const redirectUrl = 'com.docavailable.app://oauth2redirect?code=' + encodeURIComponent(code);
+                        window.location.href = redirectUrl;
                     }
+                } catch (e) {
+                    console.log('PostMessage failed:', e);
+                    
+                    // Final fallback: show instructions
+                    detailsEl.innerHTML = `
+                        <p>Authentication successful!</p>
+                        <p>Please return to the DocAvailable app on your mobile device.</p>
+                        <p>If the app doesn't open automatically, please close this window and try again.</p>
+                        <p>You can also try refreshing the app.</p>
+                    `;
                 }
-            }, 2000);
+            }, 1000);
         } else {
             // No OAuth parameters
             messageEl.textContent = 'Invalid OAuth redirect';

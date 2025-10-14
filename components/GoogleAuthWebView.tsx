@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import authService from '../services/authService';
 
 interface GoogleAuthWebViewProps {
   visible: boolean;
@@ -35,13 +34,14 @@ export default function GoogleAuthWebView({
   // Use a simple redirect URI that's more likely to work
   const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
   
-  const authUrl = `https://accounts.google.com/oauth/authorize?` +
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
     `redirect_uri=${encodeURIComponent(redirectUri)}&` +
     `response_type=code&` +
     `scope=${encodeURIComponent(scope)}&` +
     `access_type=offline&` +
-    `prompt=select_account&` +
+    `prompt=consent&` +
+    `include_granted_scopes=true&` +
     `state=webview_auth`;
 
   console.log('🔐 GoogleAuthWebView: Opening OAuth URL:', authUrl);
@@ -202,7 +202,7 @@ export default function GoogleAuthWebView({
           mixedContentMode="compatibility"
           thirdPartyCookiesEnabled={true}
           allowsBackForwardNavigationGestures={true}
-          userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+           userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
           onShouldStartLoadWithRequest={(request) => {
             console.log('🔐 GoogleAuthWebView: Should start load with request:', request.url);
             

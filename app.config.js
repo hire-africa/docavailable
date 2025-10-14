@@ -49,7 +49,13 @@ module.exports = {
     plugins: [
       "expo-router",
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          iosUrlScheme: "com.googleusercontent.apps.449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml"
+        }
+      ]
     ],
     extra: {
       eas: {
@@ -57,6 +63,7 @@ module.exports = {
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,
+      googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       // WebRTC Configuration
       EXPO_PUBLIC_WEBRTC_SIGNALING_URL: process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL,
       EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL: process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL,

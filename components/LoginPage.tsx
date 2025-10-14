@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
-import GoogleAuthWebView from './GoogleAuthWebView';
+import NativeGoogleSignIn from './NativeGoogleSignIn';
 
 const { width } = Dimensions.get('window');
 
@@ -173,6 +173,26 @@ export default function LoginPage() {
         setLoading(true);
         
         try {
+            // Check if user needs to sign up
+            if (user.needsSignup && user.signupData) {
+                console.log('🔐 User needs signup, redirecting with Google data:', user.signupData);
+                
+                // Navigate to signup page with Google data pre-filled
+                const signupParams = {
+                    googleData: JSON.stringify(user.signupData.googleData),
+                    userType: user.signupData.userType,
+                    source: 'google'
+                };
+                
+                // Navigate to signup page with pre-filled data
+                router.push({
+                    pathname: '/signup',
+                    params: signupParams
+                });
+                return;
+            }
+            
+            // User exists in database, proceed with normal login flow
             // Navigate to appropriate dashboard based on user type
             if (user.user_type === 'admin') {
                 navigateToDashboard('admin', true);
@@ -312,12 +332,13 @@ export default function LoginPage() {
                 </View>
             </View>
 
-            {/* Google Auth WebView Modal */}
-            <GoogleAuthWebView
+            {/* Native Google Sign-In Modal */}
+            <NativeGoogleSignIn
                 visible={showGoogleAuth}
                 onClose={handleGoogleAuthClose}
                 onSuccess={handleGoogleAuthSuccess}
                 onError={handleGoogleAuthError}
+                userType={userType as 'patient' | 'doctor' | 'admin'}
             />
         </View>
     );

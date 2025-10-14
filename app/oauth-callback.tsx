@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
-import { router } from 'expo-router';
-import { Alert } from 'react-native';
 import * as AuthSession from 'expo-auth-session';
-import { GOOGLE_OAUTH_CONFIG, GOOGLE_API_ENDPOINTS } from '../config/googleOAuth';
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { Alert } from 'react-native';
+import { GOOGLE_API_ENDPOINTS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
 
 export default function OAuthCallback() {
