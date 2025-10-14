@@ -149,16 +149,20 @@ export default function NativeGoogleSignIn({
       
       console.log('🔐 NativeGoogleSignIn: Sign-in successful:', userInfo);
       
-      if (userInfo.user && userInfo.idToken) {
+      // Check if user data exists in the response
+      const userData = userInfo.data?.user || userInfo.user;
+      const idToken = userInfo.data?.idToken || userInfo.idToken;
+      
+      if (userData && idToken) {
         // Transform user data to match your app's format
         const googleUserData = {
-          id: userInfo.user.id,
-          name: userInfo.user.name || '',
-          email: userInfo.user.email,
-          user_type: 'patient', // Default, will be determined by login context
+          id: userData.id,
+          name: userData.name || '',
+          email: userData.email,
+          user_type: userType, // Use the userType prop
           status: 'active',
-          google_id: userInfo.user.id,
-          profile_picture: userInfo.user.photo || null,
+          google_id: userData.id,
+          profile_picture: userData.photo || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -166,8 +170,9 @@ export default function NativeGoogleSignIn({
         console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
         
         // Check if user exists in database
-        await checkUserExistsAndHandle(googleUserData, userInfo.idToken);
+        await checkUserExistsAndHandle(googleUserData, idToken);
       } else {
+        console.log('🔐 NativeGoogleSignIn: Available data structure:', JSON.stringify(userInfo, null, 2));
         throw new Error('No user data received from Google');
       }
       
