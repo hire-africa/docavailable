@@ -390,6 +390,9 @@ class VideoCallService {
       await this.createOffer();
       console.log('📞 Video call offer sent successfully, starting call timeout...');
       
+      // Start call timeout (60 seconds for doctor to answer)
+      this.startCallTimeout();
+      
       // Begin periodic re-offer loop until answered or connected
       this.startReofferLoop();
       
@@ -1028,6 +1031,23 @@ class VideoCallService {
       clearInterval(this.callTimer);
       this.callTimer = null;
     }
+  }
+
+  /**
+   * Start call timeout
+   */
+  private startCallTimeout(): void {
+    this.clearCallTimeout(); // Clear any existing timeout
+    
+    this.callTimeoutTimer = setTimeout(() => {
+      console.log('⏰ [VideoCallService] Call timeout triggered');
+      if (!this.isCallAnswered && this.state.connectionState !== 'connected') {
+        console.log('⏰ [VideoCallService] Call timeout - ending call');
+        this.handleCallTimeout();
+      } else {
+        console.log('⏰ [VideoCallService] Call timeout triggered but call was already answered - ignoring');
+      }
+    }, 60000); // 60 seconds timeout
   }
 
   /**

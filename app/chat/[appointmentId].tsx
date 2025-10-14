@@ -1,19 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../../components/AudioCall';
@@ -195,6 +196,11 @@ export default function ChatPage() {
   // WebRTC chat service
   const [webrtcChatService, setWebrtcChatService] = useState<WebRTCChatService | null>(null);
   const [isWebRTCServiceActive, setIsWebRTCServiceActive] = useState(false);
+  
+  // Appointment time checking state
+  const [isAppointmentTime, setIsAppointmentTime] = useState(false);
+  const [timeUntilAppointment, setTimeUntilAppointment] = useState<string>('');
+  const [appointmentDateTime, setAppointmentDateTime] = useState<Date | null>(null);
   
   // Typing indicator state
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
@@ -468,15 +474,19 @@ export default function ChatPage() {
     const callEnabled = isCallEnabled();
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
-    const enabled = callEnabled && webrtcReadyOrFallback && !showIncomingCall;
+    // For appointments, also check if it's appointment time
+    const appointmentTimeCheck = isTextSession || isAppointmentTime;
+    const enabled = callEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck;
     
     console.log('🔍 [isCallButtonEnabled] Debug:', {
       callEnabled,
       webrtcReady,
       webrtcReadyOrFallback,
       showIncomingCall,
-      enabled,
       isTextSession,
+      isAppointmentTime,
+      appointmentTimeCheck,
+      enabled,
       appointmentType,
       environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS
     });
@@ -487,6 +497,72 @@ export default function ChatPage() {
   
   // Check if user is authenticated
   const isAuthenticated = !!user && !!user.id;
+
+  // Helper function to check if current time is within appointment time
+  const checkAppointmentTime = useCallback(() => {
+    if (!chatInfo?.appointment_date || !chatInfo?.appointment_time) {
+      setIsAppointmentTime(true); // If no appointment info, allow interaction
+      return;
+    }
+
+    try {
+      // Parse appointment date and time
+      const appointmentDate = new Date(chatInfo.appointment_date);
+      let timeStr = chatInfo.appointment_time;
+      
+      // Handle different time formats
+      if (timeStr.includes(' ')) {
+        timeStr = timeStr.split(' ')[0]; // Remove AM/PM if present
+      }
+      
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      
+      // Set appointment time
+      const appointmentDateTime = new Date(appointmentDate);
+      appointmentDateTime.setHours(hours, minutes, 0, 0);
+      
+      setAppointmentDateTime(appointmentDateTime);
+      
+      const now = new Date();
+      const timeDiff = appointmentDateTime.getTime() - now.getTime();
+      
+      if (timeDiff <= 0) {
+        // Appointment time has arrived or passed
+        setIsAppointmentTime(true);
+        setTimeUntilAppointment('');
+      } else {
+        // Appointment time hasn't arrived yet
+        setIsAppointmentTime(false);
+        
+        // Calculate time until appointment
+        const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        if (days > 0) {
+          setTimeUntilAppointment(`${days}d ${hours}h ${minutes}m`);
+        } else if (hours > 0) {
+          setTimeUntilAppointment(`${hours}h ${minutes}m`);
+        } else {
+          setTimeUntilAppointment(`${minutes}m`);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking appointment time:', error);
+      setIsAppointmentTime(true); // Default to allowing interaction on error
+    }
+  }, [chatInfo?.appointment_date, chatInfo?.appointment_time]);
+
+  // Check appointment time when chat info changes
+  useEffect(() => {
+    checkAppointmentTime();
+  }, [checkAppointmentTime]);
+
+  // Update appointment time check every minute
+  useEffect(() => {
+    const interval = setInterval(checkAppointmentTime, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [checkAppointmentTime]);
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -651,15 +727,36 @@ export default function ChatPage() {
         });
 
         console.log('🔌 [WebRTC Chat] Attempting to connect...');
+        console.log('🔍 [WebRTC Chat] Connection details:', {
+          url: `${config.webrtc.chatSignalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(String(currentUserId))}&authToken=***`,
+          appointmentId,
+          userId: currentUserId,
+          sessionType,
+          chatSignalingUrl: config.webrtc.chatSignalingUrl
+        });
+        
+        // Add a timeout to detect connection issues
+        const connectionTimeout = setTimeout(() => {
+          console.error('❌ [WebRTC Chat] Connection timeout after 15 seconds');
+          throw new Error('WebRTC connection timeout');
+        }, 15000);
+        
         try {
           await chatService.connect();
+          clearTimeout(connectionTimeout); // Clear timeout on successful connection
           console.log('✅ [WebRTC Chat] Connected successfully');
           console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
           setWebrtcChatService(chatService);
           setIsWebRTCServiceActive(true);
           console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
         } catch (connectError) {
+          clearTimeout(connectionTimeout); // Clear timeout on error
           console.error('❌ [WebRTC Chat] Connection failed:', connectError);
+          console.error('❌ [WebRTC Chat] Connection error details:', {
+            message: connectError.message,
+            name: connectError.name,
+            stack: connectError.stack
+          });
           throw connectError; // Re-throw to trigger the catch block below
         }
         
@@ -710,15 +807,61 @@ export default function ChatPage() {
           };
         }
         
-        // Set up fallback polling for messages in case WebRTC fails
+        // WebRTC is working, no need for fallback polling
+        console.log('✅ [WebRTC Chat] WebRTC connected successfully - no fallback polling needed');
+        
+        // Add a periodic check to ensure WebRTC is still working
+        const webrtcHealthCheck = setInterval(() => {
+          if (chatService && chatService.getConnectionStatus()) {
+            console.log('✅ [WebRTC Health] WebRTC connection is healthy');
+          } else {
+            console.warn('⚠️ [WebRTC Health] WebRTC connection lost, but service still active');
+          }
+        }, 30000); // Check every 30 seconds
+        
+        // Store interval for cleanup
+        (chatService as any).healthCheckInterval = webrtcHealthCheck;
+      } catch (error) {
+        console.error('❌ [WebRTCChat] Failed to initialize:', error);
+        console.log('🔄 [WebRTCChat] WebRTC chat failed, enabling fallback polling');
+        
+        // Set a fallback chat service even if WebRTC fails
+        setWebrtcChatService(null);
+        setIsWebRTCServiceActive(false);
+        
+        // Set up fallback polling only when WebRTC fails
         const fallbackInterval = setInterval(async () => {
           try {
-            const currentMessages = await chatService.getMessages();
-            if (currentMessages.length > 0) {
-              console.log('🔄 [Fallback] Polling messages:', currentMessages.length);
+            console.log('🔄 [Fallback] Polling messages from server...');
+            
+            // Fetch messages directly from API since WebRTC failed
+            const authToken = await AsyncStorage.getItem('auth_token');
+            if (!authToken) {
+              console.error('❌ [Fallback] No auth token available');
+              return;
+            }
+            
+            const currentConfig = configService.getConfig();
+            const response = await fetch(`${currentConfig.apiUrl}/api/chat/${appointmentId}/messages`, {
+              headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (!response.ok) {
+              console.error('❌ [Fallback] API request failed:', response.status);
+              return;
+            }
+            
+            const data = await response.json();
+            if (data.success && data.data) {
+              const serverMessages = data.data;
+              console.log('🔄 [Fallback] Polling messages:', serverMessages.length);
+              
               // Use merge function to prevent duplicates and loops
               setMessages(prev => {
-const mergedMessages = safeMergeMessages(prev, currentMessages);
+                const mergedMessages = safeMergeMessages(prev, serverMessages);
                 if (mergedMessages.length !== prev.length) {
                   console.log('🔄 [Fallback] New messages merged:', mergedMessages.length - prev.length);
                 }
@@ -728,17 +871,10 @@ const mergedMessages = safeMergeMessages(prev, currentMessages);
           } catch (error) {
             console.error('❌ [Fallback] Error polling messages:', error);
           }
-        }, 10000); // Poll every 10 seconds as fallback (reduced frequency)
+        }, 10000); // Poll every 10 seconds as fallback
         
         // Store interval for cleanup
-        (chatService as any).fallbackInterval = fallbackInterval;
-      } catch (error) {
-        console.error('❌ [WebRTCChat] Failed to initialize:', error);
-        console.log('🔄 [WebRTCChat] WebRTC chat failed, but chat will still work with fallback');
-        // Set a fallback chat service even if WebRTC fails
-        setWebrtcChatService(null);
-        setIsWebRTCServiceActive(false);
-        // Chat will still work through the backend API fallback
+        (window as any).fallbackInterval = fallbackInterval;
       }
     };
 
@@ -748,12 +884,22 @@ const mergedMessages = safeMergeMessages(prev, currentMessages);
     return () => {
       if (webrtcChatService) {
         console.log('🔌 [WebRTCChat] Disconnecting service');
-        // Clear fallback interval
-        if ((webrtcChatService as any).fallbackInterval) {
-          clearInterval((webrtcChatService as any).fallbackInterval);
+        
+        // Clear health check interval if it exists
+        if ((webrtcChatService as any).healthCheckInterval) {
+          console.log('🔄 [WebRTC Health] Clearing health check interval');
+          clearInterval((webrtcChatService as any).healthCheckInterval);
         }
+        
         webrtcChatService.disconnect();
         setIsWebRTCServiceActive(false);
+      }
+      
+      // Clear fallback interval if it exists
+      if ((window as any).fallbackInterval) {
+        console.log('🔄 [Fallback] Clearing fallback polling interval');
+        clearInterval((window as any).fallbackInterval);
+        (window as any).fallbackInterval = null;
       }
     };
   }, [isAuthenticated, appointmentId, currentUserId, user]);
@@ -1513,7 +1659,6 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
-          isConnected: webrtcChatService.isConnected,
           connectionStatus: webrtcChatService.getConnectionStatus()
         });
         try {
@@ -2769,6 +2914,56 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </Text>
           </View>
           
+          {/* Appointment Time Placeholder */}
+          {!isTextSession && !isAppointmentTime && appointmentDateTime && (
+            <View style={{
+              backgroundColor: '#FFF3E0',
+              borderRadius: 12,
+              padding: 20,
+              marginBottom: 16,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: '#FFB74D',
+            }}>
+              <Ionicons 
+                name="time" 
+                size={32} 
+                color="#FF9800" 
+                style={{ marginBottom: 12 }}
+              />
+                <Text style={{
+                  fontSize: 18,
+                  color: '#E65100',
+                  fontWeight: '600',
+                  textAlign: 'center',
+                  marginBottom: 8,
+                }}>
+                  You're Early! 🎉
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: '#F57C00',
+                  textAlign: 'center',
+                  lineHeight: 20,
+                }}>
+                  Your appointment is on {appointmentDateTime.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    day: 'numeric', 
+                    month: 'long' 
+                  })} at {appointmentDateTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true })}
+                </Text>
+                <Text style={{
+                  fontSize: 14,
+                  color: '#F57C00',
+                  textAlign: 'center',
+                  marginTop: 8,
+                  fontWeight: '500',
+                }}>
+                  Make sure you don't miss it! 🎯
+                </Text>
+            </View>
+          )}
 
           {/* Instant Session Timer */}
           {isInstantSession && showInstantSessionUI && (
@@ -2786,7 +2981,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             />
           )}
           
-          {messages.map((message, index) => {
+          {/* Only show messages if it's appointment time or text session */}
+          {(isTextSession || isAppointmentTime) && messages.map((message, index) => {
             // Create a stable unique key using message ID and timestamp
             if (__DEV__ && index === 0) {
               console.log('🔍 [ChatComponent] Rendering messages:', {
@@ -2897,11 +3093,11 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           {/* Image Button */}
           <TouchableOpacity
             onPress={handlePickImage}
-            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)}
+            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)) ? 0.5 : 1,
+              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)) ? 0.5 : 1,
             }}
           >
             {sendingGalleryImage ? (
@@ -2914,11 +3110,11 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           {/* Camera Button */}
           <TouchableOpacity
             onPress={handleTakePhoto}
-            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)}
+            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)) ? 0.5 : 1,
+              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)) ? 0.5 : 1,
             }}
           >
             {sendingCameraImage ? (
@@ -2937,9 +3133,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
-            editable={sessionValid}
+            editable={sessionValid && (isTextSession || isAppointmentTime)}
             style={{
-              opacity: sessionValid ? 1 : 0.5
+              opacity: (sessionValid && (isTextSession || isAppointmentTime)) ? 1 : 0.5
             }}
             placeholder={
               !sessionValid
@@ -2952,6 +3148,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 ? "Session expired - doctor did not respond"
                 : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isPatient
                 ? "Patient is waiting for your response..."
+                : !isTextSession && !isAppointmentTime && appointmentDateTime
+                ? `You're early! Your appointment starts at ${appointmentDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                 : "Type a message..."
             }
             style={{
@@ -2971,7 +3169,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             editable={
               !(sessionEnded && !isPatient) && 
               !(isInstantSession && isSessionExpired) &&
-              !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
+              !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) &&
+              (isTextSession || isAppointmentTime)
             }
           />
           
@@ -2983,7 +3182,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               sessionEnded || 
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime)
             }
             style={{
               backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',

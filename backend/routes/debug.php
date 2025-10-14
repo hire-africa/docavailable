@@ -2,97 +2,91 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Models\User;
+use App\Notifications\IncomingCallNotification;
+use App\Models\CallSession;
 
-// Debug routes for troubleshooting
-Route::get('/debug/user/{email}', function ($email) {
-    try {
-        $user = User::where('email', $email)->first();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-                'email' => $email
-            ]);
-        }
-        
-        return response()->json([
-            'success' => true,
-            'user' => [
-                'id' => $user->id,
-                'email' => $user->email,
-                'user_type' => $user->user_type,
-                'status' => $user->status,
-                'created_at' => $user->created_at,
-                'updated_at' => $user->updated_at,
-                'has_password' => !empty($user->password),
-                'password_length' => strlen($user->password ?? '')
-            ]
-        ]);
-        
-    } catch (Exception $e) {
+Route::get('/debug/doctor-push-token/{doctorId}', function ($doctorId) {
+    $doctor = User::find($doctorId);
+    
+    if (!$doctor) {
         return response()->json([
             'success' => false,
-            'error' => $e->getMessage(),
-            'type' => get_class($e)
-        ], 500);
+            'message' => 'Doctor not found'
+        ]);
     }
+    
+    return response()->json([
+        'success' => true,
+        'doctor' => [
+            'id' => $doctor->id,
+            'name' => $doctor->first_name . ' ' . $doctor->last_name,
+            'email' => $doctor->email,
+            'has_push_token' => !empty($doctor->push_token),
+            'push_token_length' => strlen($doctor->push_token ?? ''),
+            'push_notifications_enabled' => $doctor->push_notifications_enabled,
+            'last_seen' => $doctor->last_seen_at,
+            'user_type' => $doctor->user_type
+        ]
+    ]);
 });
 
-Route::post('/debug/login-test', function (Illuminate\Http\Request $request) {
+Route::post('/debug/test-notification/{doctorId}', function ($doctorId) {
+    $doctor = User::find($doctorId);
+    
+    if (!$doctor) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Doctor not found'
+        ]);
+    }
+    
+    // Create a test call session
+    $callSession = new CallSession([
+        'id' => 999,
+        'appointment_id' => 'test_appointment',
+        'call_type' => 'video',
+        'doctor_id' => $doctorId,
+        'patient_id' => 1,
+        'status' => 'connecting',
+        'started_at' => now(),
+        'last_activity_at' => now(),
+        'reason' => 'Test notification',
+        'sessions_used' => 0,
+        'sessions_remaining_before_start' => 0,
+        'is_connected' => false,
+        'call_duration' => 0,
+    ]);
+    
+    // Create a test caller
+    $caller = new User([
+        'id' => 1,
+        'first_name' => 'Test',
+        'last_name' => 'Patient',
+        'email' => 'test@example.com',
+        'user_type' => 'patient'
+    ]);
+    
     try {
-        $email = $request->input('email');
-        $password = $request->input('password');
-        
-        // Test user lookup
-        $user = User::where('email', $email)->first();
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-                'step' => 'user_lookup'
-            ]);
-        }
-        
-        // Test password verification
-        $passwordValid = password_verify($password, $user->password);
-        if (!$passwordValid) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid password',
-                'step' => 'password_verification',
-                'user_status' => $user->status,
-                'user_type' => $user->user_type
-            ]);
-        }
-        
-        // Test JWT token generation
-        $token = auth('api')->attempt(['email' => $email, 'password' => $password]);
-        if (!$token) {
-            return response()->json([
-                'success' => false,
-                'message' => 'JWT token generation failed',
-                'step' => 'jwt_generation',
-                'user_status' => $user->status,
-                'user_type' => $user->user_type
-            ]);
-        }
+        // Send test notification
+        $doctor->notify(new IncomingCallNotification($callSession, $caller));
         
         return response()->json([
             'success' => true,
-            'message' => 'Login test successful',
-            'token_length' => strlen($token),
-            'user_status' => $user->status,
-            'user_type' => $user->user_type
+            'message' => 'Test notification sent successfully',
+            'doctor' => [
+                'id' => $doctor->id,
+                'name' => $doctor->first_name . ' ' . $doctor->last_name,
+                'has_push_token' => !empty($doctor->push_token),
+                'push_notifications_enabled' => $doctor->push_notifications_enabled
+            ]
         ]);
-        
-    } catch (Exception $e) {
+    } catch (\Exception $e) {
         return response()->json([
             'success' => false,
+            'message' => 'Failed to send notification: ' . $e->getMessage(),
             'error' => $e->getMessage(),
-            'type' => get_class($e),
             'file' => $e->getFile(),
             'line' => $e->getLine()
-        ], 500);
+        ]);
     }
 });

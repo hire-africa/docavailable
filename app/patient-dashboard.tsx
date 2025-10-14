@@ -38,6 +38,7 @@ import DocBotChat from '../components/DocBotChat';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
+import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
 import { APPOINTMENT_STATUS, appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 import { apiService } from './services/apiService';
@@ -280,6 +281,33 @@ export default function PatientDashboard() {
     return 'scheduled';
   };
 
+  // Helper function to check if appointment is upcoming
+  const isAppointmentUpcoming = (appointment: any) => {
+    const dateStr = appointment.appointment_date || appointment.date;
+    const timeStr = appointment.appointment_time || appointment.time;
+    
+    if (!dateStr || !timeStr) return false;
+    
+    try {
+      // Handle different date formats
+      let appointmentDateTime;
+      if (dateStr.includes('/')) {
+        // Format: MM/DD/YYYY
+        const [month, day, year] = dateStr.split('/').map(Number);
+        const [hour, minute] = timeStr.split(':').map(Number);
+        appointmentDateTime = new Date(year, month - 1, day, hour, minute);
+      } else {
+        // Format: YYYY-MM-DD
+        appointmentDateTime = new Date(`${dateStr}T${timeStr}`);
+      }
+      
+      const now = new Date();
+      return appointmentDateTime.getTime() > now.getTime();
+    } catch (error) {
+      return false;
+    }
+  };
+
   const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
     <TouchableOpacity
       style={[styles.tab, isActive && styles.activeTab]}
@@ -310,16 +338,16 @@ export default function PatientDashboard() {
     if (user) {
       appointmentService.getAppointments()
         .then((appointmentsData) => {
-          // // console.log('PatientDashboard: Fetched appointments:', appointmentsData);
-          // // console.log('PatientDashboard: Appointment statuses:', appointmentsData.map(apt => ({ id: apt.id, status: apt.status, type: apt.appointment_type })));
           setAppointments(appointmentsData);
+          // Trigger conversion check after appointments are loaded
+          setTimeout(() => triggerConversionCheck(), 1000);
         })
         .catch(error => {
-          console.error('PatientDashboard: Error fetching appointments:', error);
+          console.error('❌ [PatientDashboard] Error fetching appointments:', error);
           setAppointments([]);
         });
     }
-  }, [user]);
+  }, [user, triggerConversionCheck]);
 
   useEffect(() => {
     if (user && user.id) { // Add user.id check to ensure user is fully loaded
@@ -658,12 +686,31 @@ export default function PatientDashboard() {
       });
       // console.log('PatientDashboard: Manual refresh - Fetched appointments:', appointmentsData);
       setAppointments(appointmentsData);
+      
+      // Trigger conversion check for text appointments
+      triggerConversionCheck();
     } catch (error) {
       console.error('PatientDashboard: Manual refresh - Error:', error);
     } finally {
       setRefreshingMessages(false);
     }
   };
+
+  // Text appointment converter hook
+  const { triggerConversionCheck } = useTextAppointmentConverter({
+    appointments: getSafeAppointments(),
+    onTextSessionCreated: (textSession) => {
+      console.log('🔄 [PatientDashboard] Text session created from appointment:', textSession);
+      setActiveTextSession(textSession);
+      // Refresh appointments to update status
+      refreshMessagesTab();
+    },
+    onAppointmentUpdated: (appointmentId) => {
+      console.log('🔄 [PatientDashboard] Appointment updated:', appointmentId);
+      // Refresh appointments to get updated status
+      refreshMessagesTab();
+    }
+  });
 
   // Manual refresh function for home tab
   const refreshHomeTab = async () => {
@@ -1738,26 +1785,47 @@ export default function PatientDashboard() {
             isActive: true
           } : null;
 
+          // Show text session if it exists (no filtering)
+          const shouldShowTextSession = !!activeTextSessionItem;
+
           // Get active appointments
           const activeAppointments = getSafeAppointments()
-            .filter(appt => 
-              (['pending', 'confirmed'].includes(appt.status || '')) && (
+            .filter(appt => {
+              // Check both string and numeric status values
+              const status = appt.status;
+              const isPendingOrConfirmed = 
+                status === 'pending' || status === 'confirmed' ||
+                status === 0 || status === 1; // 0 = pending, 1 = confirmed
+              
+              return isPendingOrConfirmed && (
                 !messageSearchQuery || 
-                (appt.doctorName || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
+                (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())
-              )
-            )
+              );
+            })
             .map(appt => ({
               ...appt,
               type: 'active',
               sortDate: (() => {
                 if (appt.updatedAt) return new Date(appt.updatedAt).getTime();
                 if (appt.createdAt) return new Date(appt.createdAt).getTime();
-                if (appt.date && appt.time && typeof appt.date === 'string' && typeof appt.time === 'string') {
+                
+                // Use appointment_date and appointment_time from API
+                const dateStr = appt.appointment_date || appt.date;
+                const timeStr = appt.appointment_time || appt.time;
+                
+                if (dateStr && timeStr && typeof dateStr === 'string' && typeof timeStr === 'string') {
                   try {
-                    const [month, day, year] = (appt.date || '').split('/').map(Number);
-                    const [hour, minute] = (appt.time || '').split(':').map(Number);
-                    return new Date(year, month - 1, day, hour, minute).getTime();
+                    // Handle different date formats
+                    if (dateStr.includes('/')) {
+                      // Format: MM/DD/YYYY
+                      const [month, day, year] = dateStr.split('/').map(Number);
+                      const [hour, minute] = timeStr.split(':').map(Number);
+                      return new Date(year, month - 1, day, hour, minute).getTime();
+                    } else {
+                      // Format: YYYY-MM-DD
+                      return new Date(`${dateStr}T${timeStr}`).getTime();
+                    }
                   } catch {
                     return 0;
                   }
@@ -1784,9 +1852,10 @@ export default function PatientDashboard() {
             }));
 
           // Combine all items and sort by date (most recent first)
-          const allItems = [activeTextSessionItem, ...activeAppointments, ...filteredEndedSessions]
+          const allItems = [shouldShowTextSession ? activeTextSessionItem : null, ...activeAppointments, ...filteredEndedSessions]
             .filter(Boolean) // Remove null values
             .sort((a, b) => b.sortDate - a.sortDate);
+            
 
           return allItems.map((item, index) => {
             const isLastItem = index === allItems.length - 1;
@@ -1894,21 +1963,38 @@ export default function PatientDashboard() {
                       marginRight: 16
                     }}>
                       <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
-                        {String(item.doctorName).charAt(0) || 'D'}
+                        {String(item.doctorName || item.doctor_name || 'Doctor').charAt(0) || 'D'}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
-                        {String(item.doctorName)}
+                        {String(item.doctorName || item.doctor_name || 'Doctor')}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                         {String(item.reason) || 'Chat'}
                       </Text>
-                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                        {item.consultationType === 'text' ? 'Text Chat' : 
-                         item.consultationType === 'voice' ? 'Voice Call' : 
-                         item.consultationType === 'video' ? 'Video Call' : 'Chat'}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                          {item.consultationType === 'text' ? 'Text Chat' : 
+                           item.consultationType === 'voice' ? 'Voice Call' : 
+                           item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                        </Text>
+                        {getAppointmentSessionStatus(item) === 'pending' && (
+                          <View style={{
+                            backgroundColor: '#FFF3E0',
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            marginLeft: 8,
+                            borderWidth: 1,
+                            borderColor: '#FFB74D',
+                          }}>
+                            <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
+                              UPCOMING
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       {getAppointmentSessionStatus(item) === 'ready' && (
@@ -1917,11 +2003,6 @@ export default function PatientDashboard() {
                         </View>
                       )}
                       {getAppointmentSessionStatus(item) === 'scheduled' && (
-                        <View style={{ backgroundColor: '#FF9800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
-                          <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Scheduled</Text>
-                        </View>
-                      )}
-                      {getAppointmentSessionStatus(item) === 'pending' && (
                         <View style={{ backgroundColor: '#999', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, marginBottom: 4 }}>
                           <Text style={{ fontSize: 10, color: 'white', fontWeight: '600' }}>Pending</Text>
                         </View>
@@ -2054,9 +2135,14 @@ export default function PatientDashboard() {
 
         {/* Empty State */}
         {(() => {
-          const activeAppointments = getSafeAppointments().filter(appt => ['pending', 'confirmed'].includes(appt.status || ''));
+          const activeAppointments = getSafeAppointments().filter(appt => {
+            const status = appt.status;
+            return status === 'pending' || status === 'confirmed' || status === 0 || status === 1;
+          });
           const hasActiveAppointments = activeAppointments.length > 0;
           const hasEndedSessions = endedSessions.length > 0;
+          
+          // Show text session if it exists (no filtering)
           const hasActiveTextSession = !!activeTextSession;
           const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0 || hasActiveTextSession);
 

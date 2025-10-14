@@ -33,50 +33,25 @@ class FcmChannel
             // First try to get from environment variable (for production)
             $serviceAccountJson = config('services.fcm.service_account_json');
             
-            if ($serviceAccountJson && !empty(trim($serviceAccountJson))) {
+            if ($serviceAccountJson) {
                 Log::info("🔑 FCM V1: Using service account from environment variable");
-                $decodedJson = json_decode($serviceAccountJson, true);
-                
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    Log::error("❌ FCM V1: Invalid JSON in service account environment variable");
-                    return null;
-                }
-                
-                if (!is_array($decodedJson)) {
-                    Log::error("❌ FCM V1: Service account JSON is not a valid array");
-                    return null;
-                }
-                
                 $credentials = new ServiceAccountCredentials(
                     'https://www.googleapis.com/auth/firebase.messaging',
-                    $decodedJson
+                    json_decode($serviceAccountJson, true)
                 );
             } else {
                 // Fallback to file path (for local development)
                 $credentialsPath = config('services.fcm.credentials_path') ?: storage_path('app/firebase-service-account.json');
                 
                 if (!file_exists($credentialsPath)) {
-                    Log::warning("⚠️ FCM V1: Service account not found in environment variable or file at: {$credentialsPath}. Push notifications will be disabled.");
+                    Log::error("❌ FCM V1: Service account not found in environment variable or file at: {$credentialsPath}");
                     return null;
                 }
                 
                 Log::info("🔑 FCM V1: Using service account from file: {$credentialsPath}");
-                $fileContents = file_get_contents($credentialsPath);
-                $decodedJson = json_decode($fileContents, true);
-                
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    Log::error("❌ FCM V1: Invalid JSON in service account file");
-                    return null;
-                }
-                
-                if (!is_array($decodedJson)) {
-                    Log::error("❌ FCM V1: Service account file JSON is not a valid array");
-                    return null;
-                }
-                
                 $credentials = new ServiceAccountCredentials(
                     'https://www.googleapis.com/auth/firebase.messaging',
-                    $decodedJson
+                    json_decode(file_get_contents($credentialsPath), true)
                 );
             }
             

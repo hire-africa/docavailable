@@ -1,21 +1,19 @@
 import { FontAwesome } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Modal,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { apiService } from '../../../app/services/apiService';
+import CustomTimePicker from '../../../components/CustomTimePicker';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import { useAuth } from '../../../contexts/AuthContext';
 import { imageCacheService } from '../../../services/imageCacheService';
@@ -34,10 +32,8 @@ const consultationTypes = [
 export default function BookAppointmentFlow() {
   const params = useLocalSearchParams();
   const { user, userData } = useAuth();
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [showNativeTimePicker, setShowNativeTimePicker] = useState(false);
-  const [tempTime, setTempTime] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [customTime, setCustomTime] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [consultationType, setConsultationType] = useState('');
@@ -155,6 +151,7 @@ export default function BookAppointmentFlow() {
 
   // Helper to get availability info for selected day
   const getAvailabilityInfo = () => {
+    if (!selectedDate) return 'Please select a date to see availability.';
     if (!workingHours) return 'No availability info.';
     const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
     const dayKey = days[selectedDate.getDay()];
@@ -168,6 +165,12 @@ export default function BookAppointmentFlow() {
   const getAvailableSlots = () => {
     console.log('🔍 [getAvailableSlots] workingHours:', workingHours);
     console.log('🔍 [getAvailableSlots] selectedDate:', selectedDate);
+    
+    if (!selectedDate) {
+      console.log('❌ [getAvailableSlots] No selectedDate');
+      return [];
+    }
+    
     console.log('🔍 [getAvailableSlots] selectedDate.getDay():', selectedDate.getDay());
     
     if (!workingHours) {
@@ -324,90 +327,22 @@ export default function BookAppointmentFlow() {
     return candidate > now;
   };
 
-  // Native time picker for Android
-  const showAndroidTimePicker = () => {
-    console.log('🔍 [showAndroidTimePicker] Setting showNativeTimePicker to true');
-    setShowNativeTimePicker(true);
-  };
-
-  // Native time picker for iOS
-  const showIOSTimePicker = () => {
-    console.log('🔍 [showIOSTimePicker] Setting showNativeTimePicker to true');
-    setShowNativeTimePicker(true);
-  };
-
-  // Handle time picker change for both Android and iOS
-  const handleTimeChange = (event: any, selectedTime?: Date) => {
-    if (Platform.OS === 'android') {
-      // On Android, the picker closes automatically after selection
-      setShowNativeTimePicker(false);
-    }
-    
-    if (selectedTime && event.type !== 'dismissed') {
-      setTempTime(selectedTime);
-      
-      // On Android, automatically save the time when selected
-      if (Platform.OS === 'android') {
-        const timeStr = formatTime12Hour(selectedTime);
-        const time24Hour = to24HourFormat(timeStr);
-        
-        // Check if time is within available slots
-        if (isTimeInAvailableSlots(selectedTime) && isTimeNotPastForSelectedDay(selectedTime)) {
-          setCustomTime(timeStr);
-          setSelectedTime(time24Hour);
-        } else {
-          Alert.alert(
-            'Invalid Time',
-            'Please select a time within the doctor\'s working hours. For today, the time must be in the future.',
-            [{ text: 'OK' }]
-          );
-        }
-      }
-    }
-  };
-
-  // Handle continue button press for iOS time picker
-  const handleContinueTimeSelection = () => {
-    const timeStr = formatTime12Hour(tempTime);
-    const time24Hour = to24HourFormat(timeStr);
-    
-    // Check if time is within available slots
-    if (isTimeInAvailableSlots(tempTime) && isTimeNotPastForSelectedDay(tempTime)) {
-      setCustomTime(timeStr);
-      setSelectedTime(time24Hour);
-      setShowNativeTimePicker(false);
-    } else {
-      Alert.alert(
-        'Invalid Time',
-        'Please select a time within the doctor\'s working hours. For today, the time must be in the future.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  // Show appropriate time picker based on platform
+  // Show custom time picker
   const showTimePickerModal = () => {
-    console.log('🔍 [showTimePickerModal] Called');
-    console.log('🔍 [showTimePickerModal] Platform.OS:', Platform.OS);
-    console.log('🔍 [showTimePickerModal] getAvailableSlots().length:', getAvailableSlots().length);
-    
-    if (Platform.OS === 'android') {
-      console.log('🔍 [showTimePickerModal] Calling showAndroidTimePicker');
-      showAndroidTimePicker();
-    } else {
-      console.log('🔍 [showTimePickerModal] Calling showIOSTimePicker');
-      showIOSTimePicker();
-    }
+    setShowCustomTimePicker(true);
   };
 
-  // Check if current temp time is valid
-  const isCurrentTimeValid = () => {
-    return isTimeInAvailableSlots(tempTime) && isTimeNotPastForSelectedDay(tempTime);
+  // Handle time selection from custom picker
+  const handleTimeSelection = (timeStr: string) => {
+    const time24Hour = to24HourFormat(timeStr);
+    setCustomTime(timeStr);
+    setSelectedTime(time24Hour);
   };
 
   // Calendar logic for current month
-  const currentMonth = selectedDate.getMonth();
-  const currentYear = selectedDate.getFullYear();
+  const currentDate = selectedDate || new Date();
+  const currentMonth = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -425,32 +360,6 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        {/* Enhanced Doctor Profile Card */}
-        <View style={styles.doctorProfileCard}>
-          <View style={styles.doctorProfileHeader}>
-            {doctorPicUrl || doctorPic ? (
-              <DoctorProfilePicture
-                profilePictureUrl={doctorPicUrl || undefined}
-                profilePicture={doctorPic || undefined}
-                size={80}
-                name={doctorName}
-                style={styles.doctorProfileImage}
-              />
-            ) : (
-              <View style={styles.doctorProfileImagePlaceholder}>
-                <FontAwesome name="user-md" size={32} color="#4CAF50" />
-              </View>
-            )}
-            <View style={styles.doctorProfileInfo}>
-              <Text style={styles.doctorProfileName}>{doctorName}</Text>
-              <Text style={styles.doctorProfileSpecialization}>{specialization}</Text>
-              <View style={styles.doctorProfileStatus}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>Available for consultation</Text>
-              </View>
-            </View>
-          </View>
-        </View>
         {/* Enhanced Calendar Section */}
         <View style={styles.calendarSection}>
           <View style={styles.sectionHeader}>
@@ -459,38 +368,51 @@ export default function BookAppointmentFlow() {
           </View>
           <View style={styles.calendarContainer}>
             <Text style={styles.monthLabel}>{monthNames[currentMonth]} {currentYear}</Text>
-            <View style={styles.calendarRowContainer}>
-            <View style={styles.calendarRow}>
+            
+            {/* Day of week headers */}
+            <View style={styles.calendarHeader}>
               {[...'SMTWTFS'].map((d, i) => (
-                <View key={i} style={styles.calendarCell}>
+                <View key={i} style={styles.calendarHeaderCell}>
                   <Text style={styles.calendarDayLabel}>{d}</Text>
                 </View>
               ))}
             </View>
-            {/* Show days for the current month */}
+            
+            {/* Calendar grid */}
             <View style={styles.calendarGrid}>
               {(() => {
-                const firstDayOfWeek = new Date(currentYear, currentMonth, 1).getDay();
-                const daysArray = [];
-                // Add empty cells for offset
+                // Get the first day of the month and calculate which day of the week it falls on
+                const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+                const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, etc.
+                const weeksArray = [];
+                let currentWeek = [];
+                
+                // Add empty cells for the first week to align dates with day headers
                 for (let i = 0; i < firstDayOfWeek; i++) {
-                  daysArray.push(<View key={`empty-${i}`} style={styles.calendarCell} />);
+                  currentWeek.push(<View key={`empty-${i}`} style={styles.calendarCell} />);
                 }
+                
                 // Add days of the month
                 for (let day = 1; day <= daysInMonth; day++) {
                   const currentDate = new Date();
                   const dayDate = new Date(currentYear, currentMonth, day);
                   const isToday = dayDate.toDateString() === currentDate.toDateString();
                   const isPast = dayDate < currentDate;
-                  const isDisabled = isToday || isPast;
+                  const isDisabled = isPast; // Only disable past dates, not today
                   
-                  daysArray.push(
+                  // Check if this day is a working day
+                  const dayOfWeek = dayDate.getDay();
+                  const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+                  const dayKey = days[dayOfWeek];
+                  const isWorkingDay = workingHours && workingHours[dayKey] && workingHours[dayKey].enabled;
+                  
+                  currentWeek.push(
                     <TouchableOpacity
                       key={day}
                       style={[
                         styles.calendarDay,
-                        styles.calendarCell,
-                        selectedDate.getDate() === day && selectedDate.getMonth() === currentMonth && selectedDate.getFullYear() === currentYear && styles.selectedDay,
+                        selectedDate && selectedDate.getDate() === day && selectedDate.getMonth() === currentMonth && selectedDate.getFullYear() === currentYear && styles.selectedDay,
+                        isToday && styles.todayDay,
                         isDisabled && styles.disabledDay
                       ]}
                       onPress={() => !isDisabled && setSelectedDate(new Date(currentYear, currentMonth, day))}
@@ -498,15 +420,50 @@ export default function BookAppointmentFlow() {
                     >
                       <Text style={[
                         styles.calendarDayText,
-                        selectedDate.getDate() === day && selectedDate.getMonth() === currentMonth && selectedDate.getFullYear() === currentYear && styles.selectedDayText,
+                        selectedDate && selectedDate.getDate() === day && selectedDate.getMonth() === currentMonth && selectedDate.getFullYear() === currentYear && styles.selectedDayText,
+                        isToday && styles.todayDayText,
                         isDisabled && styles.disabledDayText
                       ]}>{day}</Text>
+                      {isWorkingDay && !isDisabled && (
+                        <View style={styles.workingDayIndicator} />
+                      )}
                     </TouchableOpacity>
                   );
+                  
+                  // If we have 7 days in the current week, start a new week
+                  if (currentWeek.length === 7) {
+                    weeksArray.push(
+                      <View key={`week-${weeksArray.length}`} style={styles.calendarWeek}>
+                        {currentWeek}
+                      </View>
+                    );
+                    currentWeek = [];
+                  }
                 }
-                return daysArray;
+                
+                // Add remaining days if any
+                if (currentWeek.length > 0) {
+                  // Fill remaining cells to make it 7
+                  while (currentWeek.length < 7) {
+                    currentWeek.push(<View key={`empty-end-${currentWeek.length}`} style={styles.calendarCell} />);
+                  }
+                  weeksArray.push(
+                    <View key={`week-${weeksArray.length}`} style={styles.calendarWeek}>
+                      {currentWeek}
+                    </View>
+                  );
+                }
+                
+                return weeksArray;
               })()}
             </View>
+          </View>
+          
+          {/* Working Days Legend */}
+          <View style={styles.workingDaysLegend}>
+            <View style={styles.legendItem}>
+              <View style={styles.legendDot} />
+              <Text style={styles.legendText}>Available days</Text>
             </View>
           </View>
         </View>
@@ -528,7 +485,12 @@ export default function BookAppointmentFlow() {
             )}
           </View>
           <View style={styles.timePickerCard}>
-          {getAvailableSlots().length > 0 ? (
+          {!selectedDate ? (
+            <View style={styles.noDateSelectedContainer}>
+              <FontAwesome name="calendar" size={24} color="#999" />
+              <Text style={styles.noDateSelectedText}>Please select a date first</Text>
+            </View>
+          ) : getAvailableSlots().length > 0 ? (
             <>
               <TouchableOpacity
                 style={styles.timePickerBtn}
@@ -539,10 +501,6 @@ export default function BookAppointmentFlow() {
               {customTime ? (
                 <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
               ) : null}
-              {/* Debug info */}
-              <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-                Debug: showNativeTimePicker = {showNativeTimePicker.toString()}
-              </Text>
             </>
           ) : (
             <View style={styles.noAvailabilityContainer}>
@@ -602,9 +560,9 @@ export default function BookAppointmentFlow() {
           />
         </View>
         <TouchableOpacity
-          style={[styles.continueBtn, !(customTime && reason) && { opacity: 0.5 }]}
-          onPress={() => customTime && reason && setStep(2)}
-          disabled={!(customTime && reason)}
+          style={[styles.continueBtn, !(selectedDate && customTime && reason) && { opacity: 0.5 }]}
+          onPress={() => selectedDate && customTime && reason && setStep(2)}
+          disabled={!(selectedDate && customTime && reason)}
         >
           <Text style={styles.continueBtnText}>Continue</Text>
         </TouchableOpacity>
@@ -691,7 +649,7 @@ export default function BookAppointmentFlow() {
             <View style={styles.confirmDetailContent}>
               <Text style={styles.confirmLabel}>Date & Time</Text>
               <Text style={styles.confirmValue}>
-                {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
+                {selectedDate?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
               </Text>
             </View>
           </View>
@@ -742,65 +700,117 @@ export default function BookAppointmentFlow() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <FontAwesome name="close" size={22} color="#222" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Appointment Requested</Text>
+        <Text style={styles.headerTitle}>Request Sent</Text>
         <View style={{ width: 32 }} />
       </View>
-      <View style={styles.successCard}>
-        <View style={styles.successHeader}>
-          <View style={styles.successIconContainer}>
-            <FontAwesome name="check-circle" size={48} color="#4CAF50" />
+      
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Success Animation Card */}
+        <View style={styles.successAnimationCard}>
+          <View style={styles.successAnimationContainer}>
+            <View style={styles.successIconWrapper}>
+              <FontAwesome name="check-circle" size={64} color="#4CAF50" />
+              <View style={styles.successPulse} />
+            </View>
+            <Text style={styles.successMainTitle}>Request Sent Successfully!</Text>
+            <Text style={styles.successSubtitle}>
+              Your appointment request has been sent to {doctorName}
+            </Text>
           </View>
-          <Text style={styles.successTitle}>Appointment Request Sent!</Text>
-          <Text style={styles.successMsg}>Your appointment request with {doctorName} has been sent and is waiting for doctor approval.</Text>
         </View>
-        
-        <View style={styles.successDetailsContainer}>
-          <View style={styles.successDetailItem}>
-            <View style={styles.successDetailIcon}>
-              <FontAwesome name="calendar" size={16} color="#4CAF50" />
-            </View>
-            <View style={styles.successDetailContent}>
-              <Text style={styles.successDetailLabel}>Date & Time</Text>
-              <Text style={styles.successDetailValue}>
-                {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
-              </Text>
-            </View>
-          </View>
-          
-          <View style={styles.successDetailItem}>
-            <View style={styles.successDetailIcon}>
-              <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
-            </View>
-            <View style={styles.successDetailContent}>
-              <Text style={styles.successDetailLabel}>Consultation Type</Text>
-              <Text style={styles.successDetailValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.successDetailItem}>
-            <View style={styles.successDetailIcon}>
-              <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
-            </View>
-            <View style={styles.successDetailContent}>
-              <Text style={styles.successDetailLabel}>Reason</Text>
-              <Text style={styles.successDetailValue}>{reason}</Text>
+
+        {/* Doctor Info Card */}
+        <View style={styles.successDoctorCard}>
+          <View style={styles.successDoctorHeader}>
+            <View style={styles.successDoctorInfo}>
+              {doctorPicUrl || doctorPic ? (
+                <DoctorProfilePicture
+                  profilePictureUrl={doctorPicUrl || undefined}
+                  profilePicture={doctorPic || undefined}
+                  size={60}
+                  name={doctorName}
+                  style={styles.successDoctorImage}
+                />
+              ) : (
+                <View style={styles.successDoctorAvatar}>
+                  <FontAwesome name="user-md" size={24} color="#4CAF50" />
+                </View>
+              )}
+              <View style={styles.successDoctorDetails}>
+                <Text style={styles.successDoctorName}>{doctorName}</Text>
+                <Text style={styles.successDoctorSpecialization}>{specialization}</Text>
+              </View>
             </View>
           </View>
         </View>
-        
-        <View style={styles.pendingNote}>
-          <FontAwesome name="info-circle" size={16} color="#2E7D32" />
-          <Text style={styles.pendingNoteText}>
-            You'll receive a notification when the doctor confirms or rejects your appointment.
+
+        {/* Appointment Details Card */}
+        <View style={styles.successDetailsCard}>
+          <View style={styles.successDetailsHeader}>
+            <FontAwesome name="calendar-check-o" size={20} color="#4CAF50" />
+            <Text style={styles.successDetailsTitle}>Appointment Details</Text>
+          </View>
+          
+          <View style={styles.successDetailsList}>
+            <View style={styles.successDetailRow}>
+              <View style={styles.successDetailIcon}>
+                <FontAwesome name="calendar" size={16} color="#4CAF50" />
+              </View>
+              <View style={styles.successDetailContent}>
+                <Text style={styles.successDetailLabel}>Date & Time</Text>
+                <Text style={styles.successDetailValue}>
+                  {selectedDate?.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} · {customTime}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.successDetailRow}>
+              <View style={styles.successDetailIcon}>
+                <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
+              </View>
+              <View style={styles.successDetailContent}>
+                <Text style={styles.successDetailLabel}>Consultation Type</Text>
+                <Text style={styles.successDetailValue}>
+                  {consultationTypes.find(t => t.key === consultationType)?.label || ''}
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.successDetailRow}>
+              <View style={styles.successDetailIcon}>
+                <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
+              </View>
+              <View style={styles.successDetailContent}>
+                <Text style={styles.successDetailLabel}>Reason</Text>
+                <Text style={styles.successDetailValue}>{reason}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Status Card */}
+        <View style={styles.statusCard}>
+          <View style={styles.statusHeader}>
+            <View style={styles.statusIndicator}>
+              <FontAwesome name="clock-o" size={16} color="#FF9800" />
+            </View>
+            <Text style={styles.statusTitle}>Awaiting Doctor Approval</Text>
+          </View>
+          <Text style={styles.statusMessage}>
+            You'll receive a notification when the doctor confirms or rejects your appointment request.
           </Text>
         </View>
-      </View>
-      <TouchableOpacity 
-        style={styles.proceedBtn} 
-        onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover' } })}
-      >
-        <Text style={styles.proceedBtnText}>Proceed</Text>
-      </TouchableOpacity>
+
+        {/* Action Button */}
+        <View style={styles.successActionButtons}>
+          <TouchableOpacity 
+            style={styles.continueBtn} 
+            onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover' } })}
+          >
+            <Text style={styles.continueBtnText}>Continue Browsing</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 
@@ -824,7 +834,7 @@ export default function BookAppointmentFlow() {
       // console.log('❌ [BookAppointmentFlow] Missing required fields:', { 
       //   selectedDate, customTime, consultationType, reason 
       // });
-      Alert.alert('Error', 'Please fill all fields');
+      Alert.alert('Error', 'Please select a date, time, consultation type, and reason');
       return;
     }
 
@@ -899,100 +909,16 @@ export default function BookAppointmentFlow() {
       {step === 2 && renderStep2()}
       {step === 3 && renderStep3()}
       
-      {/* Time Picker Modal - rendered at component level */}
-      <Modal
-        visible={showNativeTimePicker}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          console.log('🔍 [Modal] onRequestClose called');
-          setShowNativeTimePicker(false);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Time</Text>
-              <Text style={styles.modalSubtitle}>
-                {selectedDate.toLocaleDateString(undefined, { 
-                  weekday: 'long', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
-              </Text>
-            </View>
-
-            {/* Doctor Availability Info */}
-            <View style={styles.availabilityContainer}>
-              <View style={styles.availabilityHeader}>
-                <FontAwesome name="clock-o" size={16} color="#4CAF50" />
-                <Text style={styles.availabilityTitle}>Doctor's Availability</Text>
-              </View>
-              {loadingHours ? (
-                <Text style={styles.availabilityText}>Loading availability...</Text>
-              ) : (
-                <Text style={styles.availabilityText}>{getAvailabilityInfo()}</Text>
-              )}
-            </View>
-            
-            <View style={styles.timePickerContainer}>
-              <DateTimePicker
-                value={tempTime}
-                mode="time"
-                display="spinner"
-                onChange={handleTimeChange}
-                minuteInterval={1}
-                style={styles.nativeTimePicker}
-                textColor="#000000"
-                themeVariant="light"
-              />
-            </View>
-
-            {/* Selected Time Preview */}
-            <View style={styles.selectedTimePreview}>
-              <Text style={styles.selectedTimeLabel}>Selected Time:</Text>
-              <Text style={styles.selectedTimeValue}>
-                {formatTime12Hour(tempTime)}
-              </Text>
-            </View>
-            
-            {Platform.OS !== 'android' && (
-              <View style={styles.modalFooter}>
-                <TouchableOpacity 
-                  style={styles.cancelModalBtn} 
-                  onPress={() => setShowNativeTimePicker(false)}
-                >
-                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[
-                    styles.continueModalBtn, 
-                    !isCurrentTimeValid() && styles.continueModalBtnDisabled
-                  ]} 
-                  onPress={handleContinueTimeSelection}
-                  disabled={!isCurrentTimeValid()}
-                >
-                  <Text style={[
-                    styles.continueModalBtnText,
-                    !isCurrentTimeValid() && styles.continueModalBtnTextDisabled
-                  ]}>
-                    Confirm Time
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-            
-            {!isCurrentTimeValid() && (
-              <View style={styles.validationMessage}>
-                <FontAwesome name="exclamation-triangle" size={14} color="#D32F2F" />
-                <Text style={styles.validationText}>
-                  Selected time is outside working hours
-                </Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
+      {/* Custom Time Picker */}
+      <CustomTimePicker
+        visible={showCustomTimePicker}
+        onClose={() => setShowCustomTimePicker(false)}
+        onTimeSelect={handleTimeSelection}
+        selectedTime={customTime}
+        availableSlots={getAvailableSlots()}
+        workingHours={workingHours}
+        selectedDate={selectedDate}
+      />
     </>
   );
 }
@@ -1034,51 +960,55 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   calendarContainer: {
-    marginHorizontal: 24,
+    marginHorizontal: 20,
     marginTop: 16,
     marginBottom: 8,
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 24,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    overflow: 'hidden',
   },
   monthLabel: {
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 20,
     color: '#222',
-    marginBottom: 8,
+    marginBottom: 16,
     textAlign: 'center',
   },
-  calendarRowContainer: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarRow: {
+  calendarHeader: {
     flexDirection: 'row',
+    marginBottom: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+  },
+  calendarHeaderCell: {
+    width: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    marginHorizontal: 1,
   },
   calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
+    flexDirection: 'column',
+    width: '100%',
     alignItems: 'center',
-    width: 7 * 40, // 7 cells * (36px width + 2*2px margin)
-    marginLeft: 'auto',
-    marginRight: 'auto',
+  },
+  calendarWeek: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 8,
   },
   calendarDayLabel: {
-    flex: 1,
     textAlign: 'center',
     color: '#888',
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: 16,
   },
   calendarDay: {
     width: 36,
@@ -1086,7 +1016,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 2,
+    marginHorizontal: 1,
+    position: 'relative',
   },
   selectedDay: {
     backgroundColor: '#4CAF50',
@@ -1094,17 +1025,53 @@ const styles = StyleSheet.create({
   calendarDayText: {
     color: '#222',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 14,
   },
   selectedDayText: {
     color: '#fff',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  workingDayIndicator: {
+    position: 'absolute',
+    bottom: 1,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#4CAF50',
+  },
+  workingDaysLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#4CAF50',
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
   calendarCell: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    margin: 2,
+    margin: 0,
+    paddingHorizontal: 0,
   },
   sectionLabel: {
     fontWeight: '700',
@@ -1305,54 +1272,129 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 17,
   },
-  successCard: {
+  // Success Animation Card
+  successAnimationCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
     margin: 24,
-    padding: 24,
+    marginBottom: 16,
+    padding: 32,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 4,
   },
-  successHeader: {
+  successAnimationContainer: {
     alignItems: 'center',
+  },
+  successIconWrapper: {
+    position: 'relative',
     marginBottom: 24,
   },
-  successIconContainer: {
-    backgroundColor: '#E8F5E9',
-    borderRadius: 40,
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 3,
-    borderColor: '#4CAF50',
+  successPulse: {
+    position: 'absolute',
+    top: -8,
+    left: -8,
+    right: -8,
+    bottom: -8,
+    borderRadius: 50,
+    backgroundColor: '#4CAF50',
+    opacity: 0.2,
   },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
+  successMainTitle: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#222',
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
   },
-  successMsg: {
+  successSubtitle: {
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
   },
-  successDetailsContainer: {
-    marginBottom: 24,
+  // Doctor Info Card
+  successDoctorCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  successDetailItem: {
+  successDoctorHeader: {
+    marginBottom: 0,
+  },
+  successDoctorInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  successDoctorImage: {
+    marginRight: 16,
+  },
+  successDoctorAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  successDoctorDetails: {
+    flex: 1,
+  },
+  successDoctorName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#222',
+    marginBottom: 4,
+  },
+  successDoctorSpecialization: {
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  // Appointment Details Card
+  successDetailsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  successDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222',
+    marginLeft: 12,
+  },
+  successDetailsList: {
+    gap: 16,
+  },
+  successDetailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    paddingVertical: 8,
   },
   successDetailIcon: {
     width: 32,
@@ -1377,6 +1419,44 @@ const styles = StyleSheet.create({
     color: '#222',
     fontWeight: '500',
     lineHeight: 22,
+  },
+  // Status Card
+  statusCard: {
+    backgroundColor: '#FFF8E1',
+    borderRadius: 16,
+    marginHorizontal: 24,
+    marginBottom: 24,
+    padding: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF9800',
+  },
+  statusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statusIndicator: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF3E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#E65100',
+  },
+  statusMessage: {
+    fontSize: 14,
+    color: '#E65100',
+    lineHeight: 20,
+  },
+  // Action Buttons
+  successActionButtons: {
+    paddingHorizontal: 24,
   },
   addCalendarBtn: {
     backgroundColor: '#4CAF50',
@@ -1428,159 +1508,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    width: '90%',
-    maxWidth: 380,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  modalHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-    width: '100%',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 6,
-  },
-  modalSubtitle: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-  },
-  availabilityContainer: {
-    width: '100%',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  availabilityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  availabilityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#222',
-    marginLeft: 8,
-  },
-  availabilityText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  timePickerContainer: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  nativeTimePicker: {
-    width: '100%',
-    height: 200,
-    backgroundColor: '#FFFFFF',
-  },
-  selectedTimePreview: {
-    width: '100%',
-    backgroundColor: '#E8F5E8',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  selectedTimeLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  selectedTimeValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-  },
-  modalFooter: {
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  cancelModalBtn: {
-    flex: 1,
-    backgroundColor: '#F1F3F4',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  cancelModalBtnText: {
-    color: '#666',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  continueModalBtn: {
-    flex: 1,
-    backgroundColor: '#4CAF50',
-    borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  continueModalBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  continueModalBtnDisabled: {
-    backgroundColor: '#E0E0E0',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  continueModalBtnTextDisabled: {
-    color: '#999',
-  },
-  validationMessage: {
-    backgroundColor: '#FFEBEE',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  validationText: {
-    color: '#D32F2F',
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
   disabledDay: {
     backgroundColor: '#F5F5F5',
     opacity: 0.5,
   },
   disabledDayText: {
     color: '#999',
+    textAlign: 'center',
+    lineHeight: 14,
   },
   pendingNote: {
     backgroundColor: '#F0F8FF',
@@ -1630,6 +1565,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  noDateSelectedContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+  },
+  noDateSelectedText: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 12,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   // Enhanced Doctor Profile Styles
   doctorProfileCard: {
@@ -1720,85 +1667,6 @@ const styles = StyleSheet.create({
     color: '#222',
     marginLeft: 12,
   },
-  // Enhanced Calendar Styles
-  calendarContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  // Enhanced Consultation Type Styles
-  consultationTypesContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  consultationTypeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingVertical: 8,
-  },
-  consultationTypeBtn: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 16,
-    marginRight: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 56,
-    height: 56,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedConsultationTypeBtn: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  consultationTypeTextContainer: {
-    flex: 1,
-  },
-  consultationTypeText: {
-    color: '#222',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  consultationTypeUnavailable: {
-    color: '#999',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  // Enhanced Reason Input Styles
-  reasonInput: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    fontSize: 16,
-    color: '#222',
-    fontWeight: '500',
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  // Enhanced Time Selection Styles
   availabilityCard: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
@@ -1806,22 +1674,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderLeftWidth: 4,
     borderLeftColor: '#4CAF50',
-  },
-  availabilityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  availabilityTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#4CAF50',
-    marginLeft: 8,
-  },
-  availabilityText: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
   },
   timePickerCard: {
     backgroundColor: '#fff',
@@ -1832,5 +1684,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  availabilityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  availabilityTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+    marginLeft: 8,
+  },
+  availabilityText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  todayDay: {
+    backgroundColor: '#E3F2FD',
+    borderWidth: 2,
+    borderColor: '#2196F3',
+  },
+  todayDayText: {
+    color: '#1976D2',
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 14,
   },
 }); 

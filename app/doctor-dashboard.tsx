@@ -697,6 +697,25 @@ export default function DoctorDashboard() {
     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
   };
 
+  // Helper function to check if appointment is upcoming
+  const isAppointmentUpcoming = (appointment: any) => {
+    if (!appointment.appointment_date || !appointment.appointment_time) return false;
+    
+    try {
+      const appointmentDate = new Date(appointment.appointment_date);
+      const [timeStr] = appointment.appointment_time.split(' '); // Remove AM/PM if present
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      
+      const appointmentDateTime = new Date(appointmentDate);
+      appointmentDateTime.setHours(hours, minutes, 0, 0);
+      
+      const now = new Date();
+      return appointmentDateTime.getTime() > now.getTime();
+    } catch (error) {
+      return false;
+    }
+  };
+
   const handleSelectTextSession = (session: any) => {
     // For text sessions, use the session ID with text_session_ prefix
     const chatId = `text_session_${session.id}`;
@@ -1777,11 +1796,28 @@ export default function DoctorDashboard() {
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                         {String(item.reason || 'Chat')}
                       </Text>
-                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                        {item.consultationType === 'text' ? 'Text Chat' : 
-                         item.consultationType === 'voice' ? 'Voice Call' : 
-                         item.consultationType === 'video' ? 'Video Call' : 'Chat'}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                          {item.consultationType === 'text' ? 'Text Chat' : 
+                           item.consultationType === 'voice' ? 'Voice Call' : 
+                           item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                        </Text>
+                        {isAppointmentUpcoming(item) && (
+                          <View style={{
+                            backgroundColor: '#FFF3E0',
+                            borderRadius: 8,
+                            paddingHorizontal: 8,
+                            paddingVertical: 2,
+                            marginLeft: 8,
+                            borderWidth: 1,
+                            borderColor: '#FFB74D',
+                          }}>
+                            <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
+                              UPCOMING
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                     <Text style={{ fontSize: 12, color: '#999' }}>
                       {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}

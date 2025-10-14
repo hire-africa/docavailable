@@ -30,3 +30,4 @@ if (isCorrect) {
   console.log('   Expected: wss://docavailable.org/chat-signaling');
   console.log('   Got:      ', newConfig.webrtc.chatSignalingUrl);
 }
+

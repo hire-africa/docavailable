@@ -538,9 +538,9 @@ class AudioCallService {
         throw error; // Re-throw to be caught by outer try-catch
       }
 
-      // Start call timeout (30 seconds for doctor to answer)
+      // Start call timeout (60 seconds for doctor to answer)
       this.startCallTimeout();
-      console.log('⏰ Call timeout started (30 seconds)');
+      console.log('⏰ Call timeout started (60 seconds)');
       
       console.log('📞 [AudioCallService] Call initialization complete:', {
         appointmentId: this.appointmentId,
@@ -1386,7 +1386,7 @@ class AudioCallService {
       } else {
         console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered but connection state is ${this.state.connectionState} - ignoring`);
       }
-    }, 30000); // 30 seconds timeout
+    }, 60000); // 60 seconds timeout
   }
 
   /**

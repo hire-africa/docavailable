@@ -1,4 +1,6 @@
-// Placeholder appointment service
+// Real appointment service
+import { apiService } from './apiService';
+
 export const APPOINTMENT_STATUS = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',
@@ -21,9 +23,20 @@ export interface Appointment {
 }
 
 export const appointmentService = {
-  // Placeholder methods
+  // Real API methods
   getAppointments: async (): Promise<Appointment[]> => {
-    return [];
+    try {
+      const response = await apiService.get('/appointments');
+      if (response.success && response.data) {
+        // Handle paginated response - appointments are in response.data.data
+        const appointments = (response.data as any).data || response.data;
+        return Array.isArray(appointments) ? appointments : [];
+      }
+      return [];
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      return [];
+    }
   },
   
   createAppointment: async (appointmentData: any): Promise<Appointment> => {
