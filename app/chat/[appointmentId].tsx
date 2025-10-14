@@ -5,16 +5,16 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Image,
+    Modal,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../../components/AudioCall';
@@ -457,23 +457,66 @@ export default function ChatPage() {
   // Parse and validate appointment ID
   const isTextSession = appointmentId && appointmentId.startsWith('text_session_');
   
-  // Determine if call button should be enabled
+  // Determine if chat should be enabled based on appointment type
+  const isChatEnabled = () => {
+    // Chat is always available for text sessions and text appointments
+    if (isTextSession) return true;
+    if (appointmentType === 'text') return true;
+    // For audio/video appointments, chat interface is available but text input is disabled
+    if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') return true;
+    return false;
+  };
+
+  // Determine if text input should be enabled (only for text sessions and text appointments)
+  const isTextInputEnabled = () => {
+    // Text input only enabled for text sessions and text appointments
+    if (isTextSession) return true;
+    if (appointmentType === 'text') return true;
+    // For audio/video appointments, text input is disabled
+    return false;
+  };
+
+  // Check if this is a text appointment (not text session)
+  const isTextAppointment = appointmentType === 'text' && !isTextSession;
+
+  // Text appointment session state
+  const [textAppointmentSession, setTextAppointmentSession] = useState<{
+    isActive: boolean;
+    startTime: Date | null;
+    lastActivityTime: Date | null;
+    hasPatientActivity: boolean;
+    hasDoctorActivity: boolean;
+    sessionsUsed: number;
+    isEnded: boolean;
+  }>({
+    isActive: false,
+    startTime: null,
+    lastActivityTime: null,
+    hasPatientActivity: false,
+    hasDoctorActivity: false,
+    sessionsUsed: 0,
+    isEnded: false
+  });
+
+  // Determine if audio calls should be enabled based on appointment type
+  const isAudioCallEnabled = () => {
+    // Audio calls available for audio appointments or text sessions
+    if (isTextSession) return true;
+    if (appointmentType === 'audio' || appointmentType === 'voice') return true;
+    return false;
+  };
+
+  // Determine if video calls should be enabled based on appointment type
+  const isVideoCallEnabled = () => {
+    // Video calls available for video appointments or text sessions
+    if (isTextSession) return true;
+    if (appointmentType === 'video') return true;
+    return false;
+  };
+
+  // Legacy function for backward compatibility (now checks audio calls only)
   const isCallEnabled = () => {
-    const enabled = isTextSession ? true : (appointmentType === 'audio' || appointmentType === 'voice');
-    console.log('🔍 [isCallEnabled] Debug:', {
-      isTextSession,
-      appointmentType,
-      enabled,
-      webrtcReady,
-      showIncomingCall,
-      userType: user?.user_type,
-      appointmentId,
-      chatInfo: chatInfo ? {
-        appointment_type: chatInfo.appointment_type,
-        status: chatInfo.status
-      } : null
-    });
-    return enabled;
+    return isAudioCallEnabled();
   };
 
   // Fetch subscription data for call availability
@@ -500,7 +543,9 @@ export default function ChatPage() {
 
   // Check if call button should be enabled (with subscription check)
   const isCallButtonEnabled = (callType: 'voice' | 'video' = 'voice') => {
-    const callEnabled = isCallEnabled();
+    // Check if the specific call type is allowed for this appointment type
+    const callTypeEnabled = callType === 'voice' ? isAudioCallEnabled() : isVideoCallEnabled();
+    
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
     // For appointments, also check if it's appointment time
@@ -511,21 +556,21 @@ export default function ChatPage() {
       callType === 'voice' ? subscriptionData.voiceCallsRemaining > 0 : subscriptionData.videoCallsRemaining > 0
     ) : true; // Allow if no subscription data yet (will be checked on call initiation)
     
-    const enabled = callEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
+    const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
     
     console.log('🔍 [isCallButtonEnabled] Debug:', {
-      callEnabled,
+      callTypeEnabled,
+      callType,
+      appointmentType,
+      isTextSession,
       webrtcReady,
       webrtcReadyOrFallback,
       showIncomingCall,
-      isTextSession,
       isAppointmentTime,
       appointmentTimeCheck,
-      callType,
       hasAvailableSessions,
       subscriptionData,
       enabled,
-      appointmentType,
       environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS
     });
     
@@ -602,6 +647,146 @@ export default function ChatPage() {
   useEffect(() => {
     checkAppointmentTime();
   }, [checkAppointmentTime]);
+
+  // Start text appointment session when appointment time is reached
+  useEffect(() => {
+    if (isTextAppointment && isAppointmentTime && !textAppointmentSession.isActive && !textAppointmentSession.isEnded) {
+      console.log('🕐 [TextAppointment] Starting text appointment session');
+      startTextAppointmentSession();
+    }
+  }, [isTextAppointment, isAppointmentTime, textAppointmentSession.isActive, textAppointmentSession.isEnded]);
+
+  // Function to start text appointment session via API
+  const startTextAppointmentSession = async () => {
+    try {
+      const response = await apiService.post('/text-appointments/start-session', {
+        appointment_id: getNumericAppointmentId()
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Session started successfully:', response.data);
+        setTextAppointmentSession(prev => ({
+          ...prev,
+          isActive: true,
+          startTime: new Date(response.data.start_time),
+          lastActivityTime: new Date(response.data.start_time),
+          sessionsUsed: response.data.sessions_used || 0
+        }));
+      } else {
+        console.error('❌ [TextAppointment] Failed to start session:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error starting session:', error);
+    }
+  };
+
+  // Function to update text appointment activity via API
+  const updateTextAppointmentActivity = async () => {
+    try {
+      const response = await apiService.post('/text-appointments/update-activity', {
+        appointment_id: getNumericAppointmentId(),
+        user_type: user?.user_type
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Activity updated successfully');
+      } else {
+        console.error('❌ [TextAppointment] Failed to update activity:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error updating activity:', error);
+    }
+  };
+
+  // Monitor activity and handle session logic for text appointments
+  useEffect(() => {
+    if (!isTextAppointment || !textAppointmentSession.isActive || textAppointmentSession.isEnded) {
+      return;
+    }
+
+    const checkActivity = () => {
+      const now = new Date();
+      const timeSinceLastActivity = textAppointmentSession.lastActivityTime 
+        ? (now.getTime() - textAppointmentSession.lastActivityTime.getTime()) / (1000 * 60) // minutes
+        : 0;
+
+      // If no activity in first 10 minutes, end session and deduct 1
+      if (timeSinceLastActivity >= 10 && !textAppointmentSession.hasPatientActivity && !textAppointmentSession.hasDoctorActivity) {
+        console.log('⏰ [TextAppointment] No activity in first 10 minutes, ending session');
+        processTextAppointmentDeduction(1, 'no_activity');
+        endTextAppointmentSession(1); // Deduct 1 session
+        return;
+      }
+
+      // If there was activity, check for 10-minute intervals for additional deductions
+      if (textAppointmentSession.hasPatientActivity || textAppointmentSession.hasDoctorActivity) {
+        const timeSinceStart = textAppointmentSession.startTime 
+          ? (now.getTime() - textAppointmentSession.startTime.getTime()) / (1000 * 60) // minutes
+          : 0;
+
+        // Deduct 1 session every 10 minutes after the first 10 minutes
+        const expectedSessionsUsed = Math.floor(timeSinceStart / 10);
+        if (expectedSessionsUsed > textAppointmentSession.sessionsUsed) {
+          console.log(`⏰ [TextAppointment] 10-minute interval reached, deducting session. Total: ${expectedSessionsUsed}`);
+          const sessionsToDeduct = expectedSessionsUsed - textAppointmentSession.sessionsUsed;
+          processTextAppointmentDeduction(sessionsToDeduct, 'interval');
+          setTextAppointmentSession(prev => ({
+            ...prev,
+            sessionsUsed: expectedSessionsUsed
+          }));
+        }
+      }
+    };
+
+    const interval = setInterval(checkActivity, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [isTextAppointment, textAppointmentSession]);
+
+  // Function to process text appointment deduction via API
+  const processTextAppointmentDeduction = async (sessionsToDeduct: number, reason: string) => {
+    try {
+      const response = await apiService.post('/text-appointments/process-deduction', {
+        appointment_id: getNumericAppointmentId(),
+        sessions_to_deduct: sessionsToDeduct,
+        reason: reason
+      });
+
+      if (response.success) {
+        console.log(`✅ [TextAppointment] Deduction processed successfully: ${sessionsToDeduct} sessions, reason: ${reason}`);
+      } else {
+        console.error('❌ [TextAppointment] Failed to process deduction:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error processing deduction:', error);
+    }
+  };
+
+  // Function to end text appointment session
+  const endTextAppointmentSession = async (additionalSessions = 0) => {
+    const totalSessions = textAppointmentSession.sessionsUsed + additionalSessions;
+    console.log(`🏁 [TextAppointment] Ending session, total sessions used: ${totalSessions}`);
+    
+    try {
+      const response = await apiService.post('/text-appointments/end-session', {
+        appointment_id: getNumericAppointmentId(),
+        sessions_to_deduct: additionalSessions
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Session ended successfully via API');
+      } else {
+        console.error('❌ [TextAppointment] Failed to end session via API:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error ending session via API:', error);
+    }
+    
+    setTextAppointmentSession(prev => ({
+      ...prev,
+      isActive: false,
+      isEnded: true
+    }));
+  };
 
   // Update appointment time check every minute
   useEffect(() => {
@@ -723,6 +908,18 @@ export default function ChatPage() {
               timestamp: message.created_at,
               isOwnMessage: String(message.sender_id) === String(currentUserId)
             });
+            }
+
+            // Track activity for text appointments when receiving messages
+            if (isTextAppointment && textAppointmentSession.isActive && String(message.sender_id) !== String(currentUserId)) {
+              console.log('📝 [TextAppointment] Message received - tracking activity');
+              updateTextAppointmentActivity();
+              setTextAppointmentSession(prev => ({
+                ...prev,
+                lastActivityTime: new Date(),
+                hasPatientActivity: String(message.sender_id) === String(chatInfo?.patient_id) ? true : prev.hasPatientActivity,
+                hasDoctorActivity: String(message.sender_id) === String(chatInfo?.doctor_id) ? true : prev.hasDoctorActivity
+              }));
             }
             
             setMessages(prev => {
@@ -1664,6 +1861,18 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
       console.error('❌ [ChatComponent] Cannot send message - session is invalid');
       return;
     }
+
+    // Track activity for text appointments
+    if (isTextAppointment && textAppointmentSession.isActive) {
+      console.log('📝 [TextAppointment] Message sent - tracking activity');
+      updateTextAppointmentActivity();
+      setTextAppointmentSession(prev => ({
+        ...prev,
+        lastActivityTime: new Date(),
+        hasPatientActivity: user?.user_type === 'patient' ? true : prev.hasPatientActivity,
+        hasDoctorActivity: user?.user_type === 'doctor' ? true : prev.hasDoctorActivity
+      }));
+    }
     
     // Check if session has expired (for instant sessions)
     if (isInstantSession && isSessionExpired) {
@@ -2074,6 +2283,13 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   // Handle back button press
   const handleBackPress = () => {
     if (isPatient) {
+      // Check if this is a text appointment with active session
+      if (isTextAppointment && textAppointmentSession.isActive) {
+        // Show end session modal for text appointment sessions
+        setShowEndSessionModal(true);
+        return;
+      }
+      
       // Check if this is a scheduled appointment that hasn't started yet
       const appointmentStatus = String(chatInfo?.status || '');
       const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
@@ -2110,6 +2326,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         sessionId = appointmentId.replace('text_session_', '');
       } else {
         sessionId = appointmentId;
+      }
+      
+      // Handle text appointment session ending
+      if (isTextAppointment && textAppointmentSession.isActive) {
+        console.log('🏁 [TextAppointment] Ending text appointment session manually');
+        processTextAppointmentDeduction(1, 'manual_end');
+        endTextAppointmentSession(1); // Deduct 1 session for manual end
+        setShowEndSessionModal(false);
+        setShowRatingModal(true);
+        return;
       }
       
       // Check if this is a scheduled appointment that hasn't started
@@ -2724,9 +2950,14 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 console.log('Starting video call...');
                 setShowVideoCallModal(true);
               } else {
-                const message = subscriptionData?.videoCallsRemaining === 0 
-                  ? 'No video calls remaining in your subscription. Please upgrade your plan.'
-                  : 'Video calls are only available during active sessions or when the doctor is online.';
+                let message = '';
+                if (!isVideoCallEnabled()) {
+                  message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
+                } else if (subscriptionData?.videoCallsRemaining === 0) {
+                  message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                } else {
+                  message = 'Video calls are only available during active sessions or when the doctor is online.';
+                }
                 Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
               }
             }}
@@ -2771,13 +3002,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   
                   setShowAudioCallModal(true);
                 } else {
-                  const message = subscriptionData?.voiceCallsRemaining === 0 
-                    ? 'No voice calls remaining in your subscription. Please upgrade your plan.'
-                    : !webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true'
-                      ? 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.'
-                      : isTextSession 
-                        ? 'Call Not Available: Call feature is not available for this session type.'
-                        : 'Call Not Available: Call feature is only available for audio appointments.';
+                  let message = '';
+                  if (!isAudioCallEnabled()) {
+                    message = `Audio calls are not available for ${appointmentType} appointments. Audio calls are only available for audio appointments.`;
+                  } else if (subscriptionData?.voiceCallsRemaining === 0) {
+                    message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
+                  } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
+                    message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
+                  } else {
+                    message = 'Call Not Available: Call feature is not available at this time.';
+                  }
                   Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
                 }
               }}
@@ -3186,9 +3420,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
-            editable={sessionValid && (isTextSession || isAppointmentTime)}
+            editable={sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
             style={{
-              opacity: (sessionValid && (isTextSession || isAppointmentTime)) ? 1 : 0.5
+              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5
             }}
             placeholder={
               !sessionValid
@@ -3201,6 +3435,10 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 ? "Session expired - doctor did not respond"
                 : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isPatient
                 ? "Patient is waiting for your response..."
+                : !isTextInputEnabled()
+                ? `Text messaging not available for ${appointmentType} appointments - use ${appointmentType === 'video' ? 'video call' : appointmentType === 'audio' ? 'audio call' : 'text messaging'} button instead`
+                : isTextAppointment && !textAppointmentSession.isActive
+                ? "Text appointment session will start at appointment time"
                 : !isTextSession && !isAppointmentTime && appointmentDateTime
                 ? `You're early! Your appointment starts at ${appointmentDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                 : "Type a message..."
@@ -3236,7 +3474,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime)
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
               backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',

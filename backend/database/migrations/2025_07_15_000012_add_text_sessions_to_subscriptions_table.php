@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('subscriptions', function (Blueprint $table) {
-            $table->integer('text_sessions_remaining')->default(0);
-            $table->integer('appointments_remaining')->default(0);
+            if (!Schema::hasColumn('subscriptions', 'text_sessions_remaining')) {
+                $table->integer('text_sessions_remaining')->default(0);
+            }
+            if (!Schema::hasColumn('subscriptions', 'appointments_remaining')) {
+                $table->integer('appointments_remaining')->default(0);
+            }
         });
     }
 

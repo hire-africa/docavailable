@@ -12,12 +12,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('chat_rooms', function (Blueprint $table) {
-            // Add encryption key fields
-            $table->text('encryption_key')->nullable()->after('last_message_at');
-            $table->boolean('encryption_enabled')->default(false)->after('encryption_key');
+            // Add encryption key fields only if they don't exist
+            if (!Schema::hasColumn('chat_rooms', 'encryption_key')) {
+                $table->text('encryption_key')->nullable()->after('last_message_at');
+            }
+            if (!Schema::hasColumn('chat_rooms', 'encryption_enabled')) {
+                $table->boolean('encryption_enabled')->default(false)->after('encryption_key');
+            }
             
-            // Add index for encrypted rooms
-            $table->index('encryption_enabled');
+            // Add index for encrypted rooms if it doesn't exist
+            if (!Schema::hasIndex('chat_rooms', 'chat_rooms_encryption_enabled_index')) {
+                $table->index('encryption_enabled');
+            }
         });
     }
 

@@ -12,12 +12,24 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('specialization')->nullable()->after('id_document');
-            $table->integer('years_of_experience')->nullable()->after('specialization');
-            $table->text('professional_bio')->nullable()->after('years_of_experience');
-            $table->string('national_id')->nullable()->after('professional_bio');
-            $table->string('medical_degree')->nullable()->after('national_id');
-            $table->string('medical_licence')->nullable()->after('medical_degree');
+            if (!Schema::hasColumn('users', 'specialization')) {
+                $table->string('specialization')->nullable()->after('id_document');
+            }
+            if (!Schema::hasColumn('users', 'years_of_experience')) {
+                $table->integer('years_of_experience')->nullable()->after('specialization');
+            }
+            if (!Schema::hasColumn('users', 'professional_bio')) {
+                $table->text('professional_bio')->nullable()->after('years_of_experience');
+            }
+            if (!Schema::hasColumn('users', 'national_id')) {
+                $table->string('national_id')->nullable()->after('professional_bio');
+            }
+            if (!Schema::hasColumn('users', 'medical_degree')) {
+                $table->string('medical_degree')->nullable()->after('national_id');
+            }
+            if (!Schema::hasColumn('users', 'medical_licence')) {
+                $table->string('medical_licence')->nullable()->after('medical_degree');
+            }
         });
     }
 

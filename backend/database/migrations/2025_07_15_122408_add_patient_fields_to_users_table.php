@@ -12,11 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->date('date_of_birth')->nullable()->after('role');
-            $table->string('gender')->nullable()->after('date_of_birth');
-            $table->string('country')->nullable()->after('gender');
-            $table->string('city')->nullable()->after('country');
-            $table->string('id_document')->nullable()->after('city');
+            if (!Schema::hasColumn('users', 'date_of_birth')) {
+                $table->date('date_of_birth')->nullable()->after('role');
+            }
+            if (!Schema::hasColumn('users', 'gender')) {
+                $table->string('gender')->nullable()->after('date_of_birth');
+            }
+            if (!Schema::hasColumn('users', 'country')) {
+                $table->string('country')->nullable()->after('gender');
+            }
+            if (!Schema::hasColumn('users', 'city')) {
+                $table->string('city')->nullable()->after('country');
+            }
+            if (!Schema::hasColumn('users', 'id_document')) {
+                $table->string('id_document')->nullable()->after('city');
+            }
         });
     }
 

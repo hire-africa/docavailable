@@ -22,6 +22,7 @@ use App\Http\Controllers\DoctorController;
 use App\Http\Controllers\EncryptionController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\TextSessionController;
+use App\Http\Controllers\TextAppointmentController;
 use App\Http\Controllers\PaymentController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
@@ -888,6 +889,7 @@ Route::middleware(['auth:api'])->group(function () {
     
     // Text session routes
     Route::post('/text-sessions/start', [TextSessionController::class, 'start']);
+    Route::post('/text-sessions/create-from-appointment', [TextSessionController::class, 'createFromAppointment']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
     Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
     Route::get('/text-sessions/{sessionId}/check-response', [TextSessionController::class, 'checkResponse']);
@@ -895,6 +897,13 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/text-sessions/{sessionId}/auto-deduction', [TextSessionController::class, 'processAutoDeduction']);
     Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
+    
+    // Text appointment session routes
+    Route::post('/text-appointments/start-session', [TextAppointmentController::class, 'startSession']);
+    Route::post('/text-appointments/update-activity', [TextAppointmentController::class, 'updateActivity']);
+    Route::post('/text-appointments/process-deduction', [TextAppointmentController::class, 'processDeduction']);
+    Route::post('/text-appointments/end-session', [TextAppointmentController::class, 'endSession']);
+    Route::get('/text-appointments/{appointmentId}/session-status', [TextAppointmentController::class, 'getSessionStatus']);
     
     // Call session routes
     Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);

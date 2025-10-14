@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->boolean('is_online_for_instant_sessions')->default(false);
-            $table->timestamp('last_online_at')->nullable();
+            if (!Schema::hasColumn('users', 'is_online_for_instant_sessions')) {
+                $table->boolean('is_online_for_instant_sessions')->default(false);
+            }
+            if (!Schema::hasColumn('users', 'last_online_at')) {
+                $table->timestamp('last_online_at')->nullable();
+            }
         });
     }
 

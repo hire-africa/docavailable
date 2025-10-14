@@ -9,14 +9,14 @@ Route::get('/debug/doctor-push-token/{doctorId}', function ($doctorId) {
     $doctor = User::find($doctorId);
     
     if (!$doctor) {
-        return response()->json([
-            'success' => false,
+            return response()->json([
+                'success' => false,
             'message' => 'Doctor not found'
-        ]);
-    }
-    
-    return response()->json([
-        'success' => true,
+            ]);
+        }
+        
+        return response()->json([
+            'success' => true,
         'doctor' => [
             'id' => $doctor->id,
             'name' => $doctor->first_name . ' ' . $doctor->last_name,

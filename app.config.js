@@ -27,7 +27,20 @@ module.exports = {
         backgroundColor: "#ffffff"
       },
       googleServicesFile: "./google-services.json",
-      edgeToEdgeEnabled: true
+      edgeToEdgeEnabled: true,
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            {
+              scheme: "https",
+              host: "docavailable.org"
+            }
+          ],
+          category: ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     web: {
       favicon: "./assets/images/favicon.png"

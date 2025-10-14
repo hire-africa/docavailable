@@ -95,10 +95,7 @@ android {
         versionCode 1
         versionName "1.0.0"
         
-        // App Auth redirect scheme for react-native-app-auth
-        manifestPlaceholders = [
-            appAuthRedirectScheme: 'com.docavailable.app'
-        ]
+        // App Auth redirect scheme is now hardcoded in AndroidManifest.xml
     }
     signingConfigs {
         debug {

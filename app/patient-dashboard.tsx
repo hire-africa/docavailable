@@ -6,25 +6,25 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Easing,
-    Image,
-    Linking,
-    Modal,
-    Platform,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Easing,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -190,7 +190,8 @@ export default function PatientDashboard() {
   const [subscriptionPlans, setSubscriptionPlans] = useState<any[]>([]);
   const [userCountry, setUserCountry] = useState<string>('Malawi');
   const [currentLocationInfo, setCurrentLocationInfo] = useState<LocationInfo | null>(null);
-  const [activeTextSession, setActiveTextSession] = useState<any>(null);
+  const [activeTextSessions, setActiveTextSessions] = useState<any[]>([]);
+  const [loadingTextSessions, setLoadingTextSessions] = useState(false);
 
   const sidebarAnim = useRef(new Animated.Value(0)).current;
   const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
@@ -235,13 +236,10 @@ export default function PatientDashboard() {
     }
   }, [userData]);
 
-  // Auto-refresh timer for time remaining display - updates every minute
+  // Auto-refresh timer for appointments - updates every minute
   useEffect(() => {
     const interval = setInterval(() => {
-      // Force re-render to update time remaining display
-      setActiveTextSession((prev: any) => prev ? { ...prev } : null);
-      
-      // Also refresh appointments to get updated remaining time
+      // Refresh appointments to get updated remaining time
       if (user) {
         appointmentService.getAppointments()
           .then((appointmentsData) => {
@@ -608,6 +606,7 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (activeTab === 'messages' && user?.id) {
       loadEndedSessions();
+      fetchActiveTextSessions();
     }
   }, [activeTab, user?.id]);
 
@@ -618,11 +617,13 @@ export default function PatientDashboard() {
     if (activeTab === 'messages' && user?.id) {
       // Initial load
       loadEndedSessions();
+      fetchActiveTextSessions();
       
       // Set up periodic refresh every 30 seconds when messages tab is active
       refreshInterval = setInterval(() => {
         // console.log('🔄 Auto-refreshing messages tab...');
         loadEndedSessions();
+        fetchActiveTextSessions();
         
         // Also refresh appointments to check for status changes
         if (user) {
@@ -651,6 +652,7 @@ export default function PatientDashboard() {
       if (nextAppState === 'active' && activeTab === 'messages' && user?.id) {
         // console.log('🔄 App returned to foreground, refreshing messages...');
         loadEndedSessions();
+        fetchActiveTextSessions();
         
         // Also refresh appointments
         if (user) {
@@ -677,7 +679,10 @@ export default function PatientDashboard() {
     setRefreshingMessages(true);
     try {
       // console.log('🔄 Manual refresh of messages tab...');
-      await loadEndedSessions().catch(err => console.error('Error refreshing ended sessions:', err));
+      await Promise.all([
+        loadEndedSessions().catch(err => console.error('Error refreshing ended sessions:', err)),
+        fetchActiveTextSessions().catch(err => console.error('Error refreshing text sessions:', err))
+      ]);
       
       // Also refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
@@ -701,8 +706,7 @@ export default function PatientDashboard() {
     appointments: getSafeAppointments(),
     onTextSessionCreated: (textSession) => {
       console.log('🔄 [PatientDashboard] Text session created from appointment:', textSession);
-      setActiveTextSession(textSession);
-      // Refresh appointments to update status
+      // Refresh messages tab to load the new text session
       refreshMessagesTab();
     },
     onAppointmentUpdated: (appointmentId) => {
@@ -881,103 +885,12 @@ export default function PatientDashboard() {
     }
   };
 
-  // Check for active text session and handle session parameter
+  // Check for active text sessions when component mounts
   useEffect(() => {
-    const checkActiveTextSession = async () => {
-      try {
-        // Check if there's a session parameter
-        if (params.sessionId) {
-          // console.log('PatientDashboard: Session ID from params:', params.sessionId);
-          
-          // Try to get appointment details from API
-          try {
-            const response = await apiService.get(`/appointments/${params.sessionId}`);
-            if (response.success && response.data) {
-              // Transform appointment data to match expected format
-              const appointment = response.data;
-              setActiveTextSession({
-                id: appointment.id,
-                appointment_id: appointment.id,
-                doctor: appointment.doctor,
-                patient: appointment.patient,
-                status: appointment.status,
-                remaining_time_minutes: (appointment as any).remaining_time_minutes ?? 0, // Use actual remaining time
-                started_at: (appointment as any).created_at,
-                last_activity_at: (appointment as any).updated_at
-              });
-              // console.log('PatientDashboard: Active appointment loaded:', appointment);
-            }
-          } catch (error) {
-            console.error('Error loading appointment:', error);
-            // Don't show error to user, just continue without session
-          }
-        } else {
-          // First check for active text sessions (direct sessions)
-          try {
-            const textSessionResponse = await apiService.get('/text-sessions/active-sessions');
-            if (textSessionResponse.success && textSessionResponse.data && (textSessionResponse.data as any).length > 0) {
-              console.log('📱 Found active text session');
-              const activeTextSession = (textSessionResponse.data as any)[0];
-              setActiveTextSession({
-                id: activeTextSession.id,
-                appointment_id: activeTextSession.id, // Use session ID as appointment ID for compatibility
-                doctor: activeTextSession.doctor,
-                patient: activeTextSession.patient,
-                status: activeTextSession.status,
-                remaining_time_minutes: activeTextSession.remaining_time_minutes ?? 0, // Use actual remaining time
-                started_at: activeTextSession.started_at,
-                last_activity_at: activeTextSession.last_activity_at
-              });
-              // console.log('PatientDashboard: Active text session found:', activeTextSession);
-              return; // Don't check appointments if we have an active text session
-            }
-          } catch (error) {
-            console.error('Error checking active text sessions:', error);
-            // Continue to check appointments if text session check fails
-          }
-
-          // Check for active appointments (confirmed appointments can be used for chat)
-          try {
-            const response = await apiService.get('/appointments');
-            if (response.success && response.data) {
-              // Handle paginated response - appointments are in response.data.data
-              const appointments = (response.data as any).data || response.data;
-              if (Array.isArray(appointments)) {
-                // Find the most recent confirmed appointment
-                const activeAppointment = appointments
-                  .filter((appt: any) => appt.status === 'confirmed' || appt.status === 1)
-                  .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-                
-                if (activeAppointment) {
-                  setActiveTextSession({
-                    id: activeAppointment.id,
-                    appointment_id: activeAppointment.id,
-                    doctor: activeAppointment.doctor,
-                    patient: activeAppointment.patient,
-                    status: activeAppointment.status,
-                    remaining_time_minutes: (activeAppointment as any).remaining_time_minutes ?? 0,
-                    started_at: (activeAppointment as any).created_at,
-                    last_activity_at: (activeAppointment as any).updated_at
-                  });
-                  // console.log('PatientDashboard: Active appointment found:', activeAppointment);
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error checking active appointments:', error);
-            // Don't show error to user, just continue without session
-          }
-        }
-      } catch (error) {
-        console.error('Error in appointment check:', error);
-        // Don't show error to user, just continue without session
-      }
-    };
-
-    if (user) {
-      checkActiveTextSession();
+    if (user?.id) {
+      fetchActiveTextSessions();
     }
-  }, [user, params.sessionId]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!appointments || appointments.length === 0) return;
@@ -1322,6 +1235,27 @@ export default function PatientDashboard() {
       setEndedSessions([]);
     } finally {
       setLoadingEndedSessions(false);
+    }
+  };
+
+  // Fetch active text sessions for the messages tab
+  const fetchActiveTextSessions = async () => {
+    if (!user?.id) return;
+
+    setLoadingTextSessions(true);
+    try {
+      // Get active text sessions for this patient
+      const response = await apiService.get('/text-sessions/active-sessions');
+      if (response.success && response.data) {
+        setActiveTextSessions(response.data as any[]);
+      } else {
+        setActiveTextSessions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching active text sessions:', error);
+      setActiveTextSessions([]);
+    } finally {
+      setLoadingTextSessions(false);
     }
   };
 
@@ -1777,16 +1711,13 @@ export default function PatientDashboard() {
         }
       >
         {(() => {
-          // Get active text session and add to list
-          const activeTextSessionItem = activeTextSession ? {
-            ...activeTextSession,
+          // Get active text sessions and add to list
+          const activeTextSessionItems = activeTextSessions.map(session => ({
+            ...session,
             type: 'active_text',
             sortDate: new Date().getTime(), // Most recent
             isActive: true
-          } : null;
-
-          // Show text session if it exists (no filtering)
-          const shouldShowTextSession = !!activeTextSessionItem;
+          }));
 
           // Get active appointments
           const activeAppointments = getSafeAppointments()
@@ -1852,8 +1783,7 @@ export default function PatientDashboard() {
             }));
 
           // Combine all items and sort by date (most recent first)
-          const allItems = [shouldShowTextSession ? activeTextSessionItem : null, ...activeAppointments, ...filteredEndedSessions]
-            .filter(Boolean) // Remove null values
+          const allItems = [...activeTextSessionItems, ...activeAppointments, ...filteredEndedSessions]
             .sort((a, b) => b.sortDate - a.sortDate);
             
 
@@ -1864,7 +1794,7 @@ export default function PatientDashboard() {
               // Render active text session as card
               return (
                 <TouchableOpacity
-                  key={`active_text_${item.appointment_id}`}
+                  key={`active_text_${item.id || item.appointment_id}`}
                   style={{ 
                     backgroundColor: '#FFFFFF',
                     borderRadius: 12,
@@ -1880,7 +1810,7 @@ export default function PatientDashboard() {
                     borderColor: item.isActive ? '#4CAF50' : 'transparent'
                   }}
                   onPress={() => {
-                    const chatId = `text_session_${item.appointment_id}`;
+                    const chatId = `text_session_${item.id || item.appointment_id}`;
                     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
                   }}
                 >
@@ -2126,10 +2056,10 @@ export default function PatientDashboard() {
         })()}
 
         {/* Loading State for Ended Sessions */}
-        {loadingEndedSessions && (
+        {(loadingEndedSessions || loadingTextSessions) && (
           <View style={{ alignItems: 'center', marginTop: 20, marginBottom: 20 }}>
             <ActivityIndicator size="small" color="#4CAF50" />
-            <Text style={{ fontSize: 14, color: '#666', marginTop: 8 }}>Loading ended sessions...</Text>
+            <Text style={{ fontSize: 14, color: '#666', marginTop: 8 }}>Loading messages...</Text>
           </View>
         )}
 
@@ -2142,11 +2072,11 @@ export default function PatientDashboard() {
           const hasActiveAppointments = activeAppointments.length > 0;
           const hasEndedSessions = endedSessions.length > 0;
           
-          // Show text session if it exists (no filtering)
-          const hasActiveTextSession = !!activeTextSession;
-          const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0 || hasActiveTextSession);
+          // Show text sessions if they exist (no filtering)
+          const hasActiveTextSessions = activeTextSessions.length > 0;
+          const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0 || hasActiveTextSessions);
 
-          if (!hasActiveAppointments && !hasEndedSessions && !hasActiveTextSession && !messageSearchQuery) {
+          if (!hasActiveAppointments && !hasEndedSessions && !hasActiveTextSessions && !messageSearchQuery) {
             return (
               <View style={{ alignItems: 'center', marginTop: 60, paddingHorizontal: 40 }}>
                 <DoctorProfilePicture

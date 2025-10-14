@@ -12,13 +12,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            // Add encryption key fields
-            $table->text('public_key')->nullable()->after('remember_token');
-            $table->text('private_key')->nullable()->after('public_key');
-            $table->boolean('encryption_enabled')->default(false)->after('private_key');
+            // Add encryption key fields only if they don't exist
+            if (!Schema::hasColumn('users', 'public_key')) {
+                $table->text('public_key')->nullable()->after('remember_token');
+            }
+            if (!Schema::hasColumn('users', 'private_key')) {
+                $table->text('private_key')->nullable()->after('public_key');
+            }
+            if (!Schema::hasColumn('users', 'encryption_enabled')) {
+                $table->boolean('encryption_enabled')->default(false)->after('private_key');
+            }
             
-            // Add index for encrypted users
-            $table->index('encryption_enabled');
+            // Add index for encrypted users if it doesn't exist
+            if (!Schema::hasIndex('users', 'users_encryption_enabled_index')) {
+                $table->index('encryption_enabled');
+            }
         });
     }
 

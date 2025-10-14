@@ -936,4 +936,209 @@ class TextSessionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Create a text session from a text appointment when appointment time is reached.
+     */
+    public function createFromAppointment(Request $request): JsonResponse
+    {
+        try {
+            // Validate request
+            $validator = Validator::make($request->all(), [
+                'appointment_id' => 'required|integer|exists:appointments,id',
+                'doctor_id' => 'required|integer|exists:users,id',
+                'patient_id' => 'required|integer|exists:users,id',
+                'appointment_type' => 'required|string|in:text',
+                'reason' => 'nullable|string|max:1000',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $doctorId = $request->input('doctor_id');
+            $patientId = $request->input('patient_id');
+            $reason = $request->input('reason');
+
+            // Verify the appointment exists and is a text appointment
+            $appointment = \App\Models\Appointment::find($appointmentId);
+            if (!$appointment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment not found'
+                ], 404);
+            }
+
+            if ($appointment->appointment_type !== 'text') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only text appointments can be converted to text sessions'
+                ], 400);
+            }
+
+            if ($appointment->status !== 'confirmed' && $appointment->status !== 1) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment must be confirmed to create text session'
+                ], 400);
+            }
+
+            // Check if appointment time has been reached
+            $appointmentDateTime = $this->parseAppointmentDateTime($appointment->appointment_date, $appointment->appointment_time);
+            if (!$appointmentDateTime || $appointmentDateTime > now()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment time has not been reached yet'
+                ], 400);
+            }
+
+            // Check if text session already exists for this appointment
+            $existingSession = TextSession::where('appointment_id', $appointmentId)->first();
+            if ($existingSession) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Text session already exists for this appointment',
+                    'data' => [
+                        'session_id' => $existingSession->id,
+                        'appointment_id' => $existingSession->appointment_id,
+                        'status' => $existingSession->status,
+                        'created_at' => $existingSession->created_at,
+                    ]
+                ]);
+            }
+
+            // Get patient's subscription
+            $subscription = Subscription::where('user_id', $patientId)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$subscription) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active subscription found for patient'
+                ], 400);
+            }
+
+            if ($subscription->text_sessions_remaining <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No text sessions remaining in subscription'
+                ], 400);
+            }
+
+            // Create text session
+            $textSession = TextSession::create([
+                'appointment_id' => $appointmentId,
+                'doctor_id' => $doctorId,
+                'patient_id' => $patientId,
+                'status' => 'waiting_for_doctor',
+                'reason' => $reason ?: $appointment->reason,
+                'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Deduct one text session from subscription
+            $subscription->decrement('text_sessions_remaining');
+
+            // Update text session with new remaining count
+            $textSession->update([
+                'sessions_remaining_before_start' => $subscription->fresh()->text_sessions_remaining
+            ]);
+
+            // Get doctor information
+            $doctor = User::find($doctorId);
+
+            Log::info("Text session created from appointment", [
+                'session_id' => $textSession->id,
+                'appointment_id' => $appointmentId,
+                'doctor_id' => $doctorId,
+                'patient_id' => $patientId,
+                'sessions_remaining' => $subscription->text_sessions_remaining
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Text session created successfully from appointment',
+                'data' => [
+                    'id' => $textSession->id,
+                    'appointment_id' => $textSession->appointment_id,
+                    'doctor_id' => $textSession->doctor_id,
+                    'patient_id' => $textSession->patient_id,
+                    'status' => $textSession->status,
+                    'reason' => $textSession->reason,
+                    'sessions_remaining' => $subscription->text_sessions_remaining,
+                    'created_at' => $textSession->created_at,
+                    'doctor' => [
+                        'id' => $doctor->id,
+                        'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
+                        'first_name' => $doctor->first_name,
+                        'last_name' => $doctor->last_name,
+                    ],
+                    'remaining_time_minutes' => 90, // 90 minutes for text sessions
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error creating text session from appointment", [
+                'error' => $e->getMessage(),
+                'appointment_id' => $request->input('appointment_id'),
+                'patient_id' => $request->input('patient_id'),
+                'doctor_id' => $request->input('doctor_id'),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create text session from appointment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Parse appointment date and time to create a DateTime object.
+     */
+    private function parseAppointmentDateTime($dateStr, $timeStr)
+    {
+        try {
+            if (!$dateStr || !$timeStr) {
+                return null;
+            }
+
+            // Handle different date formats
+            if (strpos($dateStr, '/') !== false) {
+                // Format: MM/DD/YYYY
+                $dateParts = explode('/', $dateStr);
+                if (count($dateParts) === 3) {
+                    $month = (int)$dateParts[0];
+                    $day = (int)$dateParts[1];
+                    $year = (int)$dateParts[2];
+                    
+                    // Handle time format (remove AM/PM if present)
+                    $timeStr = preg_replace('/\s*(AM|PM)/i', '', $timeStr);
+                    $timeParts = explode(':', $timeStr);
+                    $hour = (int)$timeParts[0];
+                    $minute = (int)$timeParts[1];
+                    
+                    return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0);
+                }
+            } else {
+                // Format: YYYY-MM-DD
+                return \Carbon\Carbon::parse($dateStr . ' ' . $timeStr);
+            }
+        } catch (\Exception $e) {
+            Log::error("Error parsing appointment date/time", [
+                'date' => $dateStr,
+                'time' => $timeStr,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+        
+        return null;
+    }
 } 
