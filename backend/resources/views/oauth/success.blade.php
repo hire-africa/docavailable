@@ -86,7 +86,7 @@
             return;
         }
         
-        // Try to redirect back to the mobile app
+        // For WebView integration, we'll use postMessage to communicate with the parent
         try {
             // Store the OAuth data in localStorage for the app to pick up
             const oauthData = {
@@ -100,21 +100,32 @@
                 localStorage.setItem('oauth_callback', JSON.stringify(oauthData));
             }
             
-            // Try to redirect to mobile app
-            const appScheme = 'com.docavailable.app';
-            const redirectUrl = `${appScheme}://oauth2redirect?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+            // Try to communicate with the parent WebView
+            if (window.ReactNativeWebView) {
+                // We're in a React Native WebView
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'oauth_callback',
+                    code: code,
+                    state: state
+                }));
+            } else if (window.parent && window.parent !== window) {
+                // We're in an iframe or similar
+                window.parent.postMessage({
+                    type: 'oauth_callback',
+                    code: code,
+                    state: state
+                }, '*');
+            }
             
-            // Try to open the app
-            window.location.href = redirectUrl;
+            // Update the UI to show success
+            document.querySelector('p').innerHTML = `
+                <strong>Authentication Complete!</strong><br>
+                You have successfully authenticated with Google.<br>
+                <small>Returning to the app...</small>
+            `;
             
-            // Fallback: if the app doesn't open, show instructions
-            setTimeout(() => {
-                document.querySelector('p').innerHTML = `
-                    <strong>Authentication Complete!</strong><br>
-                    You can now return to the DocAvailable app.<br>
-                    <small>The authentication was successful and the app should automatically detect it.</small>
-                `;
-            }, 2000);
+            // Hide the loading spinner
+            document.querySelector('.loading').style.display = 'none';
             
         } catch (error) {
             document.getElementById('error').style.display = 'block';

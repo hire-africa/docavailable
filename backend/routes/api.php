@@ -1329,7 +1329,7 @@ Route::middleware(['auth:api'])->group(function () {
 Route::get('/payments/paychangu/callback', [PaymentController::class, 'callback'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 Route::get('/payments/paychangu/return', [PaymentController::class, 'returnHandler'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
-// OAuth Callback Route
+// OAuth Callback Route (moved to api.php for proper routing)
 Route::get('/oauth/callback', function (Request $request) {
     try {
         $code = $request->query('code');
@@ -1365,6 +1365,89 @@ Route::get('/oauth/callback', function (Request $request) {
             'error' => 'server_error',
             'error_description' => 'An error occurred processing the OAuth callback'
         ]);
+    }
+})->withoutMiddleware(['auth:sanctum', 'auth:api']);
+
+// OAuth Code Exchange Route
+Route::post('/oauth/exchange-code', function (Request $request) {
+    try {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'code' => 'required|string',
+            'redirect_uri' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid request parameters',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $code = $request->input('code');
+        $redirectUri = $request->input('redirect_uri');
+        
+        // Google OAuth configuration
+        $clientId = env('GOOGLE_CLIENT_ID', '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com');
+        $clientSecret = env('GOOGLE_CLIENT_SECRET', '');
+        
+        if (!$clientSecret) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Google OAuth not configured properly'
+            ], 500);
+        }
+
+        // Exchange authorization code for tokens
+        $tokenUrl = 'https://oauth2.googleapis.com/token';
+        $tokenData = [
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'code' => $code,
+            'grant_type' => 'authorization_code',
+            'redirect_uri' => $redirectUri,
+        ];
+
+        $response = \Illuminate\Support\Facades\Http::asForm()->post($tokenUrl, $tokenData);
+        
+        if (!$response->successful()) {
+            \Log::error('Google token exchange failed', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to exchange authorization code with Google'
+            ], 400);
+        }
+
+        $tokenResponse = $response->json();
+        
+        if (!isset($tokenResponse['id_token'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No ID token received from Google'
+            ], 400);
+        }
+
+        return response()->json([
+            'success' => true,
+            'id_token' => $tokenResponse['id_token'],
+            'access_token' => $tokenResponse['access_token'] ?? null,
+            'refresh_token' => $tokenResponse['refresh_token'] ?? null,
+        ]);
+
+    } catch (\Exception $e) {
+        \Log::error('OAuth code exchange error', [
+            'error' => $e->getMessage(),
+            'request' => $request->all()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'An error occurred during code exchange'
+        ], 500);
     }
 })->withoutMiddleware(['auth:sanctum', 'auth:api']);
 

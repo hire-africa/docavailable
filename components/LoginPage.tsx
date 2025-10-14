@@ -1,5 +1,4 @@
 import { FontAwesome } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -13,9 +12,9 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
 import authService from '../services/authService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
+import GoogleAuthWebView from './GoogleAuthWebView';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +25,7 @@ export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showGoogleAuth, setShowGoogleAuth] = useState(false);
     const { userType } = useLocalSearchParams<{ userType?: string }>();
 
     const handleLogin = async () => {
@@ -162,55 +162,54 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleSignIn = async () => {
+    const handleGoogleSignIn = () => {
+        console.log('🔐 Opening Google Auth WebView');
+        setShowGoogleAuth(true);
+    };
+
+    const handleGoogleAuthSuccess = async (user: any, token: string) => {
+        console.log('🔐 Google Auth Success:', { user, token });
+        setShowGoogleAuth(false);
         setLoading(true);
+        
         try {
-            // Simple web-based OAuth approach
-            const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
-            const redirectUri = 'https://docavailable.org/oauth/callback';
-            const scope = 'openid profile email';
-            
-            const authUrl = `https://accounts.google.com/oauth/authorize?` +
-                `client_id=${clientId}&` +
-                `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-                `response_type=code&` +
-                `scope=${encodeURIComponent(scope)}&` +
-                `access_type=offline`;
-
-            console.log('Opening Google OAuth URL:', authUrl);
-
-            // Open the OAuth URL in a web browser
-            const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
-
-            console.log('OAuth Result:', result);
-            
-            if (result.type === 'success' && result.url) {
-                // Extract the authorization code from the URL
-                const url = new URL(result.url);
-                const code = url.searchParams.get('code');
-                
-                if (code) {
-                    console.log('Authorization code received:', code);
-                    
-                    // For now, show a message that Google OAuth needs backend implementation
-                    Alert.alert(
-                        'Google OAuth',
-                        'Google OAuth is not fully implemented yet. Please use email/password login for now.',
-                        [{ text: 'OK' }]
-                    );
-                } else {
-                    Alert.alert('Authentication Error', 'Failed to get authorization code from Google.');
+            // Navigate to appropriate dashboard based on user type
+            if (user.user_type === 'admin') {
+                navigateToDashboard('admin', true);
+            } else if (user.user_type === 'doctor') {
+                if (user.status === 'pending') {
+                    Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                    await authService.signOut();
+                    return;
                 }
+                if (user.status === 'suspended') {
+                    Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                    await authService.signOut();
+                    return;
+                }
+                navigateToDashboard('doctor', true);
+            } else if (user.user_type === 'patient') {
+                navigateToDashboard('patient', true);
             } else {
-                console.log('OAuth cancelled or failed:', result);
-                Alert.alert('Sign-In Cancelled', 'Google sign-in was cancelled.');
+                router.replace('/'); // fallback
             }
-        } catch (error: any) {
-            console.error('Google login error:', error);
-            Alert.alert('Google Sign-In Error', 'An error occurred during Google sign-in. Please try again.');
+        } catch (error) {
+            console.error('🔐 Error after Google Auth success:', error);
+            Alert.alert('Error', 'Failed to complete login process. Please try again.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleGoogleAuthError = (error: string) => {
+        console.error('🔐 Google Auth Error:', error);
+        setShowGoogleAuth(false);
+        Alert.alert('Google Sign-In Error', error);
+    };
+
+    const handleGoogleAuthClose = () => {
+        console.log('🔐 Google Auth WebView closed');
+        setShowGoogleAuth(false);
     };
 
     return (
@@ -312,6 +311,14 @@ export default function LoginPage() {
                     </View>
                 </View>
             </View>
+
+            {/* Google Auth WebView Modal */}
+            <GoogleAuthWebView
+                visible={showGoogleAuth}
+                onClose={handleGoogleAuthClose}
+                onSuccess={handleGoogleAuthSuccess}
+                onError={handleGoogleAuthError}
+            />
         </View>
     );
 }
