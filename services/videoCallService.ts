@@ -45,6 +45,8 @@ class VideoCallService {
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
+  private doctorName: string | null = null;
+  private doctorProfilePicture: string | null = null;
   private processedMessages: Set<string> = new Set();
   private isProcessingIncomingCall: boolean = false;
   private isFrontCamera: boolean = true;
@@ -179,7 +181,7 @@ class VideoCallService {
   /**
    * Initialize video call service
    */
-  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: VideoCallEvents): Promise<void> {
+  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: VideoCallEvents, doctorName?: string, doctorProfilePicture?: string): Promise<void> {
     try {
       // Prevent simultaneous audio call initialization or audio-only sessions
       const g: any = global as any;
@@ -193,6 +195,8 @@ class VideoCallService {
       this.events = events;
       this.appointmentId = appointmentId;
       this.userId = userId;
+      this.doctorName = doctorName || null;
+      this.doctorProfilePicture = doctorProfilePicture || null;
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
 
@@ -678,6 +682,8 @@ class VideoCallService {
         offer: offer,
         senderId: this.userId,
         callType: 'video',
+        doctorName: this.doctorName || 'Unknown',
+        doctorProfilePicture: this.doctorProfilePicture || '',
       });
       
       console.log('✅ Video call offer sent with callType: video');

@@ -245,7 +245,7 @@ export default function AudioCall({
         },
       };
 
-      await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
+      await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
       
       // Offer creation is now handled automatically in AudioCallService.initialize
       console.log('📞 Call initialization completed - offer will be created automatically if needed');

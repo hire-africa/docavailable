@@ -227,7 +227,7 @@ export default function VideoCallModal({
         },
       };
 
-      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
+      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
       videoCallService.current = VideoCallService.getInstance();
       
       // Get local stream for display

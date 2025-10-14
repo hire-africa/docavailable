@@ -42,6 +42,8 @@ class AudioCallService {
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
+  private doctorName: string | null = null;
+  private doctorProfilePicture: string | null = null;
   private processedMessages: Set<string> = new Set();
   private isProcessingIncomingCall: boolean = false;
   private isIncoming: boolean = false;
@@ -261,7 +263,7 @@ class AudioCallService {
   /**
    * Initialize audio call service
    */
-  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents): Promise<void> {
+  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents, doctorName?: string, doctorProfilePicture?: string): Promise<void> {
     try {
       // Prevent multiple initializations
       if (this.isInitializing) {
@@ -292,6 +294,8 @@ class AudioCallService {
       this.events = events;
       this.appointmentId = appointmentId;
       this.userId = userId;
+      this.doctorName = doctorName || null;
+      this.doctorProfilePicture = doctorProfilePicture || null;
       this.isCallAnswered = false;
       this.updateState({ connectionState: 'connecting' });
 
@@ -1347,6 +1351,9 @@ class AudioCallService {
         senderId: this.userId,
         appointmentId: this.appointmentId,
         userId: this.userId,
+        callType: 'audio',
+        doctorName: this.doctorName || 'Unknown',
+        doctorProfilePicture: this.doctorProfilePicture || '',
       });
       
       this.offerCreated = true;
