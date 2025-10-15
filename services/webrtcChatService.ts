@@ -742,4 +742,50 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.tempId || message.id);
     return hash;
   }
+
+  // Send session end notification to refresh both participants' chats
+  async sendSessionEndNotification(reason: string = 'manual_end'): Promise<void> {
+    if (!this.websocket || !this.isConnected) {
+      console.error('❌ [WebRTCChat] Cannot send session end notification - WebSocket not connected');
+      return;
+    }
+
+    try {
+      const message = {
+        type: 'session-ended',
+        appointmentId: this.config.appointmentId,
+        reason: reason,
+        endedAt: new Date().toISOString(),
+        triggeredBy: this.config.userId
+      };
+
+      console.log('📤 [WebRTCChat] Sending session end notification:', message);
+      this.websocket.send(JSON.stringify(message));
+      console.log('✅ [WebRTCChat] Session end notification sent successfully');
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send session end notification:', error);
+      throw error;
+    }
+  }
+
+  // Request session status to refresh chat data
+  requestSessionStatus(): void {
+    if (!this.websocket || !this.isConnected) {
+      console.error('❌ [WebRTCChat] Cannot request session status - WebSocket not connected');
+      return;
+    }
+
+    try {
+      const message = {
+        type: 'session-status-request',
+        appointmentId: this.config.appointmentId
+      };
+
+      console.log('📤 [WebRTCChat] Requesting session status:', message);
+      this.websocket.send(JSON.stringify(message));
+      console.log('✅ [WebRTCChat] Session status request sent successfully');
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to request session status:', error);
+    }
+  }
 }

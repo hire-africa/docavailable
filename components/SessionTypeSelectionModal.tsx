@@ -7,6 +7,23 @@ import {
     View,
 } from 'react-native';
 
+interface UserSubscription {
+  id: string;
+  plan_id: string;
+  planName: string;
+  plan_price: number;
+  plan_currency: string;
+  textSessionsRemaining: number;
+  voiceCallsRemaining: number;
+  videoCallsRemaining: number;
+  totalTextSessions: number;
+  totalVoiceCalls: number;
+  totalVideoCalls: number;
+  activatedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
 export type SessionType = 'text' | 'audio' | 'video';
 
 interface SessionTypeSelectionModalProps {
@@ -14,6 +31,7 @@ interface SessionTypeSelectionModalProps {
   onClose: () => void;
   onSelectSessionType: (sessionType: SessionType) => void;
   doctorName: string;
+  subscription?: UserSubscription | null;
 }
 
 export default function SessionTypeSelectionModal({
@@ -21,14 +39,36 @@ export default function SessionTypeSelectionModal({
   onClose,
   onSelectSessionType,
   doctorName,
+  subscription,
 }: SessionTypeSelectionModalProps) {
   const handleSelectType = (sessionType: SessionType) => {
+    // Check if user has remaining sessions for this type
+    if (!canStartSession(sessionType)) {
+      return; // Don't proceed if no sessions remaining
+    }
     // Automatically proceed when an option is selected
     onSelectSessionType(sessionType);
   };
 
   const handleClose = () => {
     onClose();
+  };
+
+  const canStartSession = (sessionType: SessionType): boolean => {
+    if (!subscription || !subscription.isActive) {
+      return false;
+    }
+
+    switch (sessionType) {
+      case 'text':
+        return (subscription.textSessionsRemaining || 0) > 0;
+      case 'audio':
+        return (subscription.voiceCallsRemaining || 0) > 0;
+      case 'video':
+        return (subscription.videoCallsRemaining || 0) > 0;
+      default:
+        return false;
+    }
   };
 
   const sessionTypes = [
@@ -38,7 +78,8 @@ export default function SessionTypeSelectionModal({
       description: 'Chat with the doctor via text messages',
       icon: 'comment',
       color: '#4CAF50',
-      details: 'Uses 1 text session per 10 minutes'
+      details: 'Uses 1 text session per 10 minutes',
+      remaining: subscription?.textSessionsRemaining || 0
     },
     {
       type: 'audio' as SessionType,
@@ -46,7 +87,8 @@ export default function SessionTypeSelectionModal({
       description: 'Voice call with the doctor',
       icon: 'phone',
       color: '#2196F3',
-      details: 'Direct voice consultation'
+      details: 'Direct voice consultation',
+      remaining: subscription?.voiceCallsRemaining || 0
     },
     {
       type: 'video' as SessionType,
@@ -54,7 +96,8 @@ export default function SessionTypeSelectionModal({
       description: 'Video call with the doctor',
       icon: 'video-camera',
       color: '#FF9800',
-      details: 'Face-to-face consultation'
+      details: 'Face-to-face consultation',
+      remaining: subscription?.videoCallsRemaining || 0
     }
   ];
 
@@ -80,31 +123,62 @@ export default function SessionTypeSelectionModal({
           </View>
 
           <View style={styles.content}>
-            {sessionTypes.map((session) => (
-              <TouchableOpacity
-                key={session.type}
-                style={styles.sessionCard}
-                onPress={() => handleSelectType(session.type)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.sessionContent}>
-                  <View style={[styles.iconWrapper, { backgroundColor: session.color + '15' }]}>
-                    <FontAwesome name={session.icon} size={18} color={session.color} />
+            {sessionTypes.map((session) => {
+              const isDisabled = !canStartSession(session.type);
+              return (
+                <TouchableOpacity
+                  key={session.type}
+                  style={[
+                    styles.sessionCard,
+                    isDisabled && styles.sessionCardDisabled
+                  ]}
+                  onPress={() => handleSelectType(session.type)}
+                  activeOpacity={isDisabled ? 1 : 0.7}
+                  disabled={isDisabled}
+                >
+                  <View style={styles.sessionContent}>
+                    <View style={[
+                      styles.iconWrapper, 
+                      { backgroundColor: isDisabled ? '#E0E0E0' : session.color + '15' }
+                    ]}>
+                      <FontAwesome 
+                        name={session.icon} 
+                        size={18} 
+                        color={isDisabled ? '#999' : session.color} 
+                      />
+                    </View>
+                    <View style={styles.sessionInfo}>
+                      <View style={styles.sessionTitleRow}>
+                        <Text style={[
+                          styles.sessionTitle,
+                          isDisabled && styles.sessionTitleDisabled
+                        ]}>
+                          {session.title}
+                        </Text>
+                        <Text style={[
+                          styles.remainingCount,
+                          isDisabled && styles.remainingCountDisabled
+                        ]}>
+                          {session.remaining} remaining
+                        </Text>
+                      </View>
+                      <Text style={[
+                        styles.sessionDescription,
+                        isDisabled && styles.sessionDescriptionDisabled
+                      ]}>
+                        {session.description}
+                      </Text>
+                      <Text style={[
+                        styles.sessionDetails,
+                        isDisabled && styles.sessionDetailsDisabled
+                      ]}>
+                        {isDisabled ? 'No sessions remaining in your subscription' : session.details}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.sessionInfo}>
-                    <Text style={styles.sessionTitle}>
-                      {session.title}
-                    </Text>
-                    <Text style={styles.sessionDescription}>
-                      {session.description}
-                    </Text>
-                    <Text style={styles.sessionDetails}>
-                      {session.details}
-                    </Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
       </View>
@@ -221,5 +295,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#999',
     fontStyle: 'italic',
+  },
+  sessionCardDisabled: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E0E0E0',
+    opacity: 0.6,
+  },
+  sessionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  remainingCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#4CAF50',
+  },
+  remainingCountDisabled: {
+    color: '#999',
+  },
+  sessionTitleDisabled: {
+    color: '#999',
+  },
+  sessionDescriptionDisabled: {
+    color: '#999',
+  },
+  sessionDetailsDisabled: {
+    color: '#999',
   },
 });

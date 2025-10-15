@@ -70,18 +70,18 @@ export interface Subscription {
   id: number;
   user_id: number;
   plan_id: string;
-  plan_name: string;
+  planName: string;
   plan_price: number;
   plan_currency: string;
-  text_sessions_remaining: number;
-  voice_calls_remaining: number;
-  video_calls_remaining: number;
-  total_text_sessions: number;
-  total_voice_calls: number;
-  total_video_calls: number;
-  activated_at: string;
-  expires_at?: string;
-  is_active: boolean;
+  textSessionsRemaining: number;
+  voiceCallsRemaining: number;
+  videoCallsRemaining: number;
+  totalTextSessions: number;
+  totalVoiceCalls: number;
+  totalVideoCalls: number;
+  activatedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
   created_at: string;
   updated_at: string;
 }

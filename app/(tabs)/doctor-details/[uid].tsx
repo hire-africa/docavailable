@@ -489,6 +489,7 @@ export default function DoctorProfilePage() {
         onClose={() => setShowSessionTypeModal(false)}
         onSelectSessionType={handleSessionTypeSelect}
         doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+        subscription={currentSubscription}
       />
 
       {/* Direct Booking Modal */}
@@ -499,6 +500,7 @@ export default function DoctorProfilePage() {
         doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
         sessionType={selectedSessionType}
         loading={startingSession}
+        subscription={currentSubscription}
       />
 
       {/* Outgoing audio call modal (reuses chat call flow) */}

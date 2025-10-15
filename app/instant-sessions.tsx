@@ -15,6 +15,23 @@ import { environment } from '../config/environment';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
 
+interface UserSubscription {
+  id: string;
+  plan_id: string;
+  planName: string;
+  plan_price: number;
+  plan_currency: string;
+  textSessionsRemaining: number;
+  voiceCallsRemaining: number;
+  videoCallsRemaining: number;
+  totalTextSessions: number;
+  totalVoiceCalls: number;
+  totalVideoCalls: number;
+  activatedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
 interface Doctor {
   id: number;
   first_name: string;
@@ -68,6 +85,7 @@ export default function InstantSessionsScreen() {
   const [showDirectBookingModal, setShowDirectBookingModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   const fetchAvailableDoctors = async () => {
     try {
@@ -86,6 +104,28 @@ export default function InstantSessionsScreen() {
       }
     } catch (error) {
       console.error('Error fetching doctors:', error);
+    }
+  };
+
+  const fetchSubscription = async () => {
+    try {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/subscription`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data) {
+          setSubscription(data.data);
+        }
+      } else {
+        console.error('Failed to fetch subscription data');
+      }
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
     }
   };
 
@@ -243,7 +283,7 @@ export default function InstantSessionsScreen() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([fetchAvailableDoctors(), checkActiveSession()]);
+    await Promise.all([fetchAvailableDoctors(), checkActiveSession(), fetchSubscription()]);
     setLoading(false);
   };
 
@@ -384,6 +424,7 @@ export default function InstantSessionsScreen() {
         onClose={() => setShowSessionTypeModal(false)}
         onSelectSessionType={handleSessionTypeSelect}
         doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
+        subscription={subscription}
       />
 
       <DirectBookingModal
@@ -393,6 +434,7 @@ export default function InstantSessionsScreen() {
         doctorName={selectedDoctor ? `${selectedDoctor.first_name} ${selectedDoctor.last_name}` : ''}
         sessionType={selectedSessionType}
         loading={startingSession}
+        subscription={subscription}
       />
     </>
   );

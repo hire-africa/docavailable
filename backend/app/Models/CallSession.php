@@ -24,6 +24,7 @@ class CallSession extends Model
         'sessions_remaining_before_start',
         'is_connected',
         'call_duration',
+        'auto_deductions_processed',
     ];
 
     protected $casts = [

@@ -1435,8 +1435,8 @@ class AudioCallService {
     this.clearCallTimeout();
     this.updateState({ connectionState: 'connected', isConnected: true });
     
-    // Deduct call session when answered
-    this.deductCallSession();
+    // FIX: Do NOT deduct immediately - deductions happen after 10 minutes and on hangup
+    // this.deductCallSession();
     
     // Do not echo call-answered back
     if (!this.didEmitAnswered) {

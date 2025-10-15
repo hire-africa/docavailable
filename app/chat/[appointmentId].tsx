@@ -502,16 +502,16 @@ export default function ChatPage() {
 
   // Determine if audio calls should be enabled based on appointment type
   const isAudioCallEnabled = () => {
-    // Audio calls available for audio appointments or text sessions
-    if (isTextSession) return true;
+    // Audio calls available for audio appointments only (NOT text sessions)
+    if (isTextSession) return false; // FIX: Disable call buttons for text sessions
     if (appointmentType === 'audio' || appointmentType === 'voice') return true;
     return false;
   };
 
   // Determine if video calls should be enabled based on appointment type
   const isVideoCallEnabled = () => {
-    // Video calls available for video appointments or text sessions
-    if (isTextSession) return true;
+    // Video calls available for video appointments only (NOT text sessions)
+    if (isTextSession) return false; // FIX: Disable call buttons for text sessions
     if (appointmentType === 'video') return true;
     return false;
   };
@@ -1178,6 +1178,18 @@ export default function ChatPage() {
           onSessionEnded: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
             console.log('🏁 Session ended via WebRTC:', sessionId, reason, sessionType);
             setSessionEnded(true);
+            
+            // FIX: Refresh chat data when session ends to update UI immediately
+            console.log('🔄 [SessionEnded] Refreshing chat data for session end notification...');
+            setTimeout(() => {
+              // Force refresh of chat info and messages
+              if (webrtcChatService) {
+                webrtcChatService.requestSessionStatus();
+              }
+              // Also refresh local chat info
+              loadChat();
+            }, 500);
+            
             // Show rating modal or navigate back
             setShowRatingModal(true);
           },
@@ -2342,6 +2354,27 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         console.log('🏁 [TextAppointment] Ending text appointment session manually');
         processTextAppointmentDeduction(1, 'manual_end');
         endTextAppointmentSession(1); // Deduct 1 session for manual end
+        
+        // FIX: Trigger refresh for both participants
+        console.log('🔄 [TextAppointment] Triggering chat refresh for both participants...');
+        if (webrtcChatService) {
+          try {
+            await webrtcChatService.sendSessionEndNotification('manual_end');
+            console.log('✅ [TextAppointment] Session end notification sent via WebRTC');
+          } catch (error) {
+            console.error('❌ [TextAppointment] Failed to send session end notification:', error);
+          }
+        }
+        
+        // Force refresh chat data
+        setTimeout(() => {
+          console.log('🔄 [TextAppointment] Forcing chat data refresh...');
+          if (webrtcChatService) {
+            webrtcChatService.requestSessionStatus();
+          }
+          loadChat();
+        }, 1000);
+        
         setShowEndSessionModal(false);
         setShowRatingModal(true);
         return;
@@ -2409,6 +2442,27 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         setShowEndSessionModal(false);
         setSessionEnded(true);
         setShowRatingModal(true);
+        
+        // FIX: Trigger refresh for both participants to update chat state
+        console.log('🔄 [End Session] Triggering chat refresh for both participants...');
+        if (webrtcChatService) {
+          // Send a session-ended notification to refresh both chats
+          try {
+            await webrtcChatService.sendSessionEndNotification('manual_end');
+            console.log('✅ [End Session] Session end notification sent via WebRTC');
+          } catch (error) {
+            console.error('❌ [End Session] Failed to send session end notification:', error);
+          }
+        }
+        
+        // Force refresh chat data for both participants
+        setTimeout(() => {
+          console.log('🔄 [End Session] Forcing chat data refresh...');
+          // Trigger a re-fetch of chat info and messages
+          if (webrtcChatService) {
+            webrtcChatService.requestSessionStatus();
+          }
+        }, 1000);
         
         console.log('✅ [End Session] UI updated - showing rating modal');
       } else {
@@ -3386,38 +3440,30 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
-          {/* Image Button */}
+          {/* Image Button - DISABLED */}
           <TouchableOpacity
-            onPress={handlePickImage}
-            disabled={sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)}
+            onPress={() => {}} // FIX: Disabled image/gallery functionality
+            disabled={true} // FIX: Always disabled
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingGalleryImage || sendingCameraImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)) ? 0.5 : 1,
+              opacity: 0.3, // FIX: Always grayed out
             }}
           >
-            {sendingGalleryImage ? (
-              <ActivityIndicator size="small" color="#4CAF50" />
-            ) : (
-              <Ionicons name="image" size={24} color="#4CAF50" />
-            )}
+            <Ionicons name="image" size={24} color="#999" /> {/* FIX: Grayed out icon */}
           </TouchableOpacity>
           
-          {/* Camera Button */}
+          {/* Camera Button - DISABLED */}
           <TouchableOpacity
-            onPress={handleTakePhoto}
-            disabled={sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)}
+            onPress={() => {}} // FIX: Disabled camera functionality
+            disabled={true} // FIX: Always disabled
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sendingCameraImage || sendingGalleryImage || sessionEnded || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime)) ? 0.5 : 1,
+              opacity: 0.3, // FIX: Always grayed out
             }}
           >
-            {sendingCameraImage ? (
-              <ActivityIndicator size="small" color="#4CAF50" />
-            ) : (
-              <Ionicons name="camera" size={24} color="#4CAF50" />
-            )}
+            <Ionicons name="camera" size={24} color="#999" /> {/* FIX: Grayed out icon */}
           </TouchableOpacity>
           
           <TextInput
@@ -3475,10 +3521,10 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           />
           
           <TouchableOpacity
-            onPress={newMessage.trim() ? sendMessage : startRecording}
+            onPress={sendMessage} // FIX: Disabled voice recording - only allow text messages
             disabled={
               sending || 
-              isRecording || 
+              !newMessage.trim() || // FIX: Only allow sending when there's text
               sessionEnded || 
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
@@ -3486,7 +3532,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
-              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : isRecording ? '#FF4444' : '#E5E5E5',
+              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5', // FIX: Removed recording states
               borderRadius: 20,
               padding: 12,
               minWidth: 44,
@@ -3496,128 +3542,14 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           >
             {sending ? (
               <ActivityIndicator size="small" color="#fff" />
-            ) : newMessage.trim() ? (
-              <Ionicons name="send" size={20} color="#fff" />
-            ) : isRecording ? (
-              <Ionicons name="stop" size={20} color="#fff" />
             ) : (
-              <Ionicons name="mic" size={20} color="#666" />
+              <Ionicons name="send" size={20} color="#fff" /> // FIX: Only show send icon
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Voice Recording Interface */}
-        {isRecording && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            backgroundColor: '#FFF5F5',
-            borderTopWidth: 1,
-            borderTopColor: '#FFE5E5',
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              flex: 1,
-            }}>
-              <View style={{
-                width: 12,
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: '#FF4444',
-                marginRight: 12,
-              }} />
-              <Text style={{
-                fontSize: 16,
-                color: '#FF4444',
-                fontWeight: '500',
-              }}>
-                Recording... {formatDuration(recordingDuration)}
-              </Text>
-            </View>
-            
-            <TouchableOpacity
-              onPress={stopRecording}
-              style={{
-                backgroundColor: '#FF4444',
-                borderRadius: 20,
-                padding: 12,
-                marginRight: 8,
-              }}
-            >
-              <Ionicons name="stop" size={20} color="#fff" />
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={cancelRecording}
-              style={{
-                backgroundColor: '#666',
-                borderRadius: 20,
-                padding: 12,
-              }}
-            >
-              <Ionicons name="close" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Voice Message Preview */}
-        {recordingUri && !isRecording && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            backgroundColor: '#F0F8FF',
-            borderTopWidth: 1,
-            borderTopColor: '#E5F0FF',
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              flex: 1,
-            }}>
-              <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 8 }} />
-              <Text style={{
-                fontSize: 16,
-                color: '#4CAF50',
-                fontWeight: '500',
-              }}>
-                Voice message ready
-              </Text>
-            </View>
-            
-            <TouchableOpacity
-              onPress={sendVoiceMessage}
-              disabled={sendingVoiceMessage}
-              style={{
-                backgroundColor: '#4CAF50',
-                borderRadius: 20,
-                padding: 12,
-                marginRight: 8,
-              }}
-            >
-              {sendingVoiceMessage ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="send" size={20} color="#fff" />
-              )}
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={cancelRecording}
-              style={{
-                backgroundColor: '#666',
-                borderRadius: 20,
-                padding: 12,
-              }}
-            >
-              <Ionicons name="close" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* Voice Recording Interface - DISABLED */}
+        {/* Voice recording functionality has been disabled */}
 
       {/* End Session Modal */}
       <Modal

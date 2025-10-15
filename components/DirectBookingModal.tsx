@@ -12,6 +12,23 @@ import {
 } from 'react-native';
 import { SessionType } from './SessionTypeSelectionModal';
 
+interface UserSubscription {
+  id: string;
+  plan_id: string;
+  planName: string;
+  plan_price: number;
+  plan_currency: string;
+  textSessionsRemaining: number;
+  voiceCallsRemaining: number;
+  videoCallsRemaining: number;
+  totalTextSessions: number;
+  totalVoiceCalls: number;
+  totalVideoCalls: number;
+  activatedAt: string;
+  expiresAt?: string;
+  isActive: boolean;
+}
+
 interface DirectBookingModalProps {
   visible: boolean;
   onClose: () => void;
@@ -19,6 +36,7 @@ interface DirectBookingModalProps {
   doctorName: string;
   sessionType: SessionType;
   loading?: boolean;
+  subscription?: UserSubscription | null;
 }
 
 export default function DirectBookingModal({
@@ -28,10 +46,36 @@ export default function DirectBookingModal({
   doctorName,
   sessionType,
   loading = false,
+  subscription,
 }: DirectBookingModalProps) {
   const [reason, setReason] = useState('');
 
+  const canStartSession = (): boolean => {
+    if (!subscription || !subscription.isActive) {
+      return false;
+    }
+
+    switch (sessionType) {
+      case 'text':
+        return (subscription.textSessionsRemaining || 0) > 0;
+      case 'audio':
+        return (subscription.voiceCallsRemaining || 0) > 0;
+      case 'video':
+        return (subscription.videoCallsRemaining || 0) > 0;
+      default:
+        return false;
+    }
+  };
+
   const handleConfirm = () => {
+    if (!canStartSession()) {
+      Alert.alert(
+        'No Sessions Remaining', 
+        `You have no ${sessionType === 'text' ? 'text sessions' : sessionType === 'audio' ? 'audio calls' : 'video calls'} remaining in your subscription. Please upgrade your plan or wait for renewal.`
+      );
+      return;
+    }
+
     if (!reason.trim()) {
       Alert.alert('Reason Required', 'Please provide a reason for your session.');
       return;
@@ -162,12 +206,21 @@ export default function DirectBookingModal({
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={[styles.confirmButton, { backgroundColor: sessionColor }, loading && styles.confirmButtonDisabled]} 
+              style={[
+                styles.confirmButton, 
+                { backgroundColor: canStartSession() ? sessionColor : '#E0E0E0' }, 
+                (loading || !canStartSession()) && styles.confirmButtonDisabled
+              ]} 
               onPress={handleConfirm}
-              disabled={loading}
+              disabled={loading || !canStartSession()}
             >
-              <Text style={styles.confirmButtonText}>
-                {loading ? 'Starting Session...' : `Start ${sessionInfo.title}`}
+              <Text style={[
+                styles.confirmButtonText,
+                !canStartSession() && styles.confirmButtonTextDisabled
+              ]}>
+                {loading ? 'Starting Session...' : 
+                 !canStartSession() ? 'No Sessions Remaining' : 
+                 `Start ${sessionInfo.title}`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -337,5 +390,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: 'white',
     fontWeight: '600',
+  },
+  confirmButtonTextDisabled: {
+    color: '#999',
   },
 });
