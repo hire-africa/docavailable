@@ -15,6 +15,7 @@ import {
     View,
 } from 'react-native';
 import authService from '../services/authService';
+import SuccessModal from '../components/SuccessModal';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -31,6 +32,7 @@ export default function ResetPasswordWithCode() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const validatePassword = (password: string) => {
     return password.length >= 8;
@@ -61,16 +63,11 @@ export default function ResetPasswordWithCode() {
     setLoading(true);
     try {
       await authService.resetPasswordWithCode(email, code, password, passwordConfirmation);
-      Alert.alert(
-        'Success',
-        'Your password has been reset successfully. You can now log in with your new password.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.replace('/login')
-          }
-        ]
-      );
+      
+      // Clear form and show success modal
+      setPassword('');
+      setPasswordConfirmation('');
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error('ResetPasswordWithCode: Error resetting password:', error);
       Alert.alert('Error', error.message || 'Failed to reset password. Please try again.');
@@ -232,6 +229,20 @@ export default function ResetPasswordWithCode() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Success Modal */}
+      <SuccessModal
+        visible={showSuccessModal}
+        title="🎉 Password Reset Successful!"
+        message="Your password has been updated successfully. You can now log in with your new password."
+        buttonText="Continue to Login"
+        onPress={() => {
+          setShowSuccessModal(false);
+          router.replace('/login');
+        }}
+        icon="check-circle"
+        iconColor="#4CAF50"
+      />
     </SafeAreaView>
   );
 }
