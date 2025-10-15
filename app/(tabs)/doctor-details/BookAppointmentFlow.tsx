@@ -143,11 +143,11 @@ export default function BookAppointmentFlow() {
   // Helper to check if a consultation type is available
   const isTypeAvailable = (type: string) => {
     const sub = subscription || userSubscription;
-    if (!sub) return true;
+    if (!sub || !sub.isActive) return false;
     if (type === 'text') return (sub.textSessionsRemaining || 0) > 0;
     if (type === 'voice') return (sub.voiceCallsRemaining || 0) > 0;
     if (type === 'video') return (sub.videoCallsRemaining || 0) > 0;
-    return true;
+    return false;
   };
 
   // Helper to get availability info for selected day
@@ -561,9 +561,9 @@ export default function BookAppointmentFlow() {
           />
         </View>
         <TouchableOpacity
-          style={[styles.continueBtn, !(selectedDate && customTime && reason) && { opacity: 0.5 }]}
-          onPress={() => selectedDate && customTime && reason && setStep(2)}
-          disabled={!(selectedDate && customTime && reason)}
+          style={[styles.continueBtn, !(selectedDate && customTime && reason && consultationType) && { opacity: 0.5 }]}
+          onPress={() => selectedDate && customTime && reason && consultationType && setStep(2)}
+          disabled={!(selectedDate && customTime && reason && consultationType)}
         >
           <Text style={styles.continueBtnText}>Continue</Text>
         </TouchableOpacity>
@@ -870,14 +870,7 @@ export default function BookAppointmentFlow() {
             [], // We'll pass this to the dashboard
             'appointment_offer_sent',
             'Appointment Offer Sent',
-            `Appointment offer sent to Dr. ${doctorName} for ${selectedDate} at ${customTime}`,
-            {
-              doctorName,
-              patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-              appointmentType: consultationType,
-              date: selectedDate,
-              time: customTime
-            }
+            `Appointment offer sent to Dr. ${doctorName} for ${selectedDate} at ${customTime}`
           );
           
           setStep(3);

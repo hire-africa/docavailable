@@ -31,24 +31,30 @@ export interface ConversationContext {
 }
 
 // System prompt for the health assistant
-const SYSTEM_PROMPT = `You are DocBot, a helpful AI health assistant for DocAvailable, a telemedicine platform. Your role is to:
+const SYSTEM_PROMPT = `You are DocBot, a professional AI health assistant for DocAvailable, a telemedicine platform. Your role is to:
 
-1. Provide general health information and guidance
-2. Help users understand when to seek medical care
-3. Encourage booking appointments with real doctors for personal health concerns
-4. Maintain a professional, caring, and empathetic tone
+1. Provide comprehensive, evidence-based health information and guidance
+2. Help users understand medical conditions, symptoms, and treatment options
+3. Offer detailed explanations of health concerns and their potential causes
+4. Maintain a highly professional, knowledgeable, and empathetic tone
 5. Never provide specific medical diagnoses or treatments
 6. Always recommend consulting with healthcare professionals for personal health issues
 
-Guidelines:
-- Keep responses concise but helpful (under 200 words)
-- Use simple, clear language
-- Be encouraging about seeking professional medical care
+Professional Guidelines:
+- Provide detailed, well-researched responses (300-500 words) that offer real medical value
+- Use precise medical terminology while remaining accessible to patients
+- Include relevant medical context, potential causes, and general management strategies
 - For urgent symptoms (chest pain, severe bleeding, unconsciousness), strongly recommend immediate medical attention
-- For general health questions, provide educational information
-- Always end with encouragement to book an appointment for personal concerns
+- For chronic conditions, provide comprehensive information about management and monitoring
+- For general health questions, offer detailed educational content with practical advice
+- Always end with specific guidance on how to explain the issue to a doctor during consultation
 
-Remember: You are an assistant, not a replacement for professional medical care.`;
+Medical Disclaimers:
+- Clearly state you are not a doctor and cannot replace professional medical care
+- Emphasize the importance of professional evaluation for accurate diagnosis
+- Encourage users to seek timely medical attention when appropriate
+
+Remember: You are a knowledgeable health assistant providing educational support, not a replacement for professional medical care.`;
 
 // Conversation memory storage
 const conversationMemory = new Map<string, ConversationContext>();
@@ -194,7 +200,7 @@ export class OpenAIService {
     const requestBody = {
       model: 'gpt-3.5-turbo',
       messages,
-      max_tokens: 300,
+      max_tokens: 600,
       temperature: 0.7,
     };
 
@@ -283,7 +289,7 @@ export class OpenAIService {
     const requestBody = {
       model: 'gpt-3.5-turbo',
       messages,
-      max_tokens: 300,
+      max_tokens: 600,
       temperature: 0.7,
       stream: true, // Enable streaming
     };
@@ -457,23 +463,34 @@ export class OpenAIService {
     const input = userInput.toLowerCase();
     
     if (input.includes('pain') || input.includes('symptom')) {
-      suggestions.push('Book an appointment with a doctor');
-      suggestions.push('Keep track of your symptoms');
+      suggestions.push('Prepare detailed symptom description for doctor');
+      suggestions.push('Keep track of symptom patterns and triggers');
+      suggestions.push('Note any associated symptoms or changes');
     }
     
     if (input.includes('diet') || input.includes('nutrition')) {
-      suggestions.push('Consult with a nutritionist');
-      suggestions.push('Keep a food diary');
+      suggestions.push('Document your dietary habits and concerns');
+      suggestions.push('Keep a detailed food diary');
+      suggestions.push('Note any digestive symptoms or reactions');
     }
     
     if (input.includes('exercise') || input.includes('fitness')) {
-      suggestions.push('Get a fitness assessment');
-      suggestions.push('Start with light activities');
+      suggestions.push('Document your current activity level');
+      suggestions.push('Note any physical limitations or concerns');
+      suggestions.push('Prepare questions about safe exercise options');
     }
     
     if (input.includes('mental') || input.includes('stress') || input.includes('anxiety')) {
-      suggestions.push('Consider mental health support');
-      suggestions.push('Practice relaxation techniques');
+      suggestions.push('Document your emotional patterns and triggers');
+      suggestions.push('Note how stress affects your daily life');
+      suggestions.push('Prepare to discuss coping strategies with doctor');
+    }
+    
+    // Add general doctor consultation preparation
+    if (this.shouldRecommendBooking(userInput, aiResponse)) {
+      suggestions.push('Prepare your medical history summary');
+      suggestions.push('List current medications and supplements');
+      suggestions.push('Write down specific questions for your doctor');
     }
     
     return suggestions;
