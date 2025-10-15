@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Subscription;
 use App\Services\MessageStorageService;
 use App\Services\NotificationService;
+use App\Services\TimezoneService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -988,9 +989,32 @@ class TextSessionController extends Controller
                 ], 400);
             }
 
-            // Check if appointment time has been reached
-            $appointmentDateTime = $this->parseAppointmentDateTime($appointment->appointment_date, $appointment->appointment_time);
-            if (!$appointmentDateTime || $appointmentDateTime > now()) {
+            // Get user timezone and check if appointment time has been reached
+            $userTimezone = TimezoneService::getUserTimezone($request);
+            $isTimeReached = TimezoneService::isAppointmentTimeReached(
+                $appointment->appointment_date, 
+                $appointment->appointment_time, 
+                $userTimezone, 
+                5 // 5 minute buffer
+            );
+            
+            // Debug logging for appointment time validation
+            Log::info('🕐 [TextSessionController] Time validation debug', [
+                'appointment_id' => $appointmentId,
+                'appointment_date' => $appointment->appointment_date,
+                'appointment_time' => $appointment->appointment_time,
+                'user_timezone' => $userTimezone,
+                'is_time_reached' => $isTimeReached,
+                'current_time_utc' => now()->utc()->toDateTimeString(),
+                'app_timezone' => config('app.timezone', 'UTC')
+            ]);
+            
+            if (!$isTimeReached) {
+                Log::info('⏰ [TextSessionController] Appointment time not reached', [
+                    'appointment_id' => $appointmentId,
+                    'user_timezone' => $userTimezone
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Appointment time has not been reached yet'
@@ -1102,13 +1126,16 @@ class TextSessionController extends Controller
     /**
      * Parse appointment date and time to create a DateTime object.
      */
-    private function parseAppointmentDateTime($dateStr, $timeStr)
+    private function parseAppointmentDateTime($dateStr, $timeStr, $userTimezone = null)
     {
         try {
             if (!$dateStr || !$timeStr) {
                 return null;
             }
 
+            // Use user's timezone if provided, otherwise fall back to app timezone
+            $targetTimezone = $userTimezone ?: config('app.timezone', 'UTC');
+            
             // Handle different date formats
             if (strpos($dateStr, '/') !== false) {
                 // Format: MM/DD/YYYY
@@ -1124,16 +1151,18 @@ class TextSessionController extends Controller
                     $hour = (int)$timeParts[0];
                     $minute = (int)$timeParts[1];
                     
-                    return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0);
+                    // Create Carbon instance in the target timezone
+                    return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0, $targetTimezone);
                 }
             } else {
-                // Format: YYYY-MM-DD
-                return \Carbon\Carbon::parse($dateStr . ' ' . $timeStr);
+                // Format: YYYY-MM-DD - parse in target timezone
+                return \Carbon\Carbon::parse($dateStr . ' ' . $timeStr, $targetTimezone);
             }
         } catch (\Exception $e) {
             Log::error("Error parsing appointment date/time", [
                 'date' => $dateStr,
                 'time' => $timeStr,
+                'timezone' => $userTimezone,
                 'error' => $e->getMessage()
             ]);
             return null;

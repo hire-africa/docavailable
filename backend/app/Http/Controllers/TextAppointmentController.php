@@ -70,7 +70,12 @@ class TextAppointmentController extends Controller
 
             // Check if appointment time has been reached
             $appointmentDateTime = $this->parseAppointmentDateTime($appointment->appointment_date, $appointment->appointment_time);
-            if (!$appointmentDateTime || $appointmentDateTime > now()) {
+            
+            // Allow appointments to start up to 5 minutes before scheduled time
+            $bufferMinutes = 5;
+            $earliestStartTime = now()->subMinutes($bufferMinutes);
+            
+            if (!$appointmentDateTime || $appointmentDateTime > $earliestStartTime) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Appointment time has not been reached yet'
@@ -550,11 +555,12 @@ class TextAppointmentController extends Controller
                     $hour = (int)$timeParts[0];
                     $minute = (int)$timeParts[1];
                     
-                    return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0);
+                    // Create Carbon instance in the application timezone
+                    return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0, config('app.timezone', 'Africa/Blantyre'));
                 }
             } else {
-                // Format: YYYY-MM-DD
-                return \Carbon\Carbon::parse($dateStr . ' ' . $timeStr);
+                // Format: YYYY-MM-DD - parse in application timezone
+                return \Carbon\Carbon::parse($dateStr . ' ' . $timeStr, config('app.timezone', 'Africa/Blantyre'));
             }
         } catch (\Exception $e) {
             Log::error("Error parsing appointment date/time", [

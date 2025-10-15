@@ -31,13 +31,16 @@ class ApiService {
     }
   }
 
-  async post(endpoint: string, data: any) {
+  async post(endpoint: string, data: any, options: { headers?: Record<string, string> } = {}) {
     try {
       const headers = await this.getAuthHeaders();
       
+      // Merge custom headers with auth headers
+      const finalHeaders = { ...headers, ...options.headers };
+      
       const response = await fetch(`${baseURL}${endpoint}`, {
         method: 'POST',
-        headers,
+        headers: finalHeaders,
         body: JSON.stringify(data),
       });
 

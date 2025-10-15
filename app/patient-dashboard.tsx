@@ -17,7 +17,6 @@ import {
   Linking,
   Modal,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -2218,120 +2217,126 @@ export default function PatientDashboard() {
       }
     >
       <View style={styles.header}>
-        <Text style={styles.welcomeText}>Find Doctors</Text>
       </View>
       
-      {/* Search Bar */}
-      <View style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        backgroundColor: '#FFFFFF', 
-        borderRadius: 20, 
-        marginHorizontal: 20, 
-        marginBottom: 24, 
-        paddingHorizontal: 18, 
-        height: 52,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-        elevation: 3,
-        borderWidth: 1,
-        borderColor: '#E8F5E8',
-      }}>
-        <Icon name="search" size={22} color="#4CAF50" />
-        <TextInput
-          style={{ flex: 1, fontSize: 17, color: '#666', backgroundColor: 'transparent', marginLeft: 14 }}
-          placeholder="Search doctors by name or specialization..."
-          placeholderTextColor="#999"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ marginLeft: 10 }}>
-            <Icon name="times" size={22} color="#666" />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* Search and Filter Container */}
+      <View style={styles.searchFilterContainer}>
+        {/* Search Bar */}
+        <View style={styles.searchBarContainer}>
+          <View style={styles.searchBar}>
+            <Icon name="search" size={20} color="#4CAF50" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search doctors by name or specialization..."
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                <Icon name="times" size={18} color="#666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
 
-      {/* Filter Pills */}
-      <View style={styles.filterPillsContainer}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterPillsScrollContent}
-        >
-          <Pressable 
-            style={({ pressed }) => [
-              styles.filterPill, 
-              showOnlyOnline && styles.filterPillActive,
-              pressed && styles.filterPillPressed
-            ]}
+        {/* Filter and Sort Row */}
+        <View style={styles.filterSortRow}>
+          {/* Online Filter Toggle */}
+          <TouchableOpacity 
+            style={[styles.onlineFilter, showOnlyOnline && styles.onlineFilterActive]}
             onPress={() => setShowOnlyOnline(!showOnlyOnline)}
-            onPressIn={() => setPressedPill('online')}
-            onPressOut={() => setPressedPill(null)}
           >
-            <Text style={[styles.filterPillText, showOnlyOnline && styles.filterPillTextActive]}>
+            <Icon 
+              name={showOnlyOnline ? "check" : "circle-o"} 
+              size={16} 
+              color={showOnlyOnline ? "#FFFFFF" : "#4CAF50"} 
+            />
+            <Text style={[styles.onlineFilterText, showOnlyOnline && styles.onlineFilterTextActive]}>
               Online Only
             </Text>
-          </Pressable>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.filterPill, 
-              sortBy === 'name' && styles.filterPillActive,
-              pressed && styles.filterPillPressed
-            ]}
-            onPress={() => setSortBy('name')}
-            onPressIn={() => setPressedPill('name')}
-            onPressOut={() => setPressedPill(null)}
+          </TouchableOpacity>
+
+          {/* Sort Dropdown */}
+          <TouchableOpacity 
+            style={styles.sortDropdown}
+            onPress={() => setShowSortOptions(!showSortOptions)}
           >
-            <Text style={[styles.filterPillText, sortBy === 'name' && styles.filterPillTextActive]}>
-              Name
+            <Text style={styles.sortDropdownText}>
+              Sort: {getSortOptionLabel(sortBy)}
             </Text>
-          </Pressable>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.filterPill, 
-              sortBy === 'rating' && styles.filterPillActive,
-              pressed && styles.filterPillPressed
-            ]}
-            onPress={() => setSortBy('rating')}
-            onPressIn={() => setPressedPill('rating')}
-            onPressOut={() => setPressedPill(null)}
-          >
-            <Text style={[styles.filterPillText, sortBy === 'rating' && styles.filterPillTextActive]}>
-              Rating
-            </Text>
-          </Pressable>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.filterPill, 
-              sortBy === 'experience' && styles.filterPillActive,
-              pressed && styles.filterPillPressed
-            ]}
-            onPress={() => setSortBy('experience')}
-            onPressIn={() => setPressedPill('experience')}
-            onPressOut={() => setPressedPill(null)}
-          >
-            <Text style={[styles.filterPillText, sortBy === 'experience' && styles.filterPillTextActive]}>
-              Experience
-            </Text>
-          </Pressable>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.filterPill, 
-              selectedSpecialization && styles.filterPillActive,
-              pressed && styles.filterPillPressed
-            ]}
+            <Icon 
+              name={showSortOptions ? "chevron-up" : "chevron-down"} 
+              size={16} 
+              color="#4CAF50" 
+            />
+          </TouchableOpacity>
+
+          {/* Specialization Filter */}
+          <TouchableOpacity 
+            style={[styles.specializationFilter, selectedSpecialization && styles.specializationFilterActive]}
             onPress={() => setShowSpecializationModal(true)}
-            onPressIn={() => setPressedPill('specialization')}
-            onPressOut={() => setPressedPill(null)}
           >
-            <Text style={[styles.filterPillText, selectedSpecialization && styles.filterPillTextActive]}>
-              {selectedSpecialization || 'Specialization'}
+            <Icon name="sort" size={16} color={selectedSpecialization ? "#FFFFFF" : "#4CAF50"} />
+            <Text style={[styles.specializationFilterText, selectedSpecialization && styles.specializationFilterTextActive]}>
+              {selectedSpecialization ? 'Specialty' : 'All'}
             </Text>
-          </Pressable>
-        </ScrollView>
+          </TouchableOpacity>
+        </View>
+
+        {/* Sort Options Dropdown */}
+        {showSortOptions && (
+          <View style={styles.sortOptionsContainer}>
+            <TouchableOpacity 
+              style={[styles.sortOption, sortBy === 'name' && styles.sortOptionActive]}
+              onPress={() => {
+                setSortBy('name');
+                setShowSortOptions(false);
+              }}
+            >
+              <Text style={[styles.sortOptionText, sortBy === 'name' && styles.sortOptionTextActive]}>
+                Name (A-Z)
+              </Text>
+              {sortBy === 'name' && <Icon name="check" size={16} color="#4CAF50" />}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.sortOption, sortBy === 'rating' && styles.sortOptionActive]}
+              onPress={() => {
+                setSortBy('rating');
+                setShowSortOptions(false);
+              }}
+            >
+              <Text style={[styles.sortOptionText, sortBy === 'rating' && styles.sortOptionTextActive]}>
+                Rating (High to Low)
+              </Text>
+              {sortBy === 'rating' && <Icon name="check" size={16} color="#4CAF50" />}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.sortOption, sortBy === 'experience' && styles.sortOptionActive]}
+              onPress={() => {
+                setSortBy('experience');
+                setShowSortOptions(false);
+              }}
+            >
+              <Text style={[styles.sortOptionText, sortBy === 'experience' && styles.sortOptionTextActive]}>
+                Experience (High to Low)
+              </Text>
+              {sortBy === 'experience' && <Icon name="check" size={16} color="#4CAF50" />}
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.sortOption, sortBy === 'specialization' && styles.sortOptionActive]}
+              onPress={() => {
+                setSortBy('specialization');
+                setShowSortOptions(false);
+              }}
+            >
+              <Text style={[styles.sortOptionText, sortBy === 'specialization' && styles.sortOptionTextActive]}>
+                Specialization (A-Z)
+              </Text>
+              {sortBy === 'specialization' && <Icon name="check" size={16} color="#4CAF50" />}
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Doctors List */}
@@ -2812,34 +2817,103 @@ export default function PatientDashboard() {
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
-                padding: 12,
-                backgroundColor: '#F8F9FA',
+                padding: 4,
+                backgroundColor: '#FFFFFF',
                 zIndex: 10,
                 position: 'relative',
-                minHeight: 52,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+                elevation: 3,
+                marginBottom: 8,
               }}
             >
-              {/* Profile Icon (always left) */}
-              <TouchableOpacity style={styles.profileButton} onPress={openSidebar}>
-                <Icon name="user" size={20} color="#666" />
+              {/* Hamburger Menu Icon (always left) */}
+              <TouchableOpacity style={styles.hamburgerButton} onPress={openSidebar}>
+                <View style={styles.hamburgerIcon}>
+                  <View style={styles.hamburgerLine1} />
+                  <View style={styles.hamburgerLine2} />
+                  <View style={styles.hamburgerLine3} />
+                </View>
               </TouchableOpacity>
 
-              {/* Centered DocAvailable text (for Blogs, Messages, Discover) */}
-              {['blogs', 'messages', 'discover'].includes(activeTab) && (
-                <Text
+              {/* Centered content based on active tab */}
+              {activeTab === 'home' && (
+                <Image 
+                  source={require('../assets/images/DA logo green.png')} 
+                  style={styles.headerLogo}
+                  resizeMode="contain"
+                />
+              )}
+              {activeTab === 'discover' && (
+                <View
                   style={{
                     position: 'absolute',
                     left: 0,
                     right: 0,
-                    textAlign: 'center',
-                    fontSize: 22,
-                    fontWeight: 'bold',
-                    color: '#222',
-                    top: 12,
+                    height: 60,
+                    justifyContent: 'center',
+                    alignItems: 'center',
                   }}
                 >
-                  DocAvailable
-                </Text>
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 'bold',
+                      color: '#222',
+                      textAlign: 'center',
+                    }}
+                  >
+                    Find Doctors
+                  </Text>
+                </View>
+              )}
+              {activeTab === 'messages' && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: 60,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 'bold',
+                      color: '#222',
+                      textAlign: 'center',
+                    }}
+                  >
+                    Messages
+                  </Text>
+                </View>
+              )}
+              {activeTab === 'blogs' && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    height: 60,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 22,
+                      fontWeight: 'bold',
+                      color: '#222',
+                      textAlign: 'center',
+                    }}
+                  >
+                    Blogs
+                  </Text>
+                </View>
               )}
 
               {/* Search button (for Blogs, Messages, Discover) */}
@@ -3595,17 +3669,54 @@ export default function PatientDashboard() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Hide header for DocBot tab */}
       {activeTab !== 'docbot' && (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#F8F9FA', zIndex: 10 }}>
-          <TouchableOpacity style={styles.profileButton} onPress={openSidebar}>
-            <Icon name="user" size={20} color="#666" />
+        <View style={{ 
+          flexDirection: 'row', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: 4, 
+          backgroundColor: '#FFFFFF', 
+          zIndex: 10,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          elevation: 3,
+          marginBottom: 8,
+        }}>
+          <TouchableOpacity style={styles.hamburgerButton} onPress={openSidebar}>
+            <View style={styles.hamburgerIcon}>
+              <View style={styles.hamburgerLine1} />
+              <View style={styles.hamburgerLine2} />
+              <View style={styles.hamburgerLine3} />
+            </View>
           </TouchableOpacity>
           
-          {/* DocAvailable Logo */}
-          <Image 
-            source={require('../assets/images/DA logo green.png')} 
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
+          {/* Header content based on active tab */}
+          {activeTab === 'home' ? (
+            <Image 
+              source={require('../assets/images/DA logo green.png')} 
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          ) : activeTab === 'discover' ? (
+            <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={styles.headerTitle}>Find Doctors</Text>
+            </View>
+          ) : activeTab === 'messages' ? (
+            <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={styles.headerTitle}>Messages</Text>
+            </View>
+          ) : activeTab === 'blogs' ? (
+            <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={styles.headerTitle}>Blogs</Text>
+            </View>
+          ) : (
+            <Image 
+              source={require('../assets/images/DA logo green.png')} 
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+          )}
           
           {/* Spacer to balance the layout */}
           <View style={{ width: 44 }} />
@@ -3845,7 +3956,7 @@ export default function PatientDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F5F5F5',
   },
   mainContent: {
     flex: 1,
@@ -4056,11 +4167,6 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  appointmentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
   appointmentDate: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -4075,11 +4181,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 4,
-  },
-  appointmentType: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 8,
   },
   appointmentStatus: {
     alignSelf: 'flex-start',
@@ -4686,9 +4787,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  clearButton: {
-    padding: 4,
-  },
   refreshButtonText: {
     fontSize: 14,
     color: '#4CAF50',
@@ -4729,47 +4827,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginLeft: 8,
     flex: 1,
-  },
-  sortDropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 1000,
-  },
-  sortOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  sortOptionActive: {
-    backgroundColor: '#F8F9FA',
-  },
-  sortOptionText: {
-    fontSize: 16,
-    color: '#666',
-    flex: 1,
-  },
-  sortOptionTextActive: {
-    color: '#4CAF50',
-    fontWeight: '600',
   },
   resultsContainer: {
     marginBottom: 20,
@@ -4854,48 +4911,150 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  filterPillsContainer: {
+  // New Search and Filter Styles
+  searchFilterContainer: {
     marginHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  filterPillsScrollContent: {
-    paddingRight: 20,
+  searchBarContainer: {
+    marginBottom: 16,
   },
-  filterPill: {
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    marginRight: 12,
-    borderWidth: 1.5,
-    borderColor: '#E8F5E8',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    height: 56,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    elevation: 3,
-    minWidth: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
   },
-  filterPillActive: {
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: 'transparent',
+    marginLeft: 12,
+    paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  filterSortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  onlineFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+    gap: 6,
+  },
+  onlineFilterActive: {
     backgroundColor: '#4CAF50',
     borderColor: '#4CAF50',
-    shadowColor: '#4CAF50',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  filterPillText: {
+  onlineFilterText: {
+    fontSize: 13,
     color: '#4CAF50',
-    fontSize: 14,
     fontWeight: '600',
-    textAlign: 'center',
   },
-  filterPillTextActive: {
+  onlineFilterTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
+  },
+  sortDropdown: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  sortDropdownText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    flex: 1,
+  },
+  specializationFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+    gap: 6,
+  },
+  specializationFilterActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  specializationFilterText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  specializationFilterTextActive: {
+    color: '#FFFFFF',
+  },
+  sortOptionsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+    overflow: 'hidden',
+  },
+  sortOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  sortOptionActive: {
+    backgroundColor: '#F8F9FA',
+  },
+  sortOptionText: {
+    fontSize: 15,
+    color: '#333',
+    flex: 1,
+  },
+  sortOptionTextActive: {
+    color: '#4CAF50',
+    fontWeight: '600',
   },
   doctorsListNew: {
     flexDirection: 'column',
@@ -5383,6 +5542,51 @@ const styles = StyleSheet.create({
   tabIcon: {
     fontSize: 24,
     marginBottom: 4,
+  },
+  hamburgerButton: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  hamburgerIcon: {
+    width: 20,
+    height: 16,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  hamburgerLine: {
+    height: 2,
+    backgroundColor: '#666',
+    borderRadius: 1,
+  },
+  hamburgerLine1: {
+    width: 18,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+  },
+  hamburgerLine2: {
+    width: 14,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+  },
+  hamburgerLine3: {
+    width: 10,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    textAlign: 'center',
+    height: 60,
+    lineHeight: 60,
   },
 });
 

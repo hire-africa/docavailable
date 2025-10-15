@@ -5,21 +5,21 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    BackHandler,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  BackHandler,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -1162,7 +1162,7 @@ export default function DoctorDashboard() {
       }
     >
       {/* Welcome Section - Updated to match patient dashboard */}
-      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
+      <View style={{...styles.header, alignItems: 'center', flexDirection: 'column', gap: 0, marginTop: 20, marginBottom: 24}}>
         {/* User Avatar */}
         <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 12 }}>
           {user?.profile_picture_url ? (
@@ -1207,28 +1207,8 @@ export default function DoctorDashboard() {
         </Text>
       </View>
 
-      {/* Pending Requests Summary */}
-      {bookingRequests.length > 0 && (
-        <View style={styles.pendingRequestsCard}>
-          <View style={styles.pendingRequestsHeader}>
-            <Icon name="clock" size={20} color="#666" />
-            <Text style={styles.pendingRequestsTitle}>
-              {bookingRequests.length} Pending Booking Request{bookingRequests.length !== 1 ? 's' : ''}
-            </Text>
-          </View>
-          <Text style={styles.pendingRequestsSubtitle}>
-            Review and respond to patient booking requests
-          </Text>
-          <TouchableOpacity 
-            style={styles.viewRequestsButton}
-            onPress={() => setActiveTab('appointments')}
-          >
-            <Text style={styles.viewRequestsButtonText}>View Requests</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
-      <View style={styles.quickActions}>
+      <View style={[styles.quickActions, { marginTop: 20 }]}>
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionGrid}>
           <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
@@ -1309,11 +1289,6 @@ export default function DoctorDashboard() {
         />
       }
     >
-      {/* Header */}
-      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
-        <Text style={{fontSize: 28, fontWeight: 'bold', color: '#222', textAlign: 'center', marginBottom: 8}}>Appointments</Text>
-        <Text style={{fontSize: 16, color: '#7CB18F', textAlign: 'center'}}>Review and manage patient appointments</Text>
-      </View>
       
       {/* Sub-tab button group */}
       <View style={{ flexDirection: 'row', marginBottom: 24, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 4, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
@@ -1401,54 +1376,6 @@ export default function DoctorDashboard() {
         )
       )}
       
-      {/* Expired Appointments Section */}
-      {appointmentsTab === 'requests' && bookingRequests.filter(request => isAppointmentExpired(request.date, request.time)).length > 0 && (
-        <View style={{marginTop: 24}}>
-          <Text style={{fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 16, marginLeft: 4}}>Expired Appointments</Text>
-          <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
-            {bookingRequests.filter(request => isAppointmentExpired(request.date, request.time)).map((request) => {
-              const isExpired = isAppointmentExpired(request.date, request.time);
-              return (
-                <TouchableOpacity
-                  key={request.id}
-                  style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1, borderLeftWidth: 4, borderLeftColor: '#FF9800'}}
-                  onPress={() => setSelectedRequest(request)}
-                  activeOpacity={0.8}
-                >
-                  <View style={{width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
-                    <DoctorProfilePicture
-                      profilePictureUrl={request.patientProfilePictureUrl}
-                      profilePicture={request.patientProfilePicture}
-                      size={48}
-                      name={request.patient_name}
-                    />
-                  </View>
-                  <View style={{flex: 1}}>
-                    <Text style={{fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4}} numberOfLines={1}>{request.patient_name}</Text>
-                    <Text style={{fontSize: 14, color: '#7CB18F', marginBottom: 2}}>{formatDate(request.date)} • {formatTime(request.time)}</Text>
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                      <View style={{backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, marginRight: 8}}>
-                        <Text style={{color: '#2E7D32', fontWeight: '600', fontSize: 12}}>{getConsultationTypeLabel(request.appointment_type)}</Text>
-                      </View>
-                      <View style={{backgroundColor: '#FFE0B2', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
-                        <Text style={{color: '#E65100', fontWeight: '600', fontSize: 12}}>Expired</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={{alignItems: 'center', justifyContent: 'center'}}>
-                    <TouchableOpacity
-                      style={{backgroundColor: '#FF5722', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12}}
-                      onPress={() => handleDeleteExpiredAppointment(request)}
-                    >
-                      <Text style={{color: '#fff', fontWeight: 'bold', fontSize: 12}}>Delete</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
       
       {/* Accepted Sessions Tab */}
       {appointmentsTab === 'accepted' && (
@@ -1906,11 +1833,6 @@ export default function DoctorDashboard() {
 
   const renderWorkingHoursContent = () => (
     <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={{...styles.header, backgroundColor: '#F8F9FA', alignItems: 'center', flexDirection: 'column', gap: 0, marginBottom: 24}}>
-        <Text style={{fontSize: 28, fontWeight: 'bold', color: '#222', textAlign: 'center', marginBottom: 8}}>Working Hours</Text>
-        <Text style={{fontSize: 16, color: '#7CB18F', textAlign: 'center'}}>Set your availability for patient appointments</Text>
-      </View>
       
       {/* Working Hours Component */}
       <View style={{marginBottom: 20}}>
@@ -2064,17 +1986,58 @@ export default function DoctorDashboard() {
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, backgroundColor: '#F8F9FA', zIndex: 10 }}>
-        <TouchableOpacity style={styles.profileButton} onPress={openSidebar}>
-          <Icon name="user" size={20} color="#666" />
+      <View style={{ 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: 4, 
+        backgroundColor: '#FFFFFF', 
+        zIndex: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        marginBottom: 8,
+      }}>
+        <TouchableOpacity style={styles.hamburgerButton} onPress={openSidebar}>
+          <View style={styles.hamburgerIcon}>
+            <View style={styles.hamburgerLine1} />
+            <View style={styles.hamburgerLine2} />
+            <View style={styles.hamburgerLine3} />
+          </View>
         </TouchableOpacity>
         
-        {/* DocAvailable Logo */}
-        <Image 
-          source={require('../assets/images/DA logo green.png')} 
-          style={styles.headerLogo}
-          resizeMode="contain"
-        />
+        {/* Dynamic Header Content */}
+        {activeTab === 'home' ? (
+          <Image 
+            source={require('../assets/images/DA logo green.png')} 
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+        ) : activeTab === 'appointments' ? (
+          <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>Appointments</Text>
+          </View>
+        ) : activeTab === 'messages' ? (
+          <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>Messages</Text>
+          </View>
+        ) : activeTab === 'working-hours' ? (
+          <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>Working Hours</Text>
+          </View>
+        ) : activeTab === 'profile' ? (
+          <View style={{ height: 60, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>Profile</Text>
+          </View>
+        ) : (
+          <Image 
+            source={require('../assets/images/DA logo green.png')} 
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+        )}
         
         {/* Spacer to balance the layout */}
         <View style={{ width: 44 }} />
@@ -2082,42 +2045,43 @@ export default function DoctorDashboard() {
 
       <View style={styles.mainContent}>
         {renderContent()}
-        <BottomNavigation
-          tabs={[
-            {
-              icon: "home",
-              label: "Home",
-              isActive: activeTab === 'home',
-              onPress: () => setActiveTab('home')
-            },
-            {
-              icon: "calendar",
-              label: "Appointments",
-              isActive: activeTab === 'appointments',
-              onPress: () => setActiveTab('appointments'),
-              badge: bookingRequests.length > 0 ? bookingRequests.length : undefined
-            },
-            {
-              icon: "comments",
-              label: "Messages",
-              isActive: activeTab === 'messages',
-              onPress: () => setActiveTab('messages')
-            },
-            {
-              icon: "clock",
-              label: "Working Hours",
-              isActive: activeTab === 'working-hours',
-              onPress: () => setActiveTab('working-hours')
-            },
-            ...(activeTab === 'accepted' ? [{
-              icon: "calendar",
-              label: "Accepted",
-              isActive: activeTab === 'accepted',
-              onPress: () => setActiveTab('accepted')
-            }] : [])
-          ]}
-        />
       </View>
+      
+      <BottomNavigation
+        tabs={[
+          {
+            icon: "home",
+            label: "Home",
+            isActive: activeTab === 'home',
+            onPress: () => setActiveTab('home')
+          },
+          {
+            icon: "calendar",
+            label: "Appointments",
+            isActive: activeTab === 'appointments',
+            onPress: () => setActiveTab('appointments'),
+            badge: bookingRequests.length > 0 ? bookingRequests.length : undefined
+          },
+          {
+            icon: "comments",
+            label: "Messages",
+            isActive: activeTab === 'messages',
+            onPress: () => setActiveTab('messages')
+          },
+          {
+            icon: "clock",
+            label: "Working Hours",
+            isActive: activeTab === 'working-hours',
+            onPress: () => setActiveTab('working-hours')
+          },
+          ...(activeTab === 'accepted' ? [{
+            icon: "calendar",
+            label: "Accepted",
+            isActive: activeTab === 'accepted',
+            onPress: () => setActiveTab('accepted')
+          }] : [])
+        ]}
+      />
 
       {/* Sidebar */}
       {sidebarVisible && (
@@ -2251,7 +2215,7 @@ export default function DoctorDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F5F5F5',
   },
   mainContent: {
     flex: 1,
@@ -2260,7 +2224,7 @@ const styles = StyleSheet.create({
     width: '100%',
     display: 'flex',
     flexDirection: 'column',
-    paddingBottom: 80, // Space for bottom navigation
+    paddingBottom: 80, // Space for absolutely positioned bottom navigation
   },
   loadingContainer: {
     flex: 1,
@@ -2571,48 +2535,6 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: '#FF3B30',
-  },
-  pendingRequestsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  pendingRequestsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  pendingRequestsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    marginLeft: 8,
-  },
-  pendingRequestsSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-  },
-  viewRequestsButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  viewRequestsButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   recentActivity: {
     marginBottom: 30,
@@ -3119,7 +3041,39 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   profileButton: {
-    padding: 8,
+    padding: 4,
+  },
+  hamburgerButton: {
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  hamburgerIcon: {
+    width: 20,
+    height: 16,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  hamburgerLine1: {
+    width: 18,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+  },
+  hamburgerLine2: {
+    width: 14,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
+  },
+  hamburgerLine3: {
+    width: 10,
+    height: 4,
+    backgroundColor: '#333',
+    borderRadius: 2,
   },
   headerLogo: {
     width: 140,
@@ -3336,5 +3290,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#666',
     textAlign: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    textAlign: 'center',
+    height: 60,
+    lineHeight: 60,
   },
 }); 

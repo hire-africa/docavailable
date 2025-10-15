@@ -538,11 +538,12 @@ class ChatController extends Controller
                         'other_participant_name' => $otherParticipantName,
                         'appointment_date' => $textSession->started_at,
                         'appointment_time' => date('H:i', strtotime($textSession->started_at)),
-                    'status' => $textSession->status,
-                    'doctor_id' => $textSession->doctor_id,
-                    'patient_id' => $textSession->patient_id,
-                    'other_participant_profile_picture' => $otherParticipantProfilePath,
-                    'other_participant_profile_picture_url' => $otherParticipantProfileUrl
+                        'appointment_type' => 'text', // Text sessions are always text type
+                        'status' => $textSession->status,
+                        'doctor_id' => $textSession->doctor_id,
+                        'patient_id' => $textSession->patient_id,
+                        'other_participant_profile_picture' => $otherParticipantProfilePath,
+                        'other_participant_profile_picture_url' => $otherParticipantProfileUrl
                     ]
                 ]);
             }
@@ -589,6 +590,7 @@ class ChatController extends Controller
                 'other_participant_name' => $otherParticipantName,
                 'appointment_date' => $appointment->appointment_date,
                 'appointment_time' => $appointment->appointment_time,
+                'appointment_type' => $appointment->appointment_type ?? 'text', // Include appointment type with fallback
                 'status' => $appointment->status,
                 'doctor_id' => $appointment->doctor_id,
                 'patient_id' => $appointment->patient_id,

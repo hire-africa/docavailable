@@ -595,7 +595,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
       </View>
 
       {/* Messages Container */}
-      <View style={[styles.messagesContainer, { backgroundColor: '#FFFFFF' }]}>
+      <View style={[styles.messagesContainer, { backgroundColor: '#F8F9FA' }]}>
         <Animated.View 
           style={{
             flex: 1,
@@ -611,7 +611,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
         >
           <ScrollView
             ref={scrollViewRef}
-            style={[styles.messagesList, { backgroundColor: '#FFFFFF' }]}
+            style={[styles.messagesList, { backgroundColor: '#F8F9FA' }]}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               ...styles.messagesContent,
@@ -992,16 +992,16 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
   header: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 0,
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
   },
   headerContent: {
     flexDirection: 'row',
@@ -1066,7 +1066,7 @@ const styles = StyleSheet.create({
   },
   floatingToggleContainer: {
     position: 'absolute',
-    bottom: 80,
+    bottom: 120,
     alignSelf: 'center',
     zIndex: 10,
   },

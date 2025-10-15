@@ -472,6 +472,8 @@ export default function ChatPage() {
     // Text input only enabled for text sessions and text appointments
     if (isTextSession) return true;
     if (appointmentType === 'text') return true;
+    // If appointment type is unknown/null, allow text input as fallback
+    if (!appointmentType) return true;
     // For audio/video appointments, text input is disabled
     return false;
   };
@@ -1705,6 +1707,10 @@ export default function ChatPage() {
               };
               
               setTextSessionInfo(modifiedSessionData);
+              
+              // Set appointment type for text sessions
+              setAppointmentType('text');
+              console.log('✅ [TextSession] Appointment type set to text for text session');
             } else {
               console.error('❌ [InstantSession] Failed to load text session data:', {
                 success: sessionResponse.success,
@@ -1789,13 +1795,16 @@ export default function ChatPage() {
               console.log('📅 [ChatInfo] Loading appointment type:', {
                 appointment_type: chatInfoData.appointment_type,
                 status: chatInfoData.status,
-                appointment_id: chatInfoData.appointment_id
+                appointment_id: chatInfoData.appointment_id,
+                full_chat_info: chatInfoData
               });
               if (chatInfoData.appointment_type) {
                 setAppointmentType(chatInfoData.appointment_type);
                 console.log('✅ [ChatInfo] Appointment type set:', chatInfoData.appointment_type);
               } else {
-                console.log('⚠️ [ChatInfo] No appointment type found in chat info');
+                console.log('⚠️ [ChatInfo] No appointment type found in chat info, defaulting to text input enabled');
+                // Set a default appointment type to prevent null issues
+                setAppointmentType('text');
               }
               
               // Check if session has ended (for doctors)
@@ -3436,7 +3445,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isPatient
                 ? "Patient is waiting for your response..."
                 : !isTextInputEnabled()
-                ? `Text messaging not available for ${appointmentType} appointments - use ${appointmentType === 'video' ? 'video call' : appointmentType === 'audio' ? 'audio call' : 'text messaging'} button instead`
+                ? `Text messaging not available for ${appointmentType || 'this type of'} appointments - use ${appointmentType === 'video' ? 'video call' : appointmentType === 'audio' ? 'audio call' : 'text messaging'} button instead`
                 : isTextAppointment && !textAppointmentSession.isActive
                 ? "Text appointment session will start at appointment time"
                 : !isTextSession && !isAppointmentTime && appointmentDateTime

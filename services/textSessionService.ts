@@ -1,4 +1,5 @@
 // Text Session Service for handling appointment-to-session conversion
+import { getTimezoneInfo, isAppointmentTimeReached } from '../utils/timezoneUtils';
 import { apiService } from './apiService';
 
 export interface TextSession {
@@ -43,12 +44,19 @@ export const textSessionService = {
     try {
       console.log('🔄 [TextSessionService] Creating text session from appointment:', appointment.id);
       
+      // Get user's timezone for backend processing
+      const timezoneInfo = getTimezoneInfo();
+      
       const response = await apiService.post('/text-sessions/create-from-appointment', {
         appointment_id: appointment.id,
         doctor_id: appointment.doctor_id,
         patient_id: appointment.patient_id,
         appointment_type: appointment.appointment_type,
         reason: appointment.reason
+      }, {
+        headers: {
+          'X-User-Timezone': timezoneInfo.userTimezone
+        }
       });
 
       if (response.success && response.data) {
@@ -74,26 +82,27 @@ export const textSessionService = {
       return false;
     }
 
-    // Check if appointment time has been reached
+    // Check if appointment time has been reached using timezone utility
     try {
       const dateStr = appointment.appointment_date;
       const timeStr = appointment.appointment_time;
       
       if (!dateStr || !timeStr) return false;
 
-      let appointmentDateTime;
-      if (dateStr.includes('/')) {
-        // Format: MM/DD/YYYY
-        const [month, day, year] = dateStr.split('/').map(Number);
-        const [hour, minute] = timeStr.split(':').map(Number);
-        appointmentDateTime = new Date(year, month - 1, day, hour, minute);
-      } else {
-        // Format: YYYY-MM-DD
-        appointmentDateTime = new Date(`${dateStr}T${timeStr}`);
-      }
+      // Use timezone utility for consistent time handling
+      const isTimeReached = isAppointmentTimeReached(dateStr, timeStr);
       
-      const now = new Date();
-      return appointmentDateTime.getTime() <= now.getTime();
+      // Debug logging for frontend time validation
+      const timezoneInfo = getTimezoneInfo();
+      console.log('🕐 [TextSessionService] Frontend time validation debug', {
+        appointment_id: appointment.id,
+        appointment_date: dateStr,
+        appointment_time: timeStr,
+        is_time_reached: isTimeReached,
+        ...timezoneInfo
+      });
+      
+      return isTimeReached;
     } catch (error) {
       console.error('Error checking appointment time:', error);
       return false;
