@@ -47,8 +47,11 @@ export default function VerifyResetCode() {
   const handleCodeChange = (value: string, index: number) => {
     if (value.length > 1) return; // Prevent multiple characters
     
+    // Clean the value - remove any non-numeric characters
+    const cleanValue = value.replace(/[^0-9]/g, '');
+    
     const newCode = [...code];
-    newCode[index] = value;
+    newCode[index] = cleanValue;
     setCode(newCode);
 
     // Auto-focus next input
@@ -56,9 +59,16 @@ export default function VerifyResetCode() {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-submit when all digits are entered
-    if (newCode.every(digit => digit !== '') && !loading) {
-      handleVerifyCode();
+    // Auto-submit when all digits are entered - use newCode directly
+    if (newCode.every(digit => digit !== '') && newCode.length === 6 && !loading) {
+      // Use the newCode directly to avoid state timing issues
+      setTimeout(() => {
+        const fullCode = newCode.join('');
+        console.log('Auto-submitting with code:', fullCode, 'length:', fullCode.length);
+        if (fullCode.length === 6) {
+          handleVerifyCodeWithCode(fullCode);
+        }
+      }, 150);
     }
   };
 
@@ -70,20 +80,27 @@ export default function VerifyResetCode() {
 
   const handleVerifyCode = async () => {
     const fullCode = code.join('');
+    await handleVerifyCodeWithCode(fullCode);
+  };
+
+  const handleVerifyCodeWithCode = async (codeToVerify: string) => {
+    console.log('Verifying code:', codeToVerify, 'length:', codeToVerify.length);
+    console.log('Code characters:', codeToVerify.split('').map(c => `'${c}'`).join(', '));
     
-    if (fullCode.length !== 6) {
-      Alert.alert('Error', 'Please enter the complete 6-digit code');
+    if (codeToVerify.length !== 6) {
+      console.error('Code length is not 6:', codeToVerify.length);
       return;
     }
 
     setLoading(true);
     try {
-      await authService.verifyResetCode(email, fullCode);
+      console.log('Sending to API - email:', email, 'code:', codeToVerify);
+      await authService.verifyResetCode(email, codeToVerify);
       
       // Navigate to password reset page with the verified code
       router.push({
         pathname: '/reset-password-with-code',
-        params: { email, code: fullCode, userType }
+        params: { email, code: codeToVerify, userType }
       });
     } catch (error: any) {
       console.error('VerifyResetCode: Error verifying code:', error);

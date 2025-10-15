@@ -188,7 +188,13 @@ export default function NativeGoogleSignIn({
       } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         onError('Google Play Services not available. Please update your device.');
       } else {
-        onError(`Sign-in failed: ${error.message || 'Unknown error'}`);
+        // Check if this is a cancellation error
+        if (error.message && error.message.includes('cancelled')) {
+          console.log('🔐 NativeGoogleSignIn: User cancelled sign-in (detected from message)');
+          onClose();
+        } else {
+          onError(`Sign-in failed: ${error.message || 'Unknown error'}`);
+        }
       }
     } finally {
       setIsLoading(false);

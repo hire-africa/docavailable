@@ -232,7 +232,11 @@ export default function PasswordReset() {
         buttonText="Continue to Login"
         onPress={() => {
           setShowSuccessModal(false);
-          router.replace('/login');
+          // Go directly to login and clear the stack
+          router.push({
+            pathname: '/login',
+            params: { resetStack: true }
+          });
         }}
         icon="check-circle"
         iconColor="#4CAF50"

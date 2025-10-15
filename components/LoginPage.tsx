@@ -243,6 +243,15 @@ export default function LoginPage() {
     const handleGoogleAuthError = (error: string) => {
         console.error('🔐 Google Auth Error:', error);
         setShowGoogleAuth(false);
+        
+        // Don't show alert for user cancellation
+        if (error.includes('cancelled') || 
+            error.includes('No user data received from Google') ||
+            error.includes('SIGN_IN_CANCELLED')) {
+            console.log('🔐 User cancelled Google sign-in, not showing error alert');
+            return;
+        }
+        
         Alert.alert('Google Sign-In Error', error);
     };
 
