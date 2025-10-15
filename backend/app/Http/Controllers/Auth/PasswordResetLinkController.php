@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\PasswordResetMail;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 
 class PasswordResetLinkController extends Controller
@@ -23,39 +27,68 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        $email = $request->email;
+        
+        // Check if user exists
+        $user = User::where('email', $email)->first();
+        
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'We can\'t find a user with that email address.',
+                'error_type' => 'user_not_found'
+            ], 404);
+        }
 
-        if ($status != Password::RESET_LINK_SENT) {
-            throw ValidationException::withMessages([
-                'email' => [__($status)],
+        // Generate password reset token
+        $token = Password::getRepository()->create($user);
+        
+        // Generate reset URL
+        $resetUrl = config('app.frontend_url') . '/password-reset/' . $token . '?email=' . urlencode($email);
+
+        try {
+            // Send custom password reset email
+            Mail::to($user->email)->send(new PasswordResetMail($user, $resetUrl));
+            
+            Log::info('Password reset email sent successfully', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'user_type' => $user->user_type
             ]);
-        }
 
-        // For development: Log the reset link to a file for easy access
-        if (app()->environment('local')) {
-            $email = $request->email;
-            $resetData = [
-                'email' => $email,
-                'timestamp' => now()->toISOString(),
-                'reset_link' => config('app.frontend_url') . '/password-reset/{TOKEN}?email=' . $email,
-                'note' => 'Replace {TOKEN} with the actual token from the email log'
-            ];
-            
-            $logFile = storage_path('logs/password_reset_links.log');
-            File::append($logFile, json_encode($resetData) . "\n");
-            
-            Log::info('Password reset link requested for: ' . $email);
-        }
+            // For development: Log the reset link to a file for easy access
+            if (app()->environment('local')) {
+                $resetData = [
+                    'email' => $email,
+                    'user_id' => $user->id,
+                    'timestamp' => now()->toISOString(),
+                    'reset_url' => $resetUrl,
+                    'token' => $token,
+                    'note' => 'Direct link for testing - expires in 60 minutes'
+                ];
+                
+                $logFile = storage_path('logs/password_reset_links.log');
+                File::append($logFile, json_encode($resetData) . "\n");
+            }
 
-        return response()->json([
-            'success' => true,
-            'message' => __($status),
-            'status' => __($status)
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset link has been sent to your email address.',
+                'status' => 'reset_link_sent'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to send password reset email', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send password reset email. Please try again later.',
+                'error_type' => 'email_send_failed'
+            ], 500);
+        }
     }
 }

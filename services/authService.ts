@@ -330,10 +330,14 @@ class AuthService {
         status: response.status
       });
 
-      return {
-        success: true,
-        message: response.data?.message || 'Password reset link sent successfully'
-      };
+      if (response.data?.success) {
+        return {
+          success: true,
+          message: response.data.message || 'Password reset link sent successfully'
+        };
+      } else {
+        throw new Error(response.data?.message || 'Failed to send password reset link');
+      }
     } catch (error: any) {
       console.error('AuthService: Password reset request error:', error);
       
@@ -367,10 +371,14 @@ class AuthService {
         status: response.status
       });
 
-      return {
-        success: true,
-        message: response.data?.message || 'Password reset successfully'
-      };
+      if (response.data?.success) {
+        return {
+          success: true,
+          message: response.data.message || 'Password reset successfully'
+        };
+      } else {
+        throw new Error(response.data?.message || 'Failed to reset password');
+      }
     } catch (error: any) {
       console.error('AuthService: Password reset error:', error);
       

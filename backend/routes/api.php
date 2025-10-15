@@ -338,6 +338,48 @@ Route::post('/test-email-sending', function (Request $request) {
     }
 });
 
+// Test password reset email endpoint
+Route::post('/test-password-reset-email', function (Request $request) {
+    try {
+        $email = $request->input('email', 'test@docavailable.com');
+        
+        // Find or create a test user
+        $user = \App\Models\User::where('email', $email)->first();
+        if (!$user) {
+            $user = \App\Models\User::create([
+                'first_name' => 'Test',
+                'last_name' => 'User',
+                'email' => $email,
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'user_type' => 'patient',
+                'status' => 'active',
+                'display_name' => 'Test User',
+            ]);
+        }
+        
+        // Generate a test reset URL
+        $resetUrl = config('app.frontend_url') . '/password-reset/test-token-123?email=' . urlencode($email);
+        
+        // Send the password reset email
+        \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\PasswordResetMail($user, $resetUrl));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset test email sent successfully',
+            'email' => $email,
+            'reset_url' => $resetUrl,
+            'user_id' => $user->id
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Password reset test email failed',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
 // Test verification email endpoint
 Route::post('/test-verification-email', function (Request $request) {
     try {

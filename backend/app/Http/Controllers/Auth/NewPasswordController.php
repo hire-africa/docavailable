@@ -43,11 +43,24 @@ class NewPasswordController extends Controller
         );
 
         if ($status != Password::PASSWORD_RESET) {
-            throw ValidationException::withMessages([
-                'email' => [__($status)],
-            ]);
+            $errorMessage = match($status) {
+                Password::INVALID_TOKEN => 'This password reset token is invalid or has expired.',
+                Password::INVALID_USER => 'We can\'t find a user with that email address.',
+                Password::THROTTLED => 'Please wait before retrying.',
+                default => 'Unable to reset password. Please try again.'
+            };
+
+            return response()->json([
+                'success' => false,
+                'message' => $errorMessage,
+                'error_type' => strtolower(str_replace(' ', '_', $status))
+            ], 400);
         }
 
-        return response()->json(['status' => __($status)]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Your password has been reset successfully.',
+            'status' => 'password_reset'
+        ]);
     }
 }
