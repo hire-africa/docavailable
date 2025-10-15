@@ -394,6 +394,86 @@ class AuthService {
     }
   }
 
+  // Verify reset code
+  async verifyResetCode(email: string, code: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('AuthService: Verifying reset code for:', email);
+      
+      const response = await this.api.post('/verify-reset-code', {
+        email,
+        code
+      });
+      
+      console.log('AuthService: Code verification response:', {
+        success: response.data?.success,
+        message: response.data?.message,
+        status: response.status
+      });
+
+      if (response.data?.success) {
+        return {
+          success: true,
+          message: response.data.message || 'Code verified successfully'
+        };
+      } else {
+        throw new Error(response.data?.message || 'Failed to verify code');
+      }
+    } catch (error: any) {
+      console.error('AuthService: Code verification error:', error);
+      
+      let errorMessage = 'Failed to verify code. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    }
+  }
+
+  // Reset password with code
+  async resetPasswordWithCode(email: string, code: string, password: string, passwordConfirmation: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('AuthService: Resetting password with code for:', email);
+      
+      const response = await this.api.post('/reset-password-with-code', {
+        email,
+        code,
+        password,
+        password_confirmation: passwordConfirmation
+      });
+      
+      console.log('AuthService: Password reset with code response:', {
+        success: response.data?.success,
+        message: response.data?.message,
+        status: response.status
+      });
+
+      if (response.data?.success) {
+        return {
+          success: true,
+          message: response.data.message || 'Password reset successfully'
+        };
+      } else {
+        throw new Error(response.data?.message || 'Failed to reset password');
+      }
+    } catch (error: any) {
+      console.error('AuthService: Password reset with code error:', error);
+      
+      let errorMessage = 'Failed to reset password. Please try again.';
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    }
+  }
+
   async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
     try {
       const response = await this.api.post('/google-login', credentials);

@@ -380,6 +380,49 @@ Route::post('/test-password-reset-email', function (Request $request) {
     }
 });
 
+// Test code-based password reset email endpoint
+Route::post('/test-password-reset-code-email', function (Request $request) {
+    try {
+        $email = $request->input('email', 'test@docavailable.com');
+        
+        // Find or create a test user
+        $user = \App\Models\User::where('email', $email)->first();
+        if (!$user) {
+            $user = \App\Models\User::create([
+                'first_name' => 'Test',
+                'last_name' => 'User',
+                'email' => $email,
+                'password' => \Illuminate\Support\Facades\Hash::make('password123'),
+                'user_type' => 'patient',
+                'status' => 'active',
+                'display_name' => 'Test User',
+            ]);
+        }
+        
+        // Generate a test reset code
+        $resetCode = \App\Models\PasswordResetCode::createForEmail($email);
+        
+        // Send the password reset code email
+        \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\PasswordResetCodeMail($user, $resetCode->code));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset code test email sent successfully',
+            'email' => $email,
+            'code' => $resetCode->code,
+            'expires_at' => $resetCode->expires_at->toISOString(),
+            'user_id' => $user->id
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Password reset code test email failed',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
 // Test verification email endpoint
 Route::post('/test-verification-email', function (Request $request) {
     try {
@@ -535,6 +578,10 @@ Route::get('/webhook/auto-deductions', function() {
 // Password reset routes (no auth required) - temporarily without rate limiting for testing
 Route::post('/forgot-password', [\App\Http\Controllers\Auth\PasswordResetLinkController::class, 'store'])->withoutMiddleware(['throttle']);
 Route::post('/reset-password', [\App\Http\Controllers\Auth\NewPasswordController::class, 'store'])->withoutMiddleware(['throttle']);
+
+// Code-based password reset routes
+Route::post('/verify-reset-code', [\App\Http\Controllers\Auth\PasswordResetCodeController::class, 'verifyCode'])->withoutMiddleware(['throttle']);
+Route::post('/reset-password-with-code', [\App\Http\Controllers\Auth\PasswordResetCodeController::class, 'resetPassword'])->withoutMiddleware(['throttle']);
 
 // Public plans routes (no auth required for viewing plans)
 Route::get('/plans/public', [\App\Http\Controllers\PlanController::class, 'getAllPlans']);

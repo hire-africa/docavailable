@@ -3,15 +3,13 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Mail\PasswordResetMail;
+use App\Mail\PasswordResetCodeMail;
+use App\Models\PasswordResetCode;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 
 class PasswordResetLinkController extends Controller
@@ -40,41 +38,39 @@ class PasswordResetLinkController extends Controller
             ], 404);
         }
 
-        // Generate password reset token
-        $token = Password::getRepository()->create($user);
-        
-        // Generate reset URL
-        $resetUrl = config('app.frontend_url') . '/password-reset/' . $token . '?email=' . urlencode($email);
+        // Generate password reset code
+        $resetCode = PasswordResetCode::createForEmail($email);
 
         try {
-            // Send custom password reset email
-            Mail::to($user->email)->send(new PasswordResetMail($user, $resetUrl));
+            // Send custom password reset code email
+            Mail::to($user->email)->send(new PasswordResetCodeMail($user, $resetCode->code));
             
-            Log::info('Password reset email sent successfully', [
+            Log::info('Password reset code sent successfully', [
                 'user_id' => $user->id,
                 'email' => $user->email,
-                'user_type' => $user->user_type
+                'user_type' => $user->user_type,
+                'code' => $resetCode->code
             ]);
 
-            // For development: Log the reset link to a file for easy access
+            // For development: Log the reset code to a file for easy access
             if (app()->environment('local')) {
                 $resetData = [
                     'email' => $email,
                     'user_id' => $user->id,
                     'timestamp' => now()->toISOString(),
-                    'reset_url' => $resetUrl,
-                    'token' => $token,
-                    'note' => 'Direct link for testing - expires in 60 minutes'
+                    'code' => $resetCode->code,
+                    'expires_at' => $resetCode->expires_at->toISOString(),
+                    'note' => 'Code for testing - expires in 10 minutes'
                 ];
                 
-                $logFile = storage_path('logs/password_reset_links.log');
-                File::append($logFile, json_encode($resetData) . "\n");
+                $logFile = storage_path('logs/password_reset_codes.log');
+                \Illuminate\Support\Facades\File::append($logFile, json_encode($resetData) . "\n");
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Password reset link has been sent to your email address.',
-                'status' => 'reset_link_sent'
+                'message' => 'Password reset code has been sent to your email address.',
+                'status' => 'reset_code_sent'
             ]);
 
         } catch (\Exception $e) {

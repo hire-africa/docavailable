@@ -47,19 +47,12 @@ export default function ForgotPassword() {
     try {
       await authService.forgotPassword(email.trim());
       setEmailSent(true);
-      Alert.alert(
-        'Success',
-        'Password reset link has been sent to your email address. Please check your inbox and follow the instructions.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Navigate back to login with userType preserved
-              navigateToLogin({ userType });
-            }
-          }
-        ]
-      );
+      
+      // Navigate to code verification page
+      router.push({
+        pathname: '/verify-reset-code',
+        params: { email: email.trim(), userType }
+      });
     } catch (error: any) {
       console.error('ForgotPassword: Error requesting reset:', error);
       Alert.alert('Error', error.message || 'Failed to send password reset link. Please try again.');
