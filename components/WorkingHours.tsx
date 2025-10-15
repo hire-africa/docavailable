@@ -2,7 +2,8 @@ import { FontAwesome } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
+    ActivityIndicator,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -29,7 +30,6 @@ interface DoctorAvailability {
     isOnline: boolean;
     workingHours: WorkingHours;
     maxPatientsPerDay: number;
-    autoAcceptAppointments: boolean;
 }
 
 const WorkingHours: React.FC = () => {
@@ -46,11 +46,12 @@ const WorkingHours: React.FC = () => {
             sunday: { enabled: false, slots: [{ start: '09:00', end: '17:00' }] },
         },
         maxPatientsPerDay: 10,
-        autoAcceptAppointments: false,
     });
 
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+    const [showOnlineModal, setShowOnlineModal] = useState(false);
 
     const days = [
         { key: 'monday', label: 'Monday', icon: 'calendar' as const },
@@ -82,29 +83,33 @@ const WorkingHours: React.FC = () => {
     const loadAvailability = async () => {
         try {
             setLoading(true);
-            // console.log('WorkingHours: Loading availability for user:', user?.id);
+            console.log('[WorkingHours] Loading availability for user:', user?.id);
             
             if (!user?.id) {
-                // console.log('WorkingHours: No user ID found');
+                console.log('[WorkingHours] No user ID found');
                 return;
             }
             
             const response = await authService.getDoctorAvailability(user.id.toString());
-            // console.log('WorkingHours: API response:', response);
+            console.log('[WorkingHours] API response:', response);
             
             if (response.success && response.data) {
                 // Map backend snake_case to frontend camelCase
                 const data = response.data;
-                // console.log('WorkingHours: Mapped data:', data);
+                console.log('[WorkingHours] Mapped data:', data);
                 
-                setAvailability({
+                const newAvailability = {
                     isOnline: data.is_online || false,
                     workingHours: data.working_hours || availability.workingHours,
                     maxPatientsPerDay: data.max_patients_per_day || 10,
-                    autoAcceptAppointments: data.auto_accept_appointments || false,
-                });
+                };
+                
+                console.log('[WorkingHours] Setting availability:', newAvailability);
+                setAvailability(newAvailability);
+                setBackendData(data);
+                console.log('[WorkingHours] Availability state updated');
             } else {
-                // console.log('WorkingHours: API call failed:', response.message);
+                console.log('[WorkingHours] API call failed:', response.message);
             }
         } catch (error) {
             console.error('WorkingHours: Error loading availability:', error);
@@ -116,10 +121,10 @@ const WorkingHours: React.FC = () => {
     const saveAvailability = async () => {
         try {
             setSaving(true);
-            // console.log('WorkingHours: Saving availability for user:', user?.id);
+            setSaveSuccess(false);
             
             if (!user?.id) {
-                Alert.alert('Error', 'User not found');
+                console.error('WorkingHours: User not found');
                 return;
             }
             
@@ -128,34 +133,51 @@ const WorkingHours: React.FC = () => {
                 is_online: availability.isOnline,
                 working_hours: availability.workingHours,
                 max_patients_per_day: availability.maxPatientsPerDay,
-                auto_accept_appointments: availability.autoAcceptAppointments,
             };
             
-            // console.log('WorkingHours: Sending data to backend:', backendData);
-            
             const response = await authService.updateDoctorAvailability(user.id.toString(), backendData);
-            // console.log('WorkingHours: Save response:', response);
             
             if (response.success) {
-                Alert.alert('Success', 'Availability settings updated successfully!');
-                // Reload the data after successful save to ensure UI is in sync
-                await loadAvailability();
+                setSaveSuccess(true);
+                // Hide success state after 2 seconds
+                setTimeout(() => {
+                    setSaveSuccess(false);
+                }, 2000);
             } else {
-                Alert.alert('Error', response.message || 'Failed to update availability');
+                console.error('WorkingHours: Save failed:', response.message);
             }
         } catch (error) {
             console.error('WorkingHours: Error saving availability:', error);
-            Alert.alert('Error', 'Failed to save availability settings. Please try again.');
         } finally {
             setSaving(false);
         }
     };
 
     const toggleOnlineStatus = () => {
+        const newOnlineStatus = !availability.isOnline;
+        
+        if (newOnlineStatus) {
+            // Show modal when turning online
+            setShowOnlineModal(true);
+        } else {
+            // Directly toggle off without modal
+            setAvailability(prev => ({
+                ...prev,
+                isOnline: newOnlineStatus,
+            }));
+        }
+    };
+
+    const confirmOnlineStatus = () => {
         setAvailability(prev => ({
             ...prev,
-            isOnline: !prev.isOnline,
+            isOnline: true,
         }));
+        setShowOnlineModal(false);
+    };
+
+    const cancelOnlineStatus = () => {
+        setShowOnlineModal(false);
     };
 
     const toggleDay = (day: string) => {
@@ -291,6 +313,7 @@ const WorkingHours: React.FC = () => {
                 </View>
             </View>
 
+
             {/* Quick Stats */}
             <View style={styles.statsContainer}>
                 <View style={styles.statCard}>
@@ -399,11 +422,11 @@ const WorkingHours: React.FC = () => {
             {/* Appointment Settings Section */}
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                    <FontAwesome name="cog" size={20} color="#007AFF" />
+                    <FontAwesome name="users" size={20} color="#007AFF" />
                     <Text style={styles.sectionTitle}>Appointment Settings</Text>
                 </View>
                 <Text style={styles.sectionDescription}>
-                    Configure your appointment preferences and consultation settings.
+                    Configure your daily appointment capacity.
                 </Text>
 
                 <View style={styles.settingRow}>
@@ -422,33 +445,29 @@ const WorkingHours: React.FC = () => {
                         placeholder="10"
                     />
                 </View>
-
-                <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                        <Text style={styles.settingTitle}>Auto-Accept Appointments</Text>
-                        <Text style={styles.settingDescription}>Automatically accept appointment requests</Text>
-                    </View>
-                    <Switch
-                        value={availability.autoAcceptAppointments}
-                        onValueChange={(value) => setAvailability(prev => ({
-                            ...prev,
-                            autoAcceptAppointments: value
-                        }))}
-                        trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
-                        thumbColor={availability.autoAcceptAppointments ? '#fff' : '#f4f3f4'}
-                    />
-                </View>
             </View>
 
             {/* Save Button */}
             <View style={styles.saveSection}>
                 <TouchableOpacity
-                    style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                    style={[
+                        styles.saveButton, 
+                        saving && styles.saveButtonDisabled,
+                        saveSuccess && styles.saveButtonSuccess
+                    ]}
                     onPress={saveAvailability}
                     disabled={saving}
                 >
                     {saving ? (
-                        <Text style={styles.saveButtonText}>Saving...</Text>
+                        <>
+                            <ActivityIndicator size="small" color="#fff" />
+                            <Text style={styles.saveButtonText}>Saving...</Text>
+                        </>
+                    ) : saveSuccess ? (
+                        <>
+                            <FontAwesome name="check" size={16} color="#fff" />
+                            <Text style={styles.saveButtonText}>Saved!</Text>
+                        </>
                     ) : (
                         <>
                             <FontAwesome name="save" size={16} color="#fff" />
@@ -457,6 +476,44 @@ const WorkingHours: React.FC = () => {
                     )}
                 </TouchableOpacity>
             </View>
+
+            {/* Online Status Confirmation Modal */}
+            <Modal
+                visible={showOnlineModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={cancelOnlineStatus}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalIconContainer}>
+                                <FontAwesome name="exclamation-triangle" size={24} color="#FF9500" />
+                            </View>
+                            <Text style={styles.modalTitle}>Important Notice</Text>
+                        </View>
+                        
+                        <Text style={styles.modalMessage}>
+                            Only turn online when you're actively available. Remember to turn off when going offline to avoid account restrictions.
+                        </Text>
+                        
+                        <View style={styles.modalButtons}>
+                            <TouchableOpacity
+                                style={styles.modalCancelButton}
+                                onPress={cancelOnlineStatus}
+                            >
+                                <Text style={styles.modalCancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.modalConfirmButton}
+                                onPress={confirmOnlineStatus}
+                            >
+                                <Text style={styles.modalConfirmText}>I Understand</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -464,13 +521,13 @@ const WorkingHours: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F5F7FA',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        backgroundColor: '#F5F7FA',
     },
     loadingText: {
         fontSize: 16,
@@ -507,16 +564,16 @@ const styles = StyleSheet.create({
     section: {
         backgroundColor: '#fff',
         margin: 16,
-        borderRadius: 16,
-        padding: 20,
+        borderRadius: 20,
+        padding: 24,
         shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 3,
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 4,
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -719,25 +776,104 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#4CAF50',
-        borderRadius: 12,
-        padding: 16,
-        shadowColor: '#000',
+        borderRadius: 16,
+        padding: 18,
+        shadowColor: '#4CAF50',
         shadowOffset: {
             width: 0,
-            height: 2,
+            height: 4,
         },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     saveButtonDisabled: {
         backgroundColor: '#ccc',
+    },
+    saveButtonSuccess: {
+        backgroundColor: '#4CAF50',
     },
     saveButtonText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
         marginLeft: 8,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 10,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalIconContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#FFF8E1',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+        textAlign: 'center',
+    },
+    modalMessage: {
+        fontSize: 16,
+        color: '#666',
+        lineHeight: 24,
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelButton: {
+        flex: 1,
+        backgroundColor: '#F5F5F5',
+        borderRadius: 12,
+        padding: 16,
+        alignItems: 'center',
+    },
+    modalCancelText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
+    },
+    modalConfirmButton: {
+        flex: 1,
+        backgroundColor: '#4CAF50',
+        borderRadius: 12,
+        padding: 16,
+        alignItems: 'center',
+    },
+    modalConfirmText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#fff',
     },
 });
 

@@ -15,6 +15,9 @@ export class WebRTCChatService {
   private storageKey: string;
   private processedMessageHashes: Set<string> = new Set();
   private onTypingIndicator?: (isTyping: boolean) => void;
+  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private lastPingTime = 0;
+  private pingTimeout = 30000; // 30 seconds
 
   constructor(config: ChatConfig, events: ChatEvents) {
     console.log('🔧 [WebRTCChat] Constructor called with config:', {
@@ -89,6 +92,9 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
+          
+          // Start health monitoring
+          this.startHealthCheck();
           
           // Auto-sync with server when connecting to ensure we have latest messages
           try {
@@ -205,6 +211,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             } else if (data.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
               this.onTypingIndicator?.(data.isTyping, data.senderId);
+            } else if (data.type === 'pong') {
+              // Update last ping time when we receive pong
+              this.lastPingTime = Date.now();
+              console.log('🏓 [WebRTCChat] Pong received, connection healthy');
             }
           } catch (error) {
             console.error('❌ Error parsing WebRTC chat message:', error);
@@ -228,6 +238,27 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             return;
           }
           
+          // Handle SSL/TLS connection errors with retry logic
+          if (error.message && (
+            error.message.includes('Connection reset by peer') ||
+            error.message.includes('ssl') ||
+            error.message.includes('TLS') ||
+            error.message.includes('SSL')
+          )) {
+            console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected, will retry...');
+            this.events.onError('Connection error, retrying...');
+            
+            // Don't reject immediately for SSL errors, let reconnection handle it
+            setTimeout(() => {
+              if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.handleReconnect();
+              } else {
+                reject(new Error('SSL connection failed after multiple attempts'));
+              }
+            }, 2000);
+            return;
+          }
+          
           this.events.onError('WebRTC connection error');
           reject(error);
         };
@@ -235,6 +266,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         this.websocket.onclose = (event) => {
           console.log('🔌 WebRTC chat disconnected:', event.code);
           this.isConnected = false;
+          this.stopHealthCheck();
           
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.handleReconnect();
@@ -610,6 +642,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
   }
 
   async disconnect(): Promise<void> {
+    this.stopHealthCheck();
     if (this.websocket) {
       this.websocket.close(1000, 'Normal closure');
       this.websocket = null;
@@ -618,8 +651,21 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
   }
 
   private handleReconnect(): void {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('❌ [WebRTCChat] Max reconnection attempts reached');
+      this.events.onError('Connection lost. Please refresh the session.');
+      return;
+    }
+
     this.reconnectAttempts++;
-    console.log(`🔄 Attempting WebRTC chat reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+    
+    // Exponential backoff with jitter for better reconnection
+    const baseDelay = this.reconnectDelay;
+    const exponentialDelay = baseDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const jitter = Math.random() * 1000; // Add up to 1 second of jitter
+    const finalDelay = Math.min(exponentialDelay + jitter, 30000); // Cap at 30 seconds
+    
+    console.log(`🔄 [WebRTCChat] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${Math.round(finalDelay)}ms...`);
     
     setTimeout(() => {
       this.connect().catch(error => {
@@ -628,11 +674,42 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           this.handleReconnect();
         }
       });
-    }, this.reconnectDelay * this.reconnectAttempts);
+    }, finalDelay);
   }
 
   getConnectionStatus(): boolean {
     return this.isConnected;
+  }
+
+  private startHealthCheck(): void {
+    this.stopHealthCheck();
+    this.lastPingTime = Date.now();
+    
+    this.healthCheckInterval = setInterval(() => {
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        const now = Date.now();
+        if (now - this.lastPingTime > this.pingTimeout) {
+          console.warn('🔄 [WebRTCChat] Health check timeout, reconnecting...');
+          this.handleReconnect();
+        } else {
+          // Send ping to keep connection alive
+          try {
+            this.websocket.send(JSON.stringify({ type: 'ping', timestamp: now }));
+            this.lastPingTime = now;
+          } catch (error) {
+            console.error('❌ [WebRTCChat] Failed to send ping:', error);
+            this.handleReconnect();
+          }
+        }
+      }
+    }, 10000); // Check every 10 seconds
+  }
+
+  private stopHealthCheck(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
   }
 
   // Set typing indicator callback

@@ -2,14 +2,14 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { apiService } from '../../../app/services/apiService';
@@ -18,6 +18,7 @@ import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import { useAuth } from '../../../contexts/AuthContext';
 import { imageCacheService } from '../../../services/imageCacheService';
 import { paymentsService } from '../../../services/paymentsService';
+import { addRealtimeActivity } from '../../../utils/activityUtils';
 
 const availableTimes = [
   '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -805,7 +806,7 @@ export default function BookAppointmentFlow() {
         <View style={styles.successActionButtons}>
           <TouchableOpacity 
             style={styles.continueBtn} 
-            onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover' } })}
+            onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover', newAppointment: 'true' } })}
           >
             <Text style={styles.continueBtnText}>Continue Browsing</Text>
           </TouchableOpacity>
@@ -864,6 +865,21 @@ export default function BookAppointmentFlow() {
         };
         const createRes = await apiService.post('/appointments', payload);
         if (createRes.success) {
+          // Add real-time activity for appointment offer sent
+          const newActivity = addRealtimeActivity(
+            [], // We'll pass this to the dashboard
+            'appointment_offer_sent',
+            'Appointment Offer Sent',
+            `Appointment offer sent to Dr. ${doctorName} for ${selectedDate} at ${customTime}`,
+            {
+              doctorName,
+              patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
+              appointmentType: consultationType,
+              date: selectedDate,
+              time: customTime
+            }
+          );
+          
           setStep(3);
           return;
         }

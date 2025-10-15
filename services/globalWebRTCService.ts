@@ -69,6 +69,20 @@ class GlobalWebRTCServiceClass implements GlobalWebRTCService {
         console.error('❌ [GlobalWebRTCService] WebSocket error:', error);
         this.isConnected = false;
         
+        // Handle SSL/TLS connection errors with retry logic
+        if (error.message && (
+          error.message.includes('Connection reset by peer') ||
+          error.message.includes('ssl') ||
+          error.message.includes('TLS') ||
+          error.message.includes('SSL')
+        )) {
+          console.warn('🔄 [GlobalWebRTCService] SSL/TLS connection error detected, will retry...');
+          setTimeout(() => {
+            this.scheduleReconnect();
+          }, 2000);
+          return;
+        }
+        
         // Don't immediately reconnect on control frame errors
         if (error.message && error.message.includes('Control frames must be final')) {
           console.log('🔄 [GlobalWebRTCService] Control frame error detected, will retry connection');

@@ -178,6 +178,15 @@ export default function InstantSessionsScreen() {
         setActiveSession(data.data);
         setShowDirectBookingModal(false);
         
+        // Add real-time activity for session started
+        const activityType = sessionType === 'text' ? 'text_session_started' : 
+                           sessionType === 'audio' ? 'audio_session_started' : 
+                           'video_session_started';
+        
+        // Note: We can't directly update activities here since this component doesn't have access to the dashboard state
+        // The activity will be added when the user returns to the dashboard
+        console.log(`[ActivitySystem] ${sessionType} session started with Dr. ${selectedDoctor.first_name} ${selectedDoctor.last_name}`);
+        
         // Navigate to appropriate screen based on session type
         if (sessionType === 'text') {
           // Navigate directly to chat without showing alert

@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
+import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
@@ -105,6 +106,7 @@ export default function DoctorDashboard() {
   const [ratings, setRatings] = useState<any[]>([]);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingConfirmed, setLoadingConfirmed] = useState(false);
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
@@ -241,6 +243,13 @@ export default function DoctorDashboard() {
     }
   }, [user]);
 
+  // Refresh activities when appointments change or when user logs in
+  useEffect(() => {
+    if (user && user.id) {
+      loadActivities();
+    }
+  }, [user, bookingRequests, confirmedAppointments]);
+
   const updateEnabledDaysCount = async () => {
     try {
       if (!user?.id) return;
@@ -352,6 +361,7 @@ export default function DoctorDashboard() {
         const requests = rawRequests.map((request: any) => ({
           id: request.id,
           patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+          doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
           patientProfilePictureUrl: request.patient?.profile_picture_url,
           patientProfilePicture: request.patient?.profile_picture,
           patientEmail: request.patient?.email,
@@ -421,6 +431,7 @@ export default function DoctorDashboard() {
           .map((request: any) => ({
             id: request.id,
             patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+            doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
             patientProfilePictureUrl: request.patient?.profile_picture_url,
             patientProfilePicture: request.patient?.profile_picture,
             patientEmail: request.patient?.email,
@@ -512,6 +523,54 @@ export default function DoctorDashboard() {
     }
   };
 
+  const loadActivities = async () => {
+    try {
+      // Small delay to ensure data is loaded
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Filter out cancelled appointments to prevent showing cancelled activities
+      const activeBookingRequests = bookingRequests.filter(req => req.status !== 'cancelled' && req.status !== 2);
+      const activeConfirmedAppointments = confirmedAppointments.filter(apt => apt.status !== 'cancelled' && apt.status !== 2);
+      
+      console.log('[DoctorDashboard] Filtered appointment data:', {
+        originalBookingRequests: bookingRequests.length,
+        filteredBookingRequests: activeBookingRequests.length,
+        originalConfirmedAppointments: confirmedAppointments.length,
+        filteredConfirmedAppointments: activeConfirmedAppointments.length
+      });
+      
+      // Generate activities from real user data (using filtered data)
+      const userActivities = generateUserActivities(
+        'doctor',
+        userData,
+        [...activeBookingRequests, ...activeConfirmedAppointments],
+        [], // messages - you can add this if you have message data
+        null // subscription - you can add this if you have subscription data
+      );
+      
+      // Merge with existing activities, preserving real-time activities
+      setActivities(prevActivities => {
+        // Keep real-time activities (those created in the last 5 minutes)
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const realtimeActivities = prevActivities.filter(activity => 
+          activity.timestamp > fiveMinutesAgo
+        );
+        
+        // Combine real-time activities with generated activities
+        const combinedActivities = [...realtimeActivities, ...userActivities];
+        
+        // Remove duplicates and sort by timestamp
+        const uniqueActivities = combinedActivities.filter((activity, index, self) => 
+          index === self.findIndex(a => a.id === activity.id)
+        );
+        
+        return uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      });
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    }
+  };
+
   const handleAcceptBooking = async (request: BookingRequest) => {
     // Check if appointment is expired
     if (isAppointmentExpired(request.date, request.time)) {
@@ -537,6 +596,22 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Booking request accepted successfully!');
+        
+        // Add real-time activity for appointment accepted
+        setActivities(prevActivities => 
+          addRealtimeActivity(
+            prevActivities,
+            'appointment_offer_accepted',
+            'Appointment Accepted',
+            `You accepted an appointment request from ${request.patient_name}`,
+            {
+              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
+              patientName: request.patient_name,
+              appointmentType: request.appointment_type
+            }
+          )
+        );
+        
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
@@ -581,6 +656,22 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Booking request rejected.');
+        
+        // Add real-time activity for appointment rejected
+        setActivities(prevActivities => 
+          addRealtimeActivity(
+            prevActivities,
+            'appointment_offer_rejected',
+            'Appointment Rejected',
+            `You rejected an appointment request from ${request.patient_name}`,
+            {
+              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
+              patientName: request.patient_name,
+              appointmentType: request.appointment_type
+            }
+          )
+        );
+        
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
@@ -763,6 +854,22 @@ export default function DoctorDashboard() {
 
       if (response.success) {
         showSuccess('Success', 'Withdrawal request submitted successfully!');
+        
+        // Add real-time activity for withdrawal requested
+        setActivities(prevActivities => 
+          addRealtimeActivity(
+            prevActivities,
+            'withdrawal_requested',
+            'Withdrawal Requested',
+            `You requested a withdrawal of $${withdrawalAmount} via ${withdrawalMethod}`,
+            {
+              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
+              amount: withdrawalAmount,
+              method: withdrawalMethod
+            }
+          )
+        );
+        
         setWithdrawalAmount('');
         fetchWalletInfo(); // Refresh wallet info
       } else {
@@ -1240,27 +1347,80 @@ export default function DoctorDashboard() {
       </View>
 
       <View style={styles.recentActivity}>
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
-        {bookingRequests.length > 0 ? (
-          <View style={styles.activityCard}>
-            <View style={styles.activityHeader}>
-              <Icon name="user" size={20} color="#666" />
-              <Text style={styles.activityTitle}>New Booking Request</Text>
-              <Text style={styles.activityTime}>Just now</Text>
+        <Text style={{
+          fontSize: 20,
+          fontWeight: 'bold',
+          color: '#222',
+          marginBottom: 16,
+          textAlign: 'center'
+        }}>Recent Activity</Text>
+        {activities.length > 0 ? (
+          activities.slice(0, 5).map((activity, index) => (
+            <View key={activity.id} style={{
+              backgroundColor: '#F8F9FA',
+              borderRadius: 16,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: '#E8F5E8',
+              marginBottom: index < 4 ? 12 : 0,
+            }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                marginBottom: 8,
+              }}>
+                <View style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  backgroundColor: activity.color + '20',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginRight: 12,
+                }}>
+                  <Icon name={activity.icon as any} size={20} color={activity.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{
+                    fontSize: 16,
+                    fontWeight: 'bold',
+                    color: '#222',
+                    marginBottom: 2,
+                  }}>{activity.title}</Text>
+                  <Text style={{
+                    fontSize: 12,
+                    color: '#666',
+                  }}>{formatTimestamp(activity.timestamp)}</Text>
+                </View>
+              </View>
+              <Text style={{
+                fontSize: 14,
+                color: '#666',
+                lineHeight: 20,
+              }}>{activity.description}</Text>
             </View>
-            <Text style={styles.activityDescription}>
-              {bookingRequests[0].patient_name} requested a {getConsultationTypeLabel(bookingRequests[0].appointment_type)} appointment
-            </Text>
-          </View>
+          ))
         ) : (
-          <View style={styles.activityCard}>
-            <View style={styles.activityHeader}>
-              <Icon name="infoCircle" size={20} color="#666" />
-              <Text style={styles.activityTitle}>No Recent Activity</Text>
+          <View style={{
+            alignItems: 'center',
+            paddingVertical: 20,
+          }}>
+            <View style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: '#F0F0F0',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12,
+            }}>
+              <Icon name="clock" size={24} color="#999" />
             </View>
-            <Text style={styles.activityDescription}>
-              You&apos;ll see patient booking requests and messages here
-            </Text>
+            <Text style={{
+              fontSize: 16,
+              color: '#666',
+              textAlign: 'center'
+            }}>No recent activity.</Text>
           </View>
         )}
       </View>
@@ -2060,7 +2220,10 @@ export default function DoctorDashboard() {
             label: "Appointments",
             isActive: activeTab === 'appointments',
             onPress: () => setActiveTab('appointments'),
-            badge: bookingRequests.length > 0 ? bookingRequests.length : undefined
+            badge: (() => {
+              const pendingRequests = bookingRequests.filter(req => req.status === 'pending' || req.status === 0);
+              return pendingRequests.length > 0 ? pendingRequests.length : undefined;
+            })()
           },
           {
             icon: "comments",
@@ -2127,33 +2290,18 @@ export default function DoctorDashboard() {
               <Text style={styles.sidebarUserEmail}>{userData?.email || user?.email || 'doctor@example.com'}</Text>
             </View>
             
-            {/* Settings Section */}
-            <Text style={styles.sectionHeader}>Settings</Text>
+            {/* Profile Section */}
             <View style={styles.sectionGroup}>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/doctor-profile'); }}>
-                <View style={styles.iconBox}><Icon name="user" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="eye" size={20} color="#4CAF50" /></View>
                 <Text style={styles.sidebarMenuItemText}>View Profile</Text>
                 <View style={{ marginLeft: 'auto' }}>
                   <Icon name="chevronRight" size={20} color="#4CAF50" />
                 </View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/edit-doctor-profile'); }}>
-                <View style={styles.iconBox}><Icon name="user" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="edit" size={20} color="#4CAF50" /></View>
                 <Text style={styles.sidebarMenuItemText}>Edit Profile</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/privacy-settings'); }}>
-                <View style={styles.iconBox}><Icon name="eye" size={20} color="#4CAF50" /></View>
-                <Text style={styles.sidebarMenuItemText}>Privacy Settings</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/notifications-settings'); }}>
-                <View style={styles.iconBox}><Icon name="bell" size={20} color="#4CAF50" /></View>
-                <Text style={styles.sidebarMenuItemText}>Notifications</Text>
                 <View style={{ marginLeft: 'auto' }}>
                   <Icon name="chevronRight" size={20} color="#4CAF50" />
                 </View>
@@ -2165,11 +2313,18 @@ export default function DoctorDashboard() {
                   <Icon name="chevronRight" size={20} color="#4CAF50" />
                 </View>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/doctor-settings'); }}>
+                <View style={styles.iconBox}><Icon name="cog" size={20} color="#4CAF50" /></View>
+                <Text style={styles.sidebarMenuItemText}>Settings</Text>
+                <View style={{ marginLeft: 'auto' }}>
+                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                </View>
+              </TouchableOpacity>
             </View>
               
             
             {/* Logout */}
-            <TouchableOpacity style={[styles.sidebarMenuItem, { marginTop: 20 }]} onPress={() => { closeSidebar(); handleLogout(); }}>
+            <TouchableOpacity style={[styles.sidebarMenuItem, styles.lastMenuItem]} onPress={() => { closeSidebar(); handleLogout(); }}>
               <View style={styles.iconBox}><Icon name="signOut" size={20} color="#FF3B30" /></View>
               <Text style={[styles.sidebarMenuItemText, { color: '#FF3B30' }]}>Logout</Text>
               <View style={{ marginLeft: 'auto' }}>
@@ -3145,30 +3300,47 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionGroup: {
-    marginBottom: 20,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   sidebarMenuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 16,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    width: '100%',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#E0F2E9',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#E8F5E8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 16,
+    shadowColor: '#4CAF50',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sidebarMenuItemText: {
     fontSize: 16,
-    color: '#000',
-    marginLeft: 12,
-    fontWeight: '500',
+    color: '#222',
+    marginLeft: 4,
+    fontWeight: '600',
+    flex: 1,
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+    marginTop: 20,
   },
   chevron: {
     marginLeft: 8,

@@ -40,7 +40,7 @@ interface Settings {
     };
 }
 
-export default function DoctorSettings() {
+export default function PatientSettings() {
     return (
         <>
             <Stack.Screen 
@@ -48,12 +48,12 @@ export default function DoctorSettings() {
                     headerShown: false 
                 }} 
             />
-            <DoctorSettingsContent />
+            <PatientSettingsContent />
         </>
     );
 }
 
-function DoctorSettingsContent() {
+function PatientSettingsContent() {
     const { user, userData } = useAuth();
     const [loading, setLoading] = useState(false);
     const [settings, setSettings] = useState<Settings>({
@@ -111,7 +111,7 @@ function DoctorSettingsContent() {
                 setSettings(prev => ({
                     ...prev,
                     privacy: {
-                        profileVisibility: privacyResponse.data.profileVisibility?.showToPatients ?? true,
+                        profileVisibility: privacyResponse.data.profileVisibility?.showToDoctors ?? true,
                         dataSharing: privacyResponse.data.dataSharing?.allowAnalytics ?? true,
                     },
                     security: {
@@ -151,7 +151,7 @@ function DoctorSettingsContent() {
             // Save privacy settings
             await apiService.patch('/user/privacy-settings', {
                 profileVisibility: {
-                    showToPatients: updatedSettings.privacy.profileVisibility,
+                    showToDoctors: updatedSettings.privacy.profileVisibility,
                 },
                 dataSharing: {
                     allowAnalytics: updatedSettings.privacy.dataSharing,
@@ -270,7 +270,7 @@ function DoctorSettingsContent() {
                             <Icon name="eye" size={20} color="#4CAF50" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Profile Visibility</Text>
-                                <Text style={styles.settingDescription}>Show profile to patients</Text>
+                                <Text style={styles.settingDescription}>Show profile to doctors</Text>
                             </View>
                         </View>
                         <Switch
