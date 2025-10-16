@@ -39,6 +39,10 @@ import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
+import {
+  getUserTimezone,
+  isAppointmentTimeReached
+} from '../../utils/appointmentTimeUtils';
 import { apiService } from '../services/apiService';
 
 interface ChatInfo {
@@ -591,59 +595,60 @@ export default function ChatPage() {
   }, [isAuthenticated, user?.user_type]);
 
   // Helper function to check if current time is within appointment time
+  // IMPORTANT: This only affects scheduled appointments, NOT instant sessions
   const checkAppointmentTime = useCallback(() => {
+    // Skip time checking for instant sessions - they work differently
+    if (isInstantSession) {
+      setIsAppointmentTime(true);
+      setTimeUntilAppointment('');
+      return;
+    }
+
     if (!chatInfo?.appointment_date || !chatInfo?.appointment_time) {
       setIsAppointmentTime(true); // If no appointment info, allow interaction
       return;
     }
 
     try {
-      // Parse appointment date and time
-      const appointmentDate = new Date(chatInfo.appointment_date);
-      let timeStr = chatInfo.appointment_time;
-      
-      // Handle different time formats
-      if (timeStr.includes(' ')) {
-        timeStr = timeStr.split(' ')[0]; // Remove AM/PM if present
-      }
-      
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      
-      // Set appointment time
-      const appointmentDateTime = new Date(appointmentDate);
-      appointmentDateTime.setHours(hours, minutes, 0, 0);
-      
-      setAppointmentDateTime(appointmentDateTime);
-      
-      const now = new Date();
-      const timeDiff = appointmentDateTime.getTime() - now.getTime();
-      
-      if (timeDiff <= 0) {
-        // Appointment time has arrived or passed
-        setIsAppointmentTime(true);
-        setTimeUntilAppointment('');
-      } else {
-        // Appointment time hasn't arrived yet
+      // Use the unified appointment time utility
+      const userTimezone = getUserTimezone();
+      const timeValidation = isAppointmentTimeReached(
+        chatInfo.appointment_date,
+        chatInfo.appointment_time,
+        userTimezone,
+        5 // 5-minute buffer to match backend
+      );
+
+      if (timeValidation.error) {
+        console.error('Error checking appointment time:', timeValidation.error);
+        // For scheduled appointments, be more conservative on errors
         setIsAppointmentTime(false);
-        
-        // Calculate time until appointment
-        const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-        
-        if (days > 0) {
-          setTimeUntilAppointment(`${days}d ${hours}h ${minutes}m`);
-        } else if (hours > 0) {
-          setTimeUntilAppointment(`${hours}h ${minutes}m`);
-        } else {
-          setTimeUntilAppointment(`${minutes}m`);
-        }
+        setTimeUntilAppointment(`Error: ${timeValidation.error}`);
+        return;
       }
+
+      setAppointmentDateTime(timeValidation.appointmentDateTime);
+      setIsAppointmentTime(timeValidation.isTimeReached);
+      setTimeUntilAppointment(timeValidation.timeUntilAppointment);
+
+      // Debug logging for appointment time validation
+      console.log('🕐 [AppointmentTime] Time validation result:', {
+        appointment_date: chatInfo.appointment_date,
+        appointment_time: chatInfo.appointment_time,
+        user_timezone: userTimezone,
+        is_time_reached: timeValidation.isTimeReached,
+        time_until_appointment: timeValidation.timeUntilAppointment,
+        time_difference_ms: timeValidation.timeDifference
+      });
+
     } catch (error) {
       console.error('Error checking appointment time:', error);
-      setIsAppointmentTime(true); // Default to allowing interaction on error
+      // For scheduled appointments, be conservative on errors
+      setIsAppointmentTime(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setTimeUntilAppointment(`Error: ${errorMessage}`);
     }
-  }, [chatInfo?.appointment_date, chatInfo?.appointment_time]);
+  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession]);
 
   // Check appointment time when chat info changes
   useEffect(() => {
@@ -662,7 +667,8 @@ export default function ChatPage() {
   const startTextAppointmentSession = async () => {
     try {
       const response = await apiService.post('/text-appointments/start-session', {
-        appointment_id: getNumericAppointmentId()
+        appointment_id: getNumericAppointmentId(),
+        user_timezone: getUserTimezone() // Include user timezone for backend validation
       });
 
       if (response.success) {
@@ -687,6 +693,7 @@ export default function ChatPage() {
     try {
       const response = await apiService.post('/text-appointments/update-activity', {
         appointment_id: getNumericAppointmentId(),
+        user_timezone: getUserTimezone(), // Include user timezone for backend validation
         user_type: user?.user_type
       });
 
@@ -780,7 +787,8 @@ export default function ChatPage() {
     try {
       const response = await apiService.post('/text-appointments/end-session', {
         appointment_id: getNumericAppointmentId(),
-        sessions_to_deduct: additionalSessions
+        sessions_to_deduct: additionalSessions,
+        user_timezone: getUserTimezone() // Include user timezone for backend validation
       });
 
       if (response.success) {

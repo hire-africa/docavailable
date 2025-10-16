@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Services\TimezoneService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -68,14 +69,32 @@ class TextAppointmentController extends Controller
                 ], 400);
             }
 
-            // Check if appointment time has been reached
-            $appointmentDateTime = $this->parseAppointmentDateTime($appointment->appointment_date, $appointment->appointment_time);
+            // Check if appointment time has been reached using TimezoneService
+            $userTimezone = $request->get('user_timezone') ?: config('app.timezone', 'UTC');
+            $isTimeReached = TimezoneService::isAppointmentTimeReached(
+                $appointment->appointment_date, 
+                $appointment->appointment_time, 
+                $userTimezone, 
+                5 // 5 minute buffer
+            );
             
-            // Allow appointments to start up to 5 minutes before scheduled time
-            $bufferMinutes = 5;
-            $earliestStartTime = now()->subMinutes($bufferMinutes);
+            // Debug logging for appointment time validation
+            Log::info('🕐 [TextAppointmentController] Time validation debug', [
+                'appointment_id' => $appointmentId,
+                'appointment_date' => $appointment->appointment_date,
+                'appointment_time' => $appointment->appointment_time,
+                'user_timezone' => $userTimezone,
+                'is_time_reached' => $isTimeReached,
+                'current_time_utc' => now()->utc()->toDateTimeString(),
+                'app_timezone' => config('app.timezone', 'UTC')
+            ]);
             
-            if (!$appointmentDateTime || $appointmentDateTime > $earliestStartTime) {
+            if (!$isTimeReached) {
+                Log::info('⏰ [TextAppointmentController] Appointment time not reached', [
+                    'appointment_id' => $appointmentId,
+                    'user_timezone' => $userTimezone
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Appointment time has not been reached yet'

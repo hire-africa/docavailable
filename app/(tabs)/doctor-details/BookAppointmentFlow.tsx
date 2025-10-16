@@ -801,16 +801,6 @@ export default function BookAppointmentFlow() {
             You'll receive a notification when the doctor confirms or rejects your appointment request.
           </Text>
         </View>
-
-        {/* Action Button */}
-        <View style={styles.successActionButtons}>
-          <TouchableOpacity 
-            style={styles.continueBtn} 
-            onPress={() => router.push({ pathname: '/patient-dashboard', params: { tab: 'discover', newAppointment: 'true' } })}
-          >
-            <Text style={styles.continueBtnText}>Continue Browsing</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

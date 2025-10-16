@@ -75,9 +75,33 @@ class TimezoneService
     public static function isAppointmentTimeReached($dateStr, $timeStr, $userTimezone = 'UTC', $bufferMinutes = 5)
     {
         try {
+            // Validate input parameters
+            if (empty($dateStr) || empty($timeStr)) {
+                Log::warning('Empty appointment date or time provided', [
+                    'date' => $dateStr,
+                    'time' => $timeStr,
+                    'timezone' => $userTimezone
+                ]);
+                return false;
+            }
+
+            // Validate timezone
+            if (!self::isValidTimezone($userTimezone)) {
+                Log::warning('Invalid timezone provided, defaulting to UTC', [
+                    'provided_timezone' => $userTimezone,
+                    'fallback_timezone' => 'UTC'
+                ]);
+                $userTimezone = 'UTC';
+            }
+
             $appointmentDateTime = self::parseAppointmentDateTime($dateStr, $timeStr, $userTimezone);
             
             if (!$appointmentDateTime) {
+                Log::error('Failed to parse appointment date/time', [
+                    'date' => $dateStr,
+                    'time' => $timeStr,
+                    'timezone' => $userTimezone
+                ]);
                 return false;
             }
 
@@ -88,13 +112,28 @@ class TimezoneService
             // Allow appointments to start up to bufferMinutes before scheduled time
             $earliestStartTime = $nowUTC->copy()->subMinutes($bufferMinutes);
             
-            return $appointmentUTC->lte($earliestStartTime);
+            $isReached = $appointmentUTC->lte($earliestStartTime);
+            
+            // Log the decision for debugging
+            Log::info('Appointment time check result', [
+                'date' => $dateStr,
+                'time' => $timeStr,
+                'timezone' => $userTimezone,
+                'appointment_utc' => $appointmentUTC->toISOString(),
+                'current_utc' => $nowUTC->toISOString(),
+                'earliest_start_utc' => $earliestStartTime->toISOString(),
+                'buffer_minutes' => $bufferMinutes,
+                'is_reached' => $isReached
+            ]);
+            
+            return $isReached;
         } catch (\Exception $e) {
             Log::error('Error checking appointment time', [
                 'date' => $dateStr,
                 'time' => $timeStr,
                 'timezone' => $userTimezone,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             return false;
         }
@@ -158,5 +197,60 @@ class TimezoneService
     public static function getUserTimezone($request)
     {
         return $request->get('user_timezone') ?: config('app.timezone', 'UTC');
+    }
+
+    /**
+     * Validate if timezone is valid
+     *
+     * @param string $timezone
+     * @return bool
+     */
+    private static function isValidTimezone($timezone)
+    {
+        try {
+            $testDate = new \DateTime('now', new \DateTimeZone($timezone));
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Validate appointment time input
+     *
+     * @param string $dateStr
+     * @param string $timeStr
+     * @return array
+     */
+    public static function validateAppointmentTime($dateStr, $timeStr)
+    {
+        $errors = [];
+
+        if (empty($dateStr)) {
+            $errors[] = 'Appointment date is required';
+        }
+
+        if (empty($timeStr)) {
+            $errors[] = 'Appointment time is required';
+        }
+
+        if (!empty($dateStr) && !empty($timeStr)) {
+            // Check if date is in the past
+            $appointmentDateTime = self::parseAppointmentDateTime($dateStr, $timeStr);
+            if ($appointmentDateTime && $appointmentDateTime->isPast()) {
+                $errors[] = 'Appointment time cannot be in the past';
+            }
+
+            // Check if date is too far in the future (more than 1 year)
+            $oneYearFromNow = Carbon::now()->addYear();
+            if ($appointmentDateTime && $appointmentDateTime->isAfter($oneYearFromNow)) {
+                $errors[] = 'Appointment time cannot be more than 1 year in the future';
+            }
+        }
+
+        return [
+            'is_valid' => empty($errors),
+            'errors' => $errors
+        ];
     }
 }

@@ -615,13 +615,32 @@ export default function DoctorDashboard() {
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
-        // Optimistically remove from booking requests and refresh data
+        
+        // INSTANT UPDATE: Remove from booking requests and add to confirmed appointments immediately
         setBookingRequests(prev => prev.filter(req => req.id !== request.id));
-        // Refresh both booking requests and confirmed appointments
-        await Promise.all([
-          fetchBookingRequests(),
-          fetchConfirmedAppointments()
-        ]);
+        
+        // Transform the request to match confirmed appointment format and add it immediately
+        const confirmedAppointment = {
+          id: request.id,
+          patient_name: request.patient_name,
+          doctor_name: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`.trim(),
+          patientProfilePictureUrl: request.patientProfilePictureUrl,
+          patientProfilePicture: request.patientProfilePicture,
+          patientEmail: request.patientEmail,
+          patientGender: request.patientGender,
+          patientPhone: request.patientPhone || '',
+          appointment_date: request.appointment_date,
+          appointment_time: request.appointment_time,
+          date: request.date,
+          time: request.time,
+          reason: request.reason,
+          appointment_type: request.appointment_type,
+          status: 1, // confirmed status
+          created_at: request.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        setConfirmedAppointments(prev => [confirmedAppointment, ...prev]);
       } else {
         // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to accept booking request. Please try again.');
@@ -675,13 +694,9 @@ export default function DoctorDashboard() {
         // Close the modal immediately
         setShowRequestModal(false);
         setSelectedRequest(null);
-        // Optimistically remove from booking requests and refresh data
+        
+        // INSTANT UPDATE: Remove from booking requests immediately (no need to add to confirmed)
         setBookingRequests(prev => prev.filter(req => req.id !== request.id));
-        // Refresh both booking requests and confirmed appointments
-        await Promise.all([
-          fetchBookingRequests(),
-          fetchConfirmedAppointments()
-        ]);
       } else {
         // console.error('❌ [DoctorDashboard] API returned success: false:', response);
         showError('Error', response.message || 'Failed to reject booking request. Please try again.');
@@ -1223,11 +1238,9 @@ export default function DoctorDashboard() {
         setShowCancelConfirm(false);
         setAppointmentToCancel(null);
         setCancelReason('');
-        // Refresh all appointment data
-        await Promise.all([
-          fetchBookingRequests(),
-          fetchConfirmedAppointments()
-        ]);
+        
+        // INSTANT UPDATE: Remove from confirmed appointments immediately
+        setConfirmedAppointments(prev => prev.filter(appt => appt.id !== appointmentToCancel.id));
       } else {
         showError('Error', 'Failed to cancel appointment. Please try again.');
       }
@@ -1244,11 +1257,9 @@ export default function DoctorDashboard() {
       await apiService.delete(`/appointments/${appointmentId}`);
       showSuccess('Success', 'Appointment cancelled successfully');
       setSelectedAcceptedRequest(null);
-      // Refresh all appointment data
-      await Promise.all([
-        fetchBookingRequests(),
-        fetchConfirmedAppointments()
-      ]);
+      
+      // INSTANT UPDATE: Remove from confirmed appointments immediately
+      setConfirmedAppointments(prev => prev.filter(appt => appt.id !== appointmentId));
     } catch (error) {
       console.error('Error cancelling appointment:', error);
       showError('Error', 'Failed to cancel appointment');
