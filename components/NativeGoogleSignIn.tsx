@@ -219,8 +219,29 @@ export default function NativeGoogleSignIn({
         })
       });
 
-      const googleLoginData = await googleLoginResponse.json();
       console.log('🔐 NativeGoogleSignIn: Google login response status:', googleLoginResponse.status);
+      console.log('🔐 NativeGoogleSignIn: Google login response headers:', googleLoginResponse.headers);
+      
+      // Check if response is JSON
+      const contentType = googleLoginResponse.headers.get('content-type');
+      console.log('🔐 NativeGoogleSignIn: Response content type:', contentType);
+      
+      let googleLoginData;
+      try {
+        const responseText = await googleLoginResponse.text();
+        console.log('🔐 NativeGoogleSignIn: Raw response text:', responseText);
+        
+        if (contentType && contentType.includes('application/json')) {
+          googleLoginData = JSON.parse(responseText);
+        } else {
+          throw new Error(`Expected JSON response but got: ${contentType}. Response: ${responseText.substring(0, 200)}...`);
+        }
+      } catch (parseError) {
+        console.error('🔐 NativeGoogleSignIn: JSON parse error:', parseError);
+        onError('Server returned invalid response. Please try again.');
+        return;
+      }
+      
       console.log('🔐 NativeGoogleSignIn: Google login response data:', googleLoginData);
 
       if (googleLoginResponse.ok && googleLoginData.success && googleLoginData.data && googleLoginData.data.user) {
@@ -243,9 +264,17 @@ export default function NativeGoogleSignIn({
           console.log('🔐 NativeGoogleSignIn: No account found with this email');
           onError('No account found with this email. Please create an account first or use a different email.');
           return;
+        } else if (googleLoginResponse.status === 500) {
+          console.log('🔐 NativeGoogleSignIn: Server error');
+          onError('Server error occurred. Please try again later.');
+          return;
+        } else if (googleLoginResponse.status === 0) {
+          console.log('🔐 NativeGoogleSignIn: Network error');
+          onError('Network error. Please check your internet connection and try again.');
+          return;
         } else {
-          console.log('🔐 NativeGoogleSignIn: Google authentication failed:', googleLoginData.message);
-          onError(googleLoginData.message || 'Google authentication failed. Please try again.');
+          console.log('🔐 NativeGoogleSignIn: Google authentication failed:', googleLoginData?.message || 'Unknown error');
+          onError(googleLoginData?.message || `Authentication failed (${googleLoginResponse.status}). Please try again.`);
           return;
         }
       }
