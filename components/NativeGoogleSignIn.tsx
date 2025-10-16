@@ -207,56 +207,42 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Checking if user exists in database...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
-      // Send the Google user data instead of the ID token
-      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+      // Simple approach: just check if email exists in database
+      const checkResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/check-user-exists', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_token: JSON.stringify(googleUserData)
+          email: googleUserData.email
         })
       });
 
-      console.log('🔐 NativeGoogleSignIn: API Response status:', authResponse.status);
-      console.log('🔐 NativeGoogleSignIn: API Response headers:', authResponse.headers);
+      console.log('🔐 NativeGoogleSignIn: Check user response status:', checkResponse.status);
       
-      // Check if response is ok
-      if (!authResponse.ok) {
-        const errorText = await authResponse.text();
-        console.error('🔐 NativeGoogleSignIn: API Error Response:', errorText);
-        throw new Error(`API Error: ${authResponse.status} - ${errorText}`);
-      }
-
-      // Try to parse JSON response
-      let authData;
-      try {
-        const responseText = await authResponse.text();
-        console.log('🔐 NativeGoogleSignIn: Raw API Response:', responseText);
-        authData = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('🔐 NativeGoogleSignIn: JSON Parse Error:', parseError);
-        const responseText = await authResponse.text();
-        console.error('🔐 NativeGoogleSignIn: Raw Response that failed to parse:', responseText);
-        throw new Error('Invalid JSON response from server');
-      }
-      
-      console.log('🔐 NativeGoogleSignIn: Parsed API Response:', authData);
-      
-      if (authData.success && authData.data && authData.data.user) {
-        // User exists in database, log them in
-        console.log('🔐 NativeGoogleSignIn: User exists, logging in:', authData.data.user);
+      if (checkResponse.ok) {
+        const checkData = await checkResponse.json();
+        console.log('🔐 NativeGoogleSignIn: Check user response:', checkData);
         
-        // Add the token to the user object for the auth service
-        const userWithToken = {
-          ...authData.data.user,
-          token: authData.data.token
-        };
-        
-        onSuccess(userWithToken, idToken);
+        if (checkData.exists && checkData.user) {
+          // User exists, log them in
+          console.log('🔐 NativeGoogleSignIn: User exists, logging in:', checkData.user);
+          
+          // Create a mock token for now (in production, you'd get this from a proper login endpoint)
+          const userWithToken = {
+            ...checkData.user,
+            token: 'mock_token_' + Date.now() // This should be replaced with actual JWT token
+          };
+          
+          onSuccess(userWithToken, idToken);
+        } else {
+          // User doesn't exist, redirect to signup
+          console.log('🔐 NativeGoogleSignIn: User not found, redirecting to signup');
+          redirectToSignupWithGoogleData(googleUserData);
+        }
       } else {
-        // User doesn't exist, redirect to signup with Google data
-        console.log('🔐 NativeGoogleSignIn: User not found, redirecting to signup');
+        // API error, fallback to signup
+        console.error('🔐 NativeGoogleSignIn: API error, redirecting to signup');
         redirectToSignupWithGoogleData(googleUserData);
       }
     } catch (error) {

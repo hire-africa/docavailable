@@ -286,6 +286,9 @@ Route::prefix('auth')->group(function () {
     Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
 });
 
+// Simple user check endpoint
+Route::post('/check-user-exists', [AuthenticationController::class, 'checkUserExists']);
+
 // Backward compatibility routes for mobile app
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/register', [AuthenticationController::class, 'register']);

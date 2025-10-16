@@ -638,6 +638,58 @@ class AuthenticationController extends Controller
     }
 
     /**
+     * Check if user exists by email
+     */
+    public function checkUserExists(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Valid email is required',
+                    'exists' => false
+                ], 422);
+            }
+
+            $email = $request->input('email');
+            $user = User::where('email', $email)->first();
+
+            if ($user) {
+                // Generate full URLs for images if they exist
+                $userData = $this->generateImageUrls($user);
+                
+                return response()->json([
+                    'success' => true,
+                    'exists' => true,
+                    'user' => $userData
+                ]);
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'exists' => false,
+                    'message' => 'User not found'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error checking user existence', [
+                'error' => $e->getMessage(),
+                'email' => $request->input('email')
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error checking user existence',
+                'exists' => false
+            ], 500);
+        }
+    }
+
+    /**
      * Get current authenticated user
      */
     public function user(Request $request): JsonResponse
