@@ -208,7 +208,7 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
       // Send the Google user data instead of the ID token
-      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/google-login', {
+      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
