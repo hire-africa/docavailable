@@ -90,8 +90,11 @@ class AuthenticationController extends Controller
                 'languages_spoken' => 'nullable|string', // JSON array of languages
                 'profile_picture' => 'nullable|string', // Base64 encoded
                 'national_id' => 'nullable|string', // Base64 encoded
+                'national_id_passport' => 'nullable|string', // Base64 encoded
                 'medical_degree' => 'nullable|string', // Base64 encoded
+                'highest_medical_certificate' => 'nullable|string', // Base64 encoded
                 'medical_licence' => 'nullable|string', // Base64 encoded
+                'specialist_certificate' => 'nullable|string', // Base64 encoded
             ]);
 
             // Add custom validation rule to require either last_name or surname
@@ -155,9 +158,10 @@ class AuthenticationController extends Controller
             $medicalLicencePath = null;
 
             if ($request->user_type === 'doctor') {
-                // Handle national ID
-                if ($request->national_id) {
-                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->national_id);
+                // Handle national ID (check both field names)
+                $nationalIdData = $request->national_id ?? $request->national_id_passport;
+                if ($nationalIdData) {
+                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $nationalIdData);
                     $image = base64_decode($image);
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
@@ -168,9 +172,10 @@ class AuthenticationController extends Controller
                     }
                 }
 
-                // Handle medical degree
-                if ($request->medical_degree) {
-                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->medical_degree);
+                // Handle medical degree (check both field names)
+                $medicalDegreeData = $request->medical_degree ?? $request->highest_medical_certificate;
+                if ($medicalDegreeData) {
+                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $medicalDegreeData);
                     $image = base64_decode($image);
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
@@ -181,9 +186,10 @@ class AuthenticationController extends Controller
                     }
                 }
 
-                // Handle medical licence (optional)
-                if ($request->medical_licence) {
-                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->medical_licence);
+                // Handle medical licence (check both field names)
+                $medicalLicenceData = $request->medical_licence ?? $request->specialist_certificate;
+                if ($medicalLicenceData) {
+                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $medicalLicenceData);
                     $image = base64_decode($image);
                     
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
