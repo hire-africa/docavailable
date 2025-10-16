@@ -760,6 +760,15 @@ export default function DoctorSignUp() {
         try {
             setIsVerifying(true);
             
+            console.log('DoctorSignup: Verifying email with code:', {
+                email: email,
+                verificationCode: verificationCode,
+                codeLength: verificationCode.length,
+                codeType: typeof verificationCode,
+                codeTrimmed: verificationCode.trim(),
+                codeTrimmedLength: verificationCode.trim().length
+            });
+            
             // Add a small delay to prevent rapid successive calls
             await new Promise(resolve => setTimeout(resolve, 200));
             

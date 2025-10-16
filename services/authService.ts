@@ -657,16 +657,30 @@ class AuthService {
   async verifyEmail(email: string, code: string): Promise<{ success: boolean; message: string }> {
     try {
       console.log('AuthService: Verifying email with code for:', email);
+      console.log('AuthService: Code details:', {
+        code: code,
+        codeLength: code.length,
+        codeType: typeof code,
+        codeCharacters: code.split('').map(c => `'${c}'`).join(', '),
+        codeTrimmed: code.trim(),
+        codeTrimmedLength: code.trim().length
+      });
       
       // Add a small delay to prevent race conditions
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const response = await this.api.post('/auth/verify-email', { email, code });
+      // Ensure code is properly trimmed and formatted
+      const trimmedCode = code.trim();
+      const requestData = { email, code: trimmedCode };
+      console.log('AuthService: Sending verification request:', requestData);
+      
+      const response = await this.api.post('/auth/verify-email', requestData);
       
       console.log('AuthService: Email verification response:', {
         success: response.data?.success,
         message: response.data?.message,
-        status: response.status
+        status: response.status,
+        data: response.data
       });
 
       return {
@@ -675,6 +689,12 @@ class AuthService {
       };
     } catch (error: any) {
       console.error('AuthService: Email verification error:', error);
+      console.error('AuthService: Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        code: error.code
+      });
       
       let errorMessage = 'Failed to verify email. Please try again.';
       

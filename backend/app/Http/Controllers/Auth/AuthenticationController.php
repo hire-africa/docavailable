@@ -34,6 +34,16 @@ class AuthenticationController extends Controller
     public function register(Request $request): JsonResponse
     {
         try {
+            // Log incoming request for debugging
+            Log::info('Registration request received', [
+                'email' => $request->email ?? 'not_provided',
+                'user_type' => $request->user_type ?? 'not_provided',
+                'has_first_name' => !empty($request->first_name),
+                'has_last_name' => !empty($request->last_name),
+                'has_surname' => !empty($request->surname),
+                'request_data' => $request->all()
+            ]);
+            
             // Normalize common alternate/camelCase field names
             $normalized = [];
             if ($request->has('firstName')) { $normalized['first_name'] = $request->input('firstName'); }
@@ -47,6 +57,18 @@ class AuthenticationController extends Controller
             // Provide password_confirmation fallback when not provided by clients
             if ($request->filled('password') && !$request->has('password_confirmation')) {
                 $request->merge(['password_confirmation' => $request->input('password')]);
+            }
+            
+            // Check if email already exists
+            if ($request->filled('email')) {
+                $existingUser = User::where('email', $request->email)->first();
+                if ($existingUser) {
+                    Log::warning('Registration attempted with existing email', [
+                        'email' => $request->email,
+                        'existing_user_id' => $existingUser->id,
+                        'existing_user_type' => $existingUser->user_type
+                    ]);
+                }
             }
 
             $validator = Validator::make($request->all(), [
@@ -75,11 +97,21 @@ class AuthenticationController extends Controller
             // Add custom validation rule to require either last_name or surname
             $validator->after(function ($validator) use ($request) {
                 if (!$request->last_name && !$request->surname) {
-                    $validator->errors()->add('last_name', 'The last name field is required.');
+                    $validator->errors()->add('surname', 'The last name field is required.');
                 }
             });
 
             if ($validator->fails()) {
+                Log::warning('Registration validation failed', [
+                    'email' => $request->email ?? 'not_provided',
+                    'user_type' => $request->user_type ?? 'not_provided',
+                    'has_first_name' => !empty($request->first_name),
+                    'has_last_name' => !empty($request->last_name),
+                    'has_surname' => !empty($request->surname),
+                    'errors' => $validator->errors()->toArray(),
+                    'request_data' => $request->all()
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -993,17 +1025,54 @@ class AuthenticationController extends Controller
             // Generate a 6-digit verification code
             $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
             
+            // Debug logging for code generation
+            Log::info('Email verification code generated', [
+                'email' => $email,
+                'generated_code' => $code,
+                'code_length' => strlen($code),
+                'code_type' => gettype($code)
+            ]);
+            
             // Store the code in cache with 10 minutes expiration
             $cacheKey = 'email_verification_' . $email;
             \Illuminate\Support\Facades\Cache::put($cacheKey, $code, now()->addMinutes(10));
             
-            // Verify the code was stored correctly
-            $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
+            // Verify the code was stored correctly with retry mechanism
+            $storedCode = null;
+            $maxRetries = 3;
+            $retryDelay = 100; // milliseconds
+            
+            for ($i = 0; $i < $maxRetries; $i++) {
+                $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
+                
+                if ($storedCode) {
+                    break; // Code found, exit retry loop
+                }
+                
+                if ($i < $maxRetries - 1) {
+                    // Wait before retrying (only if not the last attempt)
+                    usleep($retryDelay * 1000); // Convert to microseconds
+                    $retryDelay *= 2; // Exponential backoff
+                }
+            }
+            
+            Log::info('Email verification code storage verification', [
+                'email' => $email,
+                'cache_key' => $cacheKey,
+                'expected_code' => $code,
+                'stored_code' => $storedCode,
+                'codes_match' => $storedCode === $code,
+                'retry_attempts' => $i + 1,
+                'stored_code_type' => gettype($storedCode),
+                'stored_code_length' => strlen($storedCode ?? '')
+            ]);
+            
             if ($storedCode !== $code) {
-                Log::error('Email verification code storage failed', [
+                Log::error('Email verification code storage failed after retries', [
                     'email' => $email,
                     'expected_code' => $code,
-                    'stored_code' => $storedCode
+                    'stored_code' => $storedCode,
+                    'retry_attempts' => $maxRetries
                 ]);
                 
                 return response()->json([
@@ -1108,8 +1177,24 @@ class AuthenticationController extends Controller
                 ], 422);
             }
 
-            $email = $request->email;
-            $code = $request->code;
+            $email = trim($request->email);
+            $code = trim($request->code);
+            
+            // Additional validation for code format
+            if (!preg_match('/^\d{6}$/', $code)) {
+                Log::warning('Email verification code format invalid', [
+                    'email' => $email,
+                    'provided_code' => $code,
+                    'code_length' => strlen($code),
+                    'code_is_numeric' => is_numeric($code),
+                    'code_has_whitespace' => $code !== trim($code)
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid verification code format. Please enter a 6-digit number.'
+                ], 400);
+            }
             
             // Get the stored code from cache with retry mechanism
             $cacheKey = 'email_verification_' . $email;
@@ -1135,8 +1220,14 @@ class AuthenticationController extends Controller
                 'email' => $email,
                 'cache_key' => $cacheKey,
                 'stored_code_exists' => !empty($storedCode),
+                'stored_code' => $storedCode,
                 'stored_code_length' => strlen($storedCode ?? ''),
+                'stored_code_type' => gettype($storedCode),
                 'provided_code' => $code,
+                'provided_code_length' => strlen($code),
+                'provided_code_type' => gettype($code),
+                'codes_equal' => $code === $storedCode,
+                'codes_equal_strict' => $code === $storedCode,
                 'retry_attempts' => $i + 1
             ]);
             
@@ -1153,11 +1244,20 @@ class AuthenticationController extends Controller
                 ], 400);
             }
             
-            if ($code !== $storedCode) {
+            // Ensure both codes are strings and properly formatted for comparison
+            $normalizedCode = (string) $code;
+            $normalizedStoredCode = (string) $storedCode;
+            
+            if ($normalizedCode !== $normalizedStoredCode) {
                 Log::warning('Email verification code mismatch', [
                     'email' => $email,
                     'provided_code' => $code,
-                    'stored_code' => $storedCode
+                    'stored_code' => $storedCode,
+                    'normalized_provided_code' => $normalizedCode,
+                    'normalized_stored_code' => $normalizedStoredCode,
+                    'codes_equal' => $normalizedCode === $normalizedStoredCode,
+                    'provided_code_type' => gettype($code),
+                    'stored_code_type' => gettype($storedCode)
                 ]);
                 
                 return response()->json([
