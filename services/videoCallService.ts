@@ -763,8 +763,8 @@ class VideoCallService {
       });
       this.startCallTimer();
       
-      // Deduct call session when answered
-      this.deductCallSession();
+      // FIX: Do NOT deduct immediately - deductions happen after 10 minutes and on hangup
+      // this.deductCallSession();
       
       this.events?.onCallAnswered();
       
@@ -869,43 +869,71 @@ class VideoCallService {
    * Switch between front and back camera
    */
   async switchCamera(): Promise<void> {
-    if (this.localStream) {
-      const videoTracks = this.localStream.getVideoTracks();
-      if (videoTracks.length > 0) {
-        const track = videoTracks[0];
-        const settings = track.getSettings();
-        const newFacingMode = settings.facingMode === 'user' ? 'environment' : 'user';
-        
-        try {
-          // Stop current video track
-          track.stop();
-          
-          // Get new stream with switched camera
-          const newStream = await mediaDevices.getUserMedia({
-            video: { facingMode: newFacingMode },
-            audio: true,
-          });
-          
-          // Replace video track in peer connection
-          const newVideoTrack = newStream.getVideoTracks()[0];
-          const sender = this.peerConnection?.getSenders().find(s => 
-            s.track && s.track.kind === 'video'
-          );
-          
-          if (sender && this.peerConnection) {
-            await sender.replaceTrack(newVideoTrack);
-          }
-          
-          // Update local stream
-          this.localStream = newStream;
-          this.isFrontCamera = newFacingMode === 'user';
-          this.updateState({ isFrontCamera: this.isFrontCamera });
-          
-          console.log('📹 Camera switched to:', newFacingMode);
-        } catch (error) {
-          console.error('❌ Error switching camera:', error);
-        }
+    if (!this.localStream || !this.peerConnection) {
+      console.warn('⚠️ Cannot switch camera - no active stream or connection');
+      return;
+    }
+
+    const videoTracks = this.localStream.getVideoTracks();
+    if (videoTracks.length === 0) {
+      console.warn('⚠️ No video tracks found to switch');
+      return;
+    }
+
+    const track = videoTracks[0];
+    const settings = track.getSettings();
+    const newFacingMode = settings.facingMode === 'user' ? 'environment' : 'user';
+    
+    try {
+      console.log('📹 Switching camera from', settings.facingMode, 'to', newFacingMode);
+      
+      // Get new stream with switched camera
+      const newStream = await mediaDevices.getUserMedia({
+        video: { 
+          facingMode: newFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: true,
+      });
+      
+      // Find the video sender
+      const videoSender = this.peerConnection.getSenders().find(sender => 
+        sender.track && sender.track.kind === 'video'
+      );
+      
+      if (!videoSender) {
+        console.error('❌ No video sender found in peer connection');
+        newStream.getTracks().forEach(track => track.stop());
+        return;
       }
+      
+      // Get the new video track
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) {
+        console.error('❌ No video track in new stream');
+        newStream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      
+      // Replace the video track
+      await videoSender.replaceTrack(newVideoTrack);
+      
+      // Stop old video track
+      track.stop();
+      
+      // Update local stream reference
+      this.localStream = newStream;
+      this.isFrontCamera = newFacingMode === 'user';
+      
+      // Update state
+      this.updateState({ isFrontCamera: this.isFrontCamera });
+      
+      console.log('✅ Camera switched successfully to:', newFacingMode);
+    } catch (error) {
+      console.error('❌ Error switching camera:', error);
+      // Try to recover by keeping the current camera
+      this.updateState({ isFrontCamera: this.isFrontCamera });
     }
   }
 
@@ -942,13 +970,37 @@ class VideoCallService {
       console.log('ℹ️ [VideoCallService] endCall already processed');
       return;
     }
+    
     this.hasEnded = true;
     console.log('📞 Ending video call...');
+    console.log('📞 Call state when ending:', {
+      connectionState: this.state.connectionState,
+      isConnected: this.state.isConnected,
+      isCallAnswered: this.isCallAnswered
+    });
     
     // Calculate session duration
     const sessionDuration = this.state.callDuration;
     const wasConnected = this.state.isConnected && this.isCallAnswered;
     
+    // Clear call timeout and timer first
+    this.clearCallTimeout();
+    this.stopCallTimer();
+    
+    // Stop local stream
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+    }
+    
+    // Reset audio routing to default
+    await this.resetAudioRouting();
+    
+    // Close peer connection
+    if (this.peerConnection) {
+      this.peerConnection.close();
+    }
+    
+    // Send call ended message with session info
     this.sendSignalingMessage({
       type: 'call-ended',
       callType: 'video',
@@ -1181,30 +1233,37 @@ class VideoCallService {
 
     this.resetAudioRouting();
     
+    // Reset all state variables properly
     this.peerConnection = null;
     this.localStream = null;
     this.remoteStream = null;
     this.signalingChannel = null;
     this.callTimer = null;
     this.callStartTime = 0;
+    this.events = null;
     this.appointmentId = null;
     this.userId = null;
     this.processedMessages.clear();
     this.isProcessingIncomingCall = false;
     this.isCallAnswered = false;
+    this.hasEnded = false;
     this.isIncomingMode = false;
     this.hasAccepted = false;
-    this.pendingOffer = null;
     this.pendingCandidates = [];
+    this.pendingOffer = null;
     
-    this.updateState({
+    // Reset call state
+    this.state = {
       isConnected: false,
       isAudioEnabled: true,
       isVideoEnabled: true,
       isFrontCamera: true,
       callDuration: 0,
       connectionState: 'disconnected',
-    });
+    };
+    
+    // Clear global pending offer
+    (global as any).pendingOffer = null;
     
     console.log('✅ Video call cleanup complete');
     (global as any).activeVideoCall = false;
