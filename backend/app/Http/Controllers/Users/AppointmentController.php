@@ -537,7 +537,7 @@ class AppointmentController extends Controller
             // Update appointment status first
             $appointment->update([
                 'actual_end_time' => now(),
-                'status' => 'completed',
+                'status' => \App\Models\Appointment::STATUS_COMPLETED,
                 'completed_at' => now()
             ]);
 

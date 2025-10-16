@@ -5,16 +5,16 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    Modal,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../../components/AudioCall';
@@ -712,6 +712,10 @@ export default function ChatPage() {
         ? (now.getTime() - textAppointmentSession.lastActivityTime.getTime()) / (1000 * 60) // minutes
         : 0;
 
+      const timeSinceStart = textAppointmentSession.startTime 
+        ? (now.getTime() - textAppointmentSession.startTime.getTime()) / (1000 * 60) // minutes
+        : 0;
+
       // If no activity in first 10 minutes, end session and deduct 1
       if (timeSinceLastActivity >= 10 && !textAppointmentSession.hasPatientActivity && !textAppointmentSession.hasDoctorActivity) {
         console.log('⏰ [TextAppointment] No activity in first 10 minutes, ending session');
@@ -722,10 +726,6 @@ export default function ChatPage() {
 
       // If there was activity, check for 10-minute intervals for additional deductions
       if (textAppointmentSession.hasPatientActivity || textAppointmentSession.hasDoctorActivity) {
-        const timeSinceStart = textAppointmentSession.startTime 
-          ? (now.getTime() - textAppointmentSession.startTime.getTime()) / (1000 * 60) // minutes
-          : 0;
-
         // Deduct 1 session every 10 minutes after the first 10 minutes
         const expectedSessionsUsed = Math.floor(timeSinceStart / 10);
         if (expectedSessionsUsed > textAppointmentSession.sessionsUsed) {
@@ -737,6 +737,15 @@ export default function ChatPage() {
             sessionsUsed: expectedSessionsUsed
           }));
         }
+      }
+
+      // FIX: Auto-end session if no activity for 20+ minutes (regardless of previous activity)
+      if (timeSinceLastActivity >= 20) {
+        console.log('⏰ [TextAppointment] No activity for 20+ minutes, auto-ending session');
+        const sessionsToDeduct = Math.max(1, Math.floor(timeSinceStart / 10));
+        processTextAppointmentDeduction(sessionsToDeduct, 'timeout');
+        endTextAppointmentSession(sessionsToDeduct);
+        return;
       }
     };
 
@@ -2315,7 +2324,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       const appointmentStatus = String(chatInfo?.status || '');
       const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
       
-      if (!isTextSession && isConfirmedAppointment) {
+      // FIX: Only show "cannot end" message if it's a confirmed appointment AND it's not appointment time AND it's not a text appointment
+      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
         // For confirmed appointments that haven't started, show a different message
         Alert.alert(
           'Scheduled Appointment',
@@ -2328,7 +2338,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         return;
       }
       
-      // Show end session modal for active sessions only
+      // Show end session modal for active sessions (including when appointment time has been reached)
       setShowEndSessionModal(true);
     } else {
       // For doctors, just go back
@@ -2384,7 +2394,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       const appointmentStatus = String(chatInfo?.status || '');
       const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
       
-      if (!isTextSession && isConfirmedAppointment) {
+      // FIX: Only prevent ending if it's a confirmed appointment AND it's not a text appointment AND it's not appointment time
+      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
         Alert.alert(
           'Cannot End Session',
           'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
@@ -2884,7 +2895,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
       <StatusBar barStyle="dark-content" />
       
       {/* Header */}
@@ -3476,28 +3487,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               }
             }}
             editable={sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
-            style={{
-              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5
-            }}
-            placeholder={
-              !sessionValid
-                ? "Session unavailable - cannot send messages"
-                : sessionEnded && !isPatient 
-                ? "Session ended" 
-                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && isTimerActive && isPatient
-                ? "Waiting for doctor to respond..."
-                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isTimerActive && isPatient
-                ? "Session expired - doctor did not respond"
-                : isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isPatient
-                ? "Patient is waiting for your response..."
-                : !isTextInputEnabled()
-                ? `Text messaging not available for ${appointmentType || 'this type of'} appointments - use ${appointmentType === 'video' ? 'video call' : appointmentType === 'audio' ? 'audio call' : 'text messaging'} button instead`
-                : isTextAppointment && !textAppointmentSession.isActive
-                ? "Text appointment session will start at appointment time"
-                : !isTextSession && !isAppointmentTime && appointmentDateTime
-                ? `You're early! Your appointment starts at ${appointmentDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                : "Type a message..."
-            }
+            placeholder=""
             style={{
               flex: 1,
               borderWidth: 1,
@@ -3507,17 +3497,11 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               paddingVertical: 12,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionEnded && !isPatient) || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? 0.5 : 1,
+              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
             }}
             multiline
             maxLength={1000}
-            editable={
-              !(sessionEnded && !isPatient) && 
-              !(isInstantSession && isSessionExpired) &&
-              !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) &&
-              (isTextSession || isAppointmentTime)
-            }
           />
           
           <TouchableOpacity
