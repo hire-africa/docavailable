@@ -638,6 +638,70 @@ class AuthenticationController extends Controller
     }
 
     /**
+     * Find user by email for Google authentication
+     */
+    public function findUserByEmail(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Valid email is required'
+                ], 422);
+            }
+
+            $email = $request->input('email');
+            $user = User::where('email', $email)->first();
+
+            if ($user) {
+                // Check if account is suspended
+                if ($user->status === 'suspended') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Your account has been suspended. Please contact support for assistance.'
+                    ], 403);
+                }
+                
+                // Check if account is pending approval (for doctors)
+                if ($user->user_type === 'doctor' && $user->status === 'pending') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Your account is pending approval. Please wait for admin approval.'
+                    ], 403);
+                }
+
+                // Generate full URLs for images if they exist
+                $userData = $this->generateImageUrls($user);
+                
+                return response()->json([
+                    'success' => true,
+                    'user' => $userData
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found'
+                ], 404);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error finding user by email', [
+                'error' => $e->getMessage(),
+                'email' => $request->input('email')
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error finding user'
+            ], 500);
+        }
+    }
+
+    /**
      * Check if user exists by email
      */
     public function checkUserExists(Request $request): JsonResponse

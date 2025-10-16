@@ -289,6 +289,9 @@ Route::prefix('auth')->group(function () {
 // Simple user check endpoint
 Route::post('/check-user-exists', [AuthenticationController::class, 'checkUserExists']);
 
+// Find user by email for Google authentication
+Route::post('/find-user-by-email', [AuthenticationController::class, 'findUserByEmail']);
+
 // Backward compatibility routes for mobile app
 Route::post('/login', [AuthenticationController::class, 'login']);
 Route::post('/register', [AuthenticationController::class, 'register']);

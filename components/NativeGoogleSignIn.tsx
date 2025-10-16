@@ -207,9 +207,40 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Checking if user exists in database...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
-      // For now, let's always redirect to signup and let the signup page handle existing users
-      // This is simpler and avoids API issues
-      console.log('🔐 NativeGoogleSignIn: Redirecting to signup (will check for existing user there)');
+      // Try to find user by email first
+      const findUserResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/find-user-by-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: googleUserData.email
+        })
+      });
+
+      console.log('🔐 NativeGoogleSignIn: Find user response status:', findUserResponse.status);
+      
+      if (findUserResponse.ok) {
+        const userData = await findUserResponse.json();
+        console.log('🔐 NativeGoogleSignIn: Find user response:', userData);
+        
+        if (userData.success && userData.user) {
+          // User exists, log them in
+          console.log('🔐 NativeGoogleSignIn: User exists, logging in:', userData.user);
+          
+          // Create a mock token for now (in production, you'd get this from a proper login endpoint)
+          const userWithToken = {
+            ...userData.user,
+            token: 'google_auth_token_' + Date.now()
+          };
+          
+          onSuccess(userWithToken, idToken);
+          return;
+        }
+      }
+      
+      // User doesn't exist, redirect to signup
+      console.log('🔐 NativeGoogleSignIn: User not found, redirecting to signup');
       redirectToSignupWithGoogleData(googleUserData);
       
     } catch (error) {
