@@ -204,7 +204,7 @@ export default function NativeGoogleSignIn({
   // Check if user exists in database and handle accordingly
   const checkUserExistsAndHandle = async (googleUserData: any, idToken: string) => {
     try {
-      console.log('🔐 NativeGoogleSignIn: Checking if user exists in database...');
+      console.log('🔐 NativeGoogleSignIn: Attempting to log in user...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
       // Try to use the Google login endpoint to authenticate the user
@@ -238,60 +238,30 @@ export default function NativeGoogleSignIn({
             token: loginData.data.token
           };
           
-          console.log('🔐 NativeGoogleSignIn: Logging in existing user:', userWithToken);
+          console.log('🔐 NativeGoogleSignIn: Successfully logged in user:', userWithToken);
           onSuccess(userWithToken, idToken);
           return;
         }
       } else {
         const errorData = await googleLoginResponse.json();
-        console.log('🔐 NativeGoogleSignIn: Google login error:', errorData);
+        console.log('🔐 NativeGoogleSignIn: Google login failed:', errorData);
+        
+        // Show error message instead of redirecting to signup
+        onError('No account found with this email. Please create an account first or use a different email.');
+        return;
       }
       
-      // If Google login fails, user doesn't exist, redirect to signup
-      console.log('🔐 NativeGoogleSignIn: User not found, redirecting to signup');
-      redirectToSignupWithGoogleData(googleUserData);
+      // If we get here, something went wrong
+      console.log('🔐 NativeGoogleSignIn: Login failed for unknown reason');
+      onError('Login failed. Please try again.');
       
     } catch (error) {
-      console.error('🔐 NativeGoogleSignIn: Error checking user existence:', error);
-      // Fallback: redirect to signup with Google data
-      redirectToSignupWithGoogleData(googleUserData);
+      console.error('🔐 NativeGoogleSignIn: Error during login:', error);
+      onError('Login failed. Please try again.');
     }
   };
 
-  // Redirect to signup page with Google data pre-filled
-  const redirectToSignupWithGoogleData = (googleUserData: any) => {
-    try {
-      console.log('🔐 NativeGoogleSignIn: Redirecting to signup with Google data:', googleUserData);
-      
-      // Close the current modal
-      onClose();
-      
-      // Use the userType prop passed to the component
-      const signupData = {
-        googleData: {
-          name: googleUserData.name,
-          email: googleUserData.email,
-          profile_picture: googleUserData.profile_picture,
-          google_id: googleUserData.google_id
-        },
-        userType: userType,
-        source: 'google'
-      };
-      
-      console.log('🔐 NativeGoogleSignIn: Signup data prepared:', signupData);
-      
-      // Call onSuccess with a special flag to indicate signup needed
-      onSuccess({
-        ...googleUserData,
-        needsSignup: true,
-        signupData: signupData
-      }, '');
-      
-    } catch (error) {
-      console.error('🔐 NativeGoogleSignIn: Error redirecting to signup:', error);
-      onError('Failed to redirect to signup. Please try again.');
-    }
-  };
+  // This function is no longer used - Google auth now only logs in existing users
 
   // Handle sign out (for testing)
   const handleSignOut = useCallback(async () => {
