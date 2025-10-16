@@ -527,7 +527,7 @@ export default function PatientSignUp() {
     // Create refs for scrolling to errors
     const scrollViewRef = useRef<ScrollView>(null);
     
-    // Pre-fill form with Google data if available
+    // Pre-fill form with Google data if available and check if user exists
     useEffect(() => {
         if (googleData && source === 'google') {
             try {
@@ -548,11 +548,72 @@ export default function PatientSignUp() {
                 }
                 
                 console.log('🔐 Patient Signup: Form pre-filled successfully');
+                
+                // Check if user already exists
+                checkIfUserExists(parsedGoogleData.email);
+                
             } catch (error) {
                 console.error('🔐 Patient Signup: Error parsing Google data:', error);
             }
         }
     }, [googleData, source]);
+
+    // Check if user already exists
+    const checkIfUserExists = async (email: string) => {
+        try {
+            console.log('🔐 Patient Signup: Checking if user exists for email:', email);
+            
+            // Try to login with dummy password to check if user exists
+            const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: email,
+                    password: 'dummy_check_password'
+                })
+            });
+
+            if (response.ok) {
+                // This shouldn't happen, but if it does, user exists
+                console.log('🔐 Patient Signup: Unexpected successful login');
+                return;
+            }
+
+            const errorData = await response.json();
+            console.log('🔐 Patient Signup: Login check response:', errorData);
+
+            // If error mentions password/credentials, user exists
+            if (errorData.message && (
+                errorData.message.includes('password') || 
+                errorData.message.includes('credentials') ||
+                errorData.message.includes('invalid')
+            )) {
+                console.log('🔐 Patient Signup: User already exists, showing login option');
+                
+                Alert.alert(
+                    'Account Already Exists',
+                    'An account with this email already exists. Would you like to log in instead?',
+                    [
+                        {
+                            text: 'Continue Signup',
+                            style: 'cancel'
+                        },
+                        {
+                            text: 'Log In',
+                            onPress: () => {
+                                // Navigate to login page
+                                router.replace('/login');
+                            }
+                        }
+                    ]
+                );
+            }
+        } catch (error) {
+            console.error('🔐 Patient Signup: Error checking user existence:', error);
+        }
+    };
     const fieldRefs = createFieldRefs([
         'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
         'country', 'city', 'acceptPolicies', 'verificationCode'

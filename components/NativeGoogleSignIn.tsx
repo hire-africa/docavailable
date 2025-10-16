@@ -207,44 +207,11 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Checking if user exists in database...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
-      // Simple approach: just check if email exists in database
-      const checkResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/check-user-exists', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: googleUserData.email
-        })
-      });
-
-      console.log('🔐 NativeGoogleSignIn: Check user response status:', checkResponse.status);
+      // For now, let's always redirect to signup and let the signup page handle existing users
+      // This is simpler and avoids API issues
+      console.log('🔐 NativeGoogleSignIn: Redirecting to signup (will check for existing user there)');
+      redirectToSignupWithGoogleData(googleUserData);
       
-      if (checkResponse.ok) {
-        const checkData = await checkResponse.json();
-        console.log('🔐 NativeGoogleSignIn: Check user response:', checkData);
-        
-        if (checkData.exists && checkData.user) {
-          // User exists, log them in
-          console.log('🔐 NativeGoogleSignIn: User exists, logging in:', checkData.user);
-          
-          // Create a mock token for now (in production, you'd get this from a proper login endpoint)
-          const userWithToken = {
-            ...checkData.user,
-            token: 'mock_token_' + Date.now() // This should be replaced with actual JWT token
-          };
-          
-          onSuccess(userWithToken, idToken);
-        } else {
-          // User doesn't exist, redirect to signup
-          console.log('🔐 NativeGoogleSignIn: User not found, redirecting to signup');
-          redirectToSignupWithGoogleData(googleUserData);
-        }
-      } else {
-        // API error, fallback to signup
-        console.error('🔐 NativeGoogleSignIn: API error, redirecting to signup');
-        redirectToSignupWithGoogleData(googleUserData);
-      }
     } catch (error) {
       console.error('🔐 NativeGoogleSignIn: Error checking user existence:', error);
       // Fallback: redirect to signup with Google data
