@@ -595,17 +595,41 @@ class AuthenticationController extends Controller
     private function verifyGoogleIdToken($idToken)
     {
         try {
-            // Decode the JSON token from frontend (Google OAuth user info)
-            $googleUser = json_decode($idToken, true);
+            // Use Google Auth library to verify the ID token
+            $client = new \Google_Client();
             
-            if (!$googleUser || !isset($googleUser['sub']) || !isset($googleUser['email'])) {
-                Log::error('Google token verification failed - invalid token structure', [
-                    'token' => $idToken
+            // Set the client ID from environment or config
+            $clientId = config('services.google.client_id') ?? env('GOOGLE_CLIENT_ID');
+            
+            if (!$clientId) {
+                Log::error('Google Client ID not configured');
+                return false;
+            }
+            
+            $client->setClientId($clientId);
+            
+            // Verify the ID token
+            $payload = $client->verifyIdToken($idToken);
+            
+            if (!$payload) {
+                Log::error('Google token verification failed - invalid token', [
+                    'token' => substr($idToken, 0, 50) . '...'
                 ]);
                 return false;
             }
-
-            // Basic validation
+            
+            // Extract user information from the verified token
+            $googleUser = [
+                'sub' => $payload['sub'],
+                'email' => $payload['email'],
+                'name' => $payload['name'] ?? '',
+                'given_name' => $payload['given_name'] ?? '',
+                'family_name' => $payload['family_name'] ?? '',
+                'picture' => $payload['picture'] ?? '',
+                'email_verified' => $payload['email_verified'] ?? false
+            ];
+            
+            // Validate required fields
             if (empty($googleUser['email']) || empty($googleUser['sub'])) {
                 Log::error('Google token verification failed - missing required fields', [
                     'email' => $googleUser['email'] ?? 'missing',
@@ -624,14 +648,15 @@ class AuthenticationController extends Controller
 
             Log::info('Google token verification successful', [
                 'email' => $googleUser['email'],
-                'sub' => $googleUser['sub']
+                'sub' => $googleUser['sub'],
+                'name' => $googleUser['name']
             ]);
 
             return $googleUser;
         } catch (\Exception $e) {
             Log::error('Google ID token verification failed', [
                 'error' => $e->getMessage(),
-                'token' => $idToken
+                'token' => substr($idToken, 0, 50) . '...'
             ]);
             return false;
         }

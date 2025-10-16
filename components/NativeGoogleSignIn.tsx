@@ -206,40 +206,48 @@ export default function NativeGoogleSignIn({
     try {
       console.log('🔐 NativeGoogleSignIn: Attempting to log in user...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
+      console.log('🔐 NativeGoogleSignIn: Google ID token:', idToken);
       
-      // Since the backend Google login endpoint isn't working, let's use a simpler approach
-      // We'll create a user object based on Google data and use it for authentication
-      // This is a temporary solution until the backend is properly deployed
+      // Use the backend Google login endpoint with the actual Google ID token
+      const googleLoginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_token: idToken // Send the actual Google ID token
+        })
+      });
+
+      console.log('🔐 NativeGoogleSignIn: Google login response status:', googleLoginResponse.status);
       
-      console.log('🔐 NativeGoogleSignIn: Creating user object from Google data');
+      if (googleLoginResponse.ok) {
+        const loginData = await googleLoginResponse.json();
+        console.log('🔐 NativeGoogleSignIn: Google login successful:', loginData);
+        
+        if (loginData.success && loginData.data && loginData.data.user) {
+          // User exists and is logged in
+          const userWithToken = {
+            ...loginData.data.user,
+            token: loginData.data.token
+          };
+          
+          console.log('🔐 NativeGoogleSignIn: Successfully logged in user:', userWithToken);
+          onSuccess(userWithToken, idToken);
+          return;
+        }
+      } else {
+        const errorData = await googleLoginResponse.json();
+        console.log('🔐 NativeGoogleSignIn: Google login failed:', errorData);
+        
+        // Show error message instead of redirecting to signup
+        onError('No account found with this email. Please create an account first or use a different email.');
+        return;
+      }
       
-      // Create a user object that matches what the app expects
-      const userObject = {
-        id: googleUserData.id || googleUserData.google_id,
-        email: googleUserData.email,
-        name: googleUserData.name,
-        first_name: googleUserData.givenName || googleUserData.name?.split(' ')[0] || '',
-        last_name: googleUserData.familyName || googleUserData.name?.split(' ').slice(1).join(' ') || '',
-        profile_picture: googleUserData.photo || googleUserData.profile_picture,
-        user_type: 'patient', // Default to patient
-        status: 'active',
-        google_id: googleUserData.id || googleUserData.google_id,
-        email_verified_at: new Date().toISOString(),
-        created_at: googleUserData.created_at || new Date().toISOString(),
-        updated_at: googleUserData.updated_at || new Date().toISOString()
-      };
-      
-      // Use the actual Google ID token instead of creating a mock token
-      const userWithToken = {
-        ...userObject,
-        token: idToken // Use the actual Google ID token
-      };
-      
-      console.log('🔐 NativeGoogleSignIn: Successfully created user object:', userWithToken);
-      
-      // For now, we'll assume the user exists and log them in
-      // In a production environment, you'd want to verify this with the backend
-      onSuccess(userWithToken, idToken);
+      // If we get here, something went wrong
+      console.log('🔐 NativeGoogleSignIn: Login failed for unknown reason');
+      onError('Login failed. Please try again.');
       
     } catch (error) {
       console.error('🔐 NativeGoogleSignIn: Error during login:', error);
