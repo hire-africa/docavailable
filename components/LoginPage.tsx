@@ -163,10 +163,11 @@ export default function LoginPage() {
         }
     };
 
-    const handleGoogleSignIn = () => {
-        console.log('🔐 Opening Google Auth WebView');
-        setShowGoogleAuth(true);
-    };
+    // Google Sign-In handler - DISABLED
+    // const handleGoogleSignIn = () => {
+    //     console.log('🔐 Opening Google Auth WebView');
+    //     setShowGoogleAuth(true);
+    // };
 
     const handleGoogleAuthSuccess = async (user: any, token: string) => {
         console.log('🔐 Google Auth Success:', { user, token });
@@ -329,14 +330,13 @@ export default function LoginPage() {
                         )}
                     </TouchableOpacity>
 
-                    {/* Divider */}
-                    <View style={styles.dividerContainer}>
+                    {/* Google Sign-In Button - DISABLED */}
+                    {/* <View style={styles.dividerContainer}>
                         <View style={styles.dividerLine} />
                         <Text style={styles.dividerText}>or</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
-                    {/* Google Sign-In Button */}
                     <TouchableOpacity
                         style={styles.googleButton}
                         onPress={handleGoogleSignIn}
@@ -348,7 +348,7 @@ export default function LoginPage() {
                             </View>
                             <Text style={styles.googleButtonText}>Continue with Google</Text>
                         </View>
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
 
                     <View style={styles.linksContainer}>
                         <TouchableOpacity
@@ -369,14 +369,14 @@ export default function LoginPage() {
                 </View>
             </View>
 
-            {/* Native Google Sign-In Modal */}
-            <NativeGoogleSignIn
+            {/* Native Google Sign-In Modal - DISABLED */}
+            {/* <NativeGoogleSignIn
                 visible={showGoogleAuth}
                 onClose={handleGoogleAuthClose}
                 onSuccess={handleGoogleAuthSuccess}
                 onError={handleGoogleAuthError}
                 userType={userType as 'patient' | 'doctor' | 'admin'}
-            />
+            /> */}
         </View>
     );
 }
