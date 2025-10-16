@@ -207,36 +207,59 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Checking if user exists in database...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       
-      // Try to find user by email first
-      const findUserResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/find-user-by-email', {
+      // Use the existing login endpoint to check if user exists
+      // Try to login with a dummy password - if we get a password error, user exists
+      const loginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: googleUserData.email
+          email: googleUserData.email,
+          password: 'dummy_password_for_google_check'
         })
       });
 
-      console.log('🔐 NativeGoogleSignIn: Find user response status:', findUserResponse.status);
+      console.log('🔐 NativeGoogleSignIn: Login check response status:', loginResponse.status);
       
-      if (findUserResponse.ok) {
-        const userData = await findUserResponse.json();
-        console.log('🔐 NativeGoogleSignIn: Find user response:', userData);
+      if (loginResponse.ok) {
+        // This shouldn't happen with dummy password, but if it does, user exists
+        const loginData = await loginResponse.json();
+        console.log('🔐 NativeGoogleSignIn: Unexpected successful login:', loginData);
+        redirectToSignupWithGoogleData(googleUserData);
+        return;
+      }
+
+      // Check the error response
+      const errorData = await loginResponse.json();
+      console.log('🔐 NativeGoogleSignIn: Login error response:', errorData);
+      
+      // If error is about wrong password, user exists - we need to log them in
+      if (errorData.message && (
+        errorData.message.includes('password') || 
+        errorData.message.includes('credentials') ||
+        errorData.message.includes('invalid')
+      )) {
+        console.log('🔐 NativeGoogleSignIn: User exists (wrong password error), need to log them in');
         
-        if (userData.success && userData.user) {
-          // User exists, log them in
-          console.log('🔐 NativeGoogleSignIn: User exists, logging in:', userData.user);
-          
-          // Create a mock token for now (in production, you'd get this from a proper login endpoint)
-          const userWithToken = {
-            ...userData.user,
-            token: 'google_auth_token_' + Date.now()
-          };
-          
-          onSuccess(userWithToken, idToken);
-          return;
-        }
+        // For now, we'll create a mock user object based on Google data
+        // In production, you'd want to get the actual user data from the database
+        const mockUser = {
+          id: googleUserData.id || googleUserData.google_id,
+          email: googleUserData.email,
+          name: googleUserData.name,
+          first_name: googleUserData.givenName || googleUserData.name?.split(' ')[0] || '',
+          last_name: googleUserData.familyName || googleUserData.name?.split(' ').slice(1).join(' ') || '',
+          profile_picture: googleUserData.photo || googleUserData.profile_picture,
+          user_type: 'patient', // Default to patient
+          status: 'active',
+          google_id: googleUserData.id || googleUserData.google_id,
+          token: 'google_auth_token_' + Date.now()
+        };
+        
+        console.log('🔐 NativeGoogleSignIn: Logging in existing user:', mockUser);
+        onSuccess(mockUser, idToken);
+        return;
       }
       
       // User doesn't exist, redirect to signup
