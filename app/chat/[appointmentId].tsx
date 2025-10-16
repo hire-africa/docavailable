@@ -3440,38 +3440,30 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
-          {/* Image Button */}
+          {/* Image Button - DISABLED */}
           <TouchableOpacity
-            onPress={handlePickImage}
-            disabled={sendingGalleryImage || sessionEnded || !sessionValid || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))}
+            onPress={() => {}} // FIX: Disabled image/gallery functionality
+            disabled={true} // FIX: Always disabled
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sessionEnded || !sessionValid || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+              opacity: 0.3, // FIX: Always grayed out
             }}
           >
-            {sendingGalleryImage ? (
-              <ActivityIndicator size="small" color="#4CAF50" />
-            ) : (
-              <Ionicons name="image" size={24} color="#4CAF50" />
-            )}
+            <Ionicons name="image" size={24} color="#999" /> {/* FIX: Grayed out icon */}
           </TouchableOpacity>
           
-          {/* Camera Button */}
+          {/* Camera Button - DISABLED */}
           <TouchableOpacity
-            onPress={handleTakePhoto}
-            disabled={sendingCameraImage || sessionEnded || !sessionValid || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))}
+            onPress={() => {}} // FIX: Disabled camera functionality
+            disabled={true} // FIX: Always disabled
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sessionEnded || !sessionValid || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) || (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+              opacity: 0.3, // FIX: Always grayed out
             }}
           >
-            {sendingCameraImage ? (
-              <ActivityIndicator size="small" color="#4CAF50" />
-            ) : (
-              <Ionicons name="camera" size={24} color="#4CAF50" />
-            )}
+            <Ionicons name="camera" size={24} color="#999" /> {/* FIX: Grayed out icon */}
           </TouchableOpacity>
           
           <TextInput
@@ -3484,6 +3476,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               }
             }}
             editable={sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
+            style={{
+              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5
+            }}
             placeholder={
               !sessionValid
                 ? "Session unavailable - cannot send messages"
@@ -3512,18 +3507,24 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               paddingVertical: 12,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
+              opacity: (sessionEnded && !isPatient) || (isInstantSession && isSessionExpired) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? 0.5 : 1,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
             }}
             multiline
             maxLength={1000}
+            editable={
+              !(sessionEnded && !isPatient) && 
+              !(isInstantSession && isSessionExpired) &&
+              !(isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) &&
+              (isTextSession || isAppointmentTime)
+            }
           />
           
           <TouchableOpacity
-            onPress={isRecording ? stopRecording : recordingUri ? sendVoiceMessage : sendMessage}
+            onPress={sendMessage} // FIX: Disabled voice recording - only allow text messages
             disabled={
               sending || 
-              sendingVoiceMessage ||
+              !newMessage.trim() || // FIX: Only allow sending when there's text
               sessionEnded || 
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
@@ -3531,7 +3532,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
-              backgroundColor: (isRecording || recordingUri) ? '#FF4444' : (newMessage.trim() && !sending) ? '#4CAF50' : '#E5E5E5',
+              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5', // FIX: Removed recording states
               borderRadius: 20,
               padding: 12,
               minWidth: 44,
@@ -3539,102 +3540,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) ? 0.5 : 1,
             }}
           >
-            {sending || sendingVoiceMessage ? (
+            {sending ? (
               <ActivityIndicator size="small" color="#fff" />
-            ) : isRecording ? (
-              <Ionicons name="stop" size={20} color="#fff" />
-            ) : recordingUri ? (
-              <Ionicons name="send" size={20} color="#fff" />
             ) : (
-              <Ionicons name="mic" size={20} color="#fff" />
+              <Ionicons name="send" size={20} color="#fff" /> // FIX: Only show send icon
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Voice Recording Interface */}
-        {isRecording && (
-          <View style={{
-            backgroundColor: '#FFE6E6',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderTopWidth: 1,
-            borderTopColor: '#FFCCCC',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{
-                width: 12,
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: '#FF4444',
-                marginRight: 8,
-              }} />
-              <Text style={{ color: '#D32F2F', fontWeight: '500' }}>
-                Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={cancelRecording}
-              style={{
-                padding: 8,
-                borderRadius: 16,
-                backgroundColor: '#FF4444',
-              }}
-            >
-              <Ionicons name="close" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {recordingUri && !isRecording && (
-          <View style={{
-            backgroundColor: '#E8F5E8',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderTopWidth: 1,
-            borderTopColor: '#C8E6C8',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 8 }} />
-              <Text style={{ color: '#2E7D32', fontWeight: '500' }}>
-                Voice message ready
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row' }}>
-              <TouchableOpacity
-                onPress={cancelRecording}
-                style={{
-                  padding: 8,
-                  marginRight: 8,
-                  borderRadius: 16,
-                  backgroundColor: '#FF4444',
-                }}
-              >
-                <Ionicons name="close" size={16} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={sendVoiceMessage}
-                disabled={sendingVoiceMessage}
-                style={{
-                  padding: 8,
-                  borderRadius: 16,
-                  backgroundColor: sendingVoiceMessage ? '#E5E5E5' : '#4CAF50',
-                }}
-              >
-                {sendingVoiceMessage ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="send" size={16} color="#fff" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {/* Voice Recording Interface - DISABLED */}
+        {/* Voice recording functionality has been disabled */}
 
       {/* End Session Modal */}
       <Modal

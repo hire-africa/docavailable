@@ -49,9 +49,6 @@ class ProcessFileUpload implements ShouldQueue
                 case 'chat_image':
                     $this->processChatImage();
                     break;
-                case 'chat_voice':
-                    $this->processChatVoice();
-                    break;
                 case 'id_document':
                     $this->processIdDocument();
                     break;
@@ -120,39 +117,14 @@ class ProcessFileUpload implements ShouldQueue
             'preview' => [400, 400],
         ];
 
-        $processedFiles = [];
-
         foreach ($sizes as $size => $dimensions) {
             $newPath = "{$directory}/{$nameWithoutExt}_{$size}.{$extension}";
             
             $this->resizeImage($originalPath, $newPath, $dimensions[0], $dimensions[1], 85);
-            $processedFiles[] = $newPath;
         }
 
-        // Move all processed files to DigitalOcean Spaces
-        $this->moveToDigitalOceanSpaces($originalPath, $processedFiles);
-
-        // Clean up local files
+        // Clean up original file
         Storage::disk('public')->delete($originalPath);
-        foreach ($processedFiles as $file) {
-            Storage::disk('public')->delete($file);
-        }
-    }
-
-    /**
-     * Process chat voice message
-     */
-    protected function processChatVoice(): void
-    {
-        $originalPath = $this->filePath;
-        
-        // Move voice message to DigitalOcean Spaces
-        $this->moveToDigitalOceanSpaces($originalPath, []);
-        
-        // Clean up local file
-        Storage::disk('public')->delete($originalPath);
-        
-        Log::info("Voice message moved to DigitalOcean Spaces: {$originalPath}");
     }
 
     /**
@@ -300,38 +272,6 @@ class ProcessFileUpload implements ShouldQueue
             Storage::disk('public')->delete($this->filePath);
         } catch (\Exception $e) {
             Log::error("Failed to clean up file after job failure: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Move files to DigitalOcean Spaces
-     */
-    protected function moveToDigitalOceanSpaces(string $originalPath, array $processedFiles = []): void
-    {
-        try {
-            // Move original file to DigitalOcean Spaces
-            $fileContent = Storage::disk('public')->get($originalPath);
-            Storage::disk('spaces')->put($originalPath, $fileContent);
-            
-            Log::info("Original file moved to DigitalOcean Spaces: {$originalPath}");
-            
-            // Move processed files to DigitalOcean Spaces
-            foreach ($processedFiles as $filePath) {
-                if (Storage::disk('public')->exists($filePath)) {
-                    $fileContent = Storage::disk('public')->get($filePath);
-                    Storage::disk('spaces')->put($filePath, $fileContent);
-                    
-                    Log::info("Processed file moved to DigitalOcean Spaces: {$filePath}");
-                }
-            }
-            
-        } catch (\Exception $e) {
-            Log::error("Failed to move files to DigitalOcean Spaces: " . $e->getMessage(), [
-                'original_path' => $originalPath,
-                'processed_files' => $processedFiles,
-                'exception' => $e
-            ]);
-            throw $e;
         }
     }
 } 

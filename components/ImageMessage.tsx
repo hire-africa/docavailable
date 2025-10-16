@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import ReadReceipt from './ReadReceipt';
 import { environment } from '../config/environment';
+import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 

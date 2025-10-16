@@ -133,23 +133,14 @@ class ImageService {
       const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
       const fileName = `image_${uniqueId}.jpg`;
 
-      // Create proper file object for React Native
       const fileObject = {
         uri: imageUri,
         type: 'image/jpeg',
         name: fileName,
-      } as any;
+      };
 
-      // Append file with proper handling for React Native
-      formData.append('file', fileObject);
+      formData.append('file', fileObject as any);
       formData.append('appointment_id', appointmentId.toString());
-
-      console.log('ImageService: FormData prepared:', {
-        fileName,
-        appointmentId,
-        imageUriLength: imageUri.length,
-        formDataKeys: Array.from((formData as any)._parts || []).map((part: any) => part[0]),
-      });
 
       console.log('ImageService: FormData prepared:', {
         fileName,

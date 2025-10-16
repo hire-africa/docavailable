@@ -1,4 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -211,7 +212,15 @@ export default function LoginPage() {
                 return;
             }
             
-            // User exists in database, proceed with normal login flow
+            // User exists in database, store the token and proceed with login
+            console.log('🔐 Existing user, storing token and logging in');
+            
+            // Store the token in AsyncStorage
+            if (user.token) {
+                await AsyncStorage.setItem('auth_token', user.token);
+                console.log('🔐 Token stored successfully');
+            }
+            
             // Navigate to appropriate dashboard based on user type
             if (user.user_type === 'admin') {
                 navigateToDashboard('admin', true);
