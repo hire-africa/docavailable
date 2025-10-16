@@ -300,6 +300,13 @@ class FileUploadController extends Controller
             $request->validate([
                 'file' => 'required|file|mimes:jpg,jpeg,png,gif,webp|max:4096', // max 4MB
                 'appointment_id' => 'required|integer',
+            ], [
+                'file.required' => 'Please select an image file to upload.',
+                'file.file' => 'The uploaded file is not valid.',
+                'file.mimes' => 'Only JPG, JPEG, PNG, GIF, and WebP images are allowed.',
+                'file.max' => 'The image file size must not exceed 4MB.',
+                'appointment_id.required' => 'Appointment ID is required.',
+                'appointment_id.integer' => 'Appointment ID must be a valid number.',
             ]);
             
             $user = $request->user();
@@ -323,7 +330,7 @@ class FileUploadController extends Controller
             $filename = time() . '_' . Str::random(10) . '.' . $extension;
             $path = $file->storeAs($folder, $filename, 'public');
             
-            // Get the URL - use API endpoint instead of direct storage URL
+            // Get the URL - use API endpoint for async processing
             $url = url("/api/images/{$path}");
             
             // Dispatch job to process image asynchronously
@@ -348,16 +355,32 @@ class FileUploadController extends Controller
                 'message' => 'Chat image uploaded successfully.'
             ]);
             
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Chat image validation error:', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             \Log::error('Chat image upload error:', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
+                'file_info' => [
+                    'has_file' => $request->hasFile('file'),
+                    'file_size' => $request->file('file') ? $request->file('file')->getSize() : 'N/A',
+                    'mime_type' => $request->file('file') ? $request->file('file')->getMimeType() : 'N/A',
+                ]
             ]);
             
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to upload chat image: ' . $e->getMessage()
-            ], 422);
+            ], 500);
         }
     }
 
@@ -397,7 +420,7 @@ class FileUploadController extends Controller
         $filename = time() . '_' . Str::random(10) . '.' . $extension;
         $path = $file->storeAs($folder, $filename, 'public');
         
-        // Get the URL - use API endpoint instead of direct storage URL
+        // Get the URL - use API endpoint for async processing
         $url = url("/api/images/{$path}");
         
         // If it's an image, process it asynchronously
@@ -475,8 +498,11 @@ class FileUploadController extends Controller
             $folder = 'chat_voice_messages/' . $appointmentId;
             $path = $file->storeAs($folder, $filename, 'public');
             
-            // Get the public URL - use a custom route for better audio streaming
+            // Get the public URL - use API endpoint for async processing
             $url = url("/api/audio/{$path}");
+            
+            // Dispatch job to process voice message asynchronously
+            \App\Jobs\ProcessFileUpload::dispatch($path, 'chat_voice', $user->id, ['appointment_id' => $appointmentId]);
             
             \Log::info('Voice message uploaded successfully:', [
                 'path' => $path,

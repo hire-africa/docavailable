@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    Modal,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -350,122 +351,235 @@ const Step2: React.FC<Step2Props> = ({
         }
     };
 
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [currentUploadType, setCurrentUploadType] = useState<'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate' | null>(null);
+    const [currentUploadSetter, setCurrentUploadSetter] = useState<((uri: string | null) => void) | null>(null);
+
     const showUploadOptions = (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate', setter: (uri: string | null) => void) => {
-        Alert.alert(
-            'Upload Document',
-            'Choose how you want to upload your document',
-            [
-                {
-                    text: 'Camera',
-                    onPress: () => handleCameraCapture(type, setter),
-                },
-                {
-                    text: 'Photo Library',
-                    onPress: () => handleFileUpload(type, setter),
-                },
-                {
-                    text: 'Cancel',
-                    style: 'cancel',
-                },
-            ]
-        );
+        setCurrentUploadType(type);
+        setCurrentUploadSetter(() => setter);
+        setShowUploadModal(true);
+    };
+
+    const handleUploadOption = (option: 'camera' | 'library') => {
+        setShowUploadModal(false);
+        if (currentUploadType && currentUploadSetter) {
+            if (option === 'camera') {
+                handleCameraCapture(currentUploadType, currentUploadSetter);
+            } else {
+                handleFileUpload(currentUploadType, currentUploadSetter);
+            }
+        }
+    };
+
+    const getDocumentTitle = (type: 'nationalIdPassport' | 'highestMedicalCertificate' | 'specialistCertificate') => {
+        switch (type) {
+            case 'nationalIdPassport':
+                return 'National ID / Passport';
+            case 'highestMedicalCertificate':
+                return 'Highest Medical Certificate';
+            case 'specialistCertificate':
+                return 'Specialist Certificate';
+            default:
+                return 'Document';
+        }
     };
 
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-            <View style={styles.stepHeader}>
-                <FontAwesome name="file-text" size={40} color="#4CAF50" />
-                <Text style={styles.stepTitle}>Required Documents</Text>
-                <Text style={styles.stepSubtitle}>Upload your credentials</Text>
-                <Text style={styles.uploadInstruction}>
-                    Tap any upload button to choose between camera or photo library
-                </Text>
+            <View style={styles.modernStepHeader}>
+                <View style={styles.modernStepIconContainer}>
+                    <FontAwesome name="file-text-o" size={32} color="#FFFFFF" />
+                </View>
+                <Text style={styles.modernStepTitle}>Required Documents</Text>
+                <Text style={styles.modernStepSubtitle}>Upload your professional credentials to complete verification</Text>
+                <View style={styles.modernStepInstruction}>
+                    <FontAwesome name="info-circle" size={14} color="#4CAF50" />
+                    <Text style={styles.modernStepInstructionText}>
+                        Tap any upload area to choose between camera or photo library
+                    </Text>
+                </View>
             </View>
 
-            <View style={styles.formSection}>
-                <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>National ID / Passport *</Text>
+            <View style={styles.modernDocumentSection}>
+                <View style={styles.modernDocumentCard}>
+                    <View style={styles.modernDocumentHeader}>
+                        <View style={styles.modernDocumentIcon}>
+                            <FontAwesome name="id-card-o" size={20} color="#4CAF50" />
+                        </View>
+                        <View style={styles.modernDocumentInfo}>
+                            <Text style={styles.modernDocumentLabel}>National ID / Passport</Text>
+                            <Text style={styles.modernDocumentRequired}>Required</Text>
+                        </View>
+                        {nationalIdPassport && (
+                            <View style={styles.modernDocumentStatus}>
+                                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                            </View>
+                        )}
+                    </View>
                     <TouchableOpacity
                         ref={fieldRefs?.nationalIdPassport}
-                        style={[styles.uploadButton, nationalIdPassport && styles.uploadButtonSuccess]}
+                        style={[styles.modernUploadArea, nationalIdPassport && styles.modernUploadAreaSuccess]}
                         onPress={() => showUploadOptions('nationalIdPassport', setNationalIdPassport)}
                         disabled={isUploading}
                     >
-                        <View style={styles.uploadIconContainer}>
-                            <FontAwesome
-                                name={nationalIdPassport ? "check-circle" : "camera"}
-                                size={20}
-                                color={nationalIdPassport ? "#4CAF50" : "#666"}
-                            />
-                            <FontAwesome
-                                name={nationalIdPassport ? "check-circle" : "photo"}
-                                size={20}
-                                color={nationalIdPassport ? "#4CAF50" : "#666"}
-                                style={{ marginLeft: 8 }}
-                            />
+                        <View style={styles.modernUploadContent}>
+                            <View style={styles.modernUploadIconContainer}>
+                                <FontAwesome
+                                    name={nationalIdPassport ? "check-circle" : "cloud-upload"}
+                                    size={24}
+                                    color={nationalIdPassport ? "#4CAF50" : "#666"}
+                                />
+                            </View>
+                            <Text style={styles.modernUploadText}>
+                                {nationalIdPassport ? 'Document uploaded successfully' : 'Tap to upload document'}
+                            </Text>
+                            <Text style={styles.modernUploadSubtext}>
+                                {nationalIdPassport ? 'Ready for verification' : 'Camera or Photo Library'}
+                            </Text>
                         </View>
-                        <Text style={styles.uploadButtonText}>
-                            {nationalIdPassport ? 'Document uploaded' : 'Upload National ID or Passport'}
-                        </Text>
                     </TouchableOpacity>
-                    {errors.nationalIdPassport && <Text style={styles.errorText}>{errors.nationalIdPassport}</Text>}
+                    {errors.nationalIdPassport && <Text style={styles.modernErrorText}>{errors.nationalIdPassport}</Text>}
                 </View>
 
-                <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>Highest Medical Certificate *</Text>
+                <View style={styles.modernDocumentCard}>
+                    <View style={styles.modernDocumentHeader}>
+                        <View style={styles.modernDocumentIcon}>
+                            <FontAwesome name="graduation-cap" size={20} color="#4CAF50" />
+                        </View>
+                        <View style={styles.modernDocumentInfo}>
+                            <Text style={styles.modernDocumentLabel}>Highest Medical Certificate</Text>
+                            <Text style={styles.modernDocumentRequired}>Required</Text>
+                        </View>
+                        {highestMedicalCertificate && (
+                            <View style={styles.modernDocumentStatus}>
+                                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                            </View>
+                        )}
+                    </View>
                     <TouchableOpacity
                         ref={fieldRefs?.highestMedicalCertificate}
-                        style={[styles.uploadButton, highestMedicalCertificate && styles.uploadButtonSuccess]}
+                        style={[styles.modernUploadArea, highestMedicalCertificate && styles.modernUploadAreaSuccess]}
                         onPress={() => showUploadOptions('highestMedicalCertificate', setHighestMedicalCertificate)}
                         disabled={isUploading}
                     >
-                        <View style={styles.uploadIconContainer}>
-                            <FontAwesome
-                                name={highestMedicalCertificate ? "check-circle" : "camera"}
-                                size={20}
-                                color={highestMedicalCertificate ? "#4CAF50" : "#666"}
-                            />
-                            <FontAwesome
-                                name={highestMedicalCertificate ? "check-circle" : "photo"}
-                                size={20}
-                                color={highestMedicalCertificate ? "#4CAF50" : "#666"}
-                                style={{ marginLeft: 8 }}
-                            />
+                        <View style={styles.modernUploadContent}>
+                            <View style={styles.modernUploadIconContainer}>
+                                <FontAwesome
+                                    name={highestMedicalCertificate ? "check-circle" : "cloud-upload"}
+                                    size={24}
+                                    color={highestMedicalCertificate ? "#4CAF50" : "#666"}
+                                />
+                            </View>
+                            <Text style={styles.modernUploadText}>
+                                {highestMedicalCertificate ? 'Document uploaded successfully' : 'Tap to upload document'}
+                            </Text>
+                            <Text style={styles.modernUploadSubtext}>
+                                {highestMedicalCertificate ? 'Ready for verification' : 'Camera or Photo Library'}
+                            </Text>
                         </View>
-                        <Text style={styles.uploadButtonText}>
-                            {highestMedicalCertificate ? 'Document uploaded' : 'Upload Highest Medical Certificate'}
-                        </Text>
                     </TouchableOpacity>
-                    {errors.highestMedicalCertificate && <Text style={styles.errorText}>{errors.highestMedicalCertificate}</Text>}
+                    {errors.highestMedicalCertificate && <Text style={styles.modernErrorText}>{errors.highestMedicalCertificate}</Text>}
                 </View>
 
-                <View style={styles.documentUpload}>
-                    <Text style={styles.documentLabel}>Specialist Certificate (Optional)</Text>
+                <View style={styles.modernDocumentCard}>
+                    <View style={styles.modernDocumentHeader}>
+                        <View style={styles.modernDocumentIcon}>
+                            <FontAwesome name="certificate" size={20} color="#4CAF50" />
+                        </View>
+                        <View style={styles.modernDocumentInfo}>
+                            <Text style={styles.modernDocumentLabel}>Specialist Certificate</Text>
+                            <Text style={styles.modernDocumentOptional}>Optional</Text>
+                        </View>
+                        {specialistCertificate && (
+                            <View style={styles.modernDocumentStatus}>
+                                <FontAwesome name="check-circle" size={20} color="#4CAF50" />
+                            </View>
+                        )}
+                    </View>
                     <TouchableOpacity
-                        style={[styles.uploadButton, specialistCertificate && styles.uploadButtonSuccess]}
+                        style={[styles.modernUploadArea, specialistCertificate && styles.modernUploadAreaSuccess]}
                         onPress={() => showUploadOptions('specialistCertificate', setSpecialistCertificate)}
                         disabled={isUploading}
                     >
-                        <View style={styles.uploadIconContainer}>
-                            <FontAwesome
-                                name={specialistCertificate ? "check-circle" : "camera"}
-                                size={20}
-                                color={specialistCertificate ? "#4CAF50" : "#666"}
-                            />
-                            <FontAwesome
-                                name={specialistCertificate ? "check-circle" : "photo"}
-                                size={20}
-                                color={specialistCertificate ? "#4CAF50" : "#666"}
-                                style={{ marginLeft: 8 }}
-                            />
+                        <View style={styles.modernUploadContent}>
+                            <View style={styles.modernUploadIconContainer}>
+                                <FontAwesome
+                                    name={specialistCertificate ? "check-circle" : "cloud-upload"}
+                                    size={24}
+                                    color={specialistCertificate ? "#4CAF50" : "#666"}
+                                />
+                            </View>
+                            <Text style={styles.modernUploadText}>
+                                {specialistCertificate ? 'Document uploaded successfully' : 'Tap to upload document'}
+                            </Text>
+                            <Text style={styles.modernUploadSubtext}>
+                                {specialistCertificate ? 'Ready for verification' : 'Camera or Photo Library'}
+                            </Text>
                         </View>
-                        <Text style={styles.uploadButtonText}>
-                            {specialistCertificate ? 'Document uploaded' : 'Upload Specialist Certificate'}
-                        </Text>
                     </TouchableOpacity>
-                    {errors.specialistCertificate && <Text style={styles.errorText}>{errors.specialistCertificate}</Text>}
+                    {errors.specialistCertificate && <Text style={styles.modernErrorText}>{errors.specialistCertificate}</Text>}
                 </View>
             </View>
+
+            {/* Modern Upload Modal */}
+            <Modal
+                visible={showUploadModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowUploadModal(false)}
+            >
+                <View style={styles.modernModalOverlay}>
+                    <View style={styles.modernModalContainer}>
+                        <View style={styles.modernModalHeader}>
+                            <View style={styles.modernModalIcon}>
+                                <FontAwesome name="cloud-upload" size={24} color="#4CAF50" />
+                            </View>
+                            <Text style={styles.modernModalTitle}>Upload Document</Text>
+                            <Text style={styles.modernModalSubtitle}>
+                                {currentUploadType ? getDocumentTitle(currentUploadType) : 'Choose how you want to upload your document'}
+                            </Text>
+                        </View>
+
+                        <View style={styles.modernModalOptions}>
+                            <TouchableOpacity
+                                style={styles.modernModalOption}
+                                onPress={() => handleUploadOption('camera')}
+                            >
+                                <View style={styles.modernModalOptionIcon}>
+                                    <FontAwesome name="camera" size={24} color="#4CAF50" />
+                                </View>
+                                <View style={styles.modernModalOptionContent}>
+                                    <Text style={styles.modernModalOptionTitle}>Take Photo</Text>
+                                    <Text style={styles.modernModalOptionSubtitle}>Use camera to capture document</Text>
+                                </View>
+                                <FontAwesome name="chevron-right" size={16} color="#CCCCCC" />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.modernModalOption}
+                                onPress={() => handleUploadOption('library')}
+                            >
+                                <View style={styles.modernModalOptionIcon}>
+                                    <FontAwesome name="photo" size={24} color="#4CAF50" />
+                                </View>
+                                <View style={styles.modernModalOptionContent}>
+                                    <Text style={styles.modernModalOptionTitle}>Choose from Library</Text>
+                                    <Text style={styles.modernModalOptionSubtitle}>Select from photo gallery</Text>
+                                </View>
+                                <FontAwesome name="chevron-right" size={16} color="#CCCCCC" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.modernModalCancel}
+                            onPress={() => setShowUploadModal(false)}
+                        >
+                            <Text style={styles.modernModalCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -1548,6 +1662,276 @@ const styles = StyleSheet.create({
     uploadIconContainer: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    // Modern Step2 Styles
+    modernStepHeader: {
+        alignItems: 'center',
+        marginBottom: 32,
+        paddingHorizontal: 20,
+    },
+    modernStepIconContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#4CAF50',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 20,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#4CAF50',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 8,
+            },
+        }),
+    },
+    modernStepTitle: {
+        fontSize: isLargeScreen ? 28 : 24,
+        fontWeight: 'bold',
+        color: '#1A1A1A',
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    modernStepSubtitle: {
+        fontSize: isLargeScreen ? 16 : 14,
+        color: '#666',
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 16,
+    },
+    modernStepInstruction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F0F9F0',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#E8F5E9',
+    },
+    modernStepInstructionText: {
+        fontSize: 12,
+        color: '#4CAF50',
+        marginLeft: 8,
+        fontWeight: '500',
+    },
+    modernDocumentSection: {
+        paddingHorizontal: 20,
+    },
+    modernDocumentCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        marginBottom: 20,
+        padding: 20,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.08,
+                shadowRadius: 8,
+            },
+            android: {
+                elevation: 4,
+            },
+            web: {
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            },
+        }),
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+    },
+    modernDocumentHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modernDocumentIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F0F9F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    modernDocumentInfo: {
+        flex: 1,
+    },
+    modernDocumentLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 4,
+    },
+    modernDocumentRequired: {
+        fontSize: 12,
+        color: '#FF6B6B',
+        fontWeight: '500',
+        backgroundColor: '#FFF5F5',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    modernDocumentOptional: {
+        fontSize: 12,
+        color: '#4CAF50',
+        fontWeight: '500',
+        backgroundColor: '#F0F9F0',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+    },
+    modernDocumentStatus: {
+        marginLeft: 12,
+    },
+    modernUploadArea: {
+        borderWidth: 2,
+        borderColor: '#E0E0E0',
+        borderStyle: 'dashed',
+        borderRadius: 12,
+        padding: 24,
+        backgroundColor: '#FAFAFA',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 120,
+    },
+    modernUploadAreaSuccess: {
+        borderColor: '#4CAF50',
+        borderStyle: 'solid',
+        backgroundColor: '#F0F9F0',
+    },
+    modernUploadContent: {
+        alignItems: 'center',
+    },
+    modernUploadIconContainer: {
+        marginBottom: 12,
+    },
+    modernUploadText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    modernUploadSubtext: {
+        fontSize: 12,
+        color: '#666',
+        textAlign: 'center',
+    },
+    modernErrorText: {
+        color: '#FF3B30',
+        fontSize: 12,
+        marginTop: 8,
+        marginLeft: 4,
+        fontWeight: '500',
+    },
+    // Modern Upload Modal Styles
+    modernModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    modernModalContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        width: '100%',
+        maxWidth: 400,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.25,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 20,
+            },
+        }),
+    },
+    modernModalHeader: {
+        alignItems: 'center',
+        paddingTop: 32,
+        paddingHorizontal: 24,
+        paddingBottom: 20,
+    },
+    modernModalIcon: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#F0F9F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 16,
+    },
+    modernModalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1A1A1A',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    modernModalSubtitle: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    modernModalOptions: {
+        paddingHorizontal: 24,
+        paddingBottom: 20,
+    },
+    modernModalOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        backgroundColor: '#FAFAFA',
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+    },
+    modernModalOptionIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#F0F9F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 16,
+    },
+    modernModalOptionContent: {
+        flex: 1,
+    },
+    modernModalOptionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 4,
+    },
+    modernModalOptionSubtitle: {
+        fontSize: 12,
+        color: '#666',
+    },
+    modernModalCancel: {
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        borderTopWidth: 1,
+        borderTopColor: '#F0F0F0',
+        alignItems: 'center',
+    },
+    modernModalCancelText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
     },
     footer: {
         flexDirection: 'row',
