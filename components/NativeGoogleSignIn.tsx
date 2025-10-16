@@ -201,61 +201,62 @@ export default function NativeGoogleSignIn({
     }
   }, [isConfigured, onSuccess, onError, onClose]);
 
-  // Check if user exists in database and handle accordingly
+  // Authenticate user with Google OAuth using backend endpoint
   const checkUserExistsAndHandle = async (googleUserData: any, idToken: string) => {
     try {
-      console.log('🔐 NativeGoogleSignIn: Attempting to log in user...');
+      console.log('🔐 NativeGoogleSignIn: Attempting to authenticate with Google OAuth...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       console.log('🔐 NativeGoogleSignIn: Google ID token:', idToken);
       
-      // Use the backend Google login endpoint with the actual Google ID token
+      // Use the backend's Google OAuth endpoint
       const googleLoginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_token: idToken // Send the actual Google ID token
+          id_token: idToken
         })
       });
 
+      const googleLoginData = await googleLoginResponse.json();
       console.log('🔐 NativeGoogleSignIn: Google login response status:', googleLoginResponse.status);
-      
-      if (googleLoginResponse.ok) {
-        const loginData = await googleLoginResponse.json();
-        console.log('🔐 NativeGoogleSignIn: Google login successful:', loginData);
+      console.log('🔐 NativeGoogleSignIn: Google login response data:', googleLoginData);
+
+      if (googleLoginResponse.ok && googleLoginData.success && googleLoginData.data && googleLoginData.data.user) {
+        // Success! We have a proper JWT token from the backend
+        const userWithToken = {
+          ...googleLoginData.data.user,
+          token: googleLoginData.data.token
+        };
         
-        if (loginData.success && loginData.data && loginData.data.user) {
-          // User exists and is logged in
-          const userWithToken = {
-            ...loginData.data.user,
-            token: loginData.data.token
-          };
-          
-          console.log('🔐 NativeGoogleSignIn: Successfully logged in user:', userWithToken);
-          onSuccess(userWithToken, idToken);
+        console.log('🔐 NativeGoogleSignIn: Successfully authenticated with Google OAuth and received JWT token:', userWithToken);
+        onSuccess(userWithToken, googleLoginData.data.token);
+        return;
+      } else {
+        // Handle different error cases
+        if (googleLoginResponse.status === 401) {
+          console.log('🔐 NativeGoogleSignIn: Invalid Google token');
+          onError('Invalid Google authentication. Please try signing in again.');
+          return;
+        } else if (googleLoginResponse.status === 404) {
+          console.log('🔐 NativeGoogleSignIn: No account found with this email');
+          onError('No account found with this email. Please create an account first or use a different email.');
+          return;
+        } else {
+          console.log('🔐 NativeGoogleSignIn: Google authentication failed:', googleLoginData.message);
+          onError(googleLoginData.message || 'Google authentication failed. Please try again.');
           return;
         }
-      } else {
-        const errorData = await googleLoginResponse.json();
-        console.log('🔐 NativeGoogleSignIn: Google login failed:', errorData);
-        
-        // Show error message instead of redirecting to signup
-        onError('No account found with this email. Please create an account first or use a different email.');
-        return;
       }
       
-      // If we get here, something went wrong
-      console.log('🔐 NativeGoogleSignIn: Login failed for unknown reason');
-      onError('Login failed. Please try again.');
-      
     } catch (error) {
-      console.error('🔐 NativeGoogleSignIn: Error during login:', error);
-      onError('Login failed. Please try again.');
+      console.error('🔐 NativeGoogleSignIn: Error during Google authentication:', error);
+      onError('Authentication failed. Please check your internet connection and try again.');
     }
   };
 
-  // This function is no longer used - Google auth now only logs in existing users
+  // Google OAuth now only logs in existing users - no signup functionality
 
   // Handle sign out (for testing)
   const handleSignOut = useCallback(async () => {
@@ -339,9 +340,9 @@ export default function NativeGoogleSignIn({
                   </Animated.View>
 
                   {/* Title */}
-                  <Text style={styles.title}>Welcome to DocAvailable</Text>
+                  <Text style={styles.title}>Sign in to DocAvailable</Text>
                   <Text style={styles.subtitle}>
-                    Tap the button below to see your saved Google accounts and sign in with one tap
+                    Tap the button below to sign in with your existing Google account
                   </Text>
 
                   {/* Sign In Button */}

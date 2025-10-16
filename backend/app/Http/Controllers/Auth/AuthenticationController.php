@@ -472,18 +472,21 @@ class AuthenticationController extends Controller
             $user = User::where('email', $email)->first();
 
             if (!$user) {
-                // Create new user from Google data
-                $user = User::create([
-                    'email' => $email,
-                    'first_name' => $googleUser['given_name'] ?? '',
-                    'last_name' => $googleUser['family_name'] ?? '',
-                    'display_name' => $googleUser['name'] ?? ($googleUser['given_name'] . ' ' . $googleUser['family_name']),
-                    'user_type' => 'patient', // Default to patient, can be changed later
-                    'status' => 'active',
-                    'google_id' => $googleId,
-                    'email_verified_at' => now(), // Google emails are verified
-                ]);
+                // User doesn't exist - only allow login for existing users
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No account found with this email. Please create an account first or use a different email.',
+                    'error_type' => 'user_not_found',
+                    'suggestion' => 'You need to create an account first before you can sign in with Google. Please use the regular registration process.'
+                ], 404);
             } else {
+                // User exists - update Google ID if not set and verify email
+                if (!$user->google_id) {
+                    $user->update([
+                        'google_id' => $googleId,
+                        'email_verified_at' => now(),
+                    ]);
+                }
                 // Check if account is suspended
                 if ($user->status === 'suspended') {
                     return response()->json([
@@ -502,14 +505,6 @@ class AuthenticationController extends Controller
                         'error_type' => 'account_pending',
                         'suggestion' => 'You will receive an email notification once your account is approved.'
                     ], 403);
-                }
-                
-                // Update existing user with Google ID if not set
-                if (!$user->google_id) {
-                    $user->update([
-                        'google_id' => $googleId,
-                        'email_verified_at' => now(),
-                    ]);
                 }
             }
 
