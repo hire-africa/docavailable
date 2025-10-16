@@ -208,6 +208,26 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       console.log('🔐 NativeGoogleSignIn: Google ID token:', idToken);
       
+      // Test if API is working first
+      console.log('🔐 NativeGoogleSignIn: Testing API connectivity...');
+      try {
+        const testResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: 'test@example.com',
+            password: 'test'
+          })
+        });
+        console.log('🔐 NativeGoogleSignIn: Test API response status:', testResponse.status);
+        const testText = await testResponse.text();
+        console.log('🔐 NativeGoogleSignIn: Test API response:', testText.substring(0, 200));
+      } catch (testError) {
+        console.error('🔐 NativeGoogleSignIn: Test API error:', testError);
+      }
+
       // Use the backend's Google OAuth endpoint
       const googleLoginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
