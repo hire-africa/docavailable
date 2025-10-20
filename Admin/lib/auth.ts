@@ -40,7 +40,7 @@ export async function comparePassword(password: string, hash: string): Promise<b
   return bcrypt.compare(password, hash);
 }
 
-// Admin accounts configuration
+// Admin accounts configuration (hardcoded for now)
 const ADMIN_ACCOUNTS = [
   {
     email: 'blacksleeky84@gmail.com',

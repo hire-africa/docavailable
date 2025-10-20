@@ -1168,6 +1168,7 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::post('/admin/withdrawal-requests/{id}/approve', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'approve']);
     Route::post('/admin/withdrawal-requests/{id}/reject', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject']);
     Route::post('/admin/withdrawal-requests/{id}/mark-as-paid', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'markAsPaid']);
+    Route::post('/admin/withdrawal-requests/send-completion-email', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'sendWithdrawalCompletedEmail']);
     
     // Plan management
     Route::get('/admin/plans', [\App\Http\Controllers\Admin\PlanController::class, 'index']);

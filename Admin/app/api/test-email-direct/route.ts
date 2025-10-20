@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
-import { sendApprovalEmail, sendRejectionEmail } from '@/lib/email-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,16 +18,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let emailResult;
-    if (type === 'approval') {
-      emailResult = await sendApprovalEmail(doctorName, doctorEmail);
-    } else if (type === 'rejection') {
-      emailResult = await sendRejectionEmail(doctorName, doctorEmail);
-    } else {
-      return NextResponse.json({ message: 'Invalid email type' }, { status: 400 });
-    }
-
-    return NextResponse.json(emailResult);
+    // Email service is temporarily disabled
+    return NextResponse.json({
+      success: false,
+      message: 'Email service is temporarily disabled'
+    });
   } catch (error) {
     console.error('Test email API error:', error);
     return NextResponse.json(

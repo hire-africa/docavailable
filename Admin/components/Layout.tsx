@@ -14,7 +14,8 @@ import {
   X,
   Home,
   FileText,
-  Wallet
+  Wallet,
+  ArrowUpCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -30,6 +31,7 @@ const navigation = [
   { name: 'Plans', href: '/plans', icon: FileText },
   { name: 'Appointments', href: '/appointments', icon: Calendar },
   { name: 'Payments', href: '/payments', icon: Wallet },
+  { name: 'Withdraw Requests', href: '/withdraw-requests', icon: ArrowUpCircle },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ];
 

@@ -135,29 +135,9 @@ export default function UsersPage() {
   const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
-  const [pendingDoctors, setPendingDoctors] = useState<User[]>([]);
 
   const itemsPerPage = 10;
 
-  const fetchPendingDoctors = async () => {
-    try {
-      const token = localStorage.getItem('admin_token');
-      if (!token) return;
-
-      const response = await fetch('/api/users?type=doctor&status=pending&limit=50', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setPendingDoctors(data.users || []);
-      }
-    } catch (error) {
-      console.error('Error fetching pending doctors:', error);
-    }
-  };
 
   const fetchUserDetails = async (userId: number) => {
     try {
@@ -187,7 +167,6 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
-    fetchPendingDoctors();
   }, [currentPage, filterType, filterStatus, searchTerm]);
 
   const fetchUsers = async () => {
@@ -251,7 +230,6 @@ export default function UsersPage() {
       if (response.ok) {
         toast.success('User status updated successfully');
         fetchUsers();
-        fetchPendingDoctors(); // Refresh pending doctors list
       } else {
         toast.error('Failed to update user status');
       }
@@ -327,80 +305,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Pending Doctors Alert */}
-        {pendingDoctors.length > 0 && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-yellow-800">
-                    {pendingDoctors.length} Doctor{pendingDoctors.length !== 1 ? 's' : ''} Awaiting Approval
-                  </h3>
-                  <div className="mt-2 text-sm text-yellow-700">
-                    <p>The following doctors are pending approval and need your attention:</p>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setFilterType('doctor');
-                  setFilterStatus('pending');
-                  setCurrentPage(1);
-                }}
-                className="ml-4 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-md text-sm font-medium hover:bg-yellow-200 transition-colors"
-              >
-                Review Now
-              </button>
-            </div>
-            
-            {/* Quick list of pending doctors */}
-            <div className="mt-3 space-y-2">
-              {pendingDoctors.slice(0, 3).map((doctor) => (
-                <div key={doctor.id} className="flex items-center justify-between bg-white bg-opacity-50 rounded-md p-2">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-yellow-200 flex items-center justify-center">
-                        <span className="text-sm font-medium text-yellow-800">
-                          {doctor.first_name?.charAt(0)}{doctor.last_name?.charAt(0)}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Dr. {doctor.first_name} {doctor.last_name}
-                      </p>
-                      <p className="text-xs text-gray-500">{doctor.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => handleStatusChange(doctor.id, 'approved')}
-                      className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200 transition-colors"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange(doctor.id, 'rejected')}
-                      className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded hover:bg-red-200 transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {pendingDoctors.length > 3 && (
-                <p className="text-xs text-yellow-600 mt-2">
-                  +{pendingDoctors.length - 3} more doctor{pendingDoctors.length - 3 !== 1 ? 's' : ''} pending approval
-                </p>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Filters */}
         <div className="bg-white p-6 rounded-lg shadow">

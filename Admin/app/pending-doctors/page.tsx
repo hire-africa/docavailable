@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
-import { Search, Filter, UserCheck, CheckCircle, XCircle, Eye, Clock, Star, Mail, Phone, MapPin, Calendar } from 'lucide-react';
+import { Search, Filter, UserCheck, CheckCircle, XCircle, Eye, Clock, Star, Mail, Phone, MapPin, Calendar, User, Shield, GraduationCap, Building, DollarSign, Globe, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Doctor {
@@ -24,6 +24,33 @@ interface Doctor {
   experience_years: number;
   bio: string;
   profile_image: string;
+  // Additional comprehensive information
+  city?: string;
+  country?: string;
+  address?: string;
+  state?: string;
+  postal_code?: string;
+  display_name?: string;
+  national_id?: string;
+  medical_degree?: string;
+  health_history?: string;
+  occupation?: string;
+  google_id?: string;
+  is_online_for_instant_sessions?: boolean;
+  email_verified_at?: string;
+  last_online_at?: string;
+  sub_specialization?: string;
+  specializations?: string;
+  languages_spoken?: string;
+  sub_specializations?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  hospital_affiliation?: string;
+  consultation_fee?: number;
+  availability_status?: string;
+  id_document?: string;
+  email_verified?: boolean;
+  account_age_days?: number;
 }
 
 export default function PendingDoctorsPage() {
@@ -74,7 +101,7 @@ export default function PendingDoctorsPage() {
     }
   };
 
-  const handleStatusChange = async (doctorId: number, newStatus: string) => {
+  const handleStatusChange = async (doctorId: number, newStatus: string, closeModal = false) => {
     try {
       const token = localStorage.getItem('admin_token');
       const response = await fetch(`/api/users/${doctorId}/status`, {
@@ -87,10 +114,29 @@ export default function PendingDoctorsPage() {
       });
 
       if (response.ok) {
-        toast.success('Doctor status updated successfully');
+        const data = await response.json();
+        
+        // Show success message with email notification status
+        if (data.emailNotification) {
+          if (data.emailNotification.success) {
+            toast.success(`Doctor status updated successfully. ${data.emailNotification.message}`);
+          } else {
+            toast.success(`Doctor status updated successfully. Note: ${data.emailNotification.message}`);
+          }
+        } else {
+          toast.success('Doctor status updated successfully');
+        }
+        
         fetchPendingDoctors();
+        
+        // Close modal if requested
+        if (closeModal) {
+          setShowModal(false);
+          setSelectedDoctor(null);
+        }
       } else {
-        toast.error('Failed to update doctor status');
+        const errorData = await response.json();
+        toast.error(`Failed to update doctor status: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error updating doctor status:', error);
@@ -103,6 +149,7 @@ export default function PendingDoctorsPage() {
     setCurrentPage(1);
     fetchPendingDoctors();
   };
+
 
   const getStatusBadge = (status: string) => {
     const statusClasses = {
@@ -355,95 +402,291 @@ export default function PendingDoctorsPage() {
         {/* Doctor Details Modal */}
         {selectedDoctor && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div className="relative top-10 mx-auto p-5 border w-11/12 md:w-4/5 lg:w-3/4 xl:w-2/3 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
               <div className="mt-3">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Dr. {selectedDoctor.first_name} {selectedDoctor.last_name}
-                  </h3>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="flex-shrink-0 h-16 w-16">
+                      {selectedDoctor.profile_image ? (
+                        <img
+                          className="h-16 w-16 rounded-full object-cover"
+                          src={selectedDoctor.profile_image}
+                          alt={`${selectedDoctor.first_name} ${selectedDoctor.last_name}`}
+                        />
+                      ) : (
+                        <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center">
+                          <span className="text-xl font-medium text-green-800">
+                            {getInitials(selectedDoctor.first_name, selectedDoctor.last_name)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900">
+                        Dr. {selectedDoctor.first_name} {selectedDoctor.last_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">User ID: {selectedDoctor.id}</p>
+                      <p className="text-sm text-gray-500">Account Age: {selectedDoctor.account_age_days || 0} days</p>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => setShowModal(false)}
+                    onClick={() => {
+                      setShowModal(false);
+                      setSelectedDoctor(null);
+                    }}
                     className="text-gray-400 hover:text-gray-600"
                   >
                     <XCircle className="h-6 w-6" />
                   </button>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Email</label>
-                    <p className="text-sm text-gray-900 flex items-center">
-                      <Mail className="h-4 w-4 mr-2" />
-                      {selectedDoctor.email}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Phone</label>
-                    <p className="text-sm text-gray-900 flex items-center">
-                      <Phone className="h-4 w-4 mr-2" />
-                      {selectedDoctor.phone_number || 'Not provided'}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Specialization</label>
-                    <p className="text-sm text-gray-900">{selectedDoctor.specialization || 'Not specified'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Experience</label>
-                    <p className="text-sm text-gray-900">
-                      {selectedDoctor.experience_years ? `${selectedDoctor.experience_years} years` : 'Not specified'}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">License Number</label>
-                    <p className="text-sm text-gray-900">{selectedDoctor.license_number || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Gender</label>
-                    <p className="text-sm text-gray-900 capitalize">{selectedDoctor.gender || 'Not specified'}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700">Bio</label>
-                    <p className="text-sm text-gray-900">{selectedDoctor.bio || 'No bio provided'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Applied Date</label>
-                    <p className="text-sm text-gray-900 flex items-center">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      {formatDate(selectedDoctor.created_at)}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Rating</label>
-                    <p className="text-sm text-gray-900">
-                      {selectedDoctor.rating ? (
-                        <div className="flex items-center">
-                          <Star className="h-4 w-4 text-yellow-400 mr-1" />
-                          {Number(selectedDoctor.rating).toFixed(1)} ({selectedDoctor.total_ratings || 0} reviews)
-                        </div>
-                      ) : (
-                        'No ratings yet'
-                      )}
-                    </p>
+
+                {/* Personal Information Section */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center">
+                    <User className="h-5 w-5 mr-2" />
+                    Personal Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <p className="text-sm text-gray-900 flex items-center">
+                        <Mail className="h-4 w-4 mr-2" />
+                        {selectedDoctor.email}
+                        {selectedDoctor.email_verified && (
+                          <span className="ml-2 text-green-600 text-xs">✓ Verified</span>
+                        )}
+                      </p>
+                    </div>
+                    {selectedDoctor.phone_number && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+                        <p className="text-sm text-gray-900 flex items-center">
+                          <Phone className="h-4 w-4 mr-2" />
+                          {selectedDoctor.phone_number}
+                        </p>
+                      </div>
+                    )}
+                    {selectedDoctor.date_of_birth && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
+                        <p className="text-sm text-gray-900">
+                          {formatDate(selectedDoctor.date_of_birth)}
+                        </p>
+                      </div>
+                    )}
+                    {selectedDoctor.gender && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Gender</label>
+                        <p className="text-sm text-gray-900 capitalize">{selectedDoctor.gender}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.national_id && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">National ID</label>
+                        <p className="text-sm text-gray-900 font-mono">{selectedDoctor.national_id}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.google_id && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Google ID</label>
+                        <p className="text-sm text-gray-900 font-mono">{selectedDoctor.google_id}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
+                {/* Address Information Section */}
+                {(selectedDoctor.city || selectedDoctor.country) && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center">
+                      <MapPin className="h-5 w-5 mr-2" />
+                      Address Information
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {selectedDoctor.address && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          <p className="text-sm text-gray-900 flex items-center">
+                            <MapPin className="h-4 w-4 mr-2" />
+                            {selectedDoctor.address}
+                          </p>
+                        </div>
+                      )}
+                      {selectedDoctor.city && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">City</label>
+                          <p className="text-sm text-gray-900">{selectedDoctor.city}</p>
+                        </div>
+                      )}
+                      {selectedDoctor.state && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">State</label>
+                          <p className="text-sm text-gray-900">{selectedDoctor.state}</p>
+                        </div>
+                      )}
+                      {selectedDoctor.country && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Country</label>
+                          <p className="text-sm text-gray-900">{selectedDoctor.country}</p>
+                        </div>
+                      )}
+                      {selectedDoctor.postal_code && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Postal Code</label>
+                          <p className="text-sm text-gray-900">{selectedDoctor.postal_code}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Professional Information Section */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center">
+                    <GraduationCap className="h-5 w-5 mr-2" />
+                    Professional Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Specializations</label>
+                      <p className="text-sm text-gray-900">{selectedDoctor.specialization || 'Not specified'}</p>
+                    </div>
+                    {selectedDoctor.experience_years && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Experience</label>
+                        <p className="text-sm text-gray-900">
+                          {selectedDoctor.experience_years} years
+                        </p>
+                      </div>
+                    )}
+                    {selectedDoctor.license_number && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Medical License</label>
+                        <p className="text-sm text-gray-900 font-mono">{selectedDoctor.license_number}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.medical_degree && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Medical Degree</label>
+                        <p className="text-sm text-gray-900">{selectedDoctor.medical_degree}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.hospital_affiliation && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Hospital Affiliation</label>
+                        <p className="text-sm text-gray-900">{selectedDoctor.hospital_affiliation}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.consultation_fee && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Consultation Fee</label>
+                        <p className="text-sm text-gray-900">
+                          ${selectedDoctor.consultation_fee}
+                        </p>
+                      </div>
+                    )}
+                    {selectedDoctor.languages_spoken && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Languages Spoken</label>
+                        <p className="text-sm text-gray-900">{selectedDoctor.languages_spoken}</p>
+                      </div>
+                    )}
+                    {selectedDoctor.availability_status && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Availability Status</label>
+                        <p className="text-sm text-gray-900 capitalize">{selectedDoctor.availability_status}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Information Section */}
+                <div className="mb-6">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center">
+                    <Shield className="h-5 w-5 mr-2" />
+                    Account Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">User Type</label>
+                      <p className="text-sm text-gray-900 capitalize">{selectedDoctor.user_type}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Status</label>
+                      <p className="text-sm text-gray-900 capitalize">{selectedDoctor.status}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Account Active</label>
+                      <p className="text-sm text-gray-900">{selectedDoctor.is_active ? 'Yes' : 'No'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Applied Date</label>
+                      <p className="text-sm text-gray-900 flex items-center">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        {formatDate(selectedDoctor.created_at)}
+                      </p>
+                    </div>
+                    {selectedDoctor.last_online_at && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Online</label>
+                        <p className="text-sm text-gray-900">
+                          {formatDate(selectedDoctor.last_online_at)}
+                        </p>
+                      </div>
+                    )}
+                    {selectedDoctor.rating && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Rating</label>
+                        <p className="text-sm text-gray-900">
+                          <div className="flex items-center">
+                            <Star className="h-4 w-4 text-yellow-400 mr-1" />
+                            {Number(selectedDoctor.rating).toFixed(1)} ({selectedDoctor.total_ratings || 0} reviews)
+                          </div>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Emergency Contact Section */}
+                {(selectedDoctor.emergency_contact_name || selectedDoctor.emergency_contact_phone) && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center">
+                      <AlertTriangle className="h-5 w-5 mr-2" />
+                      Emergency Contact
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Contact Name</label>
+                        <p className="text-sm text-gray-900">{selectedDoctor.emergency_contact_name || 'Not provided'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Contact Phone</label>
+                        <p className="text-sm text-gray-900">{selectedDoctor.emergency_contact_phone || 'Not provided'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bio Section */}
+                {selectedDoctor.bio && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-4 border-b pb-2">Bio</h4>
+                    <p className="text-sm text-gray-900 bg-gray-50 p-4 rounded-md">{selectedDoctor.bio}</p>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
-                    onClick={() => {
-                      handleStatusChange(selectedDoctor.id, 'rejected');
-                      setShowModal(false);
-                    }}
-                    className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700"
+                    onClick={() => handleStatusChange(selectedDoctor.id, 'rejected', true)}
+                    className="bg-red-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-red-700"
                   >
                     Reject
                   </button>
                   <button
-                    onClick={() => {
-                      handleStatusChange(selectedDoctor.id, 'approved');
-                      setShowModal(false);
-                    }}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700"
+                    onClick={() => handleStatusChange(selectedDoctor.id, 'approved', true)}
+                    className="bg-green-600 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-green-700"
                   >
                     Approve
                   </button>

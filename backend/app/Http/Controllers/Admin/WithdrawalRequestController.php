@@ -6,10 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\WithdrawalRequest;
 use App\Models\DoctorWallet;
 use App\Models\WalletTransaction;
+use App\Mail\WithdrawalCompletedMail;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 
 class WithdrawalRequestController extends Controller
 {
@@ -248,5 +251,56 @@ class WithdrawalRequestController extends Controller
             'success' => true,
             'data' => $stats
         ]);
+    }
+
+    /**
+     * Send withdrawal completion email to doctor
+     */
+    public function sendWithdrawalCompletedEmail(Request $request): JsonResponse
+    {
+        $request->validate([
+            'doctor_email' => 'required|email',
+            'doctor_name' => 'required|string',
+            'amount' => 'required|numeric|min:0',
+            'payment_method' => 'required|string',
+            'bank_name' => 'required|string',
+            'account_holder_name' => 'required|string',
+            'completed_at' => 'required|date',
+        ]);
+
+        try {
+            Mail::to($request->doctor_email)->send(new WithdrawalCompletedMail(
+                $request->doctor_name,
+                $request->amount,
+                $request->payment_method,
+                $request->bank_name,
+                $request->account_holder_name,
+                $request->completed_at
+            ));
+
+            Log::info('Withdrawal completion email sent successfully', [
+                'doctor_email' => $request->doctor_email,
+                'doctor_name' => $request->doctor_name,
+                'amount' => $request->amount,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Withdrawal completion email sent successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to send withdrawal completion email: ' . $e->getMessage(), [
+                'doctor_email' => $request->doctor_email,
+                'doctor_name' => $request->doctor_name,
+                'amount' => $request->amount,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send email notification'
+            ], 500);
+        }
     }
 }

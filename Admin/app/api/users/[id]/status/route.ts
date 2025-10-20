@@ -31,21 +31,34 @@ export async function PATCH(
       );
     }
 
-    const result = await query(
-      'UPDATE users SET status = $1 WHERE id = $2 RETURNING id, first_name, last_name, status',
-      [status, id]
+    // Get user details before updating
+    const userResult = await query(
+      'SELECT id, first_name, last_name, email, user_type, status FROM users WHERE id = $1',
+      [id]
     );
 
-    if (result.rows.length === 0) {
+    if (userResult.rows.length === 0) {
       return NextResponse.json(
         { message: 'User not found' },
         { status: 404 }
       );
     }
 
+    const user = userResult.rows[0];
+
+    // Update user status
+    const result = await query(
+      'UPDATE users SET status = $1 WHERE id = $2 RETURNING id, first_name, last_name, status',
+      [status, id]
+    );
+
+    // Email service is temporarily disabled
+    const emailResult = { success: false, message: 'Email service temporarily disabled' };
+
     return NextResponse.json({
       message: 'User status updated successfully',
       user: result.rows[0],
+      emailNotification: emailResult,
     });
   } catch (error) {
     console.error('User status update error:', error);
