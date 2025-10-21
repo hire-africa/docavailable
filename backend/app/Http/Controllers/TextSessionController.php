@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Services\MessageStorageService;
 use App\Services\NotificationService;
 use App\Services\TimezoneService;
+use App\Services\AnonymizationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -18,11 +19,13 @@ class TextSessionController extends Controller
 {
     protected $messageStorageService;
     protected $notificationService;
+    protected $anonymizationService;
 
-    public function __construct(MessageStorageService $messageStorageService, NotificationService $notificationService)
+    public function __construct(MessageStorageService $messageStorageService, NotificationService $notificationService, AnonymizationService $anonymizationService)
     {
         $this->messageStorageService = $messageStorageService;
         $this->notificationService = $notificationService;
+        $this->anonymizationService = $anonymizationService;
     }
 
     /**
@@ -667,6 +670,34 @@ class TextSessionController extends Controller
                 $actualSessionsRemaining = $session->patient->subscription->text_sessions_remaining;
             }
             
+            // Apply anonymization if needed
+            $patientData = $session->patient;
+            $doctorData = $session->doctor;
+            
+            // If current user is doctor and patient has anonymous mode enabled, anonymize patient data
+            if ($user->id === $session->doctor_id && $this->anonymizationService->isAnonymousModeEnabled($session->patient)) {
+                $patientData = $this->anonymizationService->getAnonymizedUserData($session->patient);
+                \Log::info('🔍 [TextSessionController] Anonymizing patient data for doctor', [
+                    'session_id' => $sessionId,
+                    'doctor_id' => $user->id,
+                    'patient_id' => $session->patient_id,
+                    'original_name' => $session->patient->display_name ?? $session->patient->first_name . ' ' . $session->patient->last_name,
+                    'anonymized_name' => $patientData['display_name']
+                ]);
+            }
+            
+            // If current user is patient and doctor has anonymous mode enabled, anonymize doctor data
+            if ($user->id === $session->patient_id && $this->anonymizationService->isAnonymousModeEnabled($session->doctor)) {
+                $doctorData = $this->anonymizationService->getAnonymizedUserData($session->doctor);
+                \Log::info('🔍 [TextSessionController] Anonymizing doctor data for patient', [
+                    'session_id' => $sessionId,
+                    'patient_id' => $user->id,
+                    'doctor_id' => $session->doctor_id,
+                    'original_name' => $session->doctor->display_name ?? $session->doctor->first_name . ' ' . $session->doctor->last_name,
+                    'anonymized_name' => $doctorData['display_name']
+                ]);
+            }
+            
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -680,8 +711,15 @@ class TextSessionController extends Controller
                     'elapsed_minutes' => $session->getElapsedMinutes(),
                     'sessions_used' => $session->sessions_used,
                     'sessions_remaining_before_start' => $session->sessions_remaining_before_start,
-                    'patient' => $session->patient,
-                    'doctor' => $session->doctor,
+                    'patient' => $patientData,
+                    'doctor' => $doctorData,
+                    // Add other_participant_name and other_participant_profile_picture_url for frontend compatibility
+                    'other_participant_name' => $user->id === $session->doctor_id ? 
+                        ($patientData['display_name'] ?? 'Patient') : 
+                        ($doctorData['display_name'] ?? 'Doctor'),
+                    'other_participant_profile_picture_url' => $user->id === $session->doctor_id ? 
+                        ($patientData['profile_picture_url'] ?? null) : 
+                        ($doctorData['profile_picture_url'] ?? null),
                 ]
             ]);
             
