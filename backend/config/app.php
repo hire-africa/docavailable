@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Anonymization Salt
+    |--------------------------------------------------------------------------
+    |
+    | This salt is used for generating consistent anonymous identifiers.
+    | Change this in production for security.
+    |
+    */
+
+    'anonymization_salt' => env('ANONYMIZATION_SALT', 'default_salt_change_in_production'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

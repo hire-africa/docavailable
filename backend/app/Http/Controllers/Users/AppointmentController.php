@@ -7,17 +7,20 @@ use App\Models\User;
 use App\Models\Appointment;
 use App\Services\AppointmentService;
 use App\Services\NotificationService;
+use App\Services\AnonymizationService;
 use App\Http\Requests\AppointmentRequest;
 
 class AppointmentController extends Controller
 {
     protected $appointmentService;
     protected $notificationService;
+    protected $anonymizationService;
 
-    public function __construct(AppointmentService $appointmentService, NotificationService $notificationService)
+    public function __construct(AppointmentService $appointmentService, NotificationService $notificationService, AnonymizationService $anonymizationService)
     {
         $this->appointmentService = $appointmentService;
         $this->notificationService = $notificationService;
+        $this->anonymizationService = $anonymizationService;
     }
 
     // Get appointments for current user
@@ -84,7 +87,7 @@ class AppointmentController extends Controller
                         ->paginate($perPage);
             
             // Add profile picture URLs and name fields to doctors/patients
-            $appointments->getCollection()->transform(function ($appointment) {
+            $appointments->getCollection()->transform(function ($appointment) use ($user) {
                 $appointmentData = $appointment->toArray();
                 
                 // Log the raw appointment data for debugging
@@ -103,12 +106,21 @@ class AppointmentController extends Controller
                     $appointmentData['doctorName'] = $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name;
                 }
                 
-                // Add patient profile picture URL and name
+                // Add patient profile picture URL and name with anonymization
                 if ($appointment->patient) {
                     if ($appointment->patient->profile_picture) {
                         $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
                     }
-                    $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
+                    
+                    // Check if patient has anonymous mode enabled
+                    if ($this->anonymizationService->isAnonymousModeEnabled($appointment->patient)) {
+                        $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
+                        $appointmentData['patientName'] = $anonymizedData['display_name'];
+                        $appointmentData['patient']['profile_picture_url'] = null;
+                        $appointmentData['patient']['profile_picture'] = null;
+                    } else {
+                        $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
+                    }
                 }
                 
                 return $appointmentData;
@@ -418,6 +430,19 @@ class AppointmentController extends Controller
     {
         $doctor = $request->user();
         $appointments = $doctor->doctorAppointments()->with(['patient'])->get();
+        
+        // Apply anonymization to patient data
+        $appointments->transform(function ($appointment) {
+            if ($appointment->patient && $this->anonymizationService->isAnonymousModeEnabled($appointment->patient)) {
+                $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
+                $appointment->patient->first_name = $anonymizedData['first_name'];
+                $appointment->patient->last_name = $anonymizedData['last_name'];
+                $appointment->patient->profile_picture_url = null;
+                $appointment->patient->profile_picture = null;
+            }
+            return $appointment;
+        });
+        
         return response()->json(['appointments' => $appointments]);
     }
 

@@ -17,7 +17,7 @@ import {
     View
 } from 'react-native';
 import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
-import DocAIHistory from './DocAvaHistory';
+import AIDocHistory from './DocAvaHistory';
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,11 +38,11 @@ interface ChatSession {
   timestamp: Date;
 }
 
-interface DocAIChatProps {
+interface AIDocChatProps {
   onBottomHiddenChange?: (hidden: boolean) => void;
 }
 
-export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
+export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -52,6 +52,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
   const [isBottomHidden, setIsBottomHidden] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Animation value for history panel
@@ -100,28 +101,80 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
       const firstUserMessage = messages.find(msg => msg.isUser)?.text || 'Health Consultation';
       const chatTitle = generateChatTitle(firstUserMessage);
       
-      const newChatSession: ChatSession = {
-        id: Date.now().toString(),
-        title: chatTitle,
-        messages: [...messages],
-        timestamp: new Date(),
-      };
-      
-      const updatedHistory = [newChatSession, ...chatHistory];
-      setChatHistory(updatedHistory);
-      saveChatHistoryToStorage(updatedHistory);
+      if (currentChatId) {
+        // Update existing chat in history
+        const updatedHistory = chatHistory.map(chat => 
+          chat.id === currentChatId 
+            ? { ...chat, messages: [...messages], timestamp: new Date() }
+            : chat
+        );
+        setChatHistory(updatedHistory);
+        saveChatHistoryToStorage(updatedHistory);
+      } else {
+        // Create new chat session
+        const newChatSession: ChatSession = {
+          id: Date.now().toString(),
+          title: chatTitle,
+          messages: [...messages],
+          timestamp: new Date(),
+        };
+        
+        const updatedHistory = [newChatSession, ...chatHistory];
+        setChatHistory(updatedHistory);
+        saveChatHistoryToStorage(updatedHistory);
+        setCurrentChatId(newChatSession.id);
+      }
+    }
+  };
+
+  // Save current chat session to AsyncStorage
+  const saveCurrentChatSession = async () => {
+    try {
+      if (messages.length > 0) {
+        const currentChat = {
+          messages: messages,
+          inputText: inputText,
+          chatId: currentChatId,
+          timestamp: new Date()
+        };
+        await AsyncStorage.setItem('docava_current_chat', JSON.stringify(currentChat));
+      }
+    } catch (error) {
+      console.error('Error saving current chat session:', error);
+    }
+  };
+
+  // Load current chat session from AsyncStorage
+  const loadCurrentChat = async () => {
+    try {
+      const savedCurrentChat = await AsyncStorage.getItem('docava_current_chat');
+      if (savedCurrentChat) {
+        const parsedChat = JSON.parse(savedCurrentChat);
+        // Convert timestamp strings back to Date objects
+        const messagesWithDates = parsedChat.messages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(messagesWithDates);
+        setInputText(parsedChat.inputText || '');
+        setCurrentChatId(parsedChat.chatId || null);
+      }
+    } catch (error) {
+      console.error('Error loading current chat session:', error);
     }
   };
 
   // Load chat from history
   const loadChatFromHistory = (chatSession: ChatSession) => {
     setMessages(chatSession.messages);
+    setCurrentChatId(chatSession.id);
     setShowHistory(false);
   };
 
   // Load chat from history page
   const loadChatFromHistoryPage = (chatSession: ChatSession) => {
     setMessages(chatSession.messages);
+    setCurrentChatId(chatSession.id);
     setShowHistoryPage(false);
   };
 
@@ -286,10 +339,45 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
     onBottomHiddenChange?.(newState);
   };
 
-  // Load chat history on component mount
+  // Load chat history and current chat on component mount
   useEffect(() => {
     loadChatHistory();
+    loadCurrentChat();
   }, []);
+
+  // Save current chat when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveCurrentChatSession();
+      // If we have a current chat ID, update the existing chat in history
+      if (currentChatId) {
+        const updatedHistory = chatHistory.map(chat => 
+          chat.id === currentChatId 
+            ? { ...chat, messages: [...messages], timestamp: new Date() }
+            : chat
+        );
+        setChatHistory(updatedHistory);
+        saveChatHistoryToStorage(updatedHistory);
+      }
+    }
+  }, [messages]);
+
+  // Save current chat when input text changes
+  useEffect(() => {
+    if (inputText.length > 0) {
+      saveCurrentChatSession();
+    }
+  }, [inputText]);
+
+  // Save current chat when component unmounts
+  useEffect(() => {
+    return () => {
+      // Save current chat when component unmounts
+      if (messages.length > 0) {
+        saveCurrentChatSession();
+      }
+    };
+  }, [messages]);
 
   // Keyboard visibility detection
   useEffect(() => {
@@ -571,7 +659,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
           
           <View style={styles.headerText}>
             <View style={styles.botNameContainer}>
-              <Text style={styles.botName}>Doc AI</Text>
+              <Text style={styles.botName}>AI Doc</Text>
               <FontAwesome name="check-circle" size={16} color="#4CAF50" style={styles.verifiedBadge} />
             </View>
           </View>
@@ -587,6 +675,9 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
               // Clear all messages to start a new chat
               setMessages([]);
               setInputText('');
+              setCurrentChatId(null);
+              // Clear current chat from storage
+              AsyncStorage.removeItem('docava_current_chat');
             }}
           >
             <FontAwesome name="plus" size={24} color="#4CAF50" />
@@ -657,7 +748,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
                     textAlign: 'center',
                     marginBottom: 8,
                   }}>
-                    Hi, I&apos;m Doc AI! 👋
+                    Hi, I&apos;m AI Doc! 👋
                   </Text>
                   <Text style={{
                     fontSize: 16,
@@ -860,7 +951,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.textInput}
-              placeholder="Ask Doc AI"
+              placeholder="Ask AI Doc"
               placeholderTextColor="#999"
               value={inputText}
               onChangeText={setInputText}
@@ -967,7 +1058,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
       
     </KeyboardAvoidingView>
 
-    {/* Doc AI History Page - Full Screen with Slide Animation - Outside main container */}
+    {/* AI Doc History Page - Full Screen with Slide Animation - Outside main container */}
     {showHistoryPage && (
       <Animated.View 
         style={[
@@ -979,7 +1070,7 @@ export default function DocAIChat({ onBottomHiddenChange }: DocAIChatProps) {
           }
         ]}
       >
-        <DocAIHistory
+        <AIDocHistory
           onClose={() => setShowHistoryPage(false)}
           onLoadChat={loadChatFromHistoryPage}
         />
@@ -996,7 +1087,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,

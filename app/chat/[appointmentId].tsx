@@ -5,18 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  Modal,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Modal,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AnonymizedUserDisplay from '../../components/AnonymizedUserDisplay';
 import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
@@ -26,6 +26,7 @@ import RatingModal from '../../components/RatingModal';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { AudioCallService } from '../../services/audioCallService';
@@ -40,8 +41,8 @@ import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import {
-  getUserTimezone,
-  isAppointmentTimeReached
+    getUserTimezone,
+    isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { apiService } from '../services/apiService';
 
@@ -128,6 +129,7 @@ export default function ChatPage() {
   const appointmentId = params.appointmentId as string;
   const router = useRouter();
   const { user, token, loading: authLoading, refreshUserData } = useAuth();
+  const { isAnonymousModeEnabled } = useAnonymousMode();
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -2920,45 +2922,26 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         
-        {/* Profile Picture */}
-        <View style={{ marginRight: 12 }}>
-          {chatInfo?.other_participant_profile_picture_url ? (
-            <Image 
-              source={{ uri: chatInfo.other_participant_profile_picture_url }} 
-              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
-              onError={(error) => {
-                // console.log('❌ Profile picture URL failed to load:', chatInfo.other_participant_profile_picture_url, error);
-              }}
-              onLoad={() => {
-                // console.log('✅ Profile picture URL loaded successfully:', chatInfo.other_participant_profile_picture_url);
-              }}
-            />
-          ) : chatInfo?.other_participant_profile_picture ? (
-            <Image 
-              source={{ uri: chatInfo.other_participant_profile_picture }} 
-              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
-              onError={(error) => {
-                // console.log('❌ Profile picture failed to load:', chatInfo.other_participant_profile_picture, error);
-              }}
-              onLoad={() => {
-                // console.log('✅ Profile picture loaded successfully:', chatInfo.other_participant_profile_picture);
-              }}
-            />
-          ) : (
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
-              <Ionicons name="person" size={20} color="#4CAF50" />
-            </View>
-          )}
-        </View>
+        {/* Profile Picture and Name - Using Anonymized Display */}
+        <AnonymizedUserDisplay
+          user={{
+            id: chatInfo?.doctor_id || chatInfo?.patient_id,
+            display_name: chatInfo?.other_participant_name,
+            profile_picture_url: chatInfo?.other_participant_profile_picture_url,
+            profile_picture: chatInfo?.other_participant_profile_picture,
+            first_name: isPatient ? 'Doctor' : 'Patient',
+            last_name: '',
+          }}
+          isAnonymousModeEnabled={isAnonymousModeEnabled}
+          size="medium"
+          showName={true}
+          showProfilePicture={true}
+          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+          nameStyle={{ fontSize: 18, fontWeight: '600', color: '#333', marginLeft: 12 }}
+        />
         
-        {/* Name and Typing Indicator */}
+        {/* Typing Indicator */}
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
-            {isPatient 
-              ? (chatInfo?.other_participant_name || 'Doctor')
-              : (chatInfo?.other_participant_name || 'Patient')
-            }
-          </Text>
           {/* Typing Indicator in Header */}
           {isOtherUserTyping && (
             <View style={{

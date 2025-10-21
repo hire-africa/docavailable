@@ -1,25 +1,27 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
+import { NotificationService } from '@/services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  BackHandler,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    BackHandler,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -107,6 +109,7 @@ export default function DoctorDashboard() {
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [loadingConfirmed, setLoadingConfirmed] = useState(false);
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
@@ -523,6 +526,20 @@ export default function DoctorDashboard() {
     }
   };
 
+  // Helper function to get action URL for activity type
+  const getActionUrlForActivity = (activityType: string): string | undefined => {
+    switch (activityType) {
+      case 'appointment':
+        return '/appointments';
+      case 'message':
+        return '/messages';
+      case 'wallet':
+        return '/earnings';
+      default:
+        return undefined;
+    }
+  };
+
   const loadActivities = async () => {
     try {
       // Small delay to ensure data is loaded
@@ -566,6 +583,46 @@ export default function DoctorDashboard() {
         
         return uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
       });
+
+      // Load unread notification count from service
+      try {
+        // Generate automated activities first
+        const generatedActivities = generateUserActivities(
+          'doctor',
+          userData,
+          [], // appointments - would be loaded from API
+          [], // messages - would be loaded from API
+          null // subscription - would be loaded from API
+        );
+
+        // Convert activities to notifications
+        const activityNotifications = generatedActivities.map((activity, index) => ({
+          id: `activity_${activity.id}`,
+          title: activity.title,
+          message: activity.description,
+          type: activity.type as any,
+          timestamp: activity.timestamp,
+          isRead: index > 2, // Mark older activities as read
+          actionUrl: getActionUrlForActivity(activity.type)
+        }));
+
+        // Get all notifications (including admin ones)
+        const allNotifications = await NotificationService.getNotificationsForUser('doctor', userData?.id?.toString());
+        
+        // Combine with automated notifications
+        const combinedNotifications = [...allNotifications];
+        activityNotifications.forEach(autoNotif => {
+          const exists = combinedNotifications.find(n => n.id === autoNotif.id);
+          if (!exists) {
+            combinedNotifications.push(autoNotif);
+          }
+        });
+
+        const unreadCount = combinedNotifications.filter(n => !n.isRead).length;
+        setUnreadNotificationCount(unreadCount);
+      } catch (error) {
+        console.error('Error loading unread count:', error);
+      }
     } catch (error) {
       console.error('Error loading activities:', error);
     }
@@ -2156,6 +2213,7 @@ export default function DoctorDashboard() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {/* Header */}
       <View style={{ 
         flexDirection: 'row', 
@@ -2164,11 +2222,6 @@ export default function DoctorDashboard() {
         padding: 4, 
         backgroundColor: '#FFFFFF', 
         zIndex: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
         marginBottom: 8,
       }}>
         <TouchableOpacity style={styles.hamburgerButton} onPress={openSidebar}>
@@ -2210,8 +2263,19 @@ export default function DoctorDashboard() {
           />
         )}
         
-        {/* Spacer to balance the layout */}
-        <View style={{ width: 44 }} />
+        {/* Notification Icon - Right side with margin */}
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => router.push('/notifications')}
+        >
+          <FontAwesome name="bell" size={20} color="#4CAF50" />
+          {/* Unread notification badge */}
+          {unreadNotificationCount > 0 && (
+            <View style={styles.notificationBadge}>
+              <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <View style={styles.mainContent}>
@@ -3481,5 +3545,33 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     height: 60,
     lineHeight: 60,
+  },
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginRight: 8,
+  },
+  notificationBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  notificationBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 }); 

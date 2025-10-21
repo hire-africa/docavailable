@@ -28,6 +28,7 @@ interface Settings {
     privacy: {
         profileVisibility: boolean;
         dataSharing: boolean;
+        anonymousMode: boolean;
     };
     security: {
         loginNotifications: boolean;
@@ -65,6 +66,7 @@ function PatientSettingsContent() {
         privacy: {
             profileVisibility: true,
             dataSharing: true,
+            anonymousMode: false,
         },
         security: {
             loginNotifications: true,
@@ -113,6 +115,7 @@ function PatientSettingsContent() {
                     privacy: {
                         profileVisibility: privacyResponse.data.profileVisibility?.showToDoctors ?? true,
                         dataSharing: privacyResponse.data.dataSharing?.allowAnalytics ?? true,
+                        anonymousMode: privacyResponse.data.privacy?.anonymousMode ?? false,
                     },
                     security: {
                         loginNotifications: privacyResponse.data.security?.loginNotifications ?? true,
@@ -155,6 +158,9 @@ function PatientSettingsContent() {
                 },
                 dataSharing: {
                     allowAnalytics: updatedSettings.privacy.dataSharing,
+                },
+                privacy: {
+                    anonymousMode: updatedSettings.privacy.anonymousMode,
                 },
                 security: {
                     loginNotifications: updatedSettings.security.loginNotifications,
@@ -278,6 +284,22 @@ function PatientSettingsContent() {
                             onValueChange={(value) => updateSetting('privacy.profileVisibility', value)}
                             trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
                             thumbColor={settings.privacy.profileVisibility ? '#FFFFFF' : '#FFFFFF'}
+                        />
+                    </View>
+
+                    <View style={styles.settingItem}>
+                        <View style={styles.settingInfo}>
+                            <Icon name="user-secret" size={20} color="#4CAF50" />
+                            <View style={styles.settingText}>
+                                <Text style={styles.settingLabel}>Anonymous Consultations</Text>
+                                <Text style={styles.settingDescription}>Hide your name and profile in all consultations</Text>
+                            </View>
+                        </View>
+                        <Switch
+                            value={settings.privacy.anonymousMode}
+                            onValueChange={(value) => updateSetting('privacy.anonymousMode', value)}
+                            trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
+                            thumbColor={settings.privacy.anonymousMode ? '#FFFFFF' : '#FFFFFF'}
                         />
                     </View>
 

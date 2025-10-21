@@ -151,7 +151,7 @@ export class BackendChatbotService {
     // Basic keyword-based responses
     if (input.includes('hello') || input.includes('hi')) {
       return {
-        text: 'Hi! I\'m Doc AI. How can I help? For medical advice, book an appointment.',
+        text: 'Hi! I\'m AI Doc. How can I help? For medical advice, book an appointment.',
         shouldBookAppointment: true,
         urgency: 'low',
         confidence: 0.7,

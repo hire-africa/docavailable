@@ -10,6 +10,7 @@ import {
   RefreshControl,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -255,6 +256,7 @@ function DoctorWithdrawalsContent() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar backgroundColor="#fff" barStyle="dark-content" />
         <View style={styles.mainContent}>
           <View style={styles.loadingContainer}>
             <Text style={styles.loadingText}>Loading wallet data...</Text>
@@ -268,6 +270,7 @@ function DoctorWithdrawalsContent() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
@@ -656,8 +659,6 @@ const styles = StyleSheet.create({
      paddingHorizontal: 20,
      paddingVertical: 16,
      backgroundColor: '#fff',
-     borderBottomWidth: 1,
-     borderBottomColor: '#E0E0E0',
      marginTop: 20,
    },
   backButton: {

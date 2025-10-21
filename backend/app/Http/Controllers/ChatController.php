@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use App\Models\User;
 use App\Models\Appointment;
 use App\Services\MessageStorageService;
+use App\Services\AnonymizationService;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\Log;
 use App\Events\ChatMessageSent;
@@ -19,10 +20,12 @@ use App\Events\ChatUserTyping;
 class ChatController extends Controller
 {
     protected $messageStorageService;
+    protected $anonymizationService;
 
-    public function __construct(MessageStorageService $messageStorageService)
+    public function __construct(MessageStorageService $messageStorageService, AnonymizationService $anonymizationService)
     {
         $this->messageStorageService = $messageStorageService;
+        $this->anonymizationService = $anonymizationService;
     }
 
     /**
@@ -144,6 +147,9 @@ class ChatController extends Controller
                 
                 // Get messages from cache storage
                 $messages = $this->messageStorageService->getMessages($actualId, 'text_session');
+                
+                // Apply anonymization if needed
+                $messages = $this->applyAnonymizationToMessages($messages, $user, $textSession);
                     
                 return response()->json([
                     'success' => true,
@@ -167,6 +173,9 @@ class ChatController extends Controller
         
         // Get messages from cache storage
         $messages = $this->messageStorageService->getMessages($actualId, 'appointment');
+        
+        // Apply anonymization if needed
+        $messages = $this->applyAnonymizationToMessages($messages, $user, $appointment);
             
         return response()->json([
             'success' => true,
@@ -526,8 +535,15 @@ class ChatController extends Controller
         if ($otherParticipantId) {
             $otherUser = \App\Models\User::find($otherParticipantId);
             if ($otherUser) {
-                $otherParticipantProfilePath = $otherUser->profile_picture;
-                $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                // Check if the other user has anonymous mode enabled
+                if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
+                    $otherParticipantName = $this->anonymizationService->getAnonymizedDisplayName($otherUser);
+                    $otherParticipantProfilePath = null;
+                    $otherParticipantProfileUrl = null;
+                } else {
+                    $otherParticipantProfilePath = $otherUser->profile_picture;
+                    $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                }
             }
         }
                 
@@ -578,8 +594,15 @@ class ChatController extends Controller
         if ($otherParticipantId) {
             $otherUser = \App\Models\User::find($otherParticipantId);
             if ($otherUser) {
-                $otherParticipantProfilePath = $otherUser->profile_picture;
-                $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                // Check if the other user has anonymous mode enabled
+                if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
+                    $otherParticipantName = $this->anonymizationService->getAnonymizedDisplayName($otherUser);
+                    $otherParticipantProfilePath = null;
+                    $otherParticipantProfileUrl = null;
+                } else {
+                    $otherParticipantProfilePath = $otherUser->profile_picture;
+                    $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                }
             }
         }
         
@@ -1257,5 +1280,45 @@ class ChatController extends Controller
                 'line' => $e->getLine()
             ]);
         }
+    }
+
+    /**
+     * Apply anonymization to messages if the other participant has anonymous mode enabled
+     */
+    private function applyAnonymizationToMessages($messages, $currentUser, $sessionData)
+    {
+        // Determine the other participant
+        $otherParticipantId = null;
+        if ($currentUser->id == $sessionData->patient_id) {
+            $otherParticipantId = $sessionData->doctor_id;
+        } else {
+            $otherParticipantId = $sessionData->patient_id;
+        }
+
+        // Get the other participant
+        $otherParticipant = User::find($otherParticipantId);
+        if (!$otherParticipant) {
+            return $messages;
+        }
+
+        // Check if the other participant has anonymous mode enabled
+        if (!$this->anonymizationService->isAnonymousModeEnabled($otherParticipant)) {
+            return $messages;
+        }
+
+        // Apply anonymization to messages
+        $anonymizedMessages = [];
+        foreach ($messages as $message) {
+            $anonymizedMessage = $message;
+            
+            // If this message is from the other participant, anonymize it
+            if ($message['sender_id'] == $otherParticipantId) {
+                $anonymizedMessage = $this->anonymizationService->getAnonymizedMessageData($message, $otherParticipant);
+            }
+            
+            $anonymizedMessages[] = $anonymizedMessage;
+        }
+
+        return $anonymizedMessages;
     }
 } 

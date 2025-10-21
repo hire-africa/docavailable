@@ -4,20 +4,26 @@ export interface Activity {
   title: string;
   description: string;
   timestamp: Date;
+  icon: string;
+  color: string;
 }
 
 export function addRealtimeActivity(
   activities: Activity[],
   type: string,
   title: string,
-  description?: string
+  description?: string,
+  icon?: string,
+  color?: string
 ): Activity[] {
   const newActivity: Activity = {
     id: `realtime_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type,
     title,
     description: description || '',
-    timestamp: new Date()
+    timestamp: new Date(),
+    icon: icon || 'infoCircle',
+    color: color || '#4CAF50'
   };
 
   return [newActivity, ...activities];
@@ -63,7 +69,9 @@ export function generateUserActivities(
             type: 'appointment',
             title: `Appointment with Dr. ${appointment.doctor_name || 'Doctor'}`,
             description: `Scheduled for ${new Date(appointment.appointment_date || Date.now()).toLocaleDateString()}`,
-            timestamp: new Date(appointment.created_at || Date.now())
+            timestamp: new Date(appointment.created_at || Date.now()),
+            icon: 'calendarCheck',
+            color: '#4CAF50'
           });
         }
       });
@@ -76,7 +84,9 @@ export function generateUserActivities(
         type: 'subscription',
         title: 'Active Subscription',
         description: `Plan: ${subscription.plan_name || 'Premium'}`,
-        timestamp: new Date(subscription.created_at || Date.now())
+        timestamp: new Date(subscription.created_at || Date.now()),
+        icon: 'checkmark',
+        color: '#4CAF50'
       });
     }
 
@@ -87,7 +97,9 @@ export function generateUserActivities(
         type: 'welcome',
         title: 'Welcome to DocAvailable!',
         description: 'Your account has been created successfully',
-        timestamp: new Date(userData.created_at)
+        timestamp: new Date(userData.created_at),
+        icon: 'heart',
+        color: '#FF6B6B'
       });
     }
 
@@ -104,7 +116,9 @@ export function generateUserActivities(
             type: 'appointment',
             title: `${status} Appointment`,
             description: `Patient: ${appointment.patient_name || 'Unknown'}`,
-            timestamp: new Date(appointment.created_at || Date.now())
+            timestamp: new Date(appointment.created_at || Date.now()),
+            icon: status === 'Confirmed' ? 'checkmark' : status === 'Pending' ? 'clock' : 'userMd',
+            color: status === 'Confirmed' ? '#4CAF50' : status === 'Pending' ? '#FF9500' : '#2196F3'
           });
         }
       });
@@ -117,7 +131,9 @@ export function generateUserActivities(
         type: 'wallet',
         title: 'Wallet Balance',
         description: `Current balance: $${userData.wallet_balance || 0}`,
-        timestamp: new Date()
+        timestamp: new Date(),
+        icon: 'money',
+        color: '#4CAF50'
       });
     }
 
@@ -128,7 +144,9 @@ export function generateUserActivities(
         type: 'welcome',
         title: 'Welcome to DocAvailable!',
         description: 'Your doctor account is ready',
-        timestamp: new Date(userData.created_at)
+        timestamp: new Date(userData.created_at),
+        icon: 'userMd',
+        color: '#2196F3'
       });
     }
   }
@@ -141,7 +159,9 @@ export function generateUserActivities(
         type: 'message',
         title: 'New Message',
         description: message.content?.substring(0, 50) + '...' || 'You have a new message',
-        timestamp: new Date(message.created_at || Date.now())
+        timestamp: new Date(message.created_at || Date.now()),
+        icon: 'message',
+        color: '#9C27B0'
       });
     });
   }

@@ -361,6 +361,9 @@ class NotificationController extends Controller
                 'allowAnalytics' => $preferences['dataSharing']['allowAnalytics'] ?? true,
                 'allowResearch' => $preferences['dataSharing']['allowResearch'] ?? false,
             ],
+            'privacy' => [
+                'anonymousMode' => $preferences['privacy']['anonymousMode'] ?? false,
+            ],
             'communication' => [
                 'email' => $preferences['communication']['email'] ?? $user->email_notifications_enabled ?? true,
                 'sms' => $preferences['communication']['sms'] ?? $user->sms_notifications_enabled ?? true,
@@ -390,6 +393,8 @@ class NotificationController extends Controller
             'dataSharing' => 'array',
             'dataSharing.allowAnalytics' => 'boolean',
             'dataSharing.allowResearch' => 'boolean',
+            'privacy' => 'array',
+            'privacy.anonymousMode' => 'boolean',
             'communication' => 'array',
             'communication.email' => 'boolean',
             'communication.sms' => 'boolean',
