@@ -16,7 +16,6 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AnonymizedUserDisplay from '../../components/AnonymizedUserDisplay';
 import AudioCall from '../../components/AudioCall';
 import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
@@ -1703,6 +1702,8 @@ export default function ChatPage() {
             console.log('📊 [InstantSession] Text session API response:', {
               success: sessionResponse.success,
               data: sessionResponse.data,
+              other_participant_name: sessionResponse.data?.other_participant_name,
+              other_participant_profile_picture_url: sessionResponse.data?.other_participant_profile_picture_url,
               sessionId: sessionId,
               error: sessionResponse.error || 'No error'
             });
@@ -1805,6 +1806,8 @@ export default function ChatPage() {
             const infoResponse = await apiService.get(`/chat/${parsedAppointmentId}/info`);
             if (infoResponse.success && infoResponse.data) {
               console.log('🔍 Chat Info Response:', infoResponse.data);
+              console.log('🔍 Raw other_participant_name:', infoResponse.data.other_participant_name);
+              console.log('🔍 Raw other_participant_profile_picture_url:', infoResponse.data.other_participant_profile_picture_url);
               const chatInfoData = infoResponse.data as ChatInfo;
               
               // Ensure other_participant_name is set properly
