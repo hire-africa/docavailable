@@ -2922,23 +2922,38 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         
-        {/* Profile Picture and Name - Using Anonymized Display */}
-        <AnonymizedUserDisplay
-          user={{
-            id: chatInfo?.doctor_id || chatInfo?.patient_id,
-            display_name: chatInfo?.other_participant_name,
-            profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-            profile_picture: chatInfo?.other_participant_profile_picture,
-            first_name: isPatient ? 'Doctor' : 'Patient',
-            last_name: '',
-          }}
-          isAnonymousModeEnabled={isAnonymousModeEnabled}
-          size="medium"
-          showName={true}
-          showProfilePicture={true}
-          style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-          nameStyle={{ fontSize: 18, fontWeight: '600', color: '#333', marginLeft: 12 }}
-        />
+        {/* Profile Picture and Name - Using Backend Anonymized Data */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          {chatInfo?.other_participant_profile_picture_url ? (
+            <Image
+              source={{ uri: chatInfo.other_participant_profile_picture_url }}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                marginRight: 12,
+              }}
+              onError={() => {
+                console.log('Failed to load profile picture, using default icon');
+              }}
+            />
+          ) : (
+            <View style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: '#E0E0E0',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 12,
+            }}>
+              <Icon name="user" size={20} color="#666" />
+            </View>
+          )}
+          <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
+            {chatInfo?.other_participant_name || 'User'}
+          </Text>
+        </View>
         
         {/* Typing Indicator */}
         <View style={{ flex: 1 }}>
@@ -3670,9 +3685,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             appointmentId={appointmentId}
             userId={currentUserId.toString()}
             isDoctor={!isPatient}
-            doctorName={isPatient ? (isAnonymousModeEnabled ? 'Doctor' : chatInfo?.other_participant_name) : user?.display_name || `${user?.first_name} ${user?.last_name}`}
-            patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : (isAnonymousModeEnabled ? 'Patient' : (chatInfo?.other_participant_name || 'Patient'))}
-            otherParticipantProfilePictureUrl={isAnonymousModeEnabled ? null : chatInfo?.other_participant_profile_picture_url}
+            doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
+            patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : chatInfo?.other_participant_name || 'Patient'}
+            otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
             onEndCall={async () => {
               console.log('📞 Incoming call declined');
               setShowIncomingCall(false);
@@ -3744,16 +3759,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             userId={currentUserId.toString()}
             isDoctor={user?.user_type === 'doctor'}
             doctorName={textSessionInfo ? 
-              (isAnonymousModeEnabled ? 'Doctor' : (textSessionInfo.doctor?.display_name?.includes('Dr.') ?
+              (textSessionInfo.doctor?.display_name?.includes('Dr.') ?
                 textSessionInfo.doctor.display_name :
-                `Dr. ${textSessionInfo.doctor?.display_name || 'Doctor'}`)) :
-              (isAnonymousModeEnabled ? 'Doctor' : (chatInfo?.other_participant_name || 'Doctor'))
+                `Dr. ${textSessionInfo.doctor?.display_name || 'Doctor'}`) :
+              (chatInfo?.other_participant_name || 'Doctor')
             }
             patientName={textSessionInfo ? 
               'Patient' : 
-              (isAnonymousModeEnabled ? 'Patient' : (chatInfo?.other_participant_name || 'Patient'))
+              (chatInfo?.other_participant_name || 'Patient')
             }
-            otherParticipantProfilePictureUrl={isAnonymousModeEnabled ? null : (textSessionInfo?.doctor?.profile_picture || chatInfo?.other_participant_profile_picture)}
+            otherParticipantProfilePictureUrl={textSessionInfo?.doctor?.profile_picture || chatInfo?.other_participant_profile_picture}
             onEndCall={() => {
               setShowAudioCall(false);
               setIsAnsweringCall(false);
