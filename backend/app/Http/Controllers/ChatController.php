@@ -537,9 +537,10 @@ class ChatController extends Controller
             if ($otherUser) {
                 // Check if the other user has anonymous mode enabled
                 if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
-                    $otherParticipantName = $this->anonymizationService->getAnonymizedDisplayName($otherUser);
-                    $otherParticipantProfilePath = null;
-                    $otherParticipantProfileUrl = null;
+                    $anonymizedData = $this->anonymizationService->getAnonymizedUserData($otherUser);
+                    $otherParticipantName = $anonymizedData['display_name'];
+                    $otherParticipantProfilePath = $anonymizedData['profile_picture'];
+                    $otherParticipantProfileUrl = $anonymizedData['profile_picture_url'];
                 } else {
                     $otherParticipantProfilePath = $otherUser->profile_picture;
                     $otherParticipantProfileUrl = $otherUser->profile_picture_url;
@@ -596,9 +597,10 @@ class ChatController extends Controller
             if ($otherUser) {
                 // Check if the other user has anonymous mode enabled
                 if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
-                    $otherParticipantName = $this->anonymizationService->getAnonymizedDisplayName($otherUser);
-                    $otherParticipantProfilePath = null;
-                    $otherParticipantProfileUrl = null;
+                    $anonymizedData = $this->anonymizationService->getAnonymizedUserData($otherUser);
+                    $otherParticipantName = $anonymizedData['display_name'];
+                    $otherParticipantProfilePath = $anonymizedData['profile_picture'];
+                    $otherParticipantProfileUrl = $anonymizedData['profile_picture_url'];
                 } else {
                     $otherParticipantProfilePath = $otherUser->profile_picture;
                     $otherParticipantProfileUrl = $otherUser->profile_picture_url;
@@ -1302,7 +1304,15 @@ class ChatController extends Controller
         }
 
         // Check if the other participant has anonymous mode enabled
-        if (!$this->anonymizationService->isAnonymousModeEnabled($otherParticipant)) {
+        $isAnonymous = $this->anonymizationService->isAnonymousModeEnabled($otherParticipant);
+        \Log::info('🔍 [ChatController] Anonymization check', [
+            'other_participant_id' => $otherParticipantId,
+            'other_participant_name' => $otherParticipant->display_name ?? $otherParticipant->first_name . ' ' . $otherParticipant->last_name,
+            'is_anonymous' => $isAnonymous,
+            'privacy_preferences' => $otherParticipant->privacy_preferences
+        ]);
+        
+        if (!$isAnonymous) {
             return $messages;
         }
 
