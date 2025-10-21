@@ -36,12 +36,12 @@ class AnonymizationService
         $baseUrl = config('app.url', 'https://your-domain.com');
         
         if ($gender === 'male') {
-            return $baseUrl . '/images/default-avatars/male.jpg';
+            return $baseUrl . '/images/default-avatars/male.svg';
         } elseif ($gender === 'female') {
-            return $baseUrl . '/images/default-avatars/female.jpg';
+            return $baseUrl . '/images/default-avatars/female.svg';
         } else {
             // For other genders or unknown, default to male
-            return $baseUrl . '/images/default-avatars/male.jpg';
+            return $baseUrl . '/images/default-avatars/male.svg';
         }
     }
 
@@ -114,9 +114,9 @@ class AnonymizationService
         // Replace other participant name with anonymous identifier
         $anonymizedData['other_participant_name'] = $this->getAnonymizedDisplayName($otherParticipant);
         
-        // Remove profile picture references
-        unset($anonymizedData['other_participant_profile_picture_url']);
-        unset($anonymizedData['other_participant_profile_picture']);
+        // Set anonymized profile picture URL
+        $anonymizedData['other_participant_profile_picture_url'] = $this->getAnonymizedProfilePicture($otherParticipant);
+        $anonymizedData['other_participant_profile_picture'] = $this->getAnonymizedProfilePicture($otherParticipant);
         
         return $anonymizedData;
     }
