@@ -108,18 +108,17 @@ class AppointmentController extends Controller
                 
                 // Add patient profile picture URL and name with anonymization
                 if ($appointment->patient) {
-                    if ($appointment->patient->profile_picture) {
-                        $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
-                    }
-                    
                     // Check if patient has anonymous mode enabled
                     if ($this->anonymizationService->isAnonymousModeEnabled($appointment->patient)) {
                         $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
                         $appointmentData['patientName'] = $anonymizedData['display_name'];
-                        $appointmentData['patient']['profile_picture_url'] = null;
-                        $appointmentData['patient']['profile_picture'] = null;
+                        $appointmentData['patient']['profile_picture_url'] = $anonymizedData['profile_picture_url'];
+                        $appointmentData['patient']['profile_picture'] = $anonymizedData['profile_picture'];
                     } else {
                         $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
+                        if ($appointment->patient->profile_picture) {
+                            $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
+                        }
                     }
                 }
                 
@@ -437,8 +436,8 @@ class AppointmentController extends Controller
                 $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
                 $appointment->patient->first_name = $anonymizedData['first_name'];
                 $appointment->patient->last_name = $anonymizedData['last_name'];
-                $appointment->patient->profile_picture_url = null;
-                $appointment->patient->profile_picture = null;
+                $appointment->patient->profile_picture_url = $anonymizedData['profile_picture_url'];
+                $appointment->patient->profile_picture = $anonymizedData['profile_picture'];
             }
             return $appointment;
         });

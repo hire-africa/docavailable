@@ -33,15 +33,14 @@ class AnonymizationService
     {
         // Determine gender-based profile picture
         $gender = strtolower($user->gender ?? '');
-        $baseUrl = config('app.url', 'https://your-domain.com');
         
         if ($gender === 'male') {
-            return $baseUrl . '/images/default-avatars/male.svg';
+            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Male.jpg';
         } elseif ($gender === 'female') {
-            return $baseUrl . '/images/default-avatars/female.svg';
+            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Female.jpg';
         } else {
             // For other genders or unknown, default to male
-            return $baseUrl . '/images/default-avatars/male.svg';
+            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Male.jpg';
         }
     }
 
