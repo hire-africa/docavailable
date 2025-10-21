@@ -12,7 +12,6 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
@@ -110,14 +109,7 @@ function PatientSettingsContent() {
         loadSettings();
     }, [user]);
 
-    // Reload settings when page comes into focus
-    useFocusEffect(
-        React.useCallback(() => {
-            if (user) {
-                loadSettings();
-            }
-        }, [user])
-    );
+    // Note: Removed useFocusEffect as it might be causing race conditions
 
     const loadSettings = async () => {
         if (!user) return;
@@ -142,6 +134,7 @@ function PatientSettingsContent() {
             }
 
             if (privacyResponse.success && privacyResponse.data) {
+                console.log('🔍 Full privacy response:', JSON.stringify(privacyResponse.data, null, 2));
                 const anonymousMode = (privacyResponse.data as any)?.privacy?.anonymousMode ?? false;
                 console.log('🔍 Loading anonymous mode setting:', anonymousMode);
                 setSettings(prev => ({

@@ -355,7 +355,10 @@ class NotificationController extends Controller
         \Log::info('🔍 Loading privacy settings', [
             'user_id' => $user->id,
             'raw_preferences' => $preferences,
-            'anonymous_mode' => $preferences['privacy']['anonymousMode'] ?? 'not_set'
+            'raw_preferences_type' => gettype($preferences),
+            'anonymous_mode' => $preferences['privacy']['anonymousMode'] ?? 'not_set',
+            'privacy_exists' => isset($preferences['privacy']),
+            'privacy_type' => isset($preferences['privacy']) ? gettype($preferences['privacy']) : 'not_set'
         ]);
         
         // Return the structure that the frontend expects
@@ -438,9 +441,12 @@ class NotificationController extends Controller
         ]);
         
         // Log the updated data for debugging
+        $freshUser = $user->fresh();
         \Log::info('🔍 Privacy settings updated', [
             'user_id' => $user->id,
-            'stored_preferences' => $user->fresh()->privacy_preferences
+            'stored_preferences' => $freshUser->privacy_preferences,
+            'stored_preferences_type' => gettype($freshUser->privacy_preferences),
+            'anonymous_mode_stored' => $freshUser->privacy_preferences['privacy']['anonymousMode'] ?? 'not_set'
         ]);
         
         return response()->json([
