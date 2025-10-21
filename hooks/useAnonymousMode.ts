@@ -61,22 +61,24 @@ export const useAnonymizedDisplay = (user: any, isAnonymousModeEnabled: boolean)
       };
     }
 
-    // Generate consistent anonymous identifier
-    const generateAnonymousId = (userId: string) => {
-      // Simple hash function for consistent anonymous ID
-      let hash = 0;
-      for (let i = 0; i < userId.length; i++) {
-        const char = userId.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Convert to 32-bit integer
+    // Get gender-based profile picture
+    const getGenderBasedProfilePicture = (user: any) => {
+      const gender = user?.gender?.toLowerCase() || '';
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'https://your-domain.com';
+      
+      if (gender === 'male') {
+        return `${baseUrl}/images/default-avatars/male.jpg`;
+      } else if (gender === 'female') {
+        return `${baseUrl}/images/default-avatars/female.jpg`;
+      } else {
+        // For other genders or unknown, default to male
+        return `${baseUrl}/images/default-avatars/male.jpg`;
       }
-      const shortHash = Math.abs(hash).toString(16).substring(0, 8).toUpperCase();
-      return `Patient-${shortHash}`;
     };
 
     return {
-      displayName: generateAnonymousId(user.id.toString()),
-      profilePictureUrl: null,
+      displayName: 'Patient',
+      profilePictureUrl: getGenderBasedProfilePicture(user),
       isAnonymous: true,
     };
   };

@@ -53,7 +53,7 @@ export async function PATCH(
             // Continue with adminUserId = null (will be stored as NULL in database)
           }
         } catch (error) {
-          console.log(`Error looking up admin user: ${error.message}. Proceeding with NULL paid_by.`);
+          console.log(`Error looking up admin user: ${error instanceof Error ? error.message : 'Unknown error'}. Proceeding with NULL paid_by.`);
           // Continue with adminUserId = null (will be stored as NULL in database)
         }
       } else {

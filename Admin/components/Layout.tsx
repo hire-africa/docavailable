@@ -1,22 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { 
-  Users, 
-  CreditCard, 
-  Calendar, 
-  BarChart3, 
-  UserCheck, 
-  LogOut,
-  Menu,
-  X,
-  Home,
-  FileText,
-  Wallet,
-  ArrowUpCircle
+import {
+    ArrowUpCircle,
+    BarChart3,
+    Calendar,
+    CreditCard,
+    FileText,
+    Home,
+    LogOut,
+    Menu,
+    MessageSquare,
+    UserCheck,
+    Users,
+    Wallet,
+    X
 } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
 interface LayoutProps {
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Appointments', href: '/appointments', icon: Calendar },
   { name: 'Payments', href: '/payments', icon: Wallet },
   { name: 'Withdraw Requests', href: '/withdraw-requests', icon: ArrowUpCircle },
+  { name: 'Communications', href: '/communications', icon: MessageSquare },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ];
 

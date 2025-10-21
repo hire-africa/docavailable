@@ -14,14 +14,8 @@ class AnonymizationService
      */
     public function getAnonymousIdentifier(User $user): string
     {
-        // Create a hash based on user ID and a secret salt
-        // This ensures consistency across sessions
-        $salt = config('app.anonymization_salt', 'default_salt_change_in_production');
-        $hash = hash('sha256', $user->id . $salt);
-        
-        // Take first 8 characters and format as "Patient-XXXX"
-        $shortHash = strtoupper(substr($hash, 0, 8));
-        return "Patient-{$shortHash}";
+        // Simply return "Patient" for all anonymous users
+        return "Patient";
     }
 
     /**
@@ -33,11 +27,22 @@ class AnonymizationService
     }
 
     /**
-     * Get anonymized profile picture URL (returns null to use default avatar)
+     * Get anonymized profile picture URL based on gender
      */
-    public function getAnonymizedProfilePicture(): ?string
+    public function getAnonymizedProfilePicture(User $user): ?string
     {
-        return null; // Always return null to use default avatar
+        // Determine gender-based profile picture
+        $gender = strtolower($user->gender ?? '');
+        $baseUrl = config('app.url', 'https://your-domain.com');
+        
+        if ($gender === 'male') {
+            return $baseUrl . '/images/default-avatars/male.jpg';
+        } elseif ($gender === 'female') {
+            return $baseUrl . '/images/default-avatars/female.jpg';
+        } else {
+            // For other genders or unknown, default to male
+            return $baseUrl . '/images/default-avatars/male.jpg';
+        }
     }
 
     /**
@@ -57,10 +62,10 @@ class AnonymizationService
         return [
             'id' => $user->id, // Keep ID for internal operations
             'display_name' => $this->getAnonymizedDisplayName($user),
-            'profile_picture_url' => $this->getAnonymizedProfilePicture(),
-            'profile_picture' => null,
-            'first_name' => 'Anonymous',
-            'last_name' => 'Patient',
+            'profile_picture_url' => $this->getAnonymizedProfilePicture($user),
+            'profile_picture' => $this->getAnonymizedProfilePicture($user),
+            'first_name' => 'Patient',
+            'last_name' => '',
             'is_anonymous' => true,
         ];
     }

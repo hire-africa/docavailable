@@ -3670,9 +3670,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             appointmentId={appointmentId}
             userId={currentUserId.toString()}
             isDoctor={!isPatient}
-            doctorName={isPatient ? chatInfo?.other_participant_name : user?.display_name || `${user?.first_name} ${user?.last_name}`}
-            patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : (chatInfo?.other_participant_name || 'Patient')}
-            otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
+            doctorName={isPatient ? (isAnonymousModeEnabled ? 'Doctor' : chatInfo?.other_participant_name) : user?.display_name || `${user?.first_name} ${user?.last_name}`}
+            patientName={isPatient ? user?.display_name || `${user?.first_name} ${user?.last_name}` : (isAnonymousModeEnabled ? 'Patient' : (chatInfo?.other_participant_name || 'Patient'))}
+            otherParticipantProfilePictureUrl={isAnonymousModeEnabled ? null : chatInfo?.other_participant_profile_picture_url}
             onEndCall={async () => {
               console.log('📞 Incoming call declined');
               setShowIncomingCall(false);
@@ -3744,16 +3744,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             userId={currentUserId.toString()}
             isDoctor={user?.user_type === 'doctor'}
             doctorName={textSessionInfo ? 
-              (textSessionInfo.doctor?.display_name?.includes('Dr.') ?
+              (isAnonymousModeEnabled ? 'Doctor' : (textSessionInfo.doctor?.display_name?.includes('Dr.') ?
                 textSessionInfo.doctor.display_name :
-                `Dr. ${textSessionInfo.doctor?.display_name || 'Doctor'}`) :
-              chatInfo?.other_participant_name || 'Doctor'
+                `Dr. ${textSessionInfo.doctor?.display_name || 'Doctor'}`)) :
+              (isAnonymousModeEnabled ? 'Doctor' : (chatInfo?.other_participant_name || 'Doctor'))
             }
             patientName={textSessionInfo ? 
               'Patient' : 
-              chatInfo?.other_participant_name || 'Patient'
+              (isAnonymousModeEnabled ? 'Patient' : (chatInfo?.other_participant_name || 'Patient'))
             }
-            otherParticipantProfilePictureUrl={textSessionInfo?.doctor?.profile_picture || chatInfo?.other_participant_profile_picture}
+            otherParticipantProfilePictureUrl={isAnonymousModeEnabled ? null : (textSessionInfo?.doctor?.profile_picture || chatInfo?.other_participant_profile_picture)}
             onEndCall={() => {
               setShowAudioCall(false);
               setIsAnsweringCall(false);

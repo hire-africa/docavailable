@@ -60,19 +60,23 @@ const AnonymizedUserDisplay: React.FC<AnonymizedUserDisplayProps> = ({
             borderRadius: sizeStyles.containerSize / 2,
           }
         ]}>
-          {anonymizedData.profilePictureUrl ? (
-            <Image
-              source={{ uri: anonymizedData.profilePictureUrl }}
-              style={[
-                styles.profilePicture,
-                {
-                  width: sizeStyles.containerSize,
-                  height: sizeStyles.containerSize,
-                  borderRadius: sizeStyles.containerSize / 2,
-                }
-              ]}
-            />
-          ) : (
+           {anonymizedData.profilePictureUrl ? (
+             <Image
+               source={{ uri: anonymizedData.profilePictureUrl }}
+               style={[
+                 styles.profilePicture,
+                 {
+                   width: sizeStyles.containerSize,
+                   height: sizeStyles.containerSize,
+                   borderRadius: sizeStyles.containerSize / 2,
+                 }
+               ]}
+               onError={() => {
+                 // Fallback to default icon if image fails to load
+                 console.log('Failed to load gender-based avatar, using default icon');
+               }}
+             />
+           ) : (
             <View style={[
               styles.defaultProfilePicture,
               {

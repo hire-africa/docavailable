@@ -363,10 +363,10 @@ export default function DoctorDashboard() {
         // Transform the data to match the BookingRequest interface
         const requests = rawRequests.map((request: any) => ({
           id: request.id,
-          patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+          patient_name: request.patientName || 'Patient',
           doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
-          patientProfilePictureUrl: request.patient?.profile_picture_url,
-          patientProfilePicture: request.patient?.profile_picture,
+          patientProfilePictureUrl: request.patient?.profile_picture_url || null,
+          patientProfilePicture: request.patient?.profile_picture || null,
           patientEmail: request.patient?.email,
           patientGender: request.patient?.gender || request.patient?.sex,
           patientCountry: request.patient?.country,
@@ -433,7 +433,7 @@ export default function DoctorDashboard() {
           .filter((request: any) => request.status === 1 || request.status === 3) // Only confirmed (1) and completed (3)
           .map((request: any) => ({
             id: request.id,
-            patient_name: request.patientName || `${request.patient?.first_name || ''} ${request.patient?.last_name || ''}`.trim(),
+            patient_name: request.patientName || 'Patient',
             doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
             patientProfilePictureUrl: request.patient?.profile_picture_url,
             patientProfilePicture: request.patient?.profile_picture,

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
+    Modal,
     Platform,
     ScrollView,
     StyleSheet,
@@ -41,6 +42,25 @@ interface Settings {
     };
 }
 
+interface UserData {
+    notifications?: {
+        appointments?: boolean;
+        consultation?: boolean;
+        system?: boolean;
+    };
+    privacy_preferences?: {
+        profileVisibility?: boolean;
+        dataSharing?: boolean;
+        privacy?: {
+            anonymousMode?: boolean;
+        };
+        security?: {
+            loginNotifications?: boolean;
+            sessionTimeout?: number;
+        };
+    };
+}
+
 export default function PatientSettings() {
     return (
         <>
@@ -57,6 +77,8 @@ export default function PatientSettings() {
 function PatientSettingsContent() {
     const { user, userData } = useAuth();
     const [loading, setLoading] = useState(false);
+    const [showAnonymousWarning, setShowAnonymousWarning] = useState(false);
+    const [pendingAnonymousMode, setPendingAnonymousMode] = useState(false);
     const [settings, setSettings] = useState<Settings>({
         notifications: {
             appointments: true,
@@ -102,9 +124,9 @@ function PatientSettingsContent() {
                 setSettings(prev => ({
                     ...prev,
                     notifications: {
-                        appointments: notificationsResponse.data.appointments?.reminders ?? true,
-                        messages: notificationsResponse.data.consultation?.newMessages ?? true,
-                        system: notificationsResponse.data.system?.securityAlerts ?? true,
+                        appointments: (notificationsResponse.data as any)?.appointments?.reminders ?? true,
+                        messages: (notificationsResponse.data as any)?.consultation?.newMessages ?? true,
+                        system: (notificationsResponse.data as any)?.system?.securityAlerts ?? true,
                     }
                 }));
             }
@@ -113,13 +135,13 @@ function PatientSettingsContent() {
                 setSettings(prev => ({
                     ...prev,
                     privacy: {
-                        profileVisibility: privacyResponse.data.profileVisibility?.showToDoctors ?? true,
-                        dataSharing: privacyResponse.data.dataSharing?.allowAnalytics ?? true,
-                        anonymousMode: privacyResponse.data.privacy?.anonymousMode ?? false,
+                        profileVisibility: (privacyResponse.data as any)?.profileVisibility?.showToDoctors ?? true,
+                        dataSharing: (privacyResponse.data as any)?.dataSharing?.allowAnalytics ?? true,
+                        anonymousMode: (privacyResponse.data as any)?.privacy?.anonymousMode ?? false,
                     },
                     security: {
-                        loginNotifications: privacyResponse.data.security?.loginNotifications ?? true,
-                        sessionTimeout: privacyResponse.data.security?.sessionTimeout ?? 30,
+                        loginNotifications: (privacyResponse.data as any)?.security?.loginNotifications ?? true,
+                        sessionTimeout: (privacyResponse.data as any)?.security?.sessionTimeout ?? 30,
                     }
                 }));
             }
@@ -178,6 +200,30 @@ function PatientSettingsContent() {
     };
 
     const updateSetting = (path: string, value: any) => {
+        // Special handling for anonymous mode toggle
+        if (path === 'privacy.anonymousMode' && value === true && !settings.privacy.anonymousMode) {
+            // Show warning modal before enabling anonymous mode
+            setPendingAnonymousMode(true);
+            setShowAnonymousWarning(true);
+            return;
+        }
+
+        // Allow disabling anonymous mode without warning
+        if (path === 'privacy.anonymousMode' && value === false) {
+            const keys = path.split('.');
+            const newSettings = { ...settings };
+            let current = newSettings;
+            
+            for (let i = 0; i < keys.length - 1; i++) {
+                current = current[keys[i]];
+            }
+            current[keys[keys.length - 1]] = value;
+            
+            setSettings(newSettings);
+            saveSettings(newSettings);
+            return;
+        }
+
         const keys = path.split('.');
         const newSettings = { ...settings };
         let current = newSettings;
@@ -189,6 +235,24 @@ function PatientSettingsContent() {
         
         setSettings(newSettings);
         saveSettings(newSettings);
+    };
+
+    const handleAnonymousModeConfirm = () => {
+        // Enable anonymous mode
+        const newSettings = { ...settings };
+        newSettings.privacy.anonymousMode = true;
+        setSettings(newSettings);
+        saveSettings(newSettings);
+        
+        // Close modal
+        setShowAnonymousWarning(false);
+        setPendingAnonymousMode(false);
+    };
+
+    const handleAnonymousModeCancel = () => {
+        // Keep anonymous mode disabled
+        setShowAnonymousWarning(false);
+        setPendingAnonymousMode(false);
     };
 
     if (loading && !settings) {
@@ -207,7 +271,7 @@ function PatientSettingsContent() {
                     style={styles.backButton}
                     onPress={() => router.back()}
                 >
-                    <Icon name="arrow-left" size={20} color="#222" />
+                    <Icon name="arrowLeft" size={20} color="#222" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Settings</Text>
                 <View style={styles.placeholder} />
@@ -289,14 +353,14 @@ function PatientSettingsContent() {
 
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="user-secret" size={20} color="#4CAF50" />
+                            <Icon name="user" size={20} color="#4CAF50" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Anonymous Consultations</Text>
                                 <Text style={styles.settingDescription}>Hide your name and profile in all consultations</Text>
                             </View>
                         </View>
                         <Switch
-                            value={settings.privacy.anonymousMode}
+                            value={pendingAnonymousMode ? true : settings.privacy.anonymousMode}
                             onValueChange={(value) => updateSetting('privacy.anonymousMode', value)}
                             trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
                             thumbColor={settings.privacy.anonymousMode ? '#FFFFFF' : '#FFFFFF'}
@@ -321,6 +385,79 @@ function PatientSettingsContent() {
                 </View>
 
             </ScrollView>
+
+            {/* Anonymous Mode Warning Modal */}
+            <Modal
+                visible={showAnonymousWarning}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={handleAnonymousModeCancel}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.warningIconContainer}>
+                                <Icon name="warning" size={32} color="#FF6B35" />
+                            </View>
+                            <Text style={styles.modalTitle}>Enable Anonymous Consultations?</Text>
+                        </View>
+
+                        <View style={styles.modalContent}>
+                            <Text style={styles.modalDescription}>
+                                By enabling anonymous consultations, your name and profile picture will be hidden from doctors during all consultations.
+                            </Text>
+                            
+                            <View style={styles.warningSection}>
+                                <Text style={styles.warningTitle}>Important Considerations:</Text>
+                                
+                                <View style={styles.warningItem}>
+                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Text style={styles.warningText}>
+                                        Doctors won't be able to follow up on your condition or medical history
+                                    </Text>
+                                </View>
+                                
+                                <View style={styles.warningItem}>
+                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Text style={styles.warningText}>
+                                        Emergency services may not work properly as they won't be connected to your patient profile
+                                    </Text>
+                                </View>
+                                
+                                <View style={styles.warningItem}>
+                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Text style={styles.warningText}>
+                                        Medical records and consultation history may be limited
+                                    </Text>
+                                </View>
+                                
+                                <View style={styles.warningItem}>
+                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Text style={styles.warningText}>
+                                        You can disable this feature at any time in settings
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={handleAnonymousModeCancel}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.confirmButton]}
+                                onPress={handleAnonymousModeConfirm}
+                            >
+                                <Text style={styles.confirmButtonText}>Enable Anonymous Mode</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -419,5 +556,112 @@ const styles = StyleSheet.create({
     },
     dangerText: {
         color: '#FF3B30',
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    modalContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 4,
+        },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    modalHeader: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    warningIconContainer: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#FFF5F5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#222',
+        textAlign: 'center',
+    },
+    modalContent: {
+        marginBottom: 24,
+    },
+    modalDescription: {
+        fontSize: 16,
+        color: '#666',
+        lineHeight: 24,
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    warningSection: {
+        backgroundColor: '#FFF8F5',
+        borderRadius: 12,
+        padding: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF6B35',
+    },
+    warningTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#FF6B35',
+        marginBottom: 12,
+    },
+    warningItem: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    warningText: {
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+        marginLeft: 8,
+        flex: 1,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 12,
+    },
+    modalButton: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    cancelButton: {
+        backgroundColor: '#F5F5F5',
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    confirmButton: {
+        backgroundColor: '#FF6B35',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
+    },
+    confirmButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#FFFFFF',
     },
 });
