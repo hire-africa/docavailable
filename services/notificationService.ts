@@ -141,18 +141,26 @@ export class NotificationService {
           
           if (data.success && data.notifications) {
             // Convert API notifications to our format
-            adminNotifications = data.notifications.map((n: any) => ({
-              id: n.id,
-              title: n.title,
-              message: n.message,
-              type: n.type,
-              timestamp: new Date(n.timestamp),
-              isRead: n.isRead || false,
-              actionUrl: this.getActionUrlForType(n.type),
-              recipientType: n.recipientType,
-              recipientId: n.recipientId,
-              sentBy: n.sentBy
-            }));
+            adminNotifications = data.notifications.map((n: any) => {
+              console.log('🔔 Processing admin notification:', {
+                id: n.id,
+                title: n.title,
+                type: n.type,
+                originalType: n.type
+              });
+              return {
+                id: n.id,
+                title: n.title,
+                message: n.message,
+                type: n.type,
+                timestamp: new Date(n.timestamp),
+                isRead: n.isRead || false,
+                actionUrl: this.getActionUrlForType(n.type),
+                recipientType: n.recipientType,
+                recipientId: n.recipientId,
+                sentBy: n.sentBy
+              };
+            });
             console.log('🔔 Admin notifications loaded:', adminNotifications.length, adminNotifications);
           } else {
             console.log('🔔 No admin notifications found in response');

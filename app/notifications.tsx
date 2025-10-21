@@ -92,15 +92,19 @@ function NotificationsContent() {
       setActivities(generatedActivities);
 
       // Convert activities to notifications
-      const activityNotifications: ServiceNotification[] = generatedActivities.map((activity, index) => ({
-        id: `activity_${activity.id}`,
-        title: activity.title,
-        message: activity.description,
-        type: mapActivityTypeToNotificationType(activity.type) as any,
-        isRead: index > 2, // Mark older activities as read
-        timestamp: activity.timestamp,
-        actionUrl: getActionUrlForActivity(activity.type)
-      }));
+      const activityNotifications: ServiceNotification[] = generatedActivities.map((activity, index) => {
+        const notificationType = mapActivityTypeToNotificationType(activity.type);
+        console.log('🔔 Mapping activity type:', activity.type, 'to notification type:', notificationType);
+        return {
+          id: `activity_${activity.id}`,
+          title: activity.title,
+          message: activity.description,
+          type: notificationType as any,
+          isRead: index > 2, // Mark older activities as read
+          timestamp: activity.timestamp,
+          actionUrl: getActionUrlForActivity(activity.type)
+        };
+      });
 
       // Add some system notifications
       const systemNotifications: ServiceNotification[] = [
@@ -143,14 +147,14 @@ function NotificationsContent() {
     }
   };
 
-  const mapActivityTypeToNotificationType = (activityType: string): 'appointment' | 'message' | 'system' | 'payment' | 'reminder' => {
+  const mapActivityTypeToNotificationType = (activityType: string): 'appointment' | 'message' | 'system' | 'payment' | 'reminder' | 'wallet' => {
     switch (activityType) {
       case 'appointment':
         return 'appointment';
       case 'message':
         return 'message';
       case 'wallet':
-        return 'payment';
+        return 'wallet';
       case 'welcome':
         return 'system';
       default:
@@ -218,18 +222,32 @@ function NotificationsContent() {
   };
 
   const getNotificationIcon = (type: string) => {
+    console.log('🔔 Getting icon for notification type:', type);
     switch (type) {
       case 'appointment':
         return 'calendar';
       case 'message':
         return 'comments';
       case 'payment':
-        return 'money';
+        return 'dollar';
+      case 'wallet':
+        return 'dollar';
       case 'reminder':
-        return 'bell';
+        return 'clock-o';
       case 'system':
         return 'info-circle';
+      case 'appointment_booked':
+        return 'calendar-check-o';
+      case 'appointment_cancelled':
+        return 'calendar-times-o';
+      case 'new_message':
+        return 'envelope';
+      case 'payment_received':
+        return 'money';
+      case 'wallet_transaction':
+        return 'wallet';
       default:
+        console.log('🔔 Using default bell icon for type:', type);
         return 'bell';
     }
   };
@@ -242,10 +260,22 @@ function NotificationsContent() {
         return '#2196F3';
       case 'payment':
         return '#FF9800';
+      case 'wallet':
+        return '#FF9800';
       case 'reminder':
         return '#9C27B0';
       case 'system':
         return '#607D8B';
+      case 'appointment_booked':
+        return '#4CAF50';
+      case 'appointment_cancelled':
+        return '#F44336';
+      case 'new_message':
+        return '#2196F3';
+      case 'payment_received':
+        return '#4CAF50';
+      case 'wallet_transaction':
+        return '#FF9800';
       default:
         return '#666';
     }
@@ -390,11 +420,17 @@ function NotificationsContent() {
                         styles.notificationIcon,
                         { backgroundColor: getNotificationColor(notification.type) + '20' }
                       ]}>
-                        <FontAwesome 
-                          name={getNotificationIcon(notification.type) as any} 
-                          size={16} 
-                          color={getNotificationColor(notification.type)} 
-                        />
+        <FontAwesome 
+          name={getNotificationIcon(notification.type) as any} 
+          size={16} 
+          color={getNotificationColor(notification.type)} 
+        />
+        {/* Debug info - remove in production */}
+        {__DEV__ && (
+          <Text style={{fontSize: 10, color: '#999', marginTop: 2}}>
+            Type: {notification.type}
+          </Text>
+        )}
                       </View>
                       <View style={styles.notificationText}>
                         <Text style={[
@@ -437,13 +473,37 @@ function NotificationsContent() {
                   : 'You\'re all caught up! New notifications will appear here.'
                 }
               </Text>
-              <TouchableOpacity
-                style={styles.testButton}
-                onPress={loadNotifications}
-              >
-                <FontAwesome name="refresh" size={16} color="#4CAF50" />
-                <Text style={styles.testButtonText}>Test Load Notifications</Text>
-              </TouchableOpacity>
+        <View style={styles.testButtonsContainer}>
+          <TouchableOpacity
+            style={styles.testButton}
+            onPress={loadNotifications}
+          >
+            <FontAwesome name="refresh" size={16} color="#4CAF50" />
+            <Text style={styles.testButtonText}>Test Load Notifications</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.testButton, {backgroundColor: '#E3F2FD'}]}
+            onPress={() => {
+              const testNotification: ServiceNotification = {
+                id: 'test_' + Date.now(),
+                title: 'Test Admin Notification',
+                message: 'This is a test notification from admin',
+                type: 'system' as any,
+                timestamp: new Date(),
+                isRead: false,
+                actionUrl: undefined,
+                recipientType: 'all' as any,
+                recipientId: undefined,
+                sentBy: 'Test'
+              };
+              setNotifications(prev => [testNotification, ...prev]);
+            }}
+          >
+            <FontAwesome name="plus" size={16} color="#2196F3" />
+            <Text style={[styles.testButtonText, {color: '#2196F3'}]}>Add Test Notification</Text>
+          </TouchableOpacity>
+        </View>
             </View>
           )}
         </ScrollView>
@@ -656,6 +716,10 @@ const styles = StyleSheet.create({
   activeFilterTabText: {
     color: '#fff',
   },
+  testButtonsContainer: {
+    gap: 12,
+    marginTop: 16,
+  },
   testButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -663,7 +727,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 16,
     gap: 8,
   },
   testButtonText: {
