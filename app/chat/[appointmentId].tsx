@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     Modal,
     ScrollView,
     StatusBar,
@@ -1704,6 +1705,8 @@ export default function ChatPage() {
               data: sessionResponse.data,
               other_participant_name: sessionResponse.data?.other_participant_name,
               other_participant_profile_picture_url: sessionResponse.data?.other_participant_profile_picture_url,
+              patient_data: sessionResponse.data?.patient,
+              doctor_data: sessionResponse.data?.doctor,
               sessionId: sessionId,
               error: sessionResponse.error || 'No error'
             });
