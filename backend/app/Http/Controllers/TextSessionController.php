@@ -489,8 +489,8 @@ class TextSessionController extends Controller
             $sessions = $query->orderBy('last_activity_at', 'desc')->get();
 
             // Add remaining time information to each session
-            $sessionsWithTime = $sessions->map(function ($session) {
-                return [
+            $sessionsWithTime = $sessions->map(function ($session) use ($userType) {
+                $sessionData = [
                     'id' => $session->id,
                     'status' => $session->status,
                     'started_at' => $session->started_at,
@@ -504,6 +504,23 @@ class TextSessionController extends Controller
                     'patient' => $session->patient,
                     'doctor' => $session->doctor,
                 ];
+
+                // Apply anonymization for doctors viewing patient data
+                if ($userType === 'doctor' && $session->patient && $this->anonymizationService->isAnonymousModeEnabled($session->patient)) {
+                    $anonymizedPatientData = $this->anonymizationService->getAnonymizedUserData($session->patient);
+                    $sessionData['patient'] = $anonymizedPatientData;
+                    $sessionData['patient_name'] = $anonymizedPatientData['display_name'];
+                } else if ($userType === 'doctor' && $session->patient) {
+                    $sessionData['patient_name'] = $session->patient->first_name . ' ' . $session->patient->last_name;
+                }
+
+                // Apply anonymization for patients viewing doctor data
+                if ($userType === 'patient' && $session->doctor && $this->anonymizationService->isAnonymousModeEnabled($session->doctor)) {
+                    $anonymizedDoctorData = $this->anonymizationService->getAnonymizedUserData($session->doctor);
+                    $sessionData['doctor'] = $anonymizedDoctorData;
+                }
+
+                return $sessionData;
             });
 
             return response()->json([

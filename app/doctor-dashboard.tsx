@@ -423,11 +423,12 @@ export default function DoctorDashboard() {
         const rawConfirmed = responseData.data || responseData;
         
         // Transform the data to match the BookingRequest interface and filter for confirmed/completed only
-        // // console.log('📋 [fetchConfirmedAppointments] Raw appointments before filtering:', rawConfirmed.map((r: any) => ({
-        //   id: r.id,
-        //   status: r.status,
-        //   patientName: r.patientName || `${r.patient?.first_name || ''} ${r.patient?.last_name || ''}`.trim()
-        // })));
+        console.log('📋 [fetchConfirmedAppointments] Raw appointments before filtering:', rawConfirmed.map((r: any) => ({
+          id: r.id,
+          status: r.status,
+          patientName: r.patientName || `${r.patient?.first_name || ''} ${r.patient?.last_name || ''}`.trim(),
+          patient: r.patient
+        })));
         
         const confirmed = rawConfirmed
           .filter((request: any) => request.status === 1 || request.status === 3) // Only confirmed (1) and completed (3)
@@ -454,11 +455,12 @@ export default function DoctorDashboard() {
             reschedulePending: false
           }));
         
-        // // console.log('📋 [fetchConfirmedAppointments] Filtered appointments:', confirmed.map((r: any) => ({
-        //   id: r.id,
-        //   status: r.status,
-        //   patientName: r.patientName
-        // })));
+        console.log('📋 [fetchConfirmedAppointments] Filtered appointments:', confirmed.map((r: any) => ({
+          id: r.id,
+          status: r.status,
+          patientName: r.patient_name,
+          patientProfilePictureUrl: r.patientProfilePictureUrl
+        })));
         
         setConfirmedAppointments(confirmed);
       }
@@ -1784,7 +1786,9 @@ export default function DoctorDashboard() {
             ...session,
             type: 'active_text',
             sortDate: new Date().getTime(), // Most recent
-            isActive: true
+            isActive: true,
+            patientProfilePictureUrl: session.patient?.profile_picture_url,
+            patientProfilePicture: session.patient?.profile_picture
           }));
 
           // Get confirmed appointments
@@ -1805,7 +1809,9 @@ export default function DoctorDashboard() {
               }
               return 0;
             })(),
-            isActive: false
+            isActive: false,
+            patientProfilePictureUrl: appt.patient?.profile_picture_url,
+            patientProfilePicture: appt.patient?.profile_picture
           }));
 
           // Combine all items and sort by date (most recent first)
@@ -1865,19 +1871,13 @@ export default function DoctorDashboard() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ position: 'relative' }}>
-                      <View style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: '#4CAF50',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 16
-                      }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
-                          {item.patient?.first_name?.charAt(0) || 'P'}
-                        </Text>
-                      </View>
+                      <DoctorProfilePicture
+                        profilePictureUrl={item.patientProfilePictureUrl}
+                        profilePicture={item.patientProfilePicture}
+                        size={48}
+                        name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
+                        style={{ marginRight: 16 }}
+                      />
                       {/* Active indicator */}
                       {item.isActive && (
                         <View style={{
@@ -1895,7 +1895,7 @@ export default function DoctorDashboard() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
-                        {item.patient?.first_name} {item.patient?.last_name}
+                        {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                         Text Session
@@ -1931,19 +1931,13 @@ export default function DoctorDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: '#D1E7DD',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 16
-                    }}>
-                      <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
-                        {String(item.patient_name || 'Unknown Patient').charAt(0) || 'P'}
-                      </Text>
-                    </View>
+                    <DoctorProfilePicture
+                      profilePictureUrl={item.patientProfilePictureUrl}
+                      profilePicture={item.patientProfilePicture}
+                      size={48}
+                      name={item.patient_name || 'Unknown Patient'}
+                      style={{ marginRight: 16 }}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
                         {String(item.patient_name || 'Unknown Patient')}

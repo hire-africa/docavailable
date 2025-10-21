@@ -36,7 +36,7 @@ class AppointmentController extends Controller
         
             $appointments = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($user, $perPage, $status, $date) {
             $query = $user->user_type === 'doctor' 
-                ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture'])
+                ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture,privacy_preferences'])
                 : $user->appointments()->with(['doctor:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture']);
             
             // Apply filters
@@ -108,17 +108,39 @@ class AppointmentController extends Controller
                 
                 // Add patient profile picture URL and name with anonymization
                 if ($appointment->patient) {
+                    \Log::info('🔍 [AppointmentController] Processing patient', [
+                        'patient_id' => $appointment->patient->id,
+                        'patient_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
+                        'privacy_preferences' => $appointment->patient->privacy_preferences
+                    ]);
+                    
                     // Check if patient has anonymous mode enabled
-                    if ($this->anonymizationService->isAnonymousModeEnabled($appointment->patient)) {
+                    $isAnonymous = $this->anonymizationService->isAnonymousModeEnabled($appointment->patient);
+                    \Log::info('🔍 [AppointmentController] Anonymization check', [
+                        'patient_id' => $appointment->patient->id,
+                        'is_anonymous' => $isAnonymous
+                    ]);
+                    
+                    if ($isAnonymous) {
                         $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
                         $appointmentData['patientName'] = $anonymizedData['display_name'];
                         $appointmentData['patient']['profile_picture_url'] = $anonymizedData['profile_picture_url'];
                         $appointmentData['patient']['profile_picture'] = $anonymizedData['profile_picture'];
+                        \Log::info('🔍 [AppointmentController] Applied anonymization', [
+                            'patient_id' => $appointment->patient->id,
+                            'original_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
+                            'anonymized_name' => $anonymizedData['display_name'],
+                            'anonymized_picture' => $anonymizedData['profile_picture_url']
+                        ]);
                     } else {
                         $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
                         if ($appointment->patient->profile_picture) {
                             $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
                         }
+                        \Log::info('🔍 [AppointmentController] No anonymization applied', [
+                            'patient_id' => $appointment->patient->id,
+                            'name' => $appointmentData['patientName']
+                        ]);
                     }
                 }
                 
