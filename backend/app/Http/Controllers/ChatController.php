@@ -525,9 +525,19 @@ class ChatController extends Controller
         if ($user->id === $textSession->doctor_id) {
             $otherParticipantName = $textSession->patient_first_name . ' ' . $textSession->patient_last_name;
             $otherParticipantId = $textSession->patient_id;
+            \Log::info('🔍 [ChatController] Doctor viewing patient', [
+                'doctor_id' => $user->id,
+                'patient_id' => $otherParticipantId,
+                'original_patient_name' => $otherParticipantName
+            ]);
         } else {
             $otherParticipantName = 'Dr. ' . $textSession->doctor_first_name . ' ' . $textSession->doctor_last_name;
             $otherParticipantId = $textSession->doctor_id;
+            \Log::info('🔍 [ChatController] Patient viewing doctor', [
+                'patient_id' => $user->id,
+                'doctor_id' => $otherParticipantId,
+                'original_doctor_name' => $otherParticipantName
+            ]);
         }
 
         $otherParticipantProfilePath = null;
@@ -535,15 +545,36 @@ class ChatController extends Controller
         if ($otherParticipantId) {
             $otherUser = \App\Models\User::find($otherParticipantId);
             if ($otherUser) {
+                \Log::info('🔍 [ChatController] Found other user', [
+                    'other_user_id' => $otherUser->id,
+                    'other_user_name' => $otherUser->display_name ?? $otherUser->first_name . ' ' . $otherUser->last_name,
+                    'privacy_preferences' => $otherUser->privacy_preferences
+                ]);
+                
                 // Check if the other user has anonymous mode enabled
-                if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
+                $isAnonymous = $this->anonymizationService->isAnonymousModeEnabled($otherUser);
+                \Log::info('🔍 [ChatController] Anonymization check', [
+                    'other_user_id' => $otherUser->id,
+                    'is_anonymous' => $isAnonymous
+                ]);
+                
+                if ($isAnonymous) {
                     $anonymizedData = $this->anonymizationService->getAnonymizedUserData($otherUser);
                     $otherParticipantName = $anonymizedData['display_name'];
                     $otherParticipantProfilePath = $anonymizedData['profile_picture'];
                     $otherParticipantProfileUrl = $anonymizedData['profile_picture_url'];
+                    \Log::info('🔍 [ChatController] Applied anonymization', [
+                        'original_name' => $otherUser->display_name ?? $otherUser->first_name . ' ' . $otherUser->last_name,
+                        'anonymized_name' => $otherParticipantName,
+                        'anonymized_picture' => $otherParticipantProfileUrl
+                    ]);
                 } else {
                     $otherParticipantProfilePath = $otherUser->profile_picture;
                     $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                    \Log::info('🔍 [ChatController] No anonymization applied', [
+                        'name' => $otherParticipantName,
+                        'picture' => $otherParticipantProfileUrl
+                    ]);
                 }
             }
         }
