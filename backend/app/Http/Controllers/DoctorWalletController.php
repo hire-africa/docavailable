@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DoctorWalletController extends Controller
 {
@@ -114,6 +115,8 @@ class DoctorWalletController extends Controller
      */
     public function requestWithdrawal(Request $request): JsonResponse
     {
+        $user = Auth::user();
+        
         $request->validate([
             'amount' => 'required|numeric|min:1000|max:1000000', // Min 1000, Max 1M
             'payment_method' => 'required|in:bank_transfer,mobile_money',
@@ -129,7 +132,15 @@ class DoctorWalletController extends Controller
             ]);
         } else {
             // Mobile money only allowed for Malawian users
-            if (strtolower($user->country ?? '') !== 'malawi') {
+            $userCountry = strtolower($user->country ?? '');
+            Log::info('Mobile money withdrawal attempt', [
+                'user_id' => $user->id,
+                'user_country' => $user->country,
+                'user_country_lowercase' => $userCountry,
+                'is_malawi_user' => $userCountry === 'malawi'
+            ]);
+            
+            if ($userCountry !== 'malawi') {
                 return response()->json([
                     'success' => false,
                     'message' => 'Mobile money is only available for Malawian users'
@@ -141,8 +152,6 @@ class DoctorWalletController extends Controller
                 'payment_details.mobile_number' => 'required|string|max:20',
             ]);
         }
-
-        $user = Auth::user();
 
         if (!$user->isDoctor()) {
             return response()->json([

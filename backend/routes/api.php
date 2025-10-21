@@ -1148,6 +1148,19 @@ Route::get('/chatbot/debug', function () {
     ]);
 });
 
+// Debug endpoint to check user country information
+Route::middleware(['auth:api'])->get('/debug/user-country', function () {
+    $user = Auth::user();
+    return response()->json([
+        'user_id' => $user->id,
+        'user_country' => $user->country,
+        'user_country_lowercase' => strtolower($user->country ?? ''),
+        'is_malawi_user' => strtolower($user->country ?? '') === 'malawi',
+        'user_type' => $user->user_type,
+        'email' => $user->email
+    ]);
+});
+
 // Admin routes (admin only)
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::get('/admin/users', [AdminController::class, 'getAllUsers']);
