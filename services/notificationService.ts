@@ -148,6 +148,7 @@ export class NotificationService {
                 type: n.type,
                 originalType: n.type
               });
+              
               return {
                 id: n.id,
                 title: n.title,

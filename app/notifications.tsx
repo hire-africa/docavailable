@@ -236,6 +236,18 @@ function NotificationsContent() {
         return 'clock-o';
       case 'system':
         return 'info-circle';
+      case 'general':
+        return 'bell';
+      case 'alert':
+        return 'exclamation-triangle';
+      case 'info':
+        return 'info-circle';
+      case 'success':
+        return 'check-circle';
+      case 'health':
+        return 'heart';
+      case 'security':
+        return 'shield';
       case 'appointment_booked':
         return 'calendar-check-o';
       case 'appointment_cancelled':
@@ -266,6 +278,18 @@ function NotificationsContent() {
         return '#9C27B0';
       case 'system':
         return '#607D8B';
+      case 'general':
+        return '#666';
+      case 'alert':
+        return '#F44336';
+      case 'info':
+        return '#2196F3';
+      case 'success':
+        return '#4CAF50';
+      case 'health':
+        return '#E91E63';
+      case 'security':
+        return '#FF5722';
       case 'appointment_booked':
         return '#4CAF50';
       case 'appointment_cancelled':
@@ -425,12 +449,6 @@ function NotificationsContent() {
           size={16} 
           color={getNotificationColor(notification.type)} 
         />
-        {/* Debug info - remove in production */}
-        {__DEV__ && (
-          <Text style={{fontSize: 10, color: '#999', marginTop: 2}}>
-            Type: {notification.type}
-          </Text>
-        )}
                       </View>
                       <View style={styles.notificationText}>
                         <Text style={[
