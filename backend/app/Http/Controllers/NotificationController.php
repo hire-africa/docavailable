@@ -351,6 +351,13 @@ class NotificationController extends Controller
         // Get existing privacy preferences or use defaults
         $preferences = $user->privacy_preferences ?? [];
         
+        // Log the loaded preferences for debugging
+        \Log::info('🔍 Loading privacy settings', [
+            'user_id' => $user->id,
+            'raw_preferences' => $preferences,
+            'anonymous_mode' => $preferences['privacy']['anonymousMode'] ?? 'not_set'
+        ]);
+        
         // Return the structure that the frontend expects
         $settings = [
             'profileVisibility' => [
@@ -414,6 +421,13 @@ class NotificationController extends Controller
 
         $user = Auth::user();
         
+        // Log the incoming data for debugging
+        \Log::info('🔍 Updating privacy settings', [
+            'user_id' => $user->id,
+            'anonymous_mode' => $request->input('privacy.anonymousMode'),
+            'all_data' => $request->all()
+        ]);
+        
         // Update the privacy preferences
         $user->update([
             'privacy_preferences' => $request->all(),
@@ -421,6 +435,12 @@ class NotificationController extends Controller
             'email_notifications_enabled' => $request->input('communication.email', true),
             'push_notifications_enabled' => $request->input('communication.push', true),
             'sms_notifications_enabled' => $request->input('communication.sms', false),
+        ]);
+        
+        // Log the updated data for debugging
+        \Log::info('🔍 Privacy settings updated', [
+            'user_id' => $user->id,
+            'stored_preferences' => $user->fresh()->privacy_preferences
         ]);
         
         return response()->json([

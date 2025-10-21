@@ -1,5 +1,5 @@
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
@@ -75,7 +76,7 @@ export default function PatientSettings() {
 }
 
 function PatientSettingsContent() {
-    const { user, userData } = useAuth();
+    const { user, userData, refreshUserData } = useAuth();
     const [loading, setLoading] = useState(false);
     const [showAnonymousWarning, setShowAnonymousWarning] = useState(false);
     const [pendingAnonymousMode, setPendingAnonymousMode] = useState(false);
@@ -109,6 +110,15 @@ function PatientSettingsContent() {
         loadSettings();
     }, [user]);
 
+    // Reload settings when page comes into focus
+    useFocusEffect(
+        React.useCallback(() => {
+            if (user) {
+                loadSettings();
+            }
+        }, [user])
+    );
+
     const loadSettings = async () => {
         if (!user) return;
 
@@ -132,12 +142,14 @@ function PatientSettingsContent() {
             }
 
             if (privacyResponse.success && privacyResponse.data) {
+                const anonymousMode = (privacyResponse.data as any)?.privacy?.anonymousMode ?? false;
+                console.log('🔍 Loading anonymous mode setting:', anonymousMode);
                 setSettings(prev => ({
                     ...prev,
                     privacy: {
                         profileVisibility: (privacyResponse.data as any)?.profileVisibility?.showToDoctors ?? true,
                         dataSharing: (privacyResponse.data as any)?.dataSharing?.allowAnalytics ?? true,
-                        anonymousMode: (privacyResponse.data as any)?.privacy?.anonymousMode ?? false,
+                        anonymousMode: anonymousMode,
                     },
                     security: {
                         loginNotifications: (privacyResponse.data as any)?.security?.loginNotifications ?? true,
@@ -174,7 +186,8 @@ function PatientSettingsContent() {
             });
 
             // Save privacy settings
-            await apiService.patch('/user/privacy-settings', {
+            console.log('🔍 Saving anonymous mode setting:', updatedSettings.privacy.anonymousMode);
+            const privacyResponse = await apiService.patch('/user/privacy-settings', {
                 profileVisibility: {
                     showToDoctors: updatedSettings.privacy.profileVisibility,
                 },
@@ -189,8 +202,14 @@ function PatientSettingsContent() {
                     sessionTimeout: updatedSettings.security.sessionTimeout,
                 }
             });
+            console.log('🔍 Privacy settings save response:', privacyResponse);
 
-            // Settings saved silently
+            // Refresh user data to ensure settings are updated
+            if (userData) {
+                await refreshUserData();
+            }
+
+            // Settings saved successfully
         } catch (error) {
             console.error('Error saving settings:', error);
             Alert.alert('Error', 'Failed to save settings. Please try again.');

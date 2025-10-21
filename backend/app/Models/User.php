@@ -118,6 +118,7 @@ class User extends Authenticatable implements JWTSubject
         'email_notifications_enabled' => 'boolean',
         'push_notifications_enabled' => 'boolean',
         'sms_notifications_enabled' => 'boolean',
+        'privacy_preferences' => 'array',
         'notification_preferences' => 'array',
         'specializations' => 'array',
         'sub_specializations' => 'array',
