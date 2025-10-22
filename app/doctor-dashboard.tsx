@@ -270,7 +270,11 @@ export default function DoctorDashboard() {
       console.log('🔍 [DoctorDashboard] Checking profile completion:', {
         userData: userData,
         hasUserData: !!userData,
-        userType: userData?.user_type
+        userType: userData?.user_type,
+        bio: userData?.bio,
+        professional_bio: userData?.professional_bio,
+        specializations: userData?.specializations,
+        languages_spoken: userData?.languages_spoken
       });
       
       if (userData) {

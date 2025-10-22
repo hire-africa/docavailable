@@ -33,7 +33,11 @@ export const getMissingFields = (userData: any): string[] => {
     date_of_birth: userData.date_of_birth,
     gender: userData.gender,
     specialization: userData.specialization,
+    specializations: userData.specializations,
     years_of_experience: userData.years_of_experience,
+    bio: userData.bio,
+    professional_bio: userData.professional_bio,
+    languages_spoken: userData.languages_spoken,
     fullUserData: userData
   });
   
