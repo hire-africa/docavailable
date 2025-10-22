@@ -266,6 +266,12 @@ export default function DoctorDashboard() {
 
   // Check profile completion for onboarding
   useEffect(() => {
+    console.log('🔍 [DoctorDashboard] useEffect triggered:', {
+      userData: !!userData,
+      showOnboarding,
+      onboardingDismissed
+    });
+    
     const checkProfileCompletion = () => {
       console.log('🔍 [DoctorDashboard] Checking profile completion:', {
         userData: userData,
