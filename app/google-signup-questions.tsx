@@ -6,14 +6,13 @@ import {
     ActivityIndicator,
     Alert,
     Image,
-    Platform,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
-    StatusBar,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -121,17 +120,24 @@ export default function GoogleSignupQuestions() {
       });
 
       const data = await response.json();
+      console.log('Registration response:', data);
 
       if (data.success) {
-        // Navigate directly to appropriate dashboard without alert
+        console.log('Registration successful, navigating to dashboard for user type:', parsedGoogleUser.user_type);
+        
+        // Navigate to appropriate dashboard
         if (parsedGoogleUser.user_type === 'patient') {
+          console.log('Navigating to patient dashboard');
           router.replace('/patient-dashboard');
         } else if (parsedGoogleUser.user_type === 'doctor') {
+          console.log('Navigating to doctor dashboard');
           router.replace('/doctor-dashboard');
         } else {
+          console.log('Unknown user type, redirecting to home');
           router.replace('/');
         }
       } else {
+        console.error('Registration failed:', data);
         throw new Error(data.message || 'Registration failed');
       }
     } catch (error) {
@@ -192,6 +198,34 @@ export default function GoogleSignupQuestions() {
                   <Picker.Item label="Male" value="male" />
                   <Picker.Item label="Female" value="female" />
                   <Picker.Item label="Other" value="other" />
+                </Picker>
+              </View>
+            </View>
+          );
+        } else if (currentField.field === 'country') {
+          const countries = [
+            'Malawi', 'South Africa', 'Nigeria', 'Kenya', 'Ghana', 'Tanzania', 'Uganda', 'Zambia', 'Zimbabwe',
+            'Botswana', 'Namibia', 'Mozambique', 'Angola', 'Ethiopia', 'Egypt', 'Morocco', 'Tunisia', 'Algeria',
+            'Libya', 'Sudan', 'Chad', 'Niger', 'Mali', 'Burkina Faso', 'Senegal', 'Guinea', 'Sierra Leone',
+            'Liberia', 'Ivory Coast', 'Ghana', 'Togo', 'Benin', 'Cameroon', 'Central African Republic',
+            'Democratic Republic of Congo', 'Republic of Congo', 'Gabon', 'Equatorial Guinea', 'São Tomé and Príncipe',
+            'Rwanda', 'Burundi', 'Djibouti', 'Somalia', 'Eritrea', 'Madagascar', 'Mauritius', 'Seychelles',
+            'Comoros', 'Cape Verde', 'São Tomé and Príncipe', 'Other'
+          ];
+          
+          return (
+            <View style={styles.questionContainer}>
+              <Text style={styles.questionLabel}>{currentField.label}</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={currentValue}
+                  onValueChange={handleAnswer}
+                  style={styles.picker}
+                >
+                  <Picker.Item label="Select Country" value="" />
+                  {countries.map((country) => (
+                    <Picker.Item key={country} label={country} value={country} />
+                  ))}
                 </Picker>
               </View>
             </View>

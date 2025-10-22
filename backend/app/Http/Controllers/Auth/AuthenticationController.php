@@ -1662,7 +1662,7 @@ class AuthenticationController extends Controller
         $fieldTypes = [
             'date_of_birth' => 'date',
             'gender' => 'select',
-            'country' => 'text',
+            'country' => 'select',
             'city' => 'text',
             'specializations' => 'multiselect',
             'years_of_experience' => 'number',
