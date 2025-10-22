@@ -25,21 +25,6 @@ const isDefaultValue = (field: string, value: any): boolean => {
 export const getMissingFields = (userData: any): string[] => {
   if (!userData) return ['All profile information'];
   
-  // Debug logging to see what userData contains
-  console.log('🔍 [ProfileUtils] Checking userData:', {
-    userType: userData.user_type,
-    country: userData.country,
-    city: userData.city,
-    date_of_birth: userData.date_of_birth,
-    gender: userData.gender,
-    specialization: userData.specialization,
-    specializations: userData.specializations,
-    years_of_experience: userData.years_of_experience,
-    bio: userData.bio,
-    professional_bio: userData.professional_bio,
-    languages_spoken: userData.languages_spoken,
-    fullUserData: userData
-  });
   
   const requiredFields = {
     patient: [
@@ -97,18 +82,11 @@ export const getMissingFields = (userData: any): string[] => {
       
       const isMissing = isEmpty || isDefault;
       
-      console.log(`🔍 [ProfileUtils] Field ${field.key}:`, {
-        value,
-        isEmpty,
-        isDefault,
-        isMissing
-      });
       
       return isMissing;
     })
     .map(field => field.label);
     
-  console.log('🔍 [ProfileUtils] Missing fields:', missingFields);
   
   return missingFields;
 };

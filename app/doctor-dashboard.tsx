@@ -25,8 +25,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
-import OnboardingOverlay from '../components/OnboardingOverlay';
 import DoctorActivationModal from '../components/DoctorActivationModal';
+import OnboardingOverlay from '../components/OnboardingOverlay';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 import { getMissingFields } from '../utils/profileUtils';
 
@@ -266,23 +266,7 @@ export default function DoctorDashboard() {
 
   // Check profile completion for onboarding
   useEffect(() => {
-    console.log('🔍 [DoctorDashboard] useEffect triggered:', {
-      userData: !!userData,
-      showOnboarding,
-      onboardingDismissed
-    });
-    
     const checkProfileCompletion = () => {
-      console.log('🔍 [DoctorDashboard] Checking profile completion:', {
-        userData: userData,
-        hasUserData: !!userData,
-        userType: userData?.user_type,
-        bio: userData?.bio,
-        professional_bio: userData?.professional_bio,
-        specializations: userData?.specializations,
-        languages_spoken: userData?.languages_spoken,
-        allUserDataKeys: userData ? Object.keys(userData) : []
-      });
       
       if (userData) {
         const missing = getMissingFields(userData);
