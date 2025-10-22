@@ -1786,9 +1786,7 @@ export default function DoctorDashboard() {
             ...session,
             type: 'active_text',
             sortDate: new Date().getTime(), // Most recent
-            isActive: true,
-            patientProfilePictureUrl: session.patient?.profile_picture_url,
-            patientProfilePicture: session.patient?.profile_picture
+            isActive: true
           }));
 
           // Get confirmed appointments
@@ -1809,9 +1807,7 @@ export default function DoctorDashboard() {
               }
               return 0;
             })(),
-            isActive: false,
-            patientProfilePictureUrl: appt.patient?.profile_picture_url,
-            patientProfilePicture: appt.patient?.profile_picture
+            isActive: false
           }));
 
           // Combine all items and sort by date (most recent first)
@@ -1871,13 +1867,19 @@ export default function DoctorDashboard() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ position: 'relative' }}>
-                      <DoctorProfilePicture
-                        profilePictureUrl={item.patientProfilePictureUrl}
-                        profilePicture={item.patientProfilePicture}
-                        size={48}
-                        name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
-                        style={{ marginRight: 16 }}
-                      />
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: '#4CAF50',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16
+                      }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
+                          {item.patient?.first_name?.charAt(0) || 'P'}
+                        </Text>
+                      </View>
                       {/* Active indicator */}
                       {item.isActive && (
                         <View style={{
@@ -1931,13 +1933,19 @@ export default function DoctorDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <DoctorProfilePicture
-                      profilePictureUrl={item.patientProfilePictureUrl}
-                      profilePicture={item.patientProfilePicture}
-                      size={48}
-                      name={item.patient_name || 'Unknown Patient'}
-                      style={{ marginRight: 16 }}
-                    />
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: '#D1E7DD',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16
+                    }}>
+                      <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                        {String(item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient').charAt(0) || 'P'}
+                      </Text>
+                    </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
                         {String(item.patient_name || 'Unknown Patient')}

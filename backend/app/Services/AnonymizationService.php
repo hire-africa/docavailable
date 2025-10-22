@@ -34,13 +34,17 @@ class AnonymizationService
         // Determine gender-based profile picture
         $gender = strtolower($user->gender ?? '');
         
+        // Use the correct DigitalOcean Spaces URL format
+        $bucket = env('DO_SPACES_BUCKET', 'docavailable-storage');
+        $region = env('DO_SPACES_REGION', 'fra1');
+        
         if ($gender === 'male') {
-            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Male.jpg';
+            return "https://{$bucket}.{$region}.digitaloceanspaces.com/profile_pictures/Male.jpg";
         } elseif ($gender === 'female') {
-            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Female.jpg';
+            return "https://{$bucket}.{$region}.digitaloceanspaces.com/profile_pictures/Female.jpg";
         } else {
             // For other genders or unknown, default to male
-            return 'https://docavailable-storage.fra1.cdn.digitaloceanspaces.com/profile_pictures/Male.jpg';
+            return "https://{$bucket}.{$region}.digitaloceanspaces.com/profile_pictures/Male.jpg";
         }
     }
 
