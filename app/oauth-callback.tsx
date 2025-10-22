@@ -34,7 +34,7 @@ export default function OAuthCallback() {
                         clientId: GOOGLE_OAUTH_CONFIG.clientId,
                         clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
                         code: code,
-                        redirectUri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html',
+                        redirectUri: 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback',
                         extraParams: {
                             access_type: 'offline',
                         },
