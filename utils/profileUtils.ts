@@ -25,7 +25,6 @@ const isDefaultValue = (field: string, value: any): boolean => {
 export const getMissingFields = (userData: any): string[] => {
   if (!userData) return ['All profile information'];
   
-  
   const requiredFields = {
     patient: [
       { key: 'first_name', label: 'First Name' },
