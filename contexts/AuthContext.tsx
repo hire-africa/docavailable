@@ -65,6 +65,8 @@ const convertApiUserToUserData = (apiUser: any): UserData => {
     // Doctor specific fields
     specialization: apiUser.specialization,
     sub_specialization: apiUser.sub_specialization,
+    specializations: apiUser.specializations,
+    languages_spoken: apiUser.languages_spoken,
   };
 };
 

@@ -34,6 +34,8 @@ export interface UserData {
   // Doctor specific fields
   specialization?: string;
   sub_specialization?: string;
+  specializations?: string[];
+  languages_spoken?: string[];
   // Additional fields that might be used
   role?: string;
   is_online_for_instant_sessions?: boolean;
