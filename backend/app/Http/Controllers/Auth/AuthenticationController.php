@@ -428,9 +428,10 @@ class AuthenticationController extends Controller
     public function googleLogin(Request $request): JsonResponse
     {
         try {
-            Log::info('Google login attempt started', [
+            Log::info('🔍 DEBUG: Google login method called successfully', [
                 'request_data' => $request->all(),
-                'headers' => $request->headers->all()
+                'headers' => $request->headers->all(),
+                'middleware_bypassed' => true
             ]);
 
             $validator = Validator::make($request->all(), [
@@ -468,9 +469,24 @@ class AuthenticationController extends Controller
             ]);
 
             // Verify Google ID token using Firebase Admin SDK
+            Log::info('🔍 DEBUG: About to verify Google ID token', [
+                'token_length' => strlen($idToken),
+                'token_preview' => substr($idToken, 0, 50) . '...'
+            ]);
+            
             $verifiedIdToken = $this->verifyGoogleIdToken($idToken);
             
+            Log::info('🔍 DEBUG: Google token verification result', [
+                'verified' => $verifiedIdToken ? 'SUCCESS' : 'FAILED',
+                'token_data' => $verifiedIdToken ? [
+                    'email' => $verifiedIdToken['email'] ?? 'missing',
+                    'sub' => $verifiedIdToken['sub'] ?? 'missing',
+                    'name' => $verifiedIdToken['name'] ?? 'missing'
+                ] : 'No token data'
+            ]);
+            
             if (!$verifiedIdToken) {
+                Log::error('🔍 DEBUG: Google token verification failed, returning 401');
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid or expired Google token. Please try signing in again.',
@@ -642,6 +658,13 @@ class AuthenticationController extends Controller
 
             // Decode the payload (middle part)
             $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
+            
+            Log::info('🔍 DEBUG: JWT payload decoded', [
+                'payload' => $payload ? 'SUCCESS' : 'FAILED',
+                'payload_keys' => $payload ? array_keys($payload) : 'No payload',
+                'email' => $payload['email'] ?? 'missing',
+                'sub' => $payload['sub'] ?? 'missing'
+            ]);
             
             if (!$payload) {
                 Log::error('Failed to decode JWT payload');

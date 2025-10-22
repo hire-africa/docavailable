@@ -281,7 +281,7 @@ Route::post('/create-first-admin', [AuthenticationController::class, 'createFirs
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthenticationController::class, 'register']);
     Route::post('/login', [AuthenticationController::class, 'login']);
-    Route::post('/google-login', [AuthenticationController::class, 'googleLogin']);
+    Route::post('/google-login', [AuthenticationController::class, 'googleLogin'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
     Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
 });
