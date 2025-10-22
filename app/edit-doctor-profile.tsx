@@ -17,8 +17,8 @@ import DatePickerField from '../components/DatePickerField';
 import { Icon } from '../components/Icon';
 import LocationPicker from '../components/LocationPicker';
 import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
+import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import SpecializationPicker from '../components/SpecializationPicker';
 import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -37,8 +37,7 @@ export default function EditDoctorProfile() {
     const [lastName, setLastName] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [gender, setGender] = useState('');
-    const [specialization, setSpecialization] = useState('');
-    const [subSpecialization, setSubSpecialization] = useState('');
+    const [specializations, setSpecializations] = useState<string[]>([]);
     const [yearsOfExperience, setYearsOfExperience] = useState('');
     const [bio, setBio] = useState('');
     const [country, setCountry] = useState('');
@@ -123,8 +122,9 @@ export default function EditDoctorProfile() {
                 setLastName(currentUser?.last_name || '');
                 setDateOfBirth(currentUser?.date_of_birth || '');
                 setGender(currentUser?.gender || '');
-                setSpecialization(currentUser?.specialization || '');
-                setSubSpecialization(currentUser?.sub_specialization || '');
+                // Handle specializations as array
+                const specializations = currentUser?.specializations || [];
+                setSpecializations(Array.isArray(specializations) ? specializations : []);
                 setYearsOfExperience(currentUser?.years_of_experience ? currentUser.years_of_experience.toString() : '');
                 setBio(currentUser?.bio || '');
                 setCountry(currentUser?.country || '');
@@ -256,8 +256,8 @@ export default function EditDoctorProfile() {
             newErrors.lastName = 'Last name is required';
         }
 
-        if (!specialization.trim()) {
-            newErrors.specialization = 'Specialization is required';
+        if (specializations.length === 0) {
+            newErrors.specializations = 'At least one specialization is required';
         }
 
         setErrors(newErrors);
@@ -274,13 +274,12 @@ export default function EditDoctorProfile() {
             const updateData: any = {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
-                specialization: specialization.trim(),
+                specializations: specializations,
             };
 
             // Convert empty strings to null for optional fields to match backend validation
             updateData.date_of_birth = dateOfBirth && dateOfBirth.trim() ? dateOfBirth : null;
             updateData.gender = gender && gender.trim() ? gender.toLowerCase() : null;
-            updateData.sub_specialization = subSpecialization && subSpecialization.trim() ? subSpecialization.trim() : null;
             updateData.years_of_experience = yearsOfExperience && yearsOfExperience.trim() ? parseInt(yearsOfExperience) : null;
             updateData.bio = bio && bio.trim() ? bio.trim() : null;
             updateData.country = country && country.trim() ? country.trim() : null;
@@ -448,13 +447,13 @@ export default function EditDoctorProfile() {
                                         key={option}
                                         style={[
                                             styles.genderOption,
-                                            gender === option && styles.genderOptionSelected
+                                            gender?.toLowerCase() === option.toLowerCase() && styles.genderOptionSelected
                                         ]}
-                                        onPress={() => setGender(option)}
+                                        onPress={() => setGender(option.toLowerCase())}
                                     >
                                         <Text style={[
                                             styles.genderOptionText,
-                                            gender === option && styles.genderOptionTextSelected
+                                            gender?.toLowerCase() === option.toLowerCase() && styles.genderOptionTextSelected
                                         ]}>
                                             {option}
                                         </Text>
@@ -472,26 +471,12 @@ export default function EditDoctorProfile() {
                         <Text style={styles.sectionTitle}>Professional Information</Text>
                         
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Specialization *</Text>
-                            <SpecializationPicker
-                                selectedSpecialization={specialization}
-                                selectedSubSpecialization={subSpecialization}
-                                onSpecializationChange={(spec, subSpec) => {
-                                    setSpecialization(spec);
-                                    setSubSpecialization(subSpec);
-                                }}
-                                error={errors.specialization}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Sub-specialization</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={subSpecialization}
-                                onChangeText={setSubSpecialization}
-                                placeholder="e.g., Interventional Cardiology"
-                                placeholderTextColor="#999"
+                            <Text style={styles.inputLabel}>Specializations *</Text>
+                            <MultipleSpecializationPicker
+                                selectedSpecializations={specializations}
+                                onSpecializationsChange={setSpecializations}
+                                error={errors.specializations}
+                                maxSelections={3}
                             />
                         </View>
 
