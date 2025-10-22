@@ -36,3 +36,4 @@ echo "getAnonymizedProfilePicture: " . $anonymizedPicture . "\n";
 $anonymizedData = $anonymizationService->getAnonymizedUserData($patient);
 echo "getAnonymizedUserData: " . json_encode($anonymizedData, JSON_PRETTY_PRINT) . "\n";
 ?>
+
