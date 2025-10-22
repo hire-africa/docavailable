@@ -125,6 +125,24 @@ class User extends Authenticatable implements JWTSubject
         'languages_spoken' => 'array',
     ];
 
+    // Debug method to check languages_spoken
+    public function getLanguagesSpokenAttribute($value)
+    {
+        \Log::info('🔍 [User Model] languages_spoken raw value:', ['value' => $value, 'type' => gettype($value)]);
+        
+        if (is_null($value)) {
+            return null;
+        }
+        
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            \Log::info('🔍 [User Model] languages_spoken decoded:', ['decoded' => $decoded]);
+            return $decoded;
+        }
+        
+        return $value;
+    }
+
     /**
      * Get the user's full name.
      */
