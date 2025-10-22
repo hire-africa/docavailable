@@ -477,6 +477,7 @@ class AuthenticationController extends Controller
                 // User doesn't exist - create a quick account with minimal data
                 $user = User::create([
                     'email' => $email,
+                    'password' => Hash::make('google_user_' . $googleId), // Generate a secure password for Google users
                     'first_name' => $googleUser['given_name'] ?? explode(' ', $googleUser['name'])[0] ?? '',
                     'last_name' => $googleUser['family_name'] ?? implode(' ', array_slice(explode(' ', $googleUser['name']), 1)) ?? '',
                     'display_name' => $googleUser['name'] ?? '',
