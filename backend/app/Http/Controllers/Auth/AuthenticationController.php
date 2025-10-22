@@ -428,6 +428,11 @@ class AuthenticationController extends Controller
     public function googleLogin(Request $request): JsonResponse
     {
         try {
+            Log::info('Google login attempt started', [
+                'request_data' => $request->all(),
+                'headers' => $request->headers->all()
+            ]);
+
             $validator = Validator::make($request->all(), [
                 'id_token' => 'required|string',
                 'user_type' => 'nullable|string|in:patient,doctor,admin',
@@ -443,6 +448,11 @@ class AuthenticationController extends Controller
                     $detailedMessage = 'Google authentication token is missing or invalid.';
                 }
                 
+                Log::warning('Google login validation failed', [
+                    'errors' => $errors->toArray(),
+                    'request_data' => $request->all()
+                ]);
+                
                 return response()->json([
                     'success' => false,
                     'message' => $detailedMessage,
@@ -452,6 +462,10 @@ class AuthenticationController extends Controller
             }
 
             $idToken = $request->input('id_token');
+            Log::info('Google login token received', [
+                'token_length' => strlen($idToken),
+                'token_preview' => substr($idToken, 0, 20) . '...'
+            ]);
 
             // Verify Google ID token using Firebase Admin SDK
             $verifiedIdToken = $this->verifyGoogleIdToken($idToken);
@@ -613,6 +627,11 @@ class AuthenticationController extends Controller
     private function verifyGoogleIdToken($idToken)
     {
         try {
+            Log::info('Starting Google token verification', [
+                'token_length' => strlen($idToken),
+                'token_preview' => substr($idToken, 0, 20) . '...'
+            ]);
+
             // Use Google Auth library to verify the ID token
             $client = new \Google_Client();
             
@@ -620,9 +639,16 @@ class AuthenticationController extends Controller
             $clientId = config('services.google.client_id') ?? env('GOOGLE_CLIENT_ID');
             
             if (!$clientId) {
-                Log::error('Google Client ID not configured');
+                Log::error('Google Client ID not configured', [
+                    'config_value' => config('services.google.client_id'),
+                    'env_value' => env('GOOGLE_CLIENT_ID')
+                ]);
                 return false;
             }
+            
+            Log::info('Google Client ID found', [
+                'client_id_preview' => substr($clientId, 0, 20) . '...'
+            ]);
             
             $client->setClientId($clientId);
             
