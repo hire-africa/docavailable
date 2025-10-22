@@ -263,15 +263,25 @@ export default function DoctorDashboard() {
   // Check profile completion for onboarding
   useEffect(() => {
     const checkProfileCompletion = () => {
+      console.log('🔍 [DoctorDashboard] Checking profile completion:', {
+        userData: userData,
+        hasUserData: !!userData,
+        userType: userData?.user_type
+      });
+      
       if (userData) {
         const missing = getMissingFields(userData);
+        console.log('🔍 [DoctorDashboard] Missing fields result:', missing);
+        
         if (missing.length > 0) {
           setMissingFields(missing);
           // Show onboarding overlay only if not dismissed in this session
           if (!showOnboarding && !onboardingDismissed) {
+            console.log('🔍 [DoctorDashboard] Showing onboarding overlay');
             setShowOnboarding(true);
           }
         } else {
+          console.log('🔍 [DoctorDashboard] Profile is complete, hiding overlay');
           setShowOnboarding(false);
         }
       }

@@ -672,15 +672,25 @@ export default function PatientDashboard() {
   // Check profile completion for onboarding
   useEffect(() => {
     const checkProfileCompletion = () => {
+      console.log('🔍 [PatientDashboard] Checking profile completion:', {
+        userData: userData,
+        hasUserData: !!userData,
+        userType: userData?.user_type
+      });
+      
       if (userData) {
         const missing = getMissingFields(userData);
+        console.log('🔍 [PatientDashboard] Missing fields result:', missing);
+        
         if (missing.length > 0) {
           setMissingFields(missing);
           // Show onboarding overlay only if not dismissed in this session
           if (!showOnboarding && !onboardingDismissed) {
+            console.log('🔍 [PatientDashboard] Showing onboarding overlay');
             setShowOnboarding(true);
           }
         } else {
+          console.log('🔍 [PatientDashboard] Profile is complete, hiding overlay');
           setShowOnboarding(false);
         }
       }
