@@ -6,11 +6,13 @@ export interface MissingField {
 }
 
 // Default values that should be considered as "missing" for onboarding
+// Note: We're being more conservative here to avoid false positives
+// Only treat values as defaults if they're clearly placeholder values
 const DEFAULT_VALUES = {
-  country: ['Malawi', 'malawi'],
-  city: ['Lilongwe', 'lilongwe'],
-  date_of_birth: ['1990-01-01', '1990/01/01'],
-  gender: ['other', 'Other'],
+  country: [], // Don't treat any country as default - user might actually be from Malawi
+  city: [], // Don't treat any city as default - user might actually be from Lilongwe
+  date_of_birth: ['1990-01-01', '1990/01/01'], // Only treat specific default dates as missing
+  gender: ['other', 'Other'], // Only treat 'other' as default gender
   specialization: ['General Medicine', 'general medicine'],
   years_of_experience: [1, '1', 0, '0']
 };
