@@ -280,7 +280,8 @@ export default function DoctorDashboard() {
         bio: userData?.bio,
         professional_bio: userData?.professional_bio,
         specializations: userData?.specializations,
-        languages_spoken: userData?.languages_spoken
+        languages_spoken: userData?.languages_spoken,
+        allUserDataKeys: userData ? Object.keys(userData) : []
       });
       
       if (userData) {
