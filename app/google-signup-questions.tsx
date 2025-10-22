@@ -15,6 +15,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface GoogleUserData {
   email: string;
@@ -133,7 +134,6 @@ export default function GoogleSignupQuestions() {
         // Registration already returns a token, so we can store it directly
         if (data.data && data.data.token) {
           console.log('Token received from registration, storing authentication data');
-          const { AsyncStorage } = require('@react-native-async-storage/async-storage');
           await AsyncStorage.setItem('auth_token', data.data.token);
           await AsyncStorage.setItem('user_data', JSON.stringify(data.data.user));
           
