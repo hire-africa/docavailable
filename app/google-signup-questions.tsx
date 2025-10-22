@@ -356,10 +356,10 @@ export default function GoogleSignupQuestions() {
          <TouchableOpacity
            style={[
              styles.nextButton,
-             (!currentValue && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect') && styles.nextButtonDisabled
+             (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect') && styles.nextButtonDisabled
            ]}
            onPress={handleNext}
-           disabled={loading || (!currentValue && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect')}
+           disabled={loading || (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect')}
          >
           {loading ? (
             <ActivityIndicator color="#fff" />
