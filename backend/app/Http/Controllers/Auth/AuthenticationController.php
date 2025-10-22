@@ -1624,7 +1624,8 @@ class AuthenticationController extends Controller
         
         // Check which fields are missing
         foreach ($requiredFields as $field => $label) {
-            if (empty($googleUserData[$field])) {
+            // Always ask for profile picture selection, even if Google provides one
+            if ($field === 'profile_picture' || empty($googleUserData[$field])) {
                 $missingFields[] = [
                     'field' => $field,
                     'label' => $label,

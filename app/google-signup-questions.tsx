@@ -361,13 +361,17 @@ export default function GoogleSignupQuestions() {
 
       case 'image':
         if (currentField.field === 'profile_picture') {
+          // Use Google's profile picture as default if available
+          const defaultImage = parsedGoogleUser.profile_picture || currentValue;
+          
           return (
             <View style={styles.questionContainer}>
               <Text style={styles.questionLabel}>{currentField.label}</Text>
+              <Text style={styles.questionSubtext}>You can use your Google photo or select a new one</Text>
               <View style={styles.imagePickerContainer}>
-                {currentValue ? (
+                {defaultImage ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: currentValue }} style={styles.imagePreview} />
+                    <Image source={{ uri: defaultImage }} style={styles.imagePreview} />
                     <TouchableOpacity
                       style={styles.changeImageButton}
                       onPress={() => pickImage()}
@@ -627,6 +631,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2c3e50',
     marginBottom: 15,
+  },
+  questionSubtext: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginBottom: 15,
+    fontStyle: 'italic',
   },
   textInput: {
     borderWidth: 1,
