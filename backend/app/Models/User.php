@@ -107,7 +107,7 @@ class User extends Authenticatable implements JWTSubject
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
-        'date_of_birth' => 'date',
+        'date_of_birth' => 'date:Y-m-d',
         'rating' => 'float',
         'total_ratings' => 'integer',
         'years_of_experience' => 'integer',
