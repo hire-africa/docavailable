@@ -504,33 +504,37 @@ class AuthenticationController extends Controller
             $user = User::where('email', $email)->first();
 
             if (!$user) {
-                // User doesn't exist - create a quick account with minimal data
-                $user = User::create([
+                // For new Google users, don't create account immediately
+                // Instead, return the Google data and indicate additional info is needed
+                $googleUserData = [
                     'email' => $email,
-                    'password' => Hash::make('google_user_' . $googleId), // Generate a secure password for Google users
                     'first_name' => $googleUser['given_name'] ?? explode(' ', $googleUser['name'])[0] ?? '',
                     'last_name' => $googleUser['family_name'] ?? implode(' ', array_slice(explode(' ', $googleUser['name']), 1)) ?? '',
                     'display_name' => $googleUser['name'] ?? '',
-                    'user_type' => $userType,
-                    'status' => $userType === 'doctor' ? 'pending' : 'active',
-                    'google_id' => $googleId,
-                    'email_verified_at' => now(),
                     'profile_picture' => $googleUser['picture'] ?? null,
-                    // Set minimal required fields to avoid onboarding
-                    'country' => 'Malawi', // Default country
-                    'city' => 'Lilongwe', // Default city
-                    'date_of_birth' => '1990-01-01', // Default DOB
-                    'gender' => 'other', // Default gender
-                    // Doctor-specific defaults
-                    'specialization' => $userType === 'doctor' ? 'General Medicine' : null,
-                    'years_of_experience' => $userType === 'doctor' ? 1 : null,
+                    'google_id' => $googleId,
+                    'user_type' => $userType,
+                ];
+
+                // Determine which fields are missing for the user type
+                $missingFields = $this->getMissingRequiredFields($googleUserData, $userType);
+
+                Log::info('New Google user needs additional information', [
+                    'email' => $email,
+                    'user_type' => $userType,
+                    'google_id' => $googleId,
+                    'missing_fields' => $missingFields
                 ]);
 
-                Log::info('Quick Google account created', [
-                    'user_id' => $user->id,
-                    'email' => $user->email,
-                    'user_type' => $user->user_type,
-                    'google_id' => $googleId
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Google authentication successful. Additional information required.',
+                    'data' => [
+                        'google_user' => $googleUserData,
+                        'needs_additional_info' => true,
+                        'missing_fields' => $missingFields,
+                        'user_type' => $userType
+                    ]
                 ]);
             } else {
                 // User exists - update Google ID if not set and verify email
@@ -1600,5 +1604,71 @@ class AuthenticationController extends Controller
             \Log::warning('Image compression failed, using original: ' . $e->getMessage());
             return $imageData; // Return original if compression fails
         }
+    }
+
+    /**
+     * Get missing required fields for a user type
+     */
+    private function getMissingRequiredFields($googleUserData, $userType)
+    {
+        $missingFields = [];
+        
+        // Common required fields for all user types
+        $requiredFields = [
+            'date_of_birth' => 'Date of Birth',
+            'gender' => 'Gender',
+            'country' => 'Country',
+            'city' => 'City'
+        ];
+        
+        // Check which fields are missing
+        foreach ($requiredFields as $field => $label) {
+            if (empty($googleUserData[$field])) {
+                $missingFields[] = [
+                    'field' => $field,
+                    'label' => $label,
+                    'type' => $this->getFieldType($field)
+                ];
+            }
+        }
+        
+        // Add user type specific fields
+        if ($userType === 'doctor') {
+            $doctorFields = [
+                'specialization' => 'Specialization',
+                'years_of_experience' => 'Years of Experience',
+                'professional_bio' => 'Professional Bio'
+            ];
+            
+            foreach ($doctorFields as $field => $label) {
+                if (empty($googleUserData[$field])) {
+                    $missingFields[] = [
+                        'field' => $field,
+                        'label' => $label,
+                        'type' => $this->getFieldType($field)
+                    ];
+                }
+            }
+        }
+        
+        return $missingFields;
+    }
+    
+    /**
+     * Get field type for form rendering
+     */
+    private function getFieldType($field)
+    {
+        $fieldTypes = [
+            'date_of_birth' => 'date',
+            'gender' => 'select',
+            'country' => 'text',
+            'city' => 'text',
+            'specialization' => 'text',
+            'years_of_experience' => 'number',
+            'professional_bio' => 'textarea'
+        ];
+        
+        return $fieldTypes[$field] ?? 'text';
     }
 } 

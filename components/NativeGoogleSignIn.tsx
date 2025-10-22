@@ -266,16 +266,34 @@ export default function NativeGoogleSignIn({
       
       console.log('🔐 NativeGoogleSignIn: Google login response data:', googleLoginData);
 
-      if (googleLoginResponse.ok && googleLoginData.success && googleLoginData.data && googleLoginData.data.user) {
-        // Success! We have a proper JWT token from the backend
-        const userWithToken = {
-          ...googleLoginData.data.user,
-          token: googleLoginData.data.token
-        };
-        
-        console.log('🔐 NativeGoogleSignIn: Successfully authenticated with Google OAuth and received JWT token:', userWithToken);
-        onSuccess(userWithToken, googleLoginData.data.token);
-        return;
+      if (googleLoginResponse.ok && googleLoginData.success && googleLoginData.data) {
+        // Check if additional information is needed
+        if (googleLoginData.data.needs_additional_info) {
+          // Redirect to question pages with Google user data and missing fields
+          const { google_user, missing_fields, user_type } = googleLoginData.data;
+          
+          // Navigate to the Google signup questions page
+          const router = require('expo-router').router;
+          router.replace({
+            pathname: '/google-signup-questions',
+            params: {
+              googleUser: JSON.stringify(google_user),
+              missingFields: JSON.stringify(missing_fields),
+              userType: user_type
+            }
+          });
+          return;
+        } else if (googleLoginData.data.user) {
+          // User exists and has all required information
+          const userWithToken = {
+            ...googleLoginData.data.user,
+            token: googleLoginData.data.token
+          };
+          
+          console.log('🔐 NativeGoogleSignIn: Successfully authenticated with Google OAuth and received JWT token:', userWithToken);
+          onSuccess(userWithToken, googleLoginData.data.token);
+          return;
+        }
       } else {
         // Handle different error cases
         if (googleLoginResponse.status === 401) {

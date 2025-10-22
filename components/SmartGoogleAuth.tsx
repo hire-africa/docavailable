@@ -230,8 +230,28 @@ export default function SmartGoogleAuth({
       const authData = await authResponse.json();
       console.log('🔐 SmartGoogleAuth: Authentication response:', authData);
       
-      if (authData.success && authData.data && authData.data.user) {
-        onSuccess(authData.data.user, authData.data.token);
+      if (authData.success && authData.data) {
+        // Check if additional information is needed
+        if (authData.data.needs_additional_info) {
+          // Redirect to question pages with Google user data and missing fields
+          const { google_user, missing_fields, user_type } = authData.data;
+          
+          // Navigate to the Google signup questions page
+          const router = require('expo-router').router;
+          router.replace({
+            pathname: '/google-signup-questions',
+            params: {
+              googleUser: JSON.stringify(google_user),
+              missingFields: JSON.stringify(missing_fields),
+              userType: user_type
+            }
+          });
+        } else if (authData.data.user) {
+          // User exists and has all required information
+          onSuccess(authData.data.user, authData.data.token);
+        } else {
+          throw new Error('Authentication failed');
+        }
       } else {
         throw new Error('Authentication failed');
       }
