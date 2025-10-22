@@ -54,6 +54,7 @@ export default function GoogleSignupQuestions() {
   
   console.log('Google user data:', parsedGoogleUser);
   console.log('Missing fields:', parsedMissingFields);
+  console.log('Missing fields details:', parsedMissingFields.map(field => ({ field: field.field, type: field.type, label: field.label })));
 
   const currentField = parsedMissingFields[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / parsedMissingFields.length) * 100;
@@ -129,54 +130,15 @@ export default function GoogleSignupQuestions() {
         console.log('Registration successful, navigating to dashboard for user type:', parsedGoogleUser.user_type);
         console.log('Registration response data:', data);
         
-        // After successful registration, we need to authenticate the user
-        // Since registration doesn't return a token, we need to login with Google
-        try {
-          console.log('Attempting to authenticate with Google after registration...');
-          const loginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-              id_token: parsedGoogleUser.google_id, // This might need to be the actual Google ID token
-              user_type: parsedGoogleUser.user_type
-            })
-          });
+        // Registration already returns a token, so we can store it directly
+        if (data.data && data.data.token) {
+          console.log('Token received from registration, storing authentication data');
+          const { AsyncStorage } = require('@react-native-async-storage/async-storage');
+          await AsyncStorage.setItem('auth_token', data.data.token);
+          await AsyncStorage.setItem('user_data', JSON.stringify(data.data.user));
           
-          const loginData = await loginResponse.json();
-          console.log('Google login response after registration:', loginData);
-          
-          if (loginData.success && loginData.data && loginData.data.token) {
-            // Store the token and user data
-            const { AsyncStorage } = require('@react-native-async-storage/async-storage');
-            await AsyncStorage.setItem('auth_token', loginData.data.token);
-            await AsyncStorage.setItem('user_data', JSON.stringify(loginData.data.user));
-            
-            console.log('Authentication successful, navigating to dashboard');
-            // Navigate to appropriate dashboard
-            if (parsedGoogleUser.user_type === 'patient') {
-              router.replace('/patient-dashboard');
-            } else if (parsedGoogleUser.user_type === 'doctor') {
-              router.replace('/doctor-dashboard');
-            } else {
-              router.replace('/');
-            }
-          } else {
-            console.log('Google login failed after registration, navigating anyway');
-            // Navigate anyway - the user might still be able to access the dashboard
-            if (parsedGoogleUser.user_type === 'patient') {
-              router.replace('/patient-dashboard');
-            } else if (parsedGoogleUser.user_type === 'doctor') {
-              router.replace('/doctor-dashboard');
-            } else {
-              router.replace('/');
-            }
-          }
-        } catch (loginError) {
-          console.error('Error during post-registration authentication:', loginError);
-          // Navigate anyway - the user might still be able to access the dashboard
+          console.log('Authentication data stored, navigating to dashboard');
+          // Navigate to appropriate dashboard
           if (parsedGoogleUser.user_type === 'patient') {
             router.replace('/patient-dashboard');
           } else if (parsedGoogleUser.user_type === 'doctor') {
@@ -184,6 +146,9 @@ export default function GoogleSignupQuestions() {
           } else {
             router.replace('/');
           }
+        } else {
+          console.error('No token received from registration');
+          throw new Error('Registration successful but no authentication token received');
         }
       } else {
         console.error('Registration failed:', data);
@@ -360,6 +325,37 @@ export default function GoogleSignupQuestions() {
         break;
 
       default: // text
+        // Special handling for country field even if backend returns 'text'
+        if (currentField.field === 'country') {
+          const countries = [
+            'Malawi', 'South Africa', 'Nigeria', 'Kenya', 'Ghana', 'Tanzania', 'Uganda', 'Zambia', 'Zimbabwe',
+            'Botswana', 'Namibia', 'Mozambique', 'Angola', 'Ethiopia', 'Egypt', 'Morocco', 'Tunisia', 'Algeria',
+            'Libya', 'Sudan', 'Chad', 'Niger', 'Mali', 'Burkina Faso', 'Senegal', 'Guinea', 'Sierra Leone',
+            'Liberia', 'Ivory Coast', 'Ghana', 'Togo', 'Benin', 'Cameroon', 'Central African Republic',
+            'Democratic Republic of Congo', 'Republic of Congo', 'Gabon', 'Equatorial Guinea', 'São Tomé and Príncipe',
+            'Rwanda', 'Burundi', 'Djibouti', 'Somalia', 'Eritrea', 'Madagascar', 'Mauritius', 'Seychelles',
+            'Comoros', 'Cape Verde', 'São Tomé and Príncipe', 'Other'
+          ];
+          
+          return (
+            <View style={styles.questionContainer}>
+              <Text style={styles.questionLabel}>{currentField.label}</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={currentValue}
+                  onValueChange={handleAnswer}
+                  style={styles.picker}
+                >
+                  <Picker.Item label="Select Country" value="" />
+                  {countries.map((country) => (
+                    <Picker.Item key={country} label={country} value={country} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          );
+        }
+        
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionLabel}>{currentField.label}</Text>
