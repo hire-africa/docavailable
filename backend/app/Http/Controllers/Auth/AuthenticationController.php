@@ -430,6 +430,7 @@ class AuthenticationController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'id_token' => 'required|string',
+                'user_type' => 'nullable|string|in:patient,doctor,admin',
             ]);
 
             if ($validator->fails()) {
@@ -467,18 +468,39 @@ class AuthenticationController extends Controller
             $googleUser = $verifiedIdToken;
             $email = $googleUser['email'];
             $googleId = $googleUser['sub']; // Google's unique user ID
+            $userType = $request->input('user_type', 'patient'); // Default to patient if not specified
 
             // Check if user exists
             $user = User::where('email', $email)->first();
 
             if (!$user) {
-                // User doesn't exist - only allow login for existing users
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No account found with this email. Please create an account first or use a different email.',
-                    'error_type' => 'user_not_found',
-                    'suggestion' => 'You need to create an account first before you can sign in with Google. Please use the regular registration process.'
-                ], 404);
+                // User doesn't exist - create a quick account with minimal data
+                $user = User::create([
+                    'email' => $email,
+                    'first_name' => $googleUser['given_name'] ?? explode(' ', $googleUser['name'])[0] ?? '',
+                    'last_name' => $googleUser['family_name'] ?? implode(' ', array_slice(explode(' ', $googleUser['name']), 1)) ?? '',
+                    'display_name' => $googleUser['name'] ?? '',
+                    'user_type' => $userType,
+                    'status' => $userType === 'doctor' ? 'pending' : 'active',
+                    'google_id' => $googleId,
+                    'email_verified_at' => now(),
+                    'profile_picture' => $googleUser['picture'] ?? null,
+                    // Set minimal required fields to avoid onboarding
+                    'country' => 'Malawi', // Default country
+                    'city' => 'Lilongwe', // Default city
+                    'date_of_birth' => '1990-01-01', // Default DOB
+                    'gender' => 'other', // Default gender
+                    // Doctor-specific defaults
+                    'specialization' => $userType === 'doctor' ? 'General Medicine' : null,
+                    'years_of_experience' => $userType === 'doctor' ? 1 : null,
+                ]);
+
+                Log::info('Quick Google account created', [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'user_type' => $user->user_type,
+                    'google_id' => $googleId
+                ]);
             } else {
                 // User exists - update Google ID if not set and verify email
                 if (!$user->google_id) {

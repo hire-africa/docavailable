@@ -163,11 +163,11 @@ export default function LoginPage() {
         }
     };
 
-    // Google Sign-In handler - DISABLED
-    // const handleGoogleSignIn = () => {
-    //     console.log('🔐 Opening Google Auth WebView');
-    //     setShowGoogleAuth(true);
-    // };
+    // Google Sign-In handler
+    const handleGoogleSignIn = () => {
+        console.log('🔐 Opening Google Auth WebView');
+        setShowGoogleAuth(true);
+    };
 
     const handleGoogleAuthSuccess = async (user: any, token: string) => {
         console.log('🔐 Google Auth Success:', { user, token });
@@ -175,47 +175,6 @@ export default function LoginPage() {
         setLoading(true);
         
         try {
-            // Check if user needs to sign up
-            if (user.needsSignup && user.signupData) {
-                console.log('🔐 User needs signup, redirecting with Google data:', user.signupData);
-                
-                // Navigate to the correct signup page based on user type
-                const signupParams = {
-                    googleData: JSON.stringify(user.signupData.googleData),
-                    userType: user.signupData.userType,
-                    source: 'google'
-                };
-                
-                // Determine the correct signup page based on user type
-                let signupPath = '/signup'; // Default fallback
-                switch (user.signupData.userType) {
-                    case 'patient':
-                        signupPath = '/patient-signup';
-                        break;
-                    case 'doctor':
-                        signupPath = '/doctor-signup';
-                        break;
-                    case 'admin':
-                        signupPath = '/admin-signup';
-                        break;
-                    default:
-                        console.warn('🔐 Unknown user type, using default signup page:', user.signupData.userType);
-                        signupPath = '/signup';
-                }
-                
-                console.log('🔐 Redirecting to signup page:', signupPath, 'with params:', signupParams);
-                
-                // Navigate to the appropriate signup page with pre-filled data
-                router.push({
-                    pathname: signupPath,
-                    params: signupParams
-                });
-                return;
-            }
-            
-            // User exists in database, store the token and proceed with login
-            console.log('🔐 Existing user, storing token and logging in');
-            
             // Store the token in AsyncStorage
             if (user.token) {
                 await AsyncStorage.setItem('auth_token', user.token);
@@ -330,8 +289,8 @@ export default function LoginPage() {
                         )}
                     </TouchableOpacity>
 
-                    {/* Google Sign-In Button - DISABLED */}
-                    {/* <View style={styles.dividerContainer}>
+                    {/* Google Sign-In Button */}
+                    <View style={styles.dividerContainer}>
                         <View style={styles.dividerLine} />
                         <Text style={styles.dividerText}>or</Text>
                         <View style={styles.dividerLine} />
@@ -348,7 +307,7 @@ export default function LoginPage() {
                             </View>
                             <Text style={styles.googleButtonText}>Continue with Google</Text>
                         </View>
-                    </TouchableOpacity> */}
+                    </TouchableOpacity>
 
                     <View style={styles.linksContainer}>
                         <TouchableOpacity
@@ -369,14 +328,14 @@ export default function LoginPage() {
                 </View>
             </View>
 
-            {/* Native Google Sign-In Modal - DISABLED */}
-            {/* <NativeGoogleSignIn
+            {/* Native Google Sign-In Modal */}
+            <NativeGoogleSignIn
                 visible={showGoogleAuth}
                 onClose={handleGoogleAuthClose}
                 onSuccess={handleGoogleAuthSuccess}
                 onError={handleGoogleAuthError}
                 userType={userType as 'patient' | 'doctor' | 'admin'}
-            /> */}
+            />
         </View>
     );
 }

@@ -235,7 +235,8 @@ export default function NativeGoogleSignIn({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id_token: idToken
+          id_token: idToken,
+          user_type: userType // Pass the chosen user type
         })
       });
 

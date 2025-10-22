@@ -25,7 +25,9 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
+import OnboardingOverlay from '../components/OnboardingOverlay';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { getMissingFields } from '../utils/profileUtils';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
@@ -122,6 +124,11 @@ export default function DoctorDashboard() {
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null);
   const [selectedAcceptedRequest, setSelectedAcceptedRequest] = useState<BookingRequest | null>(null);
+  
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
@@ -252,6 +259,26 @@ export default function DoctorDashboard() {
       loadActivities();
     }
   }, [user, bookingRequests, confirmedAppointments]);
+
+  // Check profile completion for onboarding
+  useEffect(() => {
+    const checkProfileCompletion = () => {
+      if (userData) {
+        const missing = getMissingFields(userData);
+        if (missing.length > 0) {
+          setMissingFields(missing);
+          // Show onboarding overlay only if not dismissed in this session
+          if (!showOnboarding && !onboardingDismissed) {
+            setShowOnboarding(true);
+          }
+        } else {
+          setShowOnboarding(false);
+        }
+      }
+    };
+
+    checkProfileCompletion();
+  }, [userData, showOnboarding, onboardingDismissed]);
 
   const updateEnabledDaysCount = async () => {
     try {
@@ -2440,6 +2467,21 @@ export default function DoctorDashboard() {
         onConfirm={handleRescheduleSuccess}
       />
       {showAcceptedRequestDetailsModal()}
+      
+      {/* Onboarding Overlay */}
+      <OnboardingOverlay
+        visible={showOnboarding}
+        userType="doctor"
+        missingFields={missingFields}
+        onComplete={() => {
+          setShowOnboarding(false);
+          router.push('/edit-doctor-profile');
+        }}
+        onDismiss={() => {
+          setShowOnboarding(false);
+          setOnboardingDismissed(true);
+        }}
+      />
     </SafeAreaView>
   );
 }

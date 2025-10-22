@@ -50,10 +50,13 @@ import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
+import IncompleteProfileBlock from '../components/IncompleteProfileBlock';
+import OnboardingOverlay from '../components/OnboardingOverlay';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
 import { imageCacheService } from '../services/imageCacheService';
 import { paymentsService } from '../services/paymentsService';
+import { getMissingFields } from '../utils/profileUtils';
 import Blog from './blog';
 const profileImage = require('../assets/images/profile.jpg');
 
@@ -128,6 +131,11 @@ export default function PatientDashboard() {
   const bottomNavAnim = useRef(new Animated.Value(0)).current;
   const [pressedPill, setPressedPill] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   // Animate bottom nav
   const animateBottomNav = (hide: boolean) => {
@@ -660,6 +668,26 @@ export default function PatientDashboard() {
       initializeLocationTracking();
     }
   }, [userData, user]);
+
+  // Check profile completion for onboarding
+  useEffect(() => {
+    const checkProfileCompletion = () => {
+      if (userData) {
+        const missing = getMissingFields(userData);
+        if (missing.length > 0) {
+          setMissingFields(missing);
+          // Show onboarding overlay only if not dismissed in this session
+          if (!showOnboarding && !onboardingDismissed) {
+            setShowOnboarding(true);
+          }
+        } else {
+          setShowOnboarding(false);
+        }
+      }
+    };
+
+    checkProfileCompletion();
+  }, [userData, showOnboarding, onboardingDismissed]);
 
   // Request location permissions if not granted
   const requestLocationPermission = async () => {
@@ -2316,19 +2344,33 @@ export default function PatientDashboard() {
     </ScrollView>
   );
 
-  const renderDiscoverDoctorsContent = () => (
-    <ScrollView 
-      style={styles.content} 
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshingDoctors}
-          onRefresh={refreshDoctorsTab}
-          colors={['#4CAF50']}
-          tintColor="#4CAF50"
+  const renderDiscoverDoctorsContent = () => {
+    // Check if profile is incomplete
+    const missing = getMissingFields(userData);
+    if (missing.length > 0) {
+      return (
+        <IncompleteProfileBlock
+          userType="patient"
+          missingFields={missing}
+          context="discover"
+          onComplete={() => router.push('/edit-patient-profile')}
         />
-      }
-    >
+      );
+    }
+
+    return (
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingDoctors}
+            onRefresh={refreshDoctorsTab}
+            colors={['#4CAF50']}
+            tintColor="#4CAF50"
+          />
+        }
+      >
       <View style={styles.header}>
       </View>
       
@@ -2647,7 +2689,8 @@ export default function PatientDashboard() {
         )}
       </View>
     </ScrollView>
-  );
+    );
+  };
 
   // Helper to get status badge information
   const getStatusBadge = (status: string) => {
@@ -4060,6 +4103,21 @@ export default function PatientDashboard() {
         selectedSpecialization={selectedSpecialization}
         onSpecializationChange={setSelectedSpecialization}
         availableSpecializations={availableSpecializations}
+      />
+      
+      {/* Onboarding Overlay */}
+      <OnboardingOverlay
+        visible={showOnboarding}
+        userType="patient"
+        missingFields={missingFields}
+        onComplete={() => {
+          setShowOnboarding(false);
+          router.push('/edit-patient-profile');
+        }}
+        onDismiss={() => {
+          setShowOnboarding(false);
+          setOnboardingDismissed(true);
+        }}
       />
     </SafeAreaView>
   );
