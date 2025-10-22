@@ -233,6 +233,7 @@ export default function NativeGoogleSignIn({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify({
           id_token: idToken,

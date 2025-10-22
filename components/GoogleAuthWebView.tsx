@@ -100,23 +100,57 @@ export default function GoogleAuthWebView({
     try {
       console.log('🔐 GoogleAuthWebView: Exchanging code for token...');
       
-      // For now, let's create a mock user for testing
-      // In production, you would exchange the code for an ID token
-      const mockUser = {
-        id: 999,
-        name: 'Google Test User',
-        email: 'test@google.com',
-        user_type: 'patient',
-        status: 'active',
-        google_id: 'google_test_123',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      // Exchange authorization code for ID token using backend
+      console.log('🔐 GoogleAuthWebView: Exchanging code for ID token...');
       
-      const mockToken = 'mock_jwt_token_' + Date.now();
+      const exchangeResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/oauth/exchange-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          code: code,
+          redirect_uri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html'
+        })
+      });
       
-      console.log('🔐 GoogleAuthWebView: Using mock user for testing');
-      onSuccess(mockUser, mockToken);
+      if (!exchangeResponse.ok) {
+        throw new Error(`Code exchange failed: ${exchangeResponse.status}`);
+      }
+      
+      const exchangeData = await exchangeResponse.json();
+      console.log('🔐 GoogleAuthWebView: Code exchange response:', exchangeData);
+      
+      if (!exchangeData.success || !exchangeData.id_token) {
+        throw new Error('Failed to exchange code for ID token');
+      }
+      
+      // Now use the ID token to authenticate with backend
+      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          id_token: exchangeData.id_token,
+          user_type: 'patient'
+        })
+      });
+      
+      if (!authResponse.ok) {
+        throw new Error(`Authentication failed: ${authResponse.status}`);
+      }
+      
+      const authData = await authResponse.json();
+      console.log('🔐 GoogleAuthWebView: Authentication response:', authData);
+      
+      if (authData.success && authData.data && authData.data.user) {
+        onSuccess(authData.data.user, authData.data.token);
+      } else {
+        throw new Error('Authentication failed');
+      }
       
     } catch (error) {
       console.error('🔐 GoogleAuthWebView: Code exchange error:', error);
