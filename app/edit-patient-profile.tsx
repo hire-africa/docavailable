@@ -17,6 +17,7 @@ import {
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
+import DatePickerField from '../components/DatePickerField';
 import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -59,7 +60,6 @@ export default function EditPatientProfile() {
     const [lastName, setLastName] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [gender, setGender] = useState('');
-    const [bio, setBio] = useState('');
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');
     const [profilePicture, setProfilePicture] = useState<string | null>(null);
@@ -144,7 +144,6 @@ export default function EditPatientProfile() {
                 setLastName(currentUser?.last_name || '');
                 setDateOfBirth(currentUser?.date_of_birth || '');
                 setGender(currentUser?.gender || '');
-                setBio(currentUser?.bio || '');
                 setCountry(currentUser?.country || '');
                 setCity(currentUser?.city || '');
                 setProfilePicture(currentUser?.profile_picture_url || currentUser?.profile_picture || null);
@@ -274,6 +273,22 @@ export default function EditPatientProfile() {
             newErrors.lastName = 'Last name is required';
         }
 
+        if (!dateOfBirth) {
+            newErrors.dateOfBirth = 'Date of birth is required';
+        }
+
+        if (!gender) {
+            newErrors.gender = 'Gender is required';
+        }
+
+        if (!country.trim()) {
+            newErrors.country = 'Country is required';
+        }
+
+        if (!city.trim()) {
+            newErrors.city = 'City is required';
+        }
+
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -288,11 +303,11 @@ export default function EditPatientProfile() {
             const updateData: any = {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
+                date_of_birth: dateOfBirth,
+                gender: gender,
+                country: country.trim(),
+                city: city.trim(),
             };
-
-            // Convert empty strings to null for optional fields to match backend validation
-            updateData.country = country && country.trim() ? country.trim() : null;
-            updateData.city = city && city.trim() ? city.trim() : null;
 
             console.log('EditPatientProfile: Update data:', updateData);
 
@@ -445,6 +460,48 @@ export default function EditPatientProfile() {
                             {errors.lastName && (
                                 <Text style={styles.errorText}>{errors.lastName}</Text>
                             )}
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Date of Birth *</Text>
+                            <DatePickerField
+                                value={dateOfBirth}
+                                onChange={setDateOfBirth}
+                                error={errors.dateOfBirth}
+                                minimumDate={new Date(1900, 0, 1)}
+                                maximumDate={new Date()}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.inputLabel}>Gender *</Text>
+                            <View style={styles.optionsContainer}>
+                                <TouchableOpacity
+                                    style={[styles.optionButton, gender === 'male' && styles.optionButtonSelected]}
+                                    onPress={() => setGender('male')}
+                                >
+                                    <Text style={[styles.optionText, gender === 'male' && styles.optionTextSelected]}>
+                                        Male
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.optionButton, gender === 'female' && styles.optionButtonSelected]}
+                                    onPress={() => setGender('female')}
+                                >
+                                    <Text style={[styles.optionText, gender === 'female' && styles.optionTextSelected]}>
+                                        Female
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.optionButton, gender === 'other' && styles.optionButtonSelected]}
+                                    onPress={() => setGender('other')}
+                                >
+                                    <Text style={[styles.optionText, gender === 'other' && styles.optionTextSelected]}>
+                                        Other
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                            {errors.gender && <Text style={styles.errorText}>{errors.gender}</Text>}
                         </View>
                     </View>
 
@@ -783,5 +840,35 @@ const styles = StyleSheet.create({
     pickerItemText: {
         fontSize: 16,
         color: '#333',
+    },
+    // Gender option styles
+    optionsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 8,
+    },
+    optionButton: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: 4,
+        alignItems: 'center',
+    },
+    optionButtonSelected: {
+        backgroundColor: '#4CAF50',
+        borderColor: '#4CAF50',
+    },
+    optionText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+    },
+    optionTextSelected: {
+        color: '#FFFFFF',
+        fontWeight: '600',
     },
 }); 

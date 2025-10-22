@@ -32,8 +32,7 @@ export const getMissingFields = (userData: any): string[] => {
       { key: 'country', label: 'Country' },
       { key: 'city', label: 'City' },
       { key: 'date_of_birth', label: 'Date of Birth' },
-      { key: 'gender', label: 'Gender' },
-      { key: 'bio', label: 'Bio' }
+      { key: 'gender', label: 'Gender' }
     ],
     doctor: [
       { key: 'first_name', label: 'First Name' },
@@ -98,7 +97,7 @@ export const getProfileCompletionPercentage = (userData: any): number => {
   if (!userData) return 0;
   
   const requiredFields = {
-    patient: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'bio'],
+    patient: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender'],
     doctor: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'specializations', 'years_of_experience', 'bio', 'languages_spoken'],
     admin: ['first_name', 'last_name', 'country', 'city']
   };
