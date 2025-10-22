@@ -88,7 +88,10 @@ export const getMissingFields = (userData: any): string[] => {
         isEmpty = !hasSpecializations && !hasOldSpecialization;
         isDefault = false; // Don't treat arrays as defaults
       } else if (field.key === 'languages_spoken') {
-        isEmpty = !Array.isArray(value) || value.length === 0;
+        // Handle case where languages_spoken might be null, undefined, or not present
+        const hasLanguages = Array.isArray(value) && value.length > 0;
+        const hasLanguagesString = typeof value === 'string' && value.trim() !== '';
+        isEmpty = !hasLanguages && !hasLanguagesString;
         isDefault = false; // Don't treat arrays as defaults
       }
       
@@ -136,7 +139,10 @@ export const getProfileCompletionPercentage = (userData: any): number => {
       const hasOldSpecialization = userData.specialization && userData.specialization.trim() !== '';
       return hasSpecializations || hasOldSpecialization;
     } else if (field === 'languages_spoken') {
-      return Array.isArray(value) && value.length > 0;
+      // Handle case where languages_spoken might be null, undefined, or not present
+      const hasLanguages = Array.isArray(value) && value.length > 0;
+      const hasLanguagesString = typeof value === 'string' && value.trim() !== '';
+      return hasLanguages || hasLanguagesString;
     }
     
     // Check if field has a real value (not empty and not default)

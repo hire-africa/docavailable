@@ -130,7 +130,21 @@ export default function EditDoctorProfile() {
                 setCountry(currentUser?.country || '');
                 setCity(currentUser?.city || '');
                 setProfilePicture(currentUser?.profile_picture_url || currentUser?.profile_picture || null);
-                setLanguagesSpoken(currentUser?.languages_spoken || []);
+                // Handle languages_spoken - might be array, string, or null
+                let languages = [];
+                if (currentUser?.languages_spoken) {
+                  if (Array.isArray(currentUser.languages_spoken)) {
+                    languages = currentUser.languages_spoken;
+                  } else if (typeof currentUser.languages_spoken === 'string') {
+                    try {
+                      languages = JSON.parse(currentUser.languages_spoken);
+                    } catch (e) {
+                      console.error('Error parsing languages_spoken:', e);
+                      languages = [];
+                    }
+                  }
+                }
+                setLanguagesSpoken(languages);
                 
                 // console.log('EditDoctorProfile: Loaded data:', {
                 //   firstName: currentUser?.first_name,
