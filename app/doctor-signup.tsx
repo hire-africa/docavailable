@@ -1061,7 +1061,7 @@ export default function DoctorSignUp() {
                 // console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
                 registrationSuccessful = true;
                 // Redirect to pending approval page
-                router.replace('/pending-approval' as any);
+                router.replace('/doctor-dashboard' as any);
                 return;
             }
             

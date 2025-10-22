@@ -404,7 +404,7 @@ export default function DoctorSignUp() {
             
             // console.log('DoctorSignup: Signup successful, navigating to pending approval');
             // Redirect to pending approval page after successful signup
-            router.replace('/pending-approval');
+            router.replace('/doctor-dashboard');
         } catch (error: any) {
             console.error('DoctorSignup: Sign up error:', error);
             let errorMessage = 'Sign up failed. Please try again.';

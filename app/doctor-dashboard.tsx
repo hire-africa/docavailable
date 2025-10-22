@@ -131,6 +131,10 @@ export default function DoctorDashboard() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   
+  // Approval status state
+  const [showApprovalBanner, setShowApprovalBanner] = useState(false);
+  const [approvalBannerDismissed, setApprovalBannerDismissed] = useState(false);
+  
   // Doctor activation state
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -272,25 +276,34 @@ export default function DoctorDashboard() {
         const missing = getMissingFields(userData);
         console.log('🔍 [DoctorDashboard] Missing fields result:', missing);
         
-        // Check if doctor needs activation (Google auth users with pending status)
-        const needsActivation = userData.user_type === 'doctor' && 
-                               userData.status === 'pending' && 
+        // Check if doctor is pending approval
+        const isPendingApproval = userData.user_type === 'doctor' && userData.status === 'pending';
+        
+        // Check if doctor needs activation (Google auth users with pending status and missing documents)
+        const needsActivation = isPendingApproval && 
                                (!userData.national_id || !userData.medical_degree || !userData.medical_licence);
         
         if (needsActivation) {
           console.log('🔍 [DoctorDashboard] Doctor needs activation');
           setShowActivationModal(true);
           setShowOnboarding(false);
+          setShowApprovalBanner(false);
+        } else if (isPendingApproval) {
+          console.log('🔍 [DoctorDashboard] Doctor is pending approval - showing banner');
+          setShowApprovalBanner(true);
+          setShowOnboarding(false);
         } else if (missing.length > 0) {
           setMissingFields(missing);
+          setShowApprovalBanner(false);
           // Show onboarding overlay only if not dismissed in this session
           if (!showOnboarding && !onboardingDismissed) {
             console.log('🔍 [DoctorDashboard] Showing onboarding overlay');
             setShowOnboarding(true);
           }
         } else {
-          console.log('🔍 [DoctorDashboard] Profile is complete, hiding overlay');
+          console.log('🔍 [DoctorDashboard] Profile is complete, hiding overlays');
           setShowOnboarding(false);
+          setShowApprovalBanner(false);
         }
       }
     };
@@ -2325,6 +2338,29 @@ export default function DoctorDashboard() {
         </TouchableOpacity>
       </View>
 
+      {/* Approval Status Banner */}
+      {showApprovalBanner && !approvalBannerDismissed && (
+        <View style={styles.approvalBanner}>
+          <View style={styles.approvalBannerContent}>
+            <View style={styles.approvalBannerIcon}>
+              <FontAwesome name="clock-o" size={20} color="#fff" />
+            </View>
+            <View style={styles.approvalBannerText}>
+              <Text style={styles.approvalBannerTitle}>Account Pending Approval</Text>
+              <Text style={styles.approvalBannerMessage}>
+                Your doctor account is being reviewed. You can explore the platform while we process your application.
+              </Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.approvalBannerDismiss}
+              onPress={() => setApprovalBannerDismissed(true)}
+            >
+              <FontAwesome name="times" size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.mainContent}>
         {renderContent()}
       </View>
@@ -3650,5 +3686,53 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  approvalBanner: {
+    backgroundColor: '#FF9800',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  approvalBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  approvalBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  approvalBannerText: {
+    flex: 1,
+  },
+  approvalBannerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  approvalBannerMessage: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 20,
+  },
+  approvalBannerDismiss: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 }); 

@@ -1635,7 +1635,7 @@ class AuthenticationController extends Controller
         // Add user type specific fields
         if ($userType === 'doctor') {
             $doctorFields = [
-                'specialization' => 'Specialization',
+                'specializations' => 'Specializations',
                 'years_of_experience' => 'Years of Experience',
                 'professional_bio' => 'Professional Bio'
             ];
@@ -1664,7 +1664,7 @@ class AuthenticationController extends Controller
             'gender' => 'select',
             'country' => 'text',
             'city' => 'text',
-            'specialization' => 'text',
+            'specializations' => 'multiselect',
             'years_of_experience' => 'number',
             'professional_bio' => 'textarea'
         ];

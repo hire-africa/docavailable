@@ -67,7 +67,15 @@ export default function GoogleSignupQuestions() {
     // Validate current answer before proceeding
     const currentValue = answers[currentField?.field] || '';
     
-    if (!currentValue && currentField?.type !== 'textarea') {
+    // Special validation for different field types
+    if (currentField?.type === 'multiselect') {
+      if (!currentValue || currentValue.length === 0) {
+        Alert.alert('Required Field', `Please select at least one ${currentField?.label.toLowerCase()}`);
+        return;
+      }
+    } else if (currentField?.type === 'textarea') {
+      // Textarea is optional, allow empty
+    } else if (!currentValue) {
       Alert.alert('Required Field', `Please provide your ${currentField?.label.toLowerCase()}`);
       return;
     }
@@ -96,6 +104,8 @@ export default function GoogleSignupQuestions() {
         password_confirmation: `google_user_${parsedGoogleUser.google_id}`,
         user_type: parsedGoogleUser.user_type,
         email_verified_at: new Date().toISOString(),
+        // Handle specializations for doctors
+        specializations: answers.specializations ? JSON.stringify(answers.specializations) : null,
       };
 
       // Call the backend to create the user
@@ -228,6 +238,51 @@ export default function GoogleSignupQuestions() {
           </View>
         );
 
+      case 'multiselect':
+        // Handle specializations for doctors
+        if (currentField.field === 'specializations') {
+          const specializations = [
+            'General Medicine', 'Cardiology', 'Dermatology', 'Pediatrics', 'Gynecology',
+            'Orthopedics', 'Neurology', 'Psychiatry', 'Ophthalmology', 'ENT',
+            'Urology', 'Gastroenterology', 'Endocrinology', 'Rheumatology', 'Oncology'
+          ];
+          
+          return (
+            <View style={styles.questionContainer}>
+              <Text style={styles.questionLabel}>{currentField.label}</Text>
+              <Text style={styles.questionSubtext}>Select all that apply</Text>
+              <View style={styles.multiselectContainer}>
+                {specializations.map((spec) => {
+                  const isSelected = currentValue.includes(spec);
+                  return (
+                    <TouchableOpacity
+                      key={spec}
+                      style={[
+                        styles.multiselectOption,
+                        isSelected && styles.multiselectOptionSelected
+                      ]}
+                      onPress={() => {
+                        const newValue = isSelected 
+                          ? currentValue.filter((item: string) => item !== spec)
+                          : [...currentValue, spec];
+                        handleAnswer(newValue);
+                      }}
+                    >
+                      <Text style={[
+                        styles.multiselectOptionText,
+                        isSelected && styles.multiselectOptionTextSelected
+                      ]}>
+                        {spec}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          );
+        }
+        break;
+
       default: // text
         return (
           <View style={styles.questionContainer}>
@@ -301,10 +356,10 @@ export default function GoogleSignupQuestions() {
          <TouchableOpacity
            style={[
              styles.nextButton,
-             (!currentValue && currentField?.type !== 'textarea') && styles.nextButtonDisabled
+             (!currentValue && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect') && styles.nextButtonDisabled
            ]}
            onPress={handleNext}
-           disabled={loading || (!currentValue && currentField?.type !== 'textarea')}
+           disabled={loading || (!currentValue && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect')}
          >
           {loading ? (
             <ActivityIndicator color="#fff" />
@@ -468,5 +523,36 @@ const styles = StyleSheet.create({
     color: '#dc3545',
     textAlign: 'center',
     marginTop: 50,
+  },
+  questionSubtext: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginBottom: 15,
+    fontStyle: 'italic',
+  },
+  multiselectContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  multiselectOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+    backgroundColor: '#fff',
+  },
+  multiselectOptionSelected: {
+    backgroundColor: '#007bff',
+    borderColor: '#007bff',
+  },
+  multiselectOptionText: {
+    fontSize: 14,
+    color: '#495057',
+  },
+  multiselectOptionTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
