@@ -13,7 +13,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface GoogleUserData {
   email: string;
@@ -121,25 +123,14 @@ export default function GoogleSignupQuestions() {
       const data = await response.json();
 
       if (data.success) {
-        Alert.alert(
-          'Welcome!',
-          'Your account has been created successfully.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                // Navigate to appropriate dashboard
-                if (parsedGoogleUser.user_type === 'patient') {
-                  router.replace('/patient-dashboard');
-                } else if (parsedGoogleUser.user_type === 'doctor') {
-                  router.replace('/doctor-dashboard');
-                } else {
-                  router.replace('/');
-                }
-              }
-            }
-          ]
-        );
+        // Navigate directly to appropriate dashboard without alert
+        if (parsedGoogleUser.user_type === 'patient') {
+          router.replace('/patient-dashboard');
+        } else if (parsedGoogleUser.user_type === 'doctor') {
+          router.replace('/doctor-dashboard');
+        } else {
+          router.replace('/');
+        }
       } else {
         throw new Error(data.message || 'Registration failed');
       }
@@ -307,9 +298,22 @@ export default function GoogleSignupQuestions() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      
       {/* Header */}
       <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Image 
+            source={require('../assets/images/DA logo green.png')} 
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+        </View>
+      </View>
+
+      {/* Welcome Section */}
+      <View style={styles.welcomeSection}>
         <View style={styles.profileSection}>
           {parsedGoogleUser.profile_picture && (
             <Image
@@ -370,7 +374,7 @@ export default function GoogleSignupQuestions() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -381,9 +385,23 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#fff',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  headerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogo: {
+    height: 40,
+    width: 120,
+  },
+  welcomeSection: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
   },
@@ -422,7 +440,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#007bff',
+    backgroundColor: '#4CAF50',
     borderRadius: 2,
   },
   progressText: {
@@ -507,7 +525,7 @@ const styles = StyleSheet.create({
     flex: 2,
     padding: 15,
     borderRadius: 8,
-    backgroundColor: '#007bff',
+    backgroundColor: '#4CAF50',
     alignItems: 'center',
   },
   nextButtonDisabled: {
@@ -544,8 +562,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   multiselectOptionSelected: {
-    backgroundColor: '#007bff',
-    borderColor: '#007bff',
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
   },
   multiselectOptionText: {
     fontSize: 14,
