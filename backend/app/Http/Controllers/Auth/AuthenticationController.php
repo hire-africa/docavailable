@@ -1618,7 +1618,8 @@ class AuthenticationController extends Controller
             'date_of_birth' => 'Date of Birth',
             'gender' => 'Gender',
             'country' => 'Country',
-            'city' => 'City'
+            'city' => 'City',
+            'profile_picture' => 'Profile Picture'
         ];
         
         // Check which fields are missing
@@ -1664,6 +1665,7 @@ class AuthenticationController extends Controller
             'gender' => 'select',
             'country' => 'select',
             'city' => 'text',
+            'profile_picture' => 'image',
             'specializations' => 'multiselect',
             'years_of_experience' => 'number',
             'professional_bio' => 'textarea'
