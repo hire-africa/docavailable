@@ -26,6 +26,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
 import OnboardingOverlay from '../components/OnboardingOverlay';
+import DoctorActivationModal from '../components/DoctorActivationModal';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 import { getMissingFields } from '../utils/profileUtils';
 
@@ -129,6 +130,9 @@ export default function DoctorDashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  
+  // Doctor activation state
+  const [showActivationModal, setShowActivationModal] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showCancelReasonModal, setShowCancelReasonModal] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<any>(null);
@@ -273,7 +277,16 @@ export default function DoctorDashboard() {
         const missing = getMissingFields(userData);
         console.log('🔍 [DoctorDashboard] Missing fields result:', missing);
         
-        if (missing.length > 0) {
+        // Check if doctor needs activation (Google auth users with pending status)
+        const needsActivation = userData.user_type === 'doctor' && 
+                               userData.status === 'pending' && 
+                               (!userData.national_id || !userData.medical_degree || !userData.medical_licence);
+        
+        if (needsActivation) {
+          console.log('🔍 [DoctorDashboard] Doctor needs activation');
+          setShowActivationModal(true);
+          setShowOnboarding(false);
+        } else if (missing.length > 0) {
           setMissingFields(missing);
           // Show onboarding overlay only if not dismissed in this session
           if (!showOnboarding && !onboardingDismissed) {
@@ -2491,6 +2504,21 @@ export default function DoctorDashboard() {
           setShowOnboarding(false);
           setOnboardingDismissed(true);
         }}
+      />
+      
+      {/* Doctor Activation Modal */}
+      <DoctorActivationModal
+        visible={showActivationModal}
+        onClose={() => setShowActivationModal(false)}
+        onSuccess={() => {
+          setShowActivationModal(false);
+          // Refresh user data to reflect the activation
+          if (user) {
+            // You might want to refresh the user data here
+            console.log('Doctor account activated successfully');
+          }
+        }}
+        userData={userData}
       />
     </SafeAreaView>
   );

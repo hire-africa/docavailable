@@ -39,18 +39,29 @@ export const getMissingFields = (userData: any): string[] => {
   
   const requiredFields = {
     patient: [
+      { key: 'first_name', label: 'First Name' },
+      { key: 'last_name', label: 'Last Name' },
       { key: 'country', label: 'Country' },
       { key: 'city', label: 'City' },
       { key: 'date_of_birth', label: 'Date of Birth' },
-      { key: 'gender', label: 'Gender' }
+      { key: 'gender', label: 'Gender' },
+      { key: 'bio', label: 'Bio' }
     ],
     doctor: [
+      { key: 'first_name', label: 'First Name' },
+      { key: 'last_name', label: 'Last Name' },
       { key: 'country', label: 'Country' },
       { key: 'city', label: 'City' },
+      { key: 'date_of_birth', label: 'Date of Birth' },
+      { key: 'gender', label: 'Gender' },
       { key: 'specialization', label: 'Specialization' },
-      { key: 'years_of_experience', label: 'Years of Experience' }
+      { key: 'years_of_experience', label: 'Years of Experience' },
+      { key: 'professional_bio', label: 'Professional Bio' },
+      { key: 'languages_spoken', label: 'Languages Spoken' }
     ],
     admin: [
+      { key: 'first_name', label: 'First Name' },
+      { key: 'last_name', label: 'Last Name' },
       { key: 'country', label: 'Country' },
       { key: 'city', label: 'City' }
     ]
@@ -90,9 +101,9 @@ export const getProfileCompletionPercentage = (userData: any): number => {
   if (!userData) return 0;
   
   const requiredFields = {
-    patient: ['country', 'city', 'date_of_birth', 'gender'],
-    doctor: ['country', 'city', 'specialization', 'years_of_experience'],
-    admin: ['country', 'city']
+    patient: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'bio'],
+    doctor: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'specialization', 'years_of_experience', 'professional_bio', 'languages_spoken'],
+    admin: ['first_name', 'last_name', 'country', 'city']
   };
   
   const userType = userData.user_type || 'patient';
@@ -120,4 +131,8 @@ export const getOnboardingMessage = (userType: string): string => {
     default:
       return "Complete your profile to access all features.";
   }
+};
+
+export const getDoctorActivationMessage = (): string => {
+  return "Activate your account by uploading your medical documents to start receiving patient requests.";
 };

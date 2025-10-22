@@ -113,6 +113,21 @@ export default function AudioCall({
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <Image
+          source={require('../app/chat/black1.jpg')}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0.8,
+            zIndex: -1,
+          }}
+          resizeMode="cover"
+        />
         <View style={styles.loadingContainer}>
           <Animated.View style={[styles.loadingIcon, { opacity: pulseAnim }]}>
             <Ionicons name="call" size={60} color="#4CAF50" />
@@ -128,6 +143,21 @@ export default function AudioCall({
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
+        <Image
+          source={require('../app/chat/black1.jpg')}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0.8,
+            zIndex: -1,
+          }}
+          resizeMode="cover"
+        />
         <View style={styles.incomingCallContainer}>
           <View style={styles.profileContainer}>
             <Image
@@ -163,6 +193,21 @@ export default function AudioCall({
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#000" />
+      <Image
+        source={require('../app/chat/black1.jpg')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.8,
+          zIndex: -1,
+        }}
+        resizeMode="cover"
+      />
       <View style={styles.callContainer}>
         <View style={styles.profileContainer}>
           <Image
@@ -209,7 +254,7 @@ export default function AudioCall({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   loadingContainer: {
     flex: 1,

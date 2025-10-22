@@ -427,6 +427,25 @@ export default function AudioCall({
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
       
+      {/* Background Image */}
+      <Image
+        source={require('../app/chat/black1.jpg')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.8,
+          zIndex: -1,
+        }}
+        resizeMode="cover"
+        onLoad={() => console.log('✅ Audio call background loaded successfully')}
+        onError={(error) => console.log('❌ Audio call background failed to load:', error)}
+      />
+      
       {/* Dynamic Header based on call state */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
@@ -594,7 +613,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
     width: '100%',
     height: '100%',
   },

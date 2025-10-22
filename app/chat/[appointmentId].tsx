@@ -8,7 +8,9 @@ import {
     ActivityIndicator,
     Alert,
     Image,
+    KeyboardAvoidingView,
     Modal,
+    Platform,
     ScrollView,
     StatusBar,
     Text,
@@ -2911,25 +2913,49 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
       
-      {/* Header */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E5E5',
-        backgroundColor: '#fff',
-      }}>
-        <TouchableOpacity onPress={handleBackPress} style={{ marginRight: 12 }}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        
-        {/* Profile Picture and Name - Using Backend Anonymized Data */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+      {/* Background Wallpaper */}
+      <Image
+        source={require('./white_wallpaper.jpg')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.8,
+          zIndex: -1,
+        }}
+        resizeMode="contain"
+        onLoad={() => console.log('✅ Wallpaper loaded successfully')}
+        onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
+      />
+      
+      <KeyboardAvoidingView 
+        style={{ flex: 1, backgroundColor: 'transparent' }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        {/* Header */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: '#E5E5E5',
+          backgroundColor: '#fff',
+        }}>
+          <TouchableOpacity onPress={handleBackPress} style={{ marginRight: 12 }}>
+            <Ionicons name="arrow-back" size={24} color="#333" />
+          </TouchableOpacity>
+          
+          {/* Profile Picture and Name - Using Backend Anonymized Data */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           {chatInfo?.other_participant_profile_picture_url ? (
             <Image
               source={{ uri: chatInfo.other_participant_profile_picture_url }}
@@ -3250,16 +3276,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       )}
 
 
-      {/* Messages */}
-      <ScrollView
-          ref={scrollViewRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ 
-            padding: 16,
-            paddingBottom: 20, // Extra padding to ensure messages are visible above input
-          }}
-          showsVerticalScrollIndicator={false}
-        >
+        {/* Messages */}
+        <ScrollView
+            ref={scrollViewRef}
+            style={{ flex: 1, backgroundColor: 'transparent' }}
+            contentContainerStyle={{ 
+              padding: 16,
+              paddingBottom: 100, // Extra padding to ensure messages are visible above input and device menu
+            }}
+            showsVerticalScrollIndicator={false}
+          >
           {/* End-to-End Encryption Message */}
           <View style={{
             backgroundColor: '#E8F5E9',
@@ -3428,16 +3454,19 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           })}
         </ScrollView>
 
-      {/* Input - Fixed at bottom with proper keyboard handling */}
-      <View style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#E5E5E5',
-        backgroundColor: '#fff',
-      }}>
+        {/* Input - Fixed at bottom with proper keyboard handling and safe area */}
+        <View style={{ 
+          flexDirection: 'row', 
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          paddingBottom: 20, // Extra padding for device bottom menu
+          borderTopWidth: 1,
+          borderTopColor: '#E5E5E5',
+          backgroundColor: '#fff',
+          position: 'relative',
+          zIndex: 1000,
+        }}>
           {/* Session Ended Message for Doctors */}
           {sessionEnded && !isPatient && (
             <View style={{
@@ -3546,6 +3575,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
         {/* Voice Recording Interface - DISABLED */}
         {/* Voice recording functionality has been disabled */}
+      </KeyboardAvoidingView>
 
       {/* End Session Modal */}
       <Modal
