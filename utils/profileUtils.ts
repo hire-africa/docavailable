@@ -54,9 +54,9 @@ export const getMissingFields = (userData: any): string[] => {
       { key: 'city', label: 'City' },
       { key: 'date_of_birth', label: 'Date of Birth' },
       { key: 'gender', label: 'Gender' },
-      { key: 'specialization', label: 'Specialization' },
+      { key: 'specializations', label: 'Specializations' },
       { key: 'years_of_experience', label: 'Years of Experience' },
-      { key: 'professional_bio', label: 'Professional Bio' },
+      { key: 'bio', label: 'Professional Bio' },
       { key: 'languages_spoken', label: 'Languages Spoken' }
     ],
     admin: [
@@ -73,8 +73,15 @@ export const getMissingFields = (userData: any): string[] => {
   const missingFields = fields
     .filter(field => {
       const value = userData[field.key];
-      const isEmpty = !value || value === '';
-      const isDefault = isDefaultValue(field.key, value);
+      let isEmpty = !value || value === '';
+      let isDefault = isDefaultValue(field.key, value);
+      
+      // Special handling for array fields
+      if (field.key === 'specializations' || field.key === 'languages_spoken') {
+        isEmpty = !Array.isArray(value) || value.length === 0;
+        isDefault = false; // Don't treat arrays as defaults
+      }
+      
       const isMissing = isEmpty || isDefault;
       
       console.log(`🔍 [ProfileUtils] Field ${field.key}:`, {
@@ -102,7 +109,7 @@ export const getProfileCompletionPercentage = (userData: any): number => {
   
   const requiredFields = {
     patient: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'bio'],
-    doctor: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'specialization', 'years_of_experience', 'professional_bio', 'languages_spoken'],
+    doctor: ['first_name', 'last_name', 'country', 'city', 'date_of_birth', 'gender', 'specializations', 'years_of_experience', 'bio', 'languages_spoken'],
     admin: ['first_name', 'last_name', 'country', 'city']
   };
   
@@ -111,6 +118,12 @@ export const getProfileCompletionPercentage = (userData: any): number => {
   
   const completedFields = fields.filter(field => {
     const value = userData[field];
+    
+    // Special handling for array fields
+    if (field === 'specializations' || field === 'languages_spoken') {
+      return Array.isArray(value) && value.length > 0;
+    }
+    
     // Check if field has a real value (not empty and not default)
     return value && 
            value !== '' && 
