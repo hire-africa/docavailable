@@ -51,6 +51,9 @@ export default function GoogleSignupQuestions() {
 
   const parsedGoogleUser: GoogleUserData = googleUser ? JSON.parse(googleUser) : {};
   const parsedMissingFields: MissingField[] = missingFields ? JSON.parse(missingFields) : [];
+  
+  console.log('Google user data:', parsedGoogleUser);
+  console.log('Missing fields:', parsedMissingFields);
 
   const currentField = parsedMissingFields[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / parsedMissingFields.length) * 100;
@@ -124,17 +127,63 @@ export default function GoogleSignupQuestions() {
 
       if (data.success) {
         console.log('Registration successful, navigating to dashboard for user type:', parsedGoogleUser.user_type);
+        console.log('Registration response data:', data);
         
-        // Navigate to appropriate dashboard
-        if (parsedGoogleUser.user_type === 'patient') {
-          console.log('Navigating to patient dashboard');
-          router.replace('/patient-dashboard');
-        } else if (parsedGoogleUser.user_type === 'doctor') {
-          console.log('Navigating to doctor dashboard');
-          router.replace('/doctor-dashboard');
-        } else {
-          console.log('Unknown user type, redirecting to home');
-          router.replace('/');
+        // After successful registration, we need to authenticate the user
+        // Since registration doesn't return a token, we need to login with Google
+        try {
+          console.log('Attempting to authenticate with Google after registration...');
+          const loginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              id_token: parsedGoogleUser.google_id, // This might need to be the actual Google ID token
+              user_type: parsedGoogleUser.user_type
+            })
+          });
+          
+          const loginData = await loginResponse.json();
+          console.log('Google login response after registration:', loginData);
+          
+          if (loginData.success && loginData.data && loginData.data.token) {
+            // Store the token and user data
+            const { AsyncStorage } = require('@react-native-async-storage/async-storage');
+            await AsyncStorage.setItem('auth_token', loginData.data.token);
+            await AsyncStorage.setItem('user_data', JSON.stringify(loginData.data.user));
+            
+            console.log('Authentication successful, navigating to dashboard');
+            // Navigate to appropriate dashboard
+            if (parsedGoogleUser.user_type === 'patient') {
+              router.replace('/patient-dashboard');
+            } else if (parsedGoogleUser.user_type === 'doctor') {
+              router.replace('/doctor-dashboard');
+            } else {
+              router.replace('/');
+            }
+          } else {
+            console.log('Google login failed after registration, navigating anyway');
+            // Navigate anyway - the user might still be able to access the dashboard
+            if (parsedGoogleUser.user_type === 'patient') {
+              router.replace('/patient-dashboard');
+            } else if (parsedGoogleUser.user_type === 'doctor') {
+              router.replace('/doctor-dashboard');
+            } else {
+              router.replace('/');
+            }
+          }
+        } catch (loginError) {
+          console.error('Error during post-registration authentication:', loginError);
+          // Navigate anyway - the user might still be able to access the dashboard
+          if (parsedGoogleUser.user_type === 'patient') {
+            router.replace('/patient-dashboard');
+          } else if (parsedGoogleUser.user_type === 'doctor') {
+            router.replace('/doctor-dashboard');
+          } else {
+            router.replace('/');
+          }
         }
       } else {
         console.error('Registration failed:', data);
@@ -152,6 +201,8 @@ export default function GoogleSignupQuestions() {
     if (!currentField) return null;
 
     const currentValue = answers[currentField.field] || '';
+    
+    console.log('Rendering question for field:', currentField.field, 'type:', currentField.type, 'value:', currentValue);
 
     switch (currentField.type) {
       case 'date':
