@@ -1445,21 +1445,24 @@ Route::get('/oauth/callback', function (Request $request) {
         $error = $request->query('error');
         
         if ($error) {
-            return response()->view('oauth.error', [
+            return response()->json([
+                'success' => false,
                 'error' => $error,
                 'error_description' => $request->query('error_description', 'Unknown error')
-            ]);
+            ], 400);
         }
         
         if (!$code) {
-            return response()->view('oauth.error', [
+            return response()->json([
+                'success' => false,
                 'error' => 'missing_code',
                 'error_description' => 'Authorization code not provided'
-            ]);
+            ], 400);
         }
         
-        // Return a simple HTML page that redirects back to the app
-        return response()->view('oauth.success', [
+        // Return JSON response with the code for frontend to process
+        return response()->json([
+            'success' => true,
             'code' => $code,
             'state' => $request->query('state', '')
         ]);
@@ -1470,10 +1473,11 @@ Route::get('/oauth/callback', function (Request $request) {
             'request' => $request->all()
         ]);
         
-        return response()->view('oauth.error', [
+        return response()->json([
+            'success' => false,
             'error' => 'server_error',
             'error_description' => 'An error occurred processing the OAuth callback'
-        ]);
+        ], 500);
     }
 })->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
