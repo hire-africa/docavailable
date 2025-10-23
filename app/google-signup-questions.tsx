@@ -186,91 +186,123 @@ export default function GoogleSignupQuestions() {
   const handleComplete = async () => {
     setLoading(true);
     try {
-      let profilePictureUrl = null;
-      
-      // Handle profile picture upload - check both Google profile picture and manually selected one
+      // Convert profile picture to base64 like normal signup does
+      let profilePictureBase64 = null;
       const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
       
       if (profilePictureToUpload) {
         try {
-          console.log('🔐 Google Signup: Uploading profile picture...');
+          console.log('🔐 Google Signup: Converting profile picture to base64...');
           console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
           console.log('🔐 Google Signup: Profile picture source:', answers.profile_picture ? 'manually selected' : 'from Google');
           
-          // Convert image to base64 using React Native compatible method
-          console.log('🔐 Google Signup: Converting image to base64...');
-          
-          // Use a more React Native compatible approach
-          const base64Image = await new Promise<string>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.onload = function() {
+          const response = await fetch(profilePictureToUpload);
+          const blob = await response.blob();
+          profilePictureBase64 = await Promise.race([
+            new Promise<string>((resolve) => {
               const reader = new FileReader();
-              reader.onloadend = function() {
-                const base64 = reader.result as string;
-                console.log('🔐 Google Signup: Base64 conversion complete, length:', base64.length);
-                resolve(base64);
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                resolve(base64String);
               };
-              reader.onerror = function(error) {
-                console.error('🔐 Google Signup: FileReader error:', error);
-                reject(error);
-              };
-              reader.readAsDataURL(xhr.response);
-            };
-            xhr.onerror = function(error) {
-              console.error('🔐 Google Signup: XMLHttpRequest error:', error);
-              reject(error);
-            };
-            xhr.open('GET', profilePictureToUpload);
-            xhr.responseType = 'blob';
-            xhr.send();
-          });
-          
-          // Upload to backend (using public endpoint for registration)
-          console.log('🔐 Google Signup: Sending upload request to backend...');
-          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-              profile_picture: base64Image
-            })
-          });
-          
-          console.log('🔐 Google Signup: Upload response status:', uploadResponse.status);
-          const uploadData = await uploadResponse.json();
-          console.log('🔐 Google Signup: Profile picture upload response:', uploadData);
-          
-          if (uploadData.success && uploadData.data?.profile_picture_url) {
-            profilePictureUrl = uploadData.data.profile_picture_url;
-            console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
-          } else {
-            console.error('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
-            console.error('🔐 Google Signup: Upload response details:', {
-              success: uploadData.success,
-              hasData: !!uploadData.data,
-              hasUrl: !!uploadData.data?.profile_picture_url,
-              message: uploadData.message
-            });
-          }
-        } catch (error) {
-          console.error('🔐 Google Signup: Error uploading profile picture:', error);
-          // Fall back to using the original Google profile picture URL
-          profilePictureUrl = parsedGoogleUser.profile_picture;
-          console.log('🔐 Google Signup: Falling back to Google profile picture URL:', profilePictureUrl);
+              reader.readAsDataURL(blob);
+            }),
+            new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
+            )
+          ]);
+          console.log('🔐 Google Signup: Profile picture converted to base64, length:', profilePictureBase64.length);
+        } catch (conversionError) {
+          console.warn('🔐 Google Signup: Profile picture conversion failed:', conversionError);
+          // Continue without profile picture if conversion fails
         }
-      } else {
-        // If no profile picture to upload, use the Google profile picture URL if available
-        profilePictureUrl = parsedGoogleUser.profile_picture;
-        console.log('🔐 Google Signup: Using Google profile picture URL:', profilePictureUrl);
+      }
+
+      // Convert documents to base64 like normal signup does
+      let nationalIdBase64 = null;
+      let medicalDegreeBase64 = null;
+      let medicalLicenceBase64 = null;
+
+      if (answers.national_id) {
+        try {
+          console.log('🔐 Google Signup: Converting National ID to base64...');
+          const response = await fetch(answers.national_id);
+          const blob = await response.blob();
+          nationalIdBase64 = await Promise.race([
+            new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                resolve(base64String);
+              };
+              reader.readAsDataURL(blob);
+            }),
+            new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error('National ID conversion timeout')), 10000)
+            )
+          ]);
+          console.log('🔐 Google Signup: National ID converted to base64');
+        } catch (conversionError) {
+          console.warn('🔐 Google Signup: National ID conversion failed:', conversionError);
+        }
+      }
+
+      if (answers.medical_degree) {
+        try {
+          console.log('🔐 Google Signup: Converting Medical Degree to base64...');
+          const response = await fetch(answers.medical_degree);
+          const blob = await response.blob();
+          medicalDegreeBase64 = await Promise.race([
+            new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                resolve(base64String);
+              };
+              reader.readAsDataURL(blob);
+            }),
+            new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error('Medical Degree conversion timeout')), 10000)
+            )
+          ]);
+          console.log('🔐 Google Signup: Medical Degree converted to base64');
+        } catch (conversionError) {
+          console.warn('🔐 Google Signup: Medical Degree conversion failed:', conversionError);
+        }
+      }
+
+      if (answers.medical_licence) {
+        try {
+          console.log('🔐 Google Signup: Converting Medical Licence to base64...');
+          const response = await fetch(answers.medical_licence);
+          const blob = await response.blob();
+          medicalLicenceBase64 = await Promise.race([
+            new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                resolve(base64String);
+              };
+              reader.readAsDataURL(blob);
+            }),
+            new Promise<string>((_, reject) => 
+              setTimeout(() => reject(new Error('Medical Licence conversion timeout')), 10000)
+            )
+          ]);
+          console.log('🔐 Google Signup: Medical Licence converted to base64');
+        } catch (conversionError) {
+          console.warn('🔐 Google Signup: Medical Licence conversion failed:', conversionError);
+        }
       }
       
-      // Create the complete user data
+      // Create the complete user data with base64 images like normal signup
       const completeUserData = {
         ...parsedGoogleUser,
         ...answers,
-        profile_picture: profilePictureUrl, // Use the uploaded URL or fallback to Google URL
+        profile_picture: profilePictureBase64, // Send base64 data directly
+        national_id_passport: nationalIdBase64, // Use correct field name
+        highest_medical_certificate: medicalDegreeBase64, // Use correct field name
+        specialist_certificate: medicalLicenceBase64, // Use correct field name
         password: `google_user_${parsedGoogleUser.google_id}`,
         password_confirmation: `google_user_${parsedGoogleUser.google_id}`,
         user_type: parsedGoogleUser.user_type,
@@ -281,8 +313,14 @@ export default function GoogleSignupQuestions() {
 
       console.log('🔐 Google Signup: Complete user data for registration:', {
         ...completeUserData,
-        profile_picture: profilePictureUrl,
-        hasProfilePicture: !!profilePictureUrl
+        profile_picture: profilePictureBase64 ? 'base64 data' : 'none',
+        national_id_passport: nationalIdBase64 ? 'base64 data' : 'none',
+        highest_medical_certificate: medicalDegreeBase64 ? 'base64 data' : 'none',
+        specialist_certificate: medicalLicenceBase64 ? 'base64 data' : 'none',
+        hasProfilePicture: !!profilePictureBase64,
+        hasNationalId: !!nationalIdBase64,
+        hasMedicalDegree: !!medicalDegreeBase64,
+        hasMedicalLicence: !!medicalLicenceBase64
       });
 
       // Call the backend to create the user
