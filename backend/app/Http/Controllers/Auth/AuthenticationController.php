@@ -128,7 +128,7 @@ class AuthenticationController extends Controller
                 // Check if it's a URL (Google profile picture) or base64 data
                 if (filter_var($request->profile_picture, FILTER_VALIDATE_URL)) {
                     // It's a URL - download and process the image
-                    \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', $request->profile_picture);
+                    \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', ['url' => $request->profile_picture]);
                     
                     try {
                         $imageContent = file_get_contents($request->profile_picture);
