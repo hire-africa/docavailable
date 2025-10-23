@@ -17,7 +17,19 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.docavailable.minimal",
-      "scheme": "com.docavailable.minimal"
+      "scheme": "com.docavailable.minimal",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app needs access to camera for video calls and profile pictures",
+        "NSMicrophoneUsageDescription": "This app needs access to microphone for voice calls and audio recording",
+        "NSLocationWhenInUseUsageDescription": "This app needs location access to find nearby doctors and emergency services",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs location access to find nearby doctors and emergency services",
+        "NSContactsUsageDescription": "This app needs access to contacts to invite friends and family",
+        "NSCalendarsUsageDescription": "This app needs access to calendar to add appointments",
+        "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select and share photos in chat",
+        "NSUserNotificationsUsageDescription": "This app needs notification permission to send call notifications and messages",
+        "NSBluetoothAlwaysUsageDescription": "This app needs Bluetooth access for headset support during calls",
+        "NSBluetoothPeripheralUsageDescription": "This app needs Bluetooth access for headset support during calls"
+      }
     },
     "android": {
       "package": "com.docavailable.app",
@@ -26,7 +38,40 @@
         "backgroundColor": "#ffffff"
       },
       "googleServicesFile": "./google-services.json",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "android.permission.WAKE_LOCK",
+        "android.permission.VIBRATE",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.CALL_PHONE",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.ACCESS_NOTIFICATION_POLICY",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MICROPHONE",
+        "android.permission.FOREGROUND_SERVICE_CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

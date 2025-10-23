@@ -19,6 +19,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { imageCacheService } from '../../../services/imageCacheService';
 import { paymentsService } from '../../../services/paymentsService';
 import { addRealtimeActivity } from '../../../utils/activityUtils';
+import { detectUserTimezone } from '../../../utils/timezoneDetection';
 
 const availableTimes = [
   '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
@@ -846,10 +847,12 @@ export default function BookAppointmentFlow() {
       const hasQuota = isTypeAvailable(consultationType);
       if (hasQuota) {
         // Create appointment directly
+        const userTimezone = await detectUserTimezone();
         const payload: any = {
           doctor_id: Number(doctorId),
           appointment_date: `${apptDateTime.getFullYear()}-${(apptDateTime.getMonth()+1).toString().padStart(2,'0')}-${apptDateTime.getDate().toString().padStart(2,'0')}`,
           appointment_time: selectedTime,
+          user_timezone: userTimezone, // Enhanced timezone detection
           appointment_type: consultationType,
           reason: reason,
         };

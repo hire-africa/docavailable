@@ -28,6 +28,7 @@ import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
 import OnboardingOverlay from '../components/OnboardingOverlay';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { getMissingFields } from '../utils/profileUtils';
 
 import { FontAwesome } from '@expo/vector-icons';
@@ -1239,6 +1240,34 @@ export default function DoctorDashboard() {
     }
   };
 
+  // New timezone-aware format functions
+  const formatAppointmentDateTz = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return formatAppointmentDate({ appointment_date: appointment });
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentDate(appointment);
+    }
+    return 'No date provided';
+  };
+
+  const formatAppointmentTimeTz = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return formatAppointmentTime({ appointment_time: appointment });
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentTime(appointment);
+    }
+    return 'No time provided';
+  };
+
+  const formatAppointmentDateTimeTz = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return `${formatAppointmentDateTz(appointment)} • ${formatAppointmentTimeTz(appointment)}`;
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentDateTime(appointment);
+    }
+    return 'No appointment data';
+  };
+
   const getConsultationTypeLabel = (type: string) => {
     switch (type) {
       case 'text': return 'Text Consultation';
@@ -2159,7 +2188,7 @@ export default function DoctorDashboard() {
               <View style={{flex: 1}}>
                 <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{appointment.patient_name}</Text>
                 <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>
-                  {formatDate(appointment.appointment_date)} • {formatTime(appointment.appointment_time)}
+                  {formatAppointmentDateTimeTz(appointment)}
                 </Text>
                 <Text style={{color: '#666', fontSize: 13, marginTop: 2}} numberOfLines={1}>{appointment.appointment_type}</Text>
               </View>
@@ -2220,7 +2249,7 @@ export default function DoctorDashboard() {
                 </View>
                 <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
-                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatDate(selectedAcceptedRequest.appointment_date)} • {formatTime(selectedAcceptedRequest.appointment_time)}</Text>
+                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatAppointmentDateTimeTz(selectedAcceptedRequest)}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                     <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
                       <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{getConsultationTypeLabel(selectedAcceptedRequest.appointment_type)}</Text>

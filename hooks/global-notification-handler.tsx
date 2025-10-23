@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState, AppStateStatus, Linking } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import CallNotificationService from '../services/callNotificationService';
 
 export function useGlobalNotificationHandler() {
   const router = useRouter();
@@ -83,25 +84,68 @@ export function useGlobalNotificationHandler() {
     // Set up app state listener
     const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
 
-    // Set up notification response listener (when notification is tapped)
+    // Set up notification response listener (when notification is tapped or action button pressed)
     const notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log('🔔 [GlobalNotificationHandler] Notification tapped:', response);
+      console.log('🔔 [GlobalNotificationHandler] Notification response:', response);
       
       const data = response.notification.request.content.data;
+      const actionIdentifier = response.actionIdentifier;
+      
       if (data && (data.type === 'incoming_call' || data.type === 'direct_call')) {
-        console.log('📞 [GlobalNotificationHandler] Processing call notification tap:', data);
+        console.log('📞 [GlobalNotificationHandler] Processing call notification:', { data, actionIdentifier });
         
-        // Navigate to unified call screen
-        router.push({
-          pathname: '/call',
-          params: {
-            sessionId: String(data.appointment_id || data.session_id || ''),
-            doctorId: String(data.doctor_id || data.caller_id || ''),
-            doctorName: String(data.doctor_name || data.caller_name || ''),
-            callType: String(data.call_type || 'audio'),
-            isIncomingCall: 'true'
+        // Handle call action buttons
+        if (actionIdentifier === 'ANSWER_CALL') {
+          console.log('📞 [GlobalNotificationHandler] Answer call button pressed');
+          try {
+            // Handle call answer through service
+            await CallNotificationService.handleCallAnswer({
+              appointmentId: String(data.appointment_id || data.session_id || ''),
+              callerId: String(data.doctor_id || data.caller_id || ''),
+              sessionId: String(data.session_id || ''),
+            });
+            
+            // Navigate to call screen to answer
+            router.push({
+              pathname: '/call',
+              params: {
+                sessionId: String(data.appointment_id || data.session_id || ''),
+                doctorId: String(data.doctor_id || data.caller_id || ''),
+                doctorName: String(data.doctor_name || data.caller_name || ''),
+                callType: String(data.call_type || 'audio'),
+                isIncomingCall: 'true',
+                action: 'answer'
+              }
+            });
+          } catch (error) {
+            console.error('Failed to handle call answer:', error);
           }
-        });
+        } else if (actionIdentifier === 'DECLINE_CALL') {
+          console.log('📞 [GlobalNotificationHandler] Decline call button pressed');
+          try {
+            // Handle call decline through service
+            await CallNotificationService.handleCallDecline({
+              appointmentId: String(data.appointment_id || data.session_id || ''),
+              callerId: String(data.doctor_id || data.caller_id || ''),
+              sessionId: String(data.session_id || ''),
+            });
+          } catch (error) {
+            console.error('Failed to handle call decline:', error);
+          }
+        } else {
+          // Regular tap on notification - navigate to call screen
+          console.log('📞 [GlobalNotificationHandler] Call notification tapped');
+          router.push({
+            pathname: '/call',
+            params: {
+              sessionId: String(data.appointment_id || data.session_id || ''),
+              doctorId: String(data.doctor_id || data.caller_id || ''),
+              doctorName: String(data.doctor_name || data.caller_name || ''),
+              callType: String(data.call_type || 'audio'),
+              isIncomingCall: 'true'
+            }
+          });
+        }
       }
     });
 

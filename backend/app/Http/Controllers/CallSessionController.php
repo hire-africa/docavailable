@@ -743,4 +743,166 @@ class CallSessionController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Handle call answer from notification
+     */
+    public function answer(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $callerId = $request->input('caller_id');
+            $sessionId = $request->input('session_id');
+
+            if (!$appointmentId || !$callerId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing required parameters'
+                ], 400);
+            }
+
+            // Find the call session
+            $callSession = CallSession::where('appointment_id', $appointmentId)
+                ->where('doctor_id', $callerId)
+                ->where('status', 'pending')
+                ->first();
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call session not found or already answered'
+                ], 404);
+            }
+
+            // Update call session status
+            $callSession->update([
+                'status' => 'answered',
+                'answered_at' => now(),
+                'answered_by' => $user->id
+            ]);
+
+            Log::info("Call answered", [
+                'user_id' => $user->id,
+                'appointment_id' => $appointmentId,
+                'caller_id' => $callerId,
+                'session_id' => $sessionId,
+                'call_session_id' => $callSession->id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Call answered successfully',
+                'data' => [
+                    'call_session_id' => $callSession->id,
+                    'status' => 'answered',
+                    'answered_at' => $callSession->answered_at
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error answering call", [
+                'user_id' => Auth::id(),
+                'appointment_id' => $request->input('appointment_id'),
+                'caller_id' => $request->input('caller_id'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to answer call'
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle call decline from notification
+     */
+    public function decline(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $callerId = $request->input('caller_id');
+            $sessionId = $request->input('session_id');
+            $reason = $request->input('reason', 'declined_by_user');
+
+            if (!$appointmentId || !$callerId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing required parameters'
+                ], 400);
+            }
+
+            // Find the call session
+            $callSession = CallSession::where('appointment_id', $appointmentId)
+                ->where('doctor_id', $callerId)
+                ->where('status', 'pending')
+                ->first();
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call session not found or already handled'
+                ], 404);
+            }
+
+            // Update call session status
+            $callSession->update([
+                'status' => 'declined',
+                'declined_at' => now(),
+                'declined_by' => $user->id,
+                'decline_reason' => $reason
+            ]);
+
+            Log::info("Call declined", [
+                'user_id' => $user->id,
+                'appointment_id' => $appointmentId,
+                'caller_id' => $callerId,
+                'session_id' => $sessionId,
+                'reason' => $reason,
+                'call_session_id' => $callSession->id
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Call declined successfully',
+                'data' => [
+                    'call_session_id' => $callSession->id,
+                    'status' => 'declined',
+                    'declined_at' => $callSession->declined_at,
+                    'reason' => $reason
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error declining call", [
+                'user_id' => Auth::id(),
+                'appointment_id' => $request->input('appointment_id'),
+                'caller_id' => $request->input('caller_id'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to decline call'
+            ], 500);
+        }
+    }
 }

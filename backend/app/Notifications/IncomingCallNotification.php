@@ -36,8 +36,12 @@ class IncomingCallNotification extends Notification
 
         return [
             'notification' => [
-                'title' => $callType === 'video' ? 'Incoming video call' : 'Incoming voice call',
-                'body' => $callerName . ' is calling…',
+                'title' => $callerName . ' - ' . ($callType === 'video' ? 'Video Call' : 'Voice Call'),
+                'body' => 'Incoming call...',
+                'sound' => 'default',
+                'priority' => 'high',
+                'visibility' => 'public',
+                'tag' => 'incoming_call_' . ($this->callSession->appointment_id ?? $this->callSession->id),
             ],
             'data' => [
                 'type' => 'incoming_call',
@@ -51,6 +55,45 @@ class IncomingCallNotification extends Notification
                 'doctorProfilePicture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '', // Frontend expects this field name
                 'isIncomingCall' => 'true',
                 'click_action' => 'OPEN_CALL',
+                'categoryId' => 'incoming_call',
+                'priority' => 'high',
+                'fullScreenAction' => 'true',
+                'channelId' => 'calls',
+            ],
+            'android' => [
+                'priority' => 'high',
+                'notification' => [
+                    'channel_id' => 'calls',
+                    'priority' => 'high',
+                    'visibility' => 'public',
+                    'sound' => 'default',
+                    'vibrate_timings' => [0, 250, 250, 250],
+                    'light_settings' => [
+                        'color' => [
+                            'red' => 0.0,
+                            'green' => 0.0,
+                            'blue' => 1.0,
+                            'alpha' => 1.0,
+                        ],
+                        'light_on_duration' => '0.1s',
+                        'light_off_duration' => '0.1s',
+                    ],
+                    'tag' => 'incoming_call_' . ($this->callSession->appointment_id ?? $this->callSession->id),
+                ],
+            ],
+            'apns' => [
+                'payload' => [
+                    'aps' => [
+                        'alert' => [
+                            'title' => $callerName . ' - ' . ($callType === 'video' ? 'Video Call' : 'Voice Call'),
+                            'body' => 'Incoming call...',
+                        ],
+                        'sound' => 'default',
+                        'badge' => 1,
+                        'category' => 'incoming_call',
+                        'mutable-content' => 1,
+                    ],
+                ],
             ],
         ];
     }

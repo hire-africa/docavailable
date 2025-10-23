@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\PerformanceController;
 use App\Http\Controllers\DoctorWalletController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\TimezoneController;
 use App\Http\Controllers\DoctorController;
 use App\Http\Controllers\EncryptionController;
 use App\Http\Controllers\ChatController;
@@ -939,6 +940,11 @@ Route::middleware(['auth:api'])->group(function () {
     // User privacy settings (frontend expects this structure)
     Route::get('/user/privacy-settings', [NotificationController::class, 'getPrivacySettings']);
     Route::patch('/user/privacy-settings', [NotificationController::class, 'updatePrivacySettings']);
+    
+    // Timezone detection routes
+    Route::get('/user/timezone-from-ip', [TimezoneController::class, 'getTimezoneFromIP']);
+    Route::post('/user/timezone-from-coordinates', [TimezoneController::class, 'getTimezoneFromCoordinates']);
+    Route::get('/user/common-timezones', [TimezoneController::class, 'getCommonTimezones']);
 
     // Chat routes
     Route::get('/chat/{appointmentId}/messages', [ChatController::class, 'getMessages']);
@@ -1006,6 +1012,8 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
     Route::post('/call-sessions/re-notify', [App\Http\Controllers\CallSessionController::class, 'reNotify']);
+    Route::post('/call-sessions/answer', [App\Http\Controllers\CallSessionController::class, 'answer']);
+    Route::post('/call-sessions/decline', [App\Http\Controllers\CallSessionController::class, 'decline']);
 
     // Debug: Tail laravel.log (last 200 lines)
     Route::get('/debug/log-tail', function () {

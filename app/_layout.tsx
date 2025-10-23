@@ -4,6 +4,7 @@ import { AndroidImportance, AndroidNotificationVisibility } from 'expo-notificat
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import PermissionWrapper from '../components/PermissionWrapper';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
 import { routeIncomingCall } from '../utils/callRouter';
@@ -25,7 +26,7 @@ export default function RootLayout() {
     // Configure Android notification channels and default handler
     (async () => {
       try {
-        // Calls channel
+        // Calls channel - Enhanced for WhatsApp-like behavior
         await Notifications.setNotificationChannelAsync('calls', {
           name: 'Calls',
           importance: AndroidImportance.MAX,
@@ -33,6 +34,9 @@ export default function RootLayout() {
           vibrationPattern: [0, 250, 250, 250],
           bypassDnd: true,
           lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+          enableLights: true,
+          enableVibrate: true,
+          showBadge: true,
         });
 
         // Messages channel
@@ -53,19 +57,60 @@ export default function RootLayout() {
           lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
         });
 
+        // Set up notification categories for call actions
+        await Notifications.setNotificationCategoryAsync('incoming_call', [
+          {
+            identifier: 'ANSWER_CALL',
+            buttonTitle: 'Answer',
+            options: {
+              isDestructive: false,
+              isAuthenticationRequired: false,
+            },
+          },
+          {
+            identifier: 'DECLINE_CALL',
+            buttonTitle: 'Decline',
+            options: {
+              isDestructive: true,
+              isAuthenticationRequired: false,
+            },
+          },
+        ]);
+
         // Default notification handler - always show pop-ups
         Notifications.setNotificationHandler({
           handleNotification: async (notification) => {
             const data = notification.request.content.data || {};
             const type = (data.type || '').toString();
 
-            // Always show pop-up notifications for all types
+            console.log('🔔 [NotificationHandler] Processing notification:', {
+              type,
+              title: notification.request.content.title,
+              data
+            });
+
+            // For incoming calls, show as full-screen notification
+            if (type === 'incoming_call') {
+              console.log('📞 [NotificationHandler] Incoming call notification - showing popup');
+              return {
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: false,
+                shouldShowBanner: true,
+                shouldShowList: true,
+                priority: Notifications.AndroidNotificationPriority.MAX,
+              };
+            }
+
+            // Always show pop-up notifications for all other types
+            console.log('🔔 [NotificationHandler] Regular notification - showing popup');
             return {
               shouldShowAlert: true,
               shouldPlaySound: true,
               shouldSetBadge: false,
               shouldShowBanner: true,
               shouldShowList: true,
+              priority: Notifications.AndroidNotificationPriority.HIGH,
             };
           }
         });
@@ -100,8 +145,30 @@ export default function RootLayout() {
 
         console.log('🔔 [Foreground] Received notification:', { type, data, notification });
 
-        // For incoming calls, route immediately
+        // For incoming calls, show enhanced notification and route
         if (type === 'incoming_call') {
+          const callerName = data.doctor_name || data.doctorName || 'Unknown Caller';
+          const callType = data.call_type === 'video' ? 'Video Call' : 'Voice Call';
+          
+          // Show enhanced call notification
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `${callerName} - ${callType}`,
+              body: 'Incoming call...',
+              data: {
+                ...data,
+                categoryId: 'incoming_call',
+                priority: 'high',
+                fullScreenAction: true
+              },
+              sound: 'default',
+              priority: Notifications.AndroidNotificationPriority.HIGH,
+              vibrate: [0, 250, 250, 250],
+            },
+            trigger: null,
+          });
+          
+          // Also route to call screen
           routeIncomingCall(router, data);
           return;
         }
@@ -164,7 +231,10 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <Stack>
+        <PermissionWrapper onPermissionComplete={(allEssentialGranted) => {
+          console.log('Permission flow completed. All essential granted:', allEssentialGranted);
+        }}>
+          <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
           <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
@@ -208,7 +278,8 @@ export default function RootLayout() {
           }} />
           <Stack.Screen name="test-webview" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-        </Stack>
+          </Stack>
+        </PermissionWrapper>
       </AuthProvider>
     </SafeAreaProvider>
   );

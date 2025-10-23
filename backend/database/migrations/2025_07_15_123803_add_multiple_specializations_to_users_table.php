@@ -12,9 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            // Add new columns for multiple specializations
-            $table->json('specializations')->nullable()->after('specialization');
-            $table->json('sub_specializations')->nullable()->after('sub_specialization');
+            // Add sub_specializations column only if it doesn't exist
+            // specializations column already exists from previous migration
+            if (!Schema::hasColumn('users', 'sub_specializations')) {
+                $table->json('sub_specializations')->nullable()->after('sub_specialization');
+            }
         });
     }
 
@@ -24,7 +26,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['specializations', 'sub_specializations']);
+            // Only drop sub_specializations since specializations already exists
+            $table->dropColumn(['sub_specializations']);
         });
     }
 }; 

@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StyleSheet
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
+import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { apiService } from './services/apiService';
 
 const MyAppointments = () => {
@@ -206,19 +207,31 @@ const MyAppointments = () => {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
+  const formatDate = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return formatAppointmentDate({ appointment_date: appointment });
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentDate(appointment);
+    }
+    return 'No date provided';
   };
 
-  const formatTime = (timeStr: string) => {
-    if (!timeStr) return '';
-    return timeStr;
+  const formatTime = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return formatAppointmentTime({ appointment_time: appointment });
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentTime(appointment);
+    }
+    return 'No time provided';
+  };
+
+  const formatDateTime = (appointment: any) => {
+    if (typeof appointment === 'string') {
+      return `${formatDate(appointment)} • ${formatTime(appointment)}`;
+    } else if (appointment && typeof appointment === 'object') {
+      return formatAppointmentDateTime(appointment);
+    }
+    return 'No appointment data';
   };
 
   const renderAppointment = (appt: any, keyPrefix: string) => {
@@ -244,7 +257,7 @@ const MyAppointments = () => {
         <View style={{flex: 1}}>
           <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{appt.doctorName}</Text>
           <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>
-            {formatDate(appt.appointment_date || appt.date)} • {formatTime(appt.appointment_time || appt.time)}
+            {formatDateTime(appt)}
           </Text>
         </View>
         <View style={{alignItems: 'flex-end'}}>
@@ -329,7 +342,7 @@ const MyAppointments = () => {
                 <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
                   <Text style={{ color: '#4CAF50', marginBottom: 4 }}>
-                    {formatDate(selectedAppointment.appointment_date || selectedAppointment.date)} • {formatTime(selectedAppointment.appointment_time || selectedAppointment.time)}
+                    {formatDateTime(selectedAppointment)}
                   </Text>
                   {selectedAppointment.appointment_type && (
                     <View style={{ marginTop: 8 }}>

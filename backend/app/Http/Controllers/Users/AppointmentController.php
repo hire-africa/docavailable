@@ -204,11 +204,23 @@ class AppointmentController extends Controller
                 'doctor_name' => $doctor->first_name . ' ' . $doctor->last_name
             ]);
 
+            // Get user timezone for proper timezone handling
+            $userTimezone = $request->get('user_timezone') ?: 'UTC';
+            
+            // Convert appointment time to UTC for storage
+            $utcDateTime = \App\Services\TimezoneService::convertToUTC(
+                $request->appointment_date, 
+                $request->appointment_time, 
+                $userTimezone
+            );
+
             $appointmentData = [
                 'patient_id' => auth()->user()->id,
                 'doctor_id' => $request->doctor_id,
-                'appointment_date' => $request->appointment_date,
-                'appointment_time' => $request->appointment_time,
+                'appointment_date' => $request->appointment_date,        // Keep old format for backward compatibility
+                'appointment_time' => $request->appointment_time,        // Keep old format for backward compatibility
+                'appointment_datetime_utc' => $utcDateTime,              // Add new UTC datetime
+                'user_timezone' => $userTimezone,                        // Add user timezone
                 'appointment_type' => $request->appointment_type ?? 'text',
                 'reason' => $request->reason ?? null,
                 'status' => $request->status ?? 0

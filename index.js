@@ -41,6 +41,9 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
       vibrationPattern: [0, 250, 250, 250],
       bypassDnd: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
     });
 
     await Notifications.setNotificationChannelAsync('messages', {
@@ -61,43 +64,76 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
 
     // Handle different notification types
     if (type === 'incoming_call') {
+      // Create WhatsApp-like call notification with actions
+      const callerName = data.doctor_name || data.doctorName || 'Unknown Caller';
+      const callType = data.call_type === 'video' ? 'Video Call' : 'Voice Call';
+      
+      console.log('📞 [BackgroundHandler] Creating incoming call notification:', {
+        callerName,
+        callType,
+        data
+      });
+      
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: data.call_type === 'video' ? 'Incoming video call' : 'Incoming audio call',
-          body: 'Tap to answer',
-          data,
+          title: `${callerName} - ${callType}`,
+          body: 'Incoming call...',
+          data: {
+            ...data,
+            categoryId: 'incoming_call',
+            priority: 'high',
+            fullScreenAction: true
+          },
           sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          vibrate: [0, 250, 250, 250],
+          channelId: 'calls',
+          // Add caller profile picture if available
+          ...(data.doctor_profile_picture && {
+            attachments: [{
+              url: data.doctor_profile_picture,
+              type: 'image'
+            }]
+          })
         },
         trigger: null,
       });
     } else if (type === 'chat_message' || type === 'new_message') {
+      console.log('💬 [BackgroundHandler] Creating message notification');
       await Notifications.scheduleNotificationAsync({
         content: {
           title: notification.title || 'New Message',
           body: notification.body || 'You have a new message',
           data,
           sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          channelId: 'messages',
         },
         trigger: null,
       });
     } else if (type.includes('appointment') || type.includes('session')) {
+      console.log('📅 [BackgroundHandler] Creating appointment notification');
       await Notifications.scheduleNotificationAsync({
         content: {
           title: notification.title || 'Appointment Update',
           body: notification.body || 'You have an appointment update',
           data,
           sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+          channelId: 'appointments',
         },
         trigger: null,
       });
     } else {
       // Generic notification for other types
+      console.log('🔔 [BackgroundHandler] Creating generic notification');
       await Notifications.scheduleNotificationAsync({
         content: {
           title: notification.title || 'DocAvailable',
           body: notification.body || 'You have a new notification',
           data,
           sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
         },
         trigger: null,
       });

@@ -15,6 +15,8 @@ class Appointment extends Model
         'doctor_id',
         'appointment_date',
         'appointment_time',
+        'appointment_datetime_utc',    // Add new UTC datetime field
+        'user_timezone',               // Add user timezone field
         'appointment_type',
         'duration_minutes',
         'status',
@@ -122,5 +124,39 @@ class Appointment extends Model
     {
         $normalizedStatus = $this->normalized_status;
         return in_array($normalizedStatus, [self::STATUS_PENDING, self::STATUS_CANCELLED]);
+    }
+
+    /**
+     * Get appointment datetime in user's timezone
+     */
+    public function getLocalDateTimeAttribute()
+    {
+        if ($this->appointment_datetime_utc && $this->user_timezone) {
+            return \App\Services\TimezoneService::convertFromUTC(
+                \Carbon\Carbon::parse($this->appointment_datetime_utc),
+                $this->user_timezone
+            );
+        }
+        
+        // Fallback to old format for backward compatibility
+        return \Carbon\Carbon::parse($this->appointment_date . ' ' . $this->appointment_time);
+    }
+
+    /**
+     * Get appointment time in user's timezone for display
+     */
+    public function getLocalTimeAttribute()
+    {
+        $localDateTime = $this->local_date_time;
+        return $localDateTime->format('H:i');
+    }
+
+    /**
+     * Get appointment date in user's timezone for display
+     */
+    public function getLocalDateAttribute()
+    {
+        $localDateTime = $this->local_date_time;
+        return $localDateTime->format('Y-m-d');
     }
 }

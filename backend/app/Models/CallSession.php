@@ -25,12 +25,19 @@ class CallSession extends Model
         'is_connected',
         'call_duration',
         'auto_deductions_processed',
+        'answered_at',
+        'answered_by',
+        'declined_at',
+        'declined_by',
+        'decline_reason',
     ];
 
     protected $casts = [
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
         'last_activity_at' => 'datetime',
+        'answered_at' => 'datetime',
+        'declined_at' => 'datetime',
         'is_connected' => 'boolean',
         'call_duration' => 'integer',
     ];
@@ -41,6 +48,9 @@ class CallSession extends Model
     const STATUS_EXPIRED = 'expired';
     const STATUS_WAITING_FOR_DOCTOR = 'waiting_for_doctor';
     const STATUS_CONNECTING = 'connecting';
+    const STATUS_PENDING = 'pending';
+    const STATUS_ANSWERED = 'answered';
+    const STATUS_DECLINED = 'declined';
 
     // Call type constants
     const CALL_TYPE_VOICE = 'voice';
