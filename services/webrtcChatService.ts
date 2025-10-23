@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatConfig, ChatEvents, ChatMessage } from '../types/chat';
 import { imageService } from './imageService';
+import { mediaUploadQueueService } from './mediaUploadQueueService';
 import { voiceRecordingService } from './voiceRecordingService';
 
 export class WebRTCChatService {
@@ -80,8 +81,11 @@ export class WebRTCChatService {
         // Load existing messages first
         await this.loadMessages();
         
+        // Initialize media upload queue service
+        await mediaUploadQueueService.initialize();
+        
         const token = await this.getAuthToken();
-const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
+const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/chat-signaling';
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
@@ -505,6 +509,147 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send image message:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Send image message using enhanced service with queue
+   */
+  async sendImageMessageWithQueue(imageUri: string, appointmentId: number | string): Promise<{ success: boolean; tempId?: string; error?: string }> {
+    try {
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (typeof appointmentId === 'string' && appointmentId.startsWith('text_session_')) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      // Import enhanced image service
+      const { enhancedImageService } = await import('./enhancedImageService');
+      
+      // Add to upload queue
+      const result = await enhancedImageService.pickAndQueueImage(numericAppointmentId);
+      
+      if (result.success && result.tempId) {
+        // Create temporary message for immediate UI feedback
+        const tempMessage: ChatMessage = {
+          id: result.tempId,
+          sender_id: this.config.userId,
+          sender_name: this.config.userName,
+          message: 'Image uploading...',
+          message_type: 'image',
+          media_url: '',
+          created_at: new Date().toISOString(),
+          delivery_status: 'sending'
+        };
+        
+        await this.addMessage(tempMessage);
+        this.events.onMessage(tempMessage);
+        
+        // Subscribe to upload progress
+        enhancedImageService.subscribeToImageProgress(result.tempId, (progress) => {
+          this.handleUploadProgress(result.tempId!, progress);
+        });
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ [WebRTCChat] Failed to send image with queue:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send image'
+      };
+    }
+  }
+
+  /**
+   * Send voice message using enhanced service with queue
+   */
+  async sendVoiceMessageWithQueue(audioUri: string, appointmentId: number | string): Promise<{ success: boolean; tempId?: string; error?: string }> {
+    try {
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (typeof appointmentId === 'string' && appointmentId.startsWith('text_session_')) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      // Import enhanced voice service
+      const { enhancedVoiceService } = await import('./enhancedVoiceService');
+      
+      // Add to upload queue
+      const result = await enhancedVoiceService.stopRecordingAndQueue(numericAppointmentId);
+      
+      if (result.success && result.tempId) {
+        // Create temporary message for immediate UI feedback
+        const tempMessage: ChatMessage = {
+          id: result.tempId,
+          sender_id: this.config.userId,
+          sender_name: this.config.userName,
+          message: 'Voice uploading...',
+          message_type: 'voice',
+          media_url: '',
+          created_at: new Date().toISOString(),
+          delivery_status: 'sending'
+        };
+        
+        await this.addMessage(tempMessage);
+        this.events.onMessage(tempMessage);
+        
+        // Subscribe to upload progress
+        enhancedVoiceService.subscribeToVoiceProgress(result.tempId, (progress) => {
+          this.handleUploadProgress(result.tempId!, progress);
+        });
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ [WebRTCChat] Failed to send voice with queue:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to send voice message'
+      };
+    }
+  }
+
+  /**
+   * Handle upload progress updates
+   */
+  private handleUploadProgress(tempId: string, progress: any): void {
+    try {
+      // Find the temporary message and update its status
+      const messageIndex = this.messages.findIndex(msg => msg.id === tempId);
+      
+      if (messageIndex !== -1) {
+        const message = this.messages[messageIndex];
+        
+        switch (progress.status) {
+          case 'uploading':
+            message.delivery_status = 'sending';
+            message.message = `${progress.progress}% uploading...`;
+            break;
+          case 'completed':
+            message.delivery_status = 'sent';
+            message.message = progress.status === 'image' ? 'Image' : 'Voice message';
+            // Remove the temporary message as it will be replaced by the real message
+            this.messages.splice(messageIndex, 1);
+            break;
+          case 'failed':
+            message.delivery_status = 'sending';
+            message.message = `Upload failed: ${progress.error || 'Unknown error'}`;
+            break;
+        }
+        
+        // Save updated messages
+        this.saveMessages();
+        
+        // Notify UI of the update
+        this.events.onMessage(message);
+      }
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Error handling upload progress:', error);
     }
   }
 

@@ -5,17 +5,17 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback } from 'react';
 import {
-  BackHandler,
-  Image,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    BackHandler,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 
 const PendingApproval: React.FC = () => {
-  const { user, userData, refreshUserData } = useAuth();
+  const { user, userData } = useAuth();
 
   // Prevent back button navigation
   useFocusEffect(
@@ -30,11 +30,6 @@ const PendingApproval: React.FC = () => {
       return () => subscription.remove();
     }, [])
   );
-
-  const handleRefresh = async () => {
-    // console.log('PendingApproval: Manual refresh requested');
-    await refreshUserData();
-  };
 
   const handleGoHome = async () => {
     // console.log('PendingApproval: Signing out and navigating to home page');
@@ -62,20 +57,11 @@ const PendingApproval: React.FC = () => {
         <ThemedText type="title" style={styles.title}>Account Pending Approval</ThemedText>
         <ThemedText style={styles.message}>
           Your doctor account has been created and is awaiting admin approval.
-          You will receive an email once your account is approved.
+          You will receive an email at {userData?.email ?? 'your registered email'} once your account is approved.
         </ThemedText>
-        {/* Debug output */}
-        <View style={{ marginBottom: 16, alignItems: 'center' }}>
-          <ThemedText>Status: {userData?.status?.toString() ?? 'undefined'}</ThemedText>
-          <ThemedText>UserType: Doctor</ThemedText>
-          <ThemedText>Email: {userData?.email ?? 'undefined'}</ThemedText>
-        </View>
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={handleRefresh}>
-            <Text style={styles.buttonText}>Refresh Status</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleGoHome}>
-            <Text style={[styles.buttonText, styles.secondaryButtonText]}>Go to Home Page</Text>
+          <TouchableOpacity style={styles.button} onPress={handleGoHome}>
+            <Text style={styles.buttonText}>Go to Home Page</Text>
           </TouchableOpacity>
         </View>
       </ThemedView>

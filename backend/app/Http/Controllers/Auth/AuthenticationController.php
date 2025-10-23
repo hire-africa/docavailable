@@ -160,30 +160,30 @@ class AuthenticationController extends Controller
                     }
                 } else {
                     // It's base64 data - process as before
-                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
-                    $image = base64_decode($image);
+                $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
+                $image = base64_decode($image);
+                
+                // Debug logging
+                \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
+                    'original_length' => strlen($request->profile_picture),
+                    'decoded_length' => $image ? strlen($image) : 0,
+                    'is_valid' => $image && strlen($image) > 100
+                ]);
+                
+                // Validate that the decoded data is not empty and is actually an image
+                if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
+                    // Compress image before storing
+                    $compressedImage = $this->compressImage($image);
                     
-                    // Debug logging
-                    \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
-                        'original_length' => strlen($request->profile_picture),
-                        'decoded_length' => $image ? strlen($image) : 0,
-                        'is_valid' => $image && strlen($image) > 100
-                    ]);
+                    $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+                    $path = 'profile_pictures/' . $filename;
                     
-                    // Validate that the decoded data is not empty and is actually an image
-                    if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
-                        // Compress image before storing
-                        $compressedImage = $this->compressImage($image);
-                        
-                        $filename = \Illuminate\Support\Str::uuid() . '.jpg';
-                        $path = 'profile_pictures/' . $filename;
-                        
-                        // Store compressed image in DigitalOcean Spaces
-                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
-                        
-                        // Get the public URL from DigitalOcean Spaces
-                        $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
-                        $profilePicturePath = $publicUrl;
+                    // Store compressed image in DigitalOcean Spaces
+                    \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                    
+                    // Get the public URL from DigitalOcean Spaces
+                    $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                    $profilePicturePath = $publicUrl;
                     }
                 }
             }
