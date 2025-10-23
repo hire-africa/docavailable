@@ -1902,7 +1902,27 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
 
   // Send message via WebRTC or fallback to backend API
   const sendMessage = async () => {
-    if (!newMessage.trim()) return;
+    console.log('📤 [ChatComponent] sendMessage function called with:', newMessage.trim());
+    console.log('📤 [ChatComponent] sendMessage conditions check:', {
+      hasMessage: !!newMessage.trim(),
+      sending,
+      sessionEnded,
+      sessionValid,
+      isInstantSession,
+      isSessionExpired,
+      hasPatientSentMessage,
+      hasDoctorResponded,
+      isSessionActivated,
+      isPatient,
+      isTextSession,
+      isAppointmentTime,
+      textAppointmentSessionActive: textAppointmentSession.isActive
+    });
+    
+    if (!newMessage.trim()) {
+      console.log('📤 [ChatComponent] sendMessage aborted - no message text');
+      return;
+    }
     
     // Check if session is valid before sending message
     if (!sessionValid) {
@@ -1953,7 +1973,14 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
       console.log('🔍 [ChatComponent] WebRTC chat service state:', {
         hasService: !!webrtcChatService,
         isWebRTCServiceActive: isWebRTCServiceActive,
-        serviceType: webrtcChatService ? typeof webrtcChatService : 'null'
+        serviceType: webrtcChatService ? typeof webrtcChatService : 'null',
+        connectionStatus: webrtcChatService ? webrtcChatService.getConnectionStatus() : 'N/A'
+      });
+      
+      console.log('🔍 [ChatComponent] WebRTC service details:', {
+        service: webrtcChatService,
+        hasSendMessage: webrtcChatService ? typeof webrtcChatService.sendMessage === 'function' : false,
+        isConnected: webrtcChatService ? webrtcChatService.getConnectionStatus() : false
       });
       
       if (webrtcChatService) {
@@ -1961,7 +1988,12 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
         console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
-          connectionStatus: webrtcChatService.getConnectionStatus()
+          connectionStatus: webrtcChatService.getConnectionStatus(),
+          isWebRTCServiceActive: isWebRTCServiceActive
+        });
+        console.log('🔍 [ChatComponent] WebRTC service details:', {
+          serviceType: typeof webrtcChatService,
+          hasSendMessage: typeof webrtcChatService.sendMessage === 'function'
         });
         try {
           const message = await webrtcChatService.sendMessage(newMessage.trim());
@@ -1995,6 +2027,11 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
           }
         } catch (webrtcError) {
           console.error('❌ [ChatComponent] WebRTC failed:', webrtcError);
+          console.error('❌ [ChatComponent] WebRTC error details:', {
+            message: webrtcError.message,
+            name: webrtcError.name,
+            stack: webrtcError.stack
+          });
           // Fallback to backend API
           console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
           await sendMessageViaBackendAPI();
@@ -2003,6 +2040,10 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
       } else {
         // Fallback to backend API
         console.log('📤 [ChatComponent] WebRTC not available, using backend API fallback');
+        console.log('📤 [ChatComponent] WebRTC service state when not available:', {
+          webrtcChatService: webrtcChatService,
+          isWebRTCServiceActive: isWebRTCServiceActive
+        });
         await sendMessageViaBackendAPI();
       }
     } catch (error) {

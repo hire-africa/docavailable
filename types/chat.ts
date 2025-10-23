@@ -23,9 +23,10 @@ export interface ChatConfig {
   userId: number;
   userName: string;
   apiKey: string;
-  sessionType?: 'appointment' | 'text_session';
+  sessionType?: 'appointment' | 'text_session' | 'instant';
   webrtcConfig?: {
     signalingUrl: string;
+    chatSignalingUrl: string;
   };
 }
 

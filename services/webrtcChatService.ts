@@ -16,7 +16,7 @@ export class WebRTCChatService {
   private storageKey: string;
   private processedMessageHashes: Set<string> = new Set();
   private onTypingIndicator?: (isTyping: boolean) => void;
-  private healthCheckInterval: NodeJS.Timeout | null = null;
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private lastPingTime = 0;
   private pingTimeout = 30000; // 30 seconds
 
@@ -214,7 +214,7 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
               }
             } else if (data.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
-              this.onTypingIndicator?.(data.isTyping, data.senderId);
+              this.onTypingIndicator?.(data.isTyping);
             } else if (data.type === 'pong') {
               // Update last ping time when we receive pong
               this.lastPingTime = Date.now();
@@ -228,13 +228,14 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
         this.websocket.onerror = (error) => {
           console.error('❌ [WebRTCChat] WebRTC chat error:', error);
           console.error('❌ [WebRTCChat] Error details:', {
-            type: error.type,
-            target: error.target?.url,
-            readyState: error.target?.readyState
+            type: (error as any).type,
+            target: (error as any).target?.url,
+            readyState: (error as any).target?.readyState
           });
           
           // Check if it's a connection error (HTTP 200 instead of 101)
-          if (error.message && error.message.includes('Expected HTTP 101')) {
+          const errorMessage = (error as any).message;
+          if (errorMessage && errorMessage.includes('Expected HTTP 101')) {
             console.error('❌ [WebRTCChat] WebSocket server not properly configured - getting HTTP 200 instead of 101');
             this.events.onError('WebSocket server not available. Using fallback mode.');
             // Don't try to reconnect if server is misconfigured
@@ -243,11 +244,11 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
           }
           
           // Handle SSL/TLS connection errors with retry logic
-          if (error.message && (
-            error.message.includes('Connection reset by peer') ||
-            error.message.includes('ssl') ||
-            error.message.includes('TLS') ||
-            error.message.includes('SSL')
+          if (errorMessage && (
+            errorMessage.includes('Connection reset by peer') ||
+            errorMessage.includes('ssl') ||
+            errorMessage.includes('TLS') ||
+            errorMessage.includes('SSL')
           )) {
             console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected, will retry...');
             this.events.onError('Connection error, retrying...');
@@ -285,7 +286,21 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
   }
 
   async sendMessage(message: string): Promise<ChatMessage | null> {
-    if (!this.isConnected || !this.websocket) {
+    console.log('📤 [WebRTCChat] sendMessage called with:', message);
+    console.log('📤 [WebRTCChat] Connection status:', {
+      isConnected: this.isConnected,
+      hasWebSocket: !!this.websocket,
+      websocketState: this.websocket?.readyState,
+      isWebSocketOpen: this.websocket?.readyState === WebSocket.OPEN
+    });
+    
+    if (!this.isConnected || !this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      console.error('❌ [WebRTCChat] WebRTC chat not connected - cannot send message', {
+        isConnected: this.isConnected,
+        hasWebSocket: !!this.websocket,
+        websocketState: this.websocket?.readyState,
+        expectedState: WebSocket.OPEN
+      });
       throw new Error('WebRTC chat not connected');
     }
 
@@ -351,7 +366,13 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
   }
 
   async sendVoiceMessage(audioUri: string, appointmentId: number | string): Promise<ChatMessage | null> {
-    if (!this.isConnected || !this.websocket) {
+    if (!this.isConnected || !this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      console.error('❌ [WebRTCChat] WebRTC chat not connected for voice message', {
+        isConnected: this.isConnected,
+        hasWebSocket: !!this.websocket,
+        websocketState: this.websocket?.readyState,
+        expectedState: WebSocket.OPEN
+      });
       throw new Error('WebRTC chat not connected');
     }
 
@@ -448,7 +469,13 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
   }
 
   async sendImageMessage(imageUri: string, appointmentId: number | string): Promise<ChatMessage | null> {
-    if (!this.isConnected || !this.websocket) {
+    if (!this.isConnected || !this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+      console.error('❌ [WebRTCChat] WebRTC chat not connected for image message', {
+        isConnected: this.isConnected,
+        hasWebSocket: !!this.websocket,
+        websocketState: this.websocket?.readyState,
+        expectedState: WebSocket.OPEN
+      });
       throw new Error('WebRTC chat not connected');
     }
 
@@ -823,7 +850,7 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
   }
 
   getConnectionStatus(): boolean {
-    return this.isConnected;
+    return this.isConnected && this.websocket && this.websocket.readyState === WebSocket.OPEN;
   }
 
   private startHealthCheck(): void {
