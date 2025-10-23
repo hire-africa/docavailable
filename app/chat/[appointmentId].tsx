@@ -2691,6 +2691,64 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     router.back();
   };
 
+  // Image and camera picker functions
+  const handleImagePicker = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        console.log('📷 [ImagePicker] Image selected:', imageUri);
+        
+        if (webrtcChatService) {
+          console.log('📤 [ImagePicker] Sending image via WebRTC');
+          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+          if (message) {
+            console.log('✅ [ImagePicker] Image sent via WebRTC:', message.id);
+          }
+        } else {
+          console.log('📤 [ImagePicker] WebRTC not available, using backend API');
+          // Fallback to backend API if needed
+        }
+      }
+    } catch (error) {
+      console.error('❌ [ImagePicker] Error selecting image:', error);
+    }
+  };
+
+  const handleCameraPicker = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        console.log('📷 [CameraPicker] Photo taken:', imageUri);
+        
+        if (webrtcChatService) {
+          console.log('📤 [CameraPicker] Sending photo via WebRTC');
+          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+          if (message) {
+            console.log('✅ [CameraPicker] Photo sent via WebRTC:', message.id);
+          }
+        } else {
+          console.log('📤 [CameraPicker] WebRTC not available, using backend API');
+          // Fallback to backend API if needed
+        }
+      }
+    } catch (error) {
+      console.error('❌ [CameraPicker] Error taking photo:', error);
+    }
+  };
+
   // Voice recording functions
   const startRecording = async () => {
     try {
@@ -3519,30 +3577,98 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
-          {/* Image Button - DISABLED */}
+          {/* Image Button */}
           <TouchableOpacity
-            onPress={() => {}} // FIX: Disabled image/gallery functionality
-            disabled={true} // FIX: Always disabled
+            onPress={handleImagePicker}
+            disabled={
+              sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+            }
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: 0.3, // FIX: Always grayed out
+              opacity: (sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="image" size={24} color="#999" /> {/* FIX: Grayed out icon */}
+            <Ionicons name="image" size={24} color={(sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : "#4CAF50"} />
           </TouchableOpacity>
           
-          {/* Camera Button - DISABLED */}
+          {/* Camera Button */}
           <TouchableOpacity
-            onPress={() => {}} // FIX: Disabled camera functionality
-            disabled={true} // FIX: Always disabled
+            onPress={handleCameraPicker}
+            disabled={
+              sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+            }
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: 0.3, // FIX: Always grayed out
+              opacity: (sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="camera" size={24} color="#999" /> {/* FIX: Grayed out icon */}
+            <Ionicons name="camera" size={24} color={(sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : "#4CAF50"} />
+          </TouchableOpacity>
+          
+          {/* Voice Recording Button */}
+          <TouchableOpacity
+            onPress={isRecording ? stopRecording : startRecording}
+            disabled={
+              sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+            }
+            style={{
+              padding: 8,
+              marginRight: 8,
+              opacity: (sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+            }}
+          >
+            <Ionicons 
+              name={isRecording ? "stop" : "mic"} 
+              size={24} 
+              color={(sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")} 
+            />
           </TouchableOpacity>
           
           <TextInput
@@ -3600,8 +3726,103 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           </TouchableOpacity>
         </View>
 
-        {/* Voice Recording Interface - DISABLED */}
-        {/* Voice recording functionality has been disabled */}
+        {/* Voice Recording Interface */}
+        {isRecording && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 16,
+            backgroundColor: '#f0f0f0',
+            borderTopWidth: 1,
+            borderTopColor: '#e0e0e0'
+          }}>
+            <View style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center'
+            }}>
+              <View style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: '#ff4444',
+                marginRight: 12
+              }} />
+              <Text style={{
+                fontSize: 16,
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={stopRecording}
+              style={{
+                padding: 8,
+                backgroundColor: '#ff4444',
+                borderRadius: 20
+              }}
+            >
+              <Ionicons name="stop" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
+        
+        {recordingUri && !isRecording && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 16,
+            backgroundColor: '#f0f0f0',
+            borderTopWidth: 1,
+            borderTopColor: '#e0e0e0'
+          }}>
+            <View style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center'
+            }}>
+              <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 12 }} />
+              <Text style={{
+                fontSize: 16,
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                Voice message ready
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={sendVoiceMessage}
+              disabled={sendingVoiceMessage}
+              style={{
+                padding: 8,
+                backgroundColor: sendingVoiceMessage ? '#ccc' : '#4CAF50',
+                borderRadius: 20,
+                marginRight: 8
+              }}
+            >
+              {sendingVoiceMessage ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Ionicons name="send" size={20} color="white" />
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setRecordingUri(null);
+                setRecordingDuration(0);
+              }}
+              style={{
+                padding: 8,
+                backgroundColor: '#ff4444',
+                borderRadius: 20
+              }}
+            >
+              <Ionicons name="close" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* End Session Modal */}
