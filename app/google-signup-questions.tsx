@@ -191,7 +191,7 @@ export default function GoogleSignupQuestions() {
       const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
       
       if (profilePictureToUpload) {
-        if (answers.profile_picture) {
+      if (answers.profile_picture) {
           // Manually selected image - upload via separate endpoint like edit profile
           try {
             console.log('🔐 Google Signup: Uploading manually selected profile picture via separate endpoint...');
@@ -213,22 +213,22 @@ export default function GoogleSignupQuestions() {
             const formData = new FormData();
             formData.append('profile_picture', base64);
             
-            const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: JSON.stringify({
+          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
                 profile_picture: base64
-              })
-            });
-            
-            const uploadData = await uploadResponse.json();
-            if (uploadData.success && uploadData.data?.profile_picture_url) {
-              profilePictureUrl = uploadData.data.profile_picture_url;
-              console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
-            } else {
+            })
+          });
+          
+          const uploadData = await uploadResponse.json();
+          if (uploadData.success && uploadData.data?.profile_picture_url) {
+            profilePictureUrl = uploadData.data.profile_picture_url;
+            console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
+          } else {
               console.warn('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
             }
           } catch (uploadError) {
@@ -324,9 +324,9 @@ export default function GoogleSignupQuestions() {
         ...parsedGoogleUser,
         ...answers,
         profile_picture: profilePictureUrl, // Send uploaded URL or Google URL directly
-        national_id_passport: nationalIdBase64, // Use correct field name
-        highest_medical_certificate: medicalDegreeBase64, // Use correct field name
-        specialist_certificate: medicalLicenceBase64, // Use correct field name
+        national_id: nationalIdBase64, // Use correct field name
+        medical_degree: medicalDegreeBase64, // Use correct field name
+        medical_licence: medicalLicenceBase64, // Use correct field name
         password: `google_user_${parsedGoogleUser.google_id}`,
         password_confirmation: `google_user_${parsedGoogleUser.google_id}`,
         user_type: parsedGoogleUser.user_type,
@@ -338,9 +338,9 @@ export default function GoogleSignupQuestions() {
       console.log('🔐 Google Signup: Complete user data for registration:', {
         ...completeUserData,
         profile_picture: profilePictureUrl ? (profilePictureUrl.startsWith('data:') ? 'base64 data' : 'URL') : 'none',
-        national_id_passport: nationalIdBase64 ? 'base64 data' : 'none',
-        highest_medical_certificate: medicalDegreeBase64 ? 'base64 data' : 'none',
-        specialist_certificate: medicalLicenceBase64 ? 'base64 data' : 'none',
+        national_id: nationalIdBase64 ? 'base64 data' : 'none',
+        medical_degree: medicalDegreeBase64 ? 'base64 data' : 'none',
+        medical_licence: medicalLicenceBase64 ? 'base64 data' : 'none',
         hasProfilePicture: !!profilePictureUrl,
         hasNationalId: !!nationalIdBase64,
         hasMedicalDegree: !!medicalDegreeBase64,
