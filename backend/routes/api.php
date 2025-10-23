@@ -908,9 +908,6 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/upload/chat-attachment', [FileUploadController::class, 'uploadChatAttachment']);
     Route::post('/upload/voice-message', [FileUploadController::class, 'uploadVoiceMessage']);
     
-    // Public upload routes (for registration process)
-    Route::post('/upload/profile-picture-public', [FileUploadController::class, 'uploadProfilePicturePublic']);
-    
     // Audio file serving route (no auth required for streaming)
     Route::get('/audio/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
     
@@ -1171,6 +1168,9 @@ Route::middleware(['auth:api'])->get('/debug/user-country', function () {
         'email' => $user->email
     ]);
 });
+
+// Public upload routes (for registration process - no auth required)
+Route::post('/upload/profile-picture-public', [FileUploadController::class, 'uploadProfilePicturePublic']);
 
 // Admin routes (admin only)
 Route::middleware(['auth:api', 'role:admin'])->group(function () {
