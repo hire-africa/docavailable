@@ -195,15 +195,15 @@ class AdminController extends Controller
         $doctorData['certificate_image'] = $doctor->medical_degree;
         $doctorData['license_image'] = $doctor->medical_licence;
         
-        // Add additional URLs for documents
+        // Add additional URLs for documents (stored in private spaces)
         if ($doctor->medical_degree) {
-            $doctorData['certificate_image_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->medical_degree);
+            $doctorData['certificate_image_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->medical_degree);
         }
         if ($doctor->medical_licence) {
-            $doctorData['license_image_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->medical_licence);
+            $doctorData['license_image_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->medical_licence);
         }
         if ($doctor->national_id) {
-            $doctorData['national_id_url'] = \Illuminate\Support\Facades\Storage::disk('public')->url($doctor->national_id);
+            $doctorData['national_id_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->national_id);
         }
         
         return response()->json([
