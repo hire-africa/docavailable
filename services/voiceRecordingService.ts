@@ -122,7 +122,7 @@ class VoiceRecordingService {
       const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
       const fileName = `voice_${uniqueId}.m4a`;
       
-      // Create the file object for FormData
+      // Create the file object for FormData - React Native format
       const fileObject = {
         uri: uri,
         type: 'audio/mp4',
@@ -131,6 +131,7 @@ class VoiceRecordingService {
       
       console.log('📤 File object for FormData:', fileObject);
       
+      // For React Native, we need to append the file object directly
       formData.append('file', fileObject as any);
       
       formData.append('appointment_id', appointmentId.toString());
@@ -146,17 +147,31 @@ class VoiceRecordingService {
         })),
       });
 
-      const response = await apiService.uploadFile('/upload/voice-message', formData);
-
-      console.log('📤 Voice message upload response:', response);
+      // Try using fetch directly with proper headers for file upload
+      const token = await AsyncStorage.getItem('auth_token');
+      const response = await fetch(`${apiService.baseURL}/upload/voice-message`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          // Don't set Content-Type for FormData, let the system set it with boundary
+        },
+        body: formData,
+      });
+      
+      const responseData = await response.json();
+      console.log('📤 Voice message upload response:', responseData);
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      }
 
       // Support multiple possible response shapes: { data: { media_url } } or { data: { url } } or flat { media_url | url }
-      const uploadedUrl = response?.data?.media_url || response?.data?.url || response?.media_url || response?.url;
-      if (response.success && uploadedUrl) {
+      const uploadedUrl = responseData?.data?.media_url || responseData?.data?.url || responseData?.media_url || responseData?.url;
+      if (responseData.success && uploadedUrl) {
         return uploadedUrl;
       }
 
-      console.error('❌ Voice message upload failed:', response);
+      console.error('❌ Voice message upload failed:', responseData);
       return null;
     } catch (error: any) {
       console.error('❌ Error uploading voice message:', error);

@@ -40,15 +40,20 @@ export default function ImageMessage({
   const getImageUrl = (uri: string) => {
     // If already a full URL or local file, return as-is
     if (uri.startsWith('http') || uri.startsWith('file://')) {
+      console.log('🖼️ ImageMessage: Using full URL:', uri);
       return uri;
     }
     // If it's an absolute path on device
     if (uri.startsWith('/')) {
-      return `file://${uri}`;
+      const fileUrl = `file://${uri}`;
+      console.log('🖼️ ImageMessage: Using file URL:', fileUrl);
+      return fileUrl;
     }
     // Otherwise, treat as relative path from backend and prefix with BASE_URL
     const needsSlash = uri.startsWith('/') ? '' : '/';
-    return `${environment.BASE_URL}${needsSlash}${uri}`;
+    const fullUrl = `${environment.BASE_URL}${needsSlash}${uri}`;
+    console.log('🖼️ ImageMessage: Constructed URL:', fullUrl, 'from base:', environment.BASE_URL, 'and uri:', uri);
+    return fullUrl;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);
@@ -65,7 +70,9 @@ export default function ImageMessage({
     setImageLoading(false);
   };
 
-  const handleImageError = () => {
+  const handleImageError = (error: any) => {
+    console.error('🖼️ ImageMessage: Image load error:', error);
+    console.error('🖼️ ImageMessage: Failed URL:', getImageUrl(imageUrl));
     setImageLoading(false);
     setImageError(true);
     

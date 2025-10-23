@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiService } from './apiService';
 
 export interface ImageUploadResult {
@@ -151,19 +152,35 @@ class ImageService {
         })),
       });
 
-      const response = await apiService.uploadFile('/upload/chat-image', formData);
+      // Try using fetch directly with proper headers for file upload
+      const token = await AsyncStorage.getItem('auth_token');
+      const response = await fetch(`${apiService.baseURL}/upload/chat-image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          // Don't set Content-Type for FormData, let the system set it with boundary
+        },
+        body: formData,
+      });
+      
+      const responseData = await response.json();
+      console.log('ImageService: Upload response data:', responseData);
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      }
 
-      if (response.success && response.data?.media_url) {
-        console.log('ImageService: Upload successful:', response.data.media_url);
+      if (responseData.success && responseData.data?.media_url) {
+        console.log('ImageService: Upload successful:', responseData.data.media_url);
         return {
           success: true,
-          mediaUrl: response.data.media_url,
+          mediaUrl: responseData.data.media_url,
         };
       } else {
-        console.error('ImageService: Upload failed:', response);
+        console.error('ImageService: Upload failed:', responseData);
         return {
           success: false,
-          error: response.message || 'Upload failed',
+          error: responseData.message || 'Upload failed',
         };
       }
     } catch (error: any) {
