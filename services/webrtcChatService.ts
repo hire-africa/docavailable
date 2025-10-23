@@ -85,7 +85,7 @@ export class WebRTCChatService {
         await mediaUploadQueueService.initialize();
         
         const token = await this.getAuthToken();
-const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/chat-signaling';
+const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
@@ -116,6 +116,7 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
             const data = JSON.parse(event.data);
             console.log('📨 [WebRTCChat] Message received:', data.type);
             console.log('📨 [WebRTCChat] Message data:', JSON.stringify(data, null, 2));
+            console.log('📨 [WebRTCChat] Raw event data:', event.data);
             
             // Handle session-ended messages for real-time notifications
             if (data.type === 'session-ended') {
@@ -323,7 +324,13 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
 
     try {
       console.log('📤 [WebRTCChat] Sending message:', messageId, 'to WebSocket with auth token');
+      console.log('📤 [WebRTCChat] Message data being sent:', JSON.stringify(messageData, null, 2));
+      console.log('📤 [WebRTCChat] WebSocket readyState before send:', this.websocket.readyState);
+      console.log('📤 [WebRTCChat] WebSocket URL:', this.websocket.url);
+      
       this.websocket.send(JSON.stringify(messageData));
+      console.log('✅ [WebRTCChat] Message sent to WebSocket successfully');
+      console.log('📤 [WebRTCChat] Message sent to server, waiting for forwarding to other participants...');
       
       // Ensure processedMessageHashes is initialized
       if (!this.processedMessageHashes) {
@@ -347,6 +354,37 @@ const base = this.config.webrtcConfig?.signalingUrl || 'wss://docavailable.org/c
       
       // Store the sent message locally and save to AsyncStorage
       await this.addMessage(chatMessage);
+      
+      // Also persist to backend API as fallback in case WebSocket forwarding fails
+      try {
+        const authToken = await this.getAuthToken();
+        if (authToken) {
+          const apiUrl = `${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`;
+          console.log('📤 [WebRTCChat] Persisting message to backend as fallback:', apiUrl);
+          const resp = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message: message,
+              message_type: 'text',
+              temp_id: messageId,
+            }),
+          });
+          if (!resp.ok) {
+            console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
+          } else {
+            const json = await resp.json().catch(() => null);
+            console.log('✅ [WebRTCChat] Backend persisted message:', json?.success);
+          }
+        } else {
+          console.warn('⚠️ [WebRTCChat] No auth token available to persist message to backend');
+        }
+      } catch (persistErr) {
+        console.warn('⚠️ [WebRTCChat] Failed to persist message to backend:', persistErr);
+      }
       
       // Trigger the onMessage event so the sender can see their own message immediately
       console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
