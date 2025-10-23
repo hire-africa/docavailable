@@ -158,8 +158,25 @@ class VoiceRecordingService {
         body: formData,
       });
       
-      const responseData = await response.json();
-      console.log('📤 Voice message upload response:', responseData);
+      // Check if response is JSON or HTML
+      const contentType = response.headers.get('content-type');
+      console.log('📤 Voice upload response headers:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: contentType,
+        contentLength: response.headers.get('content-length')
+      });
+      
+      let responseData;
+      if (contentType && contentType.includes('application/json')) {
+        responseData = await response.json();
+        console.log('📤 Voice message upload response:', responseData);
+      } else {
+        // Server returned HTML (likely an error page)
+        const htmlResponse = await response.text();
+        console.error('❌ Voice upload server returned HTML instead of JSON:', htmlResponse.substring(0, 500));
+        throw new Error(`Server returned HTML error page: ${response.status} ${response.statusText}`);
+      }
       
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.status} ${response.statusText}`);

@@ -4,6 +4,9 @@ import { environment } from '../config/environment';
 const baseURL = `${environment.LARAVEL_API_URL}/api`;
 
 class ApiService {
+  get baseURL() {
+    return baseURL;
+  }
   private async getAuthHeaders() {
     const token = await AsyncStorage.getItem('auth_token');
     return {
