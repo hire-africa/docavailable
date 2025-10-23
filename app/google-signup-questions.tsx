@@ -186,35 +186,41 @@ export default function GoogleSignupQuestions() {
   const handleComplete = async () => {
     setLoading(true);
     try {
-      // Convert profile picture to base64 like normal signup does
-      let profilePictureBase64 = null;
+      // Handle profile picture - convert manually selected to base64, send Google URL directly
+      let profilePictureData = null;
       const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
       
       if (profilePictureToUpload) {
-        try {
-          console.log('🔐 Google Signup: Converting profile picture to base64...');
-          console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
-          console.log('🔐 Google Signup: Profile picture source:', answers.profile_picture ? 'manually selected' : 'from Google');
-          
-          const response = await fetch(profilePictureToUpload);
-          const blob = await response.blob();
-          profilePictureBase64 = await Promise.race([
-            new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const base64String = reader.result as string;
-                resolve(base64String);
-              };
-              reader.readAsDataURL(blob);
-            }),
-            new Promise<string>((_, reject) => 
-              setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
-            )
-          ]);
-          console.log('🔐 Google Signup: Profile picture converted to base64, length:', profilePictureBase64.length);
-        } catch (conversionError) {
-          console.warn('🔐 Google Signup: Profile picture conversion failed:', conversionError);
-          // Continue without profile picture if conversion fails
+        if (answers.profile_picture) {
+          // Manually selected image - convert to base64
+          try {
+            console.log('🔐 Google Signup: Converting manually selected profile picture to base64...');
+            console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
+            
+            const response = await fetch(profilePictureToUpload);
+            const blob = await response.blob();
+            profilePictureData = await Promise.race([
+              new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const base64String = reader.result as string;
+                  resolve(base64String);
+                };
+                reader.readAsDataURL(blob);
+              }),
+              new Promise<string>((_, reject) => 
+                setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
+              )
+            ]);
+            console.log('🔐 Google Signup: Manually selected profile picture converted to base64, length:', profilePictureData.length);
+          } catch (conversionError) {
+            console.warn('🔐 Google Signup: Profile picture conversion failed:', conversionError);
+            // Continue without profile picture if conversion fails
+          }
+        } else {
+          // Google profile picture - send URL directly (backend will handle downloading)
+          console.log('🔐 Google Signup: Using Google profile picture URL directly:', profilePictureToUpload);
+          profilePictureData = profilePictureToUpload;
         }
       }
 
@@ -299,7 +305,7 @@ export default function GoogleSignupQuestions() {
       const completeUserData = {
         ...parsedGoogleUser,
         ...answers,
-        profile_picture: profilePictureBase64, // Send base64 data directly
+        profile_picture: profilePictureData, // Send base64 data or URL directly
         national_id_passport: nationalIdBase64, // Use correct field name
         highest_medical_certificate: medicalDegreeBase64, // Use correct field name
         specialist_certificate: medicalLicenceBase64, // Use correct field name
@@ -313,11 +319,11 @@ export default function GoogleSignupQuestions() {
 
       console.log('🔐 Google Signup: Complete user data for registration:', {
         ...completeUserData,
-        profile_picture: profilePictureBase64 ? 'base64 data' : 'none',
+        profile_picture: profilePictureData ? (profilePictureData.startsWith('data:') ? 'base64 data' : 'URL') : 'none',
         national_id_passport: nationalIdBase64 ? 'base64 data' : 'none',
         highest_medical_certificate: medicalDegreeBase64 ? 'base64 data' : 'none',
         specialist_certificate: medicalLicenceBase64 ? 'base64 data' : 'none',
-        hasProfilePicture: !!profilePictureBase64,
+        hasProfilePicture: !!profilePictureData,
         hasNationalId: !!nationalIdBase64,
         hasMedicalDegree: !!medicalDegreeBase64,
         hasMedicalLicence: !!medicalLicenceBase64
