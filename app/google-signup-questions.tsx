@@ -64,10 +64,15 @@ export default function GoogleSignupQuestions() {
 
   const handleAnswer = (value: any) => {
     if (currentField) {
-      setAnswers(prev => ({
-        ...prev,
-        [currentField.field]: value
-      }));
+      console.log('🔐 Google Signup: Setting answer for field:', currentField.field, 'value:', value);
+      setAnswers(prev => {
+        const newAnswers = {
+          ...prev,
+          [currentField.field]: value
+        };
+        console.log('🔐 Google Signup: Updated answers:', newAnswers);
+        return newAnswers;
+      });
     }
   };
 
@@ -103,6 +108,7 @@ export default function GoogleSignupQuestions() {
 
   const pickImage = async () => {
     try {
+      console.log('🔐 Google Signup: Starting image picker...');
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -111,7 +117,10 @@ export default function GoogleSignupQuestions() {
       });
 
       if (!result.canceled && result.assets[0]) {
+        console.log('🔐 Google Signup: Image selected:', result.assets[0].uri);
         handleAnswer(result.assets[0].uri);
+      } else {
+        console.log('🔐 Google Signup: Image picker cancelled');
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -140,10 +149,61 @@ export default function GoogleSignupQuestions() {
   const handleComplete = async () => {
     setLoading(true);
     try {
+      let profilePictureUrl = null;
+      
+      // Handle profile picture upload if one was selected
+      if (answers.profile_picture) {
+        try {
+          console.log('🔐 Google Signup: Uploading profile picture...');
+          
+          // Convert local URI to base64
+          const response = await fetch(answers.profile_picture);
+          const blob = await response.blob();
+          const reader = new FileReader();
+          
+          const base64Promise = new Promise<string>((resolve, reject) => {
+            reader.onload = () => {
+              const base64 = reader.result as string;
+              resolve(base64);
+            };
+            reader.onerror = reject;
+          });
+          
+          reader.readAsDataURL(blob);
+          const base64Image = await base64Promise;
+          
+          // Upload to backend
+          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+              profile_picture: base64Image
+            })
+          });
+          
+          const uploadData = await uploadResponse.json();
+          console.log('🔐 Google Signup: Profile picture upload response:', uploadData);
+          
+          if (uploadData.success && uploadData.data?.profile_picture_url) {
+            profilePictureUrl = uploadData.data.profile_picture_url;
+            console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
+          } else {
+            console.error('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
+          }
+        } catch (error) {
+          console.error('🔐 Google Signup: Error uploading profile picture:', error);
+          // Continue without profile picture rather than failing completely
+        }
+      }
+      
       // Create the complete user data
       const completeUserData = {
         ...parsedGoogleUser,
         ...answers,
+        profile_picture: profilePictureUrl, // Use the uploaded URL instead of local URI
         password: `google_user_${parsedGoogleUser.google_id}`,
         password_confirmation: `google_user_${parsedGoogleUser.google_id}`,
         user_type: parsedGoogleUser.user_type,

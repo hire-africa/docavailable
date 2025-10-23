@@ -42,22 +42,83 @@ export default function OAuthCallback() {
                     GOOGLE_OAUTH_CONFIG.discovery
                 );
 
+                console.log('🔐 OAuth Callback: Token response:', {
+                    hasAccessToken: !!tokenResponse.accessToken,
+                    hasIdToken: !!tokenResponse.idToken,
+                    scopes: tokenResponse.scopes
+                });
+
                 // Get user info from Google People API for additional data
                 const peopleApiResponse = await fetch(
                     `https://people.googleapis.com/v1/people/me?personFields=names,emailAddresses,birthdays,genders&access_token=${tokenResponse.accessToken}`
                 );
                 
+                console.log('🔐 OAuth Callback: People API response status:', peopleApiResponse.status);
+                
                 if (!peopleApiResponse.ok) {
-                    throw new Error('Failed to fetch user info from Google People API');
+                    const errorText = await peopleApiResponse.text();
+                    console.error('🔐 OAuth Callback: People API error:', errorText);
+                    console.log('🔐 OAuth Callback: Falling back to basic userinfo API');
+                    
+                    // Fallback to basic userinfo API
+                    const userInfoResponse = await fetch(
+                        `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenResponse.accessToken}`
+                    );
+                    
+                    if (!userInfoResponse.ok) {
+                        throw new Error('Failed to fetch user info from both People API and userinfo API');
+                    }
+                    
+                    const userInfo = await userInfoResponse.json();
+                    console.log('🔐 OAuth Callback: Fallback userinfo data:', userInfo);
+                    
+                    // Create a JWT-like token for your backend with basic info only
+                    const googleToken = {
+                        sub: userInfo.id,
+                        email: userInfo.email,
+                        name: userInfo.name,
+                        given_name: userInfo.given_name,
+                        family_name: userInfo.family_name,
+                        birthday: null, // Not available from basic API
+                        gender: null,  // Not available from basic API
+                    };
+                    
+                    console.log('🔐 OAuth Callback: Fallback Google token:', googleToken);
+                    
+                    // Send to your backend
+                    const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
+                    
+                    if (authState.success && authState.data.user) {
+                        const user = authState.data.user;
+                        
+                        if (user.user_type === 'admin') {
+                            router.replace('/admin-dashboard');
+                        } else if (user.user_type === 'doctor') {
+                            router.replace('/doctor-dashboard');
+                        } else {
+                            router.replace('/patient-dashboard');
+                        }
+                    } else {
+                        throw new Error('Authentication failed');
+                    }
+                    return;
                 }
                 
                 const peopleData = await peopleApiResponse.json();
+                console.log('🔐 OAuth Callback: People API data:', peopleData);
                 
                 // Extract data from People API response
                 const names = peopleData.names?.[0] || {};
                 const emailAddresses = peopleData.emailAddresses?.[0] || {};
                 const birthdays = peopleData.birthdays?.[0] || {};
                 const genders = peopleData.genders?.[0] || {};
+
+                console.log('🔐 OAuth Callback: Extracted data:', {
+                    names: names,
+                    emailAddresses: emailAddresses,
+                    birthdays: birthdays,
+                    genders: genders
+                });
 
                 // Create a JWT-like token for your backend
                 const googleToken = {
@@ -69,6 +130,8 @@ export default function OAuthCallback() {
                     birthday: birthdays.date ? `${birthdays.date.year}-${String(birthdays.date.month).padStart(2, '0')}-${String(birthdays.date.day).padStart(2, '0')}` : null,
                     gender: genders.value?.toLowerCase() || null,
                 };
+
+                console.log('🔐 OAuth Callback: Final Google token:', googleToken);
 
                 // Send to your backend
                 const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));

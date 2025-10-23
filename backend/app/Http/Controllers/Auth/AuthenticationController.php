@@ -1653,6 +1653,14 @@ class AuthenticationController extends Controller
             'profile_picture' => 'Profile Picture'
         ];
         
+        // Add birthday and gender back if they're not provided by Google
+        if (empty($googleUserData['date_of_birth'])) {
+            $requiredFields['date_of_birth'] = 'Date of Birth';
+        }
+        if (empty($googleUserData['gender'])) {
+            $requiredFields['gender'] = 'Gender';
+        }
+        
         // Check which fields are missing
         foreach ($requiredFields as $field => $label) {
             if (empty($googleUserData[$field])) {
