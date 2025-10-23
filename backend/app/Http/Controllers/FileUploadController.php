@@ -192,7 +192,12 @@ class FileUploadController extends Controller
                 // Compress and return as JPEG
                 return $image->encode('jpg', $quality);
             } else {
-                // Fallback: basic compression using GD
+                // Fallback: basic compression using GD (if available)
+                if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
+                    \Log::warning('GD extension not available, returning original image data');
+                    return $imageData; // Return original if GD is not available
+                }
+                
                 $sourceImage = imagecreatefromstring($imageData);
                 if (!$sourceImage) {
                     return $imageData; // Return original if GD fails
