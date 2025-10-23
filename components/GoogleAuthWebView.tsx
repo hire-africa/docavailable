@@ -29,7 +29,7 @@ export default function GoogleAuthWebView({
 
   // Google OAuth configuration
   const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
-  const scope = 'openid profile email';
+  const scope = 'openid profile email https://www.googleapis.com/auth/user.birthday.read https://www.googleapis.com/auth/user.gender.read';
   
   // Use a simple redirect URI that's more likely to work
   const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';

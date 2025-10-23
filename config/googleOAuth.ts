@@ -31,7 +31,9 @@ export const GOOGLE_OAUTH_CONFIG = {
   scopes: [
     'openid',
     'profile',
-    'email'
+    'email',
+    'https://www.googleapis.com/auth/user.birthday.read',
+    'https://www.googleapis.com/auth/user.gender.read'
   ],
   
   // Additional parameters

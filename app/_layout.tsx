@@ -4,7 +4,6 @@ import { AndroidImportance, AndroidNotificationVisibility } from 'expo-notificat
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import PermissionWrapper from '../components/PermissionWrapper';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
 import { routeIncomingCall } from '../utils/callRouter';
@@ -231,10 +230,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <PermissionWrapper onPermissionComplete={(allEssentialGranted) => {
-          console.log('Permission flow completed. All essential granted:', allEssentialGranted);
-        }}>
-          <Stack>
+        <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
           <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
@@ -278,8 +274,7 @@ export default function RootLayout() {
           }} />
           <Stack.Screen name="test-webview" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-          </Stack>
-        </PermissionWrapper>
+        </Stack>
       </AuthProvider>
     </SafeAreaProvider>
   );

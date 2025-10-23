@@ -511,9 +511,10 @@ class AuthenticationController extends Controller
                     'first_name' => $googleUser['given_name'] ?? explode(' ', $googleUser['name'])[0] ?? '',
                     'last_name' => $googleUser['family_name'] ?? implode(' ', array_slice(explode(' ', $googleUser['name']), 1)) ?? '',
                     'display_name' => $googleUser['name'] ?? '',
-                    'profile_picture' => $googleUser['picture'] ?? null,
                     'google_id' => $googleId,
                     'user_type' => $userType,
+                    'date_of_birth' => $googleUser['birthday'] ?? null,
+                    'gender' => $googleUser['gender'] ?? null,
                 ];
 
                 // Determine which fields are missing for the user type
@@ -691,9 +692,14 @@ class AuthenticationController extends Controller
                 'name' => $payload['name'] ?? '',
                 'given_name' => $payload['given_name'] ?? '',
                 'family_name' => $payload['family_name'] ?? '',
-                'picture' => $payload['picture'] ?? '',
                 'email_verified' => $payload['email_verified'] ?? false
             ];
+            
+            // Fetch additional data from Google People API if access token is available
+            $additionalData = $this->fetchGooglePeopleData($idToken);
+            if ($additionalData) {
+                $googleUser = array_merge($googleUser, $additionalData);
+            }
             
             // Validate required fields
             if (empty($googleUser['email']) || empty($googleUser['sub'])) {
@@ -725,6 +731,33 @@ class AuthenticationController extends Controller
                 'token' => substr($idToken, 0, 50) . '...'
             ]);
             return false;
+        }
+    }
+
+    /**
+     * Fetch additional user data from Google People API
+     */
+    private function fetchGooglePeopleData($idToken)
+    {
+        try {
+            // For now, we'll extract what we can from the ID token
+            // In a full implementation, you would exchange the ID token for an access token
+            // and then call the Google People API
+            
+            // The ID token doesn't contain birthday and gender by default
+            // You would need to implement OAuth flow to get access token for People API
+            // For now, return empty array - the frontend will handle the OAuth flow
+            
+            Log::info('Google People API data fetch - using ID token only', [
+                'note' => 'Birthday and gender will be fetched via OAuth flow in frontend'
+            ]);
+            
+            return [];
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch Google People API data', [
+                'error' => $e->getMessage()
+            ]);
+            return [];
         }
     }
 
@@ -1615,8 +1648,6 @@ class AuthenticationController extends Controller
         
         // Common required fields for all user types
         $requiredFields = [
-            'date_of_birth' => 'Date of Birth',
-            'gender' => 'Gender',
             'country' => 'Country',
             'city' => 'City',
             'profile_picture' => 'Profile Picture'
@@ -1624,8 +1655,7 @@ class AuthenticationController extends Controller
         
         // Check which fields are missing
         foreach ($requiredFields as $field => $label) {
-            // Always ask for profile picture selection, even if Google provides one
-            if ($field === 'profile_picture' || empty($googleUserData[$field])) {
+            if (empty($googleUserData[$field])) {
                 $missingFields[] = [
                     'field' => $field,
                     'label' => $label,

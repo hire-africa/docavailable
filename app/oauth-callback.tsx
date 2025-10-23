@@ -2,7 +2,7 @@ import * as AuthSession from 'expo-auth-session';
 import { router } from 'expo-router';
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
-import { GOOGLE_API_ENDPOINTS, GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
+import { GOOGLE_OAUTH_CONFIG } from '../config/googleOAuth';
 import authService from '../services/authService';
 
 export default function OAuthCallback() {
@@ -42,25 +42,32 @@ export default function OAuthCallback() {
                     GOOGLE_OAUTH_CONFIG.discovery
                 );
 
-                // Get user info from Google
-                const userInfoResponse = await fetch(
-                    `${GOOGLE_API_ENDPOINTS.userInfo}?access_token=${tokenResponse.accessToken}`
+                // Get user info from Google People API for additional data
+                const peopleApiResponse = await fetch(
+                    `https://people.googleapis.com/v1/people/me?personFields=names,emailAddresses,birthdays,genders&access_token=${tokenResponse.accessToken}`
                 );
                 
-                if (!userInfoResponse.ok) {
-                    throw new Error('Failed to fetch user info from Google');
+                if (!peopleApiResponse.ok) {
+                    throw new Error('Failed to fetch user info from Google People API');
                 }
                 
-                const userInfo = await userInfoResponse.json();
+                const peopleData = await peopleApiResponse.json();
+                
+                // Extract data from People API response
+                const names = peopleData.names?.[0] || {};
+                const emailAddresses = peopleData.emailAddresses?.[0] || {};
+                const birthdays = peopleData.birthdays?.[0] || {};
+                const genders = peopleData.genders?.[0] || {};
 
                 // Create a JWT-like token for your backend
                 const googleToken = {
-                    sub: userInfo.id,
-                    email: userInfo.email,
-                    name: userInfo.name,
-                    given_name: userInfo.given_name,
-                    family_name: userInfo.family_name,
-                    picture: userInfo.picture,
+                    sub: names.metadata?.source?.id || emailAddresses.metadata?.source?.id,
+                    email: emailAddresses.value,
+                    name: names.displayName,
+                    given_name: names.givenName,
+                    family_name: names.familyName,
+                    birthday: birthdays.date ? `${birthdays.date.year}-${String(birthdays.date.month).padStart(2, '0')}-${String(birthdays.date.day).padStart(2, '0')}` : null,
+                    gender: genders.value?.toLowerCase() || null,
                 };
 
                 // Send to your backend

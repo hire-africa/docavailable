@@ -31,7 +31,7 @@ export default function SmartGoogleAuth({
 
   // Google OAuth configuration
   const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
-  const scope = 'openid profile email';
+  const scope = 'openid profile email https://www.googleapis.com/auth/user.birthday.read https://www.googleapis.com/auth/user.gender.read';
   
   // Generate redirect URI for deep linking
   const redirectUri = AuthSession.makeRedirectUri({

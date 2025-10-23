@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Calendar from 'expo-calendar';
-import * as Camera from 'expo-camera';
-import * as Contacts from 'expo-contacts';
-import * as Location from 'expo-location';
-import * as MediaLibrary from 'expo-media-library';
+// import * as Calendar from 'expo-calendar';
+// import * as Camera from 'expo-camera';
+// import * as Contacts from 'expo-contacts';
+// import * as Location from 'expo-location';
+// import * as MediaLibrary from 'expo-media-library';
 import * as Notifications from 'expo-notifications';
 import { Alert, Linking, Platform } from 'react-native';
 import { check, PERMISSIONS, PermissionStatus, request, RESULTS } from 'react-native-permissions';
@@ -191,12 +191,12 @@ export class PermissionManager {
 
       switch (permissionKey) {
         case 'camera':
-          status = await Camera.requestCameraPermissionsAsync();
-          return { granted: status.granted, canAskAgain: status.canAskAgain };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'microphone':
-          status = await Camera.requestMicrophonePermissionsAsync();
-          return { granted: status.granted, canAskAgain: status.canAskAgain };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'notifications':
           const { status: notificationStatus } = await Notifications.getPermissionsAsync();
@@ -227,20 +227,20 @@ export class PermissionManager {
           return { granted: true, canAskAgain: true };
         
         case 'location':
-          const { status: locationStatus } = await Location.getForegroundPermissionsAsync();
-          return { granted: locationStatus === 'granted', canAskAgain: locationStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'media_library':
-          const { status: mediaStatus } = await MediaLibrary.getPermissionsAsync();
-          return { granted: mediaStatus === 'granted', canAskAgain: mediaStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'contacts':
-          const { status: contactsStatus } = await Contacts.getPermissionsAsync();
-          return { granted: contactsStatus === 'granted', canAskAgain: contactsStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'calendar':
-          const { status: calendarStatus } = await Calendar.getCalendarPermissionsAsync();
-          return { granted: calendarStatus === 'granted', canAskAgain: calendarStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         default:
           return { granted: false, canAskAgain: false };
@@ -261,12 +261,12 @@ export class PermissionManager {
 
       switch (permissionKey) {
         case 'camera':
-          status = await Camera.requestCameraPermissionsAsync();
-          return { granted: status.granted, canAskAgain: status.canAskAgain };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'microphone':
-          status = await Camera.requestMicrophonePermissionsAsync();
-          return { granted: status.granted, canAskAgain: status.canAskAgain };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'notifications':
           const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
@@ -297,20 +297,20 @@ export class PermissionManager {
           return { granted: true, canAskAgain: true };
         
         case 'location':
-          const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
-          return { granted: locationStatus === 'granted', canAskAgain: locationStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'media_library':
-          const { status: mediaStatus } = await MediaLibrary.requestPermissionsAsync();
-          return { granted: mediaStatus === 'granted', canAskAgain: mediaStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'contacts':
-          const { status: contactsStatus } = await Contacts.requestPermissionsAsync();
-          return { granted: contactsStatus === 'granted', canAskAgain: contactsStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         case 'calendar':
-          const { status: calendarStatus } = await Calendar.requestCalendarPermissionsAsync();
-          return { granted: calendarStatus === 'granted', canAskAgain: calendarStatus !== 'denied' };
+          // Temporarily disabled for Expo Go compatibility
+          return { granted: false, canAskAgain: false };
         
         default:
           return { granted: false, canAskAgain: false };

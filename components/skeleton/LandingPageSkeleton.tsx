@@ -1,6 +1,7 @@
 import React from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import { SkeletonBox, SkeletonText } from './';
+import { SkeletonBox } from './SkeletonBox';
+import { SkeletonText } from './SkeletonText';
 
 const { width, height } = Dimensions.get('window');
 

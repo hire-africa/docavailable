@@ -1,5 +1,7 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -14,18 +16,17 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface GoogleUserData {
   email: string;
   first_name: string;
   last_name: string;
   display_name: string;
-  profile_picture?: string;
   google_id: string;
   user_type: string;
+  date_of_birth?: string;
+  gender?: string;
 }
 
 interface MissingField {
@@ -379,17 +380,14 @@ export default function GoogleSignupQuestions() {
 
       case 'image':
         if (currentField.field === 'profile_picture') {
-          // Use Google's profile picture as default if available
-          const defaultImage = parsedGoogleUser.profile_picture || currentValue;
-          
           return (
             <View style={styles.questionContainer}>
               <Text style={styles.questionLabel}>{currentField.label}</Text>
-              <Text style={styles.questionSubtext}>You can use your Google photo or select a new one</Text>
+              <Text style={styles.questionSubtext}>Select a profile picture for your account</Text>
               <View style={styles.imagePickerContainer}>
-                {defaultImage ? (
+                {currentValue ? (
                   <View style={styles.imagePreviewContainer}>
-                    <Image source={{ uri: defaultImage }} style={styles.imagePreview} />
+                    <Image source={{ uri: currentValue }} style={styles.imagePreview} />
                     <TouchableOpacity
                       style={styles.changeImageButton}
                       onPress={() => pickImage()}
@@ -521,12 +519,6 @@ export default function GoogleSignupQuestions() {
       {/* Welcome Section */}
       <View style={styles.welcomeSection}>
         <View style={styles.profileSection}>
-          {parsedGoogleUser.profile_picture && (
-            <Image
-              source={{ uri: parsedGoogleUser.profile_picture }}
-              style={styles.profileImage}
-            />
-          )}
           <View style={styles.welcomeText}>
             <Text style={styles.welcomeTitle}>Welcome, {parsedGoogleUser.first_name}!</Text>
             <Text style={styles.welcomeSubtitle}>

@@ -2759,13 +2759,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     try {
       setSendingCameraImage(true);
       
-      // Request camera permissions
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Camera permission is required to take photos.');
-        return;
-      }
-
       // Take photo
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -2799,13 +2792,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     try {
       setSendingGalleryImage(true);
       
-      // Request media library permissions
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Media library permission is required to select photos.');
-        return;
-      }
-
       // Pick image from gallery
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,

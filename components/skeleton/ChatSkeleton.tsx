@@ -1,6 +1,8 @@
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { SkeletonBox, SkeletonCircle, SkeletonText } from './';
+import { SkeletonBox } from './SkeletonBox';
+import { SkeletonCircle } from './SkeletonCircle';
+import { SkeletonText } from './SkeletonText';
 
 interface ChatSkeletonProps {
   messageCount?: number;
