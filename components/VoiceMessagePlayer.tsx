@@ -42,6 +42,7 @@ export default function VoiceMessagePlayer({
   const [isLoading, setIsLoading] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAudio();
@@ -56,11 +57,20 @@ export default function VoiceMessagePlayer({
     try {
       setIsLoading(true);
       
-      // Normalize audio URL: if it's not http(s) or file, prefix with BASE_URL
+      // Check if audioUri is valid
+      if (!audioUri || audioUri.trim() === '') {
+        console.error('🎵 VoiceMessagePlayer: No audio URI provided');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Normalize audio URL: if it's not http(s) or file, prefix with audio serving endpoint
       let audioUrl = audioUri;
       if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
-        const needsSlash = audioUrl.startsWith('/') ? '' : '/';
-        audioUrl = `${environment.BASE_URL}${needsSlash}${audioUrl}`;
+        // Remove leading slash if present
+        const cleanPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
+        // Use the audio serving endpoint
+        audioUrl = `${environment.BASE_URL}/api/audio/${cleanPath}`;
       }
 
       // Only handle local file:// URLs if they exist
@@ -69,6 +79,7 @@ export default function VoiceMessagePlayer({
       }
       
       console.log('🎵 Loading audio URL:', audioUrl);
+      console.log('🎵 Original audioUri:', audioUri);
       
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
@@ -93,6 +104,8 @@ export default function VoiceMessagePlayer({
       
     } catch (error) {
       console.error('Error loading audio:', error);
+      setLoadError(`Failed to load audio: ${error.message || 'Unknown error'}`);
+      
       // For iOS, try alternative URL format if first attempt fails
       if (Platform.OS === 'ios' && !audioUri.startsWith('file://')) {
         try {
@@ -106,6 +119,7 @@ export default function VoiceMessagePlayer({
           );
           
           setSound(newSound);
+          setLoadError(null); // Clear error on successful retry
           
           const status = await newSound.getStatusAsync();
           if (status.isLoaded) {
@@ -120,6 +134,7 @@ export default function VoiceMessagePlayer({
           });
         } catch (retryError) {
           console.error('Error on audio retry:', retryError);
+          setLoadError(`Failed to load audio after retry: ${retryError.message || 'Unknown error'}`);
         }
       }
     } finally {
@@ -179,6 +194,52 @@ export default function VoiceMessagePlayer({
         <Text style={[styles.loadingText, { color: isOwnMessage ? "#fff" : "#666" }]}>
           Loading voice message...
         </Text>
+      </View>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
+        <View style={styles.profilePictureContainer}>
+          {profilePictureUrl ? (
+            <Image
+              source={{ uri: profilePictureUrl }}
+              style={styles.profilePicture}
+              onError={() => {}}
+            />
+          ) : (
+            <View style={styles.profilePictureFallback}>
+              <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
+            </View>
+          )}
+        </View>
+        <View style={styles.contentContainer}>
+          <View style={styles.topRow}>
+            <View style={styles.microphoneContainer}>
+              <Ionicons
+                name="mic"
+                size={18}
+                color={isOwnMessage ? "#fff" : "#666"}
+              />
+            </View>
+            <View style={styles.playButton}>
+              <Ionicons
+                name="alert-circle"
+                size={18}
+                color={isOwnMessage ? "#fff" : "#FF3B30"}
+              />
+            </View>
+            <Text style={[styles.errorText, { color: isOwnMessage ? "#fff" : "#FF3B30" }]}>
+              Voice message unavailable
+            </Text>
+          </View>
+          {timestamp && (
+            <Text style={[styles.timestampText, { color: isOwnMessage ? "#fff" : "#666" }]}>
+              {timestamp}
+            </Text>
+          )}
+        </View>
       </View>
     );
   }
@@ -354,6 +415,11 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     marginLeft: 12,
+  },
+  errorText: {
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
   },
   contentContainer: {
     flex: 1,

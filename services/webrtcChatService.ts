@@ -427,6 +427,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       const mediaUrl = await voiceRecordingService.uploadVoiceMessage(numericAppointmentId, audioUri);
       
       if (!mediaUrl) {
+        console.error('❌ [WebRTCChat] Voice upload failed - not sending message');
         throw new Error('Failed to upload voice message');
       }
 
@@ -435,7 +436,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       
       const messageData = {
         type: 'chat-message',
-        content: 'Voice message', // Placeholder text
+        content: '🎤 Voice message', // Voice message indicator
         messageType: 'voice',
         senderId: this.config.userId,
         senderName: this.config.userName,
@@ -456,7 +457,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         id: messageId,
         sender_id: this.config.userId,
         sender_name: this.config.userName,
-        message: 'Voice message',
+        message: '🎤 Voice message',
         message_type: 'voice',
         media_url: mediaUrl,
         created_at: new Date().toISOString(),
@@ -479,7 +480,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              message: 'Voice message',
+              message: '🎤 Voice message',
               message_type: 'voice',
               media_url: mediaUrl,
               temp_id: messageId,
@@ -697,7 +698,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             break;
           case 'completed':
             message.delivery_status = 'sent';
-            message.message = progress.status === 'image' ? 'Image' : 'Voice message';
+            message.message = progress.status === 'image' ? '🖼️ Image' : '🎤 Voice message';
             // Remove the temporary message as it will be replaced by the real message
             this.messages.splice(messageIndex, 1);
             break;

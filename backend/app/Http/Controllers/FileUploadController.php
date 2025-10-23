@@ -590,14 +590,40 @@ class FileUploadController extends Controller
     public function serveAudioFile($path)
     {
         try {
+            // Debug: Log the requested path
+            \Log::info('Audio file request:', [
+                'requested_path' => $path,
+                'url' => request()->url(),
+                'full_url' => request()->fullUrl()
+            ]);
+            
             // Validate the path to prevent directory traversal
             if (str_contains($path, '..') || !str_starts_with($path, 'chat_voice_messages/')) {
+                \Log::warning('Audio file path validation failed:', [
+                    'path' => $path,
+                    'contains_dots' => str_contains($path, '..'),
+                    'starts_with_chat_voice' => str_starts_with($path, 'chat_voice_messages/')
+                ]);
                 abort(404);
             }
             
             $fullPath = Storage::disk('public')->path($path);
             
+            \Log::info('Audio file path resolution:', [
+                'requested_path' => $path,
+                'full_path' => $fullPath,
+                'file_exists' => file_exists($fullPath),
+                'is_readable' => is_readable($fullPath),
+                'storage_disk' => Storage::disk('public')->getDriver()->getAdapter()->getPathPrefix()
+            ]);
+            
             if (!file_exists($fullPath)) {
+                \Log::error('Audio file not found:', [
+                    'requested_path' => $path,
+                    'full_path' => $fullPath,
+                    'storage_path' => Storage::disk('public')->path(''),
+                    'files_in_storage' => Storage::disk('public')->files('chat_voice_messages')
+                ]);
                 abort(404);
             }
             
