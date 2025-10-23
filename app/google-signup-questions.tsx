@@ -88,6 +88,17 @@ export default function GoogleSignupQuestions() {
       }
     } else if (currentField?.type === 'textarea') {
       // Textarea is optional, allow empty
+    } else if (currentField?.type === 'documents') {
+      // Validate grouped documents
+      const requiredFields = currentField.required_fields || {};
+      const missingRequired = Object.entries(requiredFields)
+        .filter(([key, fieldInfo]: [string, any]) => fieldInfo.required && !answers[fieldInfo.field])
+        .map(([key, fieldInfo]: [string, any]) => fieldInfo.label);
+      
+      if (missingRequired.length > 0) {
+        Alert.alert('Required Documents', `Please upload the following required documents: ${missingRequired.join(', ')}`);
+        return;
+      }
     } else if (!currentValue) {
       Alert.alert('Required Field', `Please provide your ${currentField?.label.toLowerCase()}`);
       return;
@@ -146,6 +157,32 @@ export default function GoogleSignupQuestions() {
     }
   };
 
+  const pickDocumentForField = async (fieldName: string) => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1.0, // Maximum quality for documents
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('🔐 Google Signup: Setting answer for field:', fieldName, 'value:', result.assets[0].uri);
+        setAnswers(prev => {
+          const newAnswers = {
+            ...prev,
+            [fieldName]: result.assets[0].uri
+          };
+          console.log('🔐 Google Signup: Updated answers:', newAnswers);
+          return newAnswers;
+        });
+      }
+    } catch (error) {
+      console.error('Error picking document for field:', fieldName, error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
   const handleComplete = async () => {
     setLoading(true);
     try {
@@ -155,24 +192,38 @@ export default function GoogleSignupQuestions() {
       if (answers.profile_picture) {
         try {
           console.log('🔐 Google Signup: Uploading profile picture...');
+          console.log('🔐 Google Signup: Profile picture URI:', answers.profile_picture);
           
-          // Convert local URI to base64
-          const response = await fetch(answers.profile_picture);
-          const blob = await response.blob();
-          const reader = new FileReader();
+          // Convert local URI to base64 using React Native compatible method
+          console.log('🔐 Google Signup: Converting image to base64...');
           
-          const base64Promise = new Promise<string>((resolve, reject) => {
-            reader.onload = () => {
-              const base64 = reader.result as string;
-              resolve(base64);
+          // Use a more React Native compatible approach
+          const base64Image = await new Promise<string>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onload = function() {
+              const reader = new FileReader();
+              reader.onloadend = function() {
+                const base64 = reader.result as string;
+                console.log('🔐 Google Signup: Base64 conversion complete, length:', base64.length);
+                resolve(base64);
+              };
+              reader.onerror = function(error) {
+                console.error('🔐 Google Signup: FileReader error:', error);
+                reject(error);
+              };
+              reader.readAsDataURL(xhr.response);
             };
-            reader.onerror = reject;
+            xhr.onerror = function(error) {
+              console.error('🔐 Google Signup: XMLHttpRequest error:', error);
+              reject(error);
+            };
+            xhr.open('GET', answers.profile_picture);
+            xhr.responseType = 'blob';
+            xhr.send();
           });
           
-          reader.readAsDataURL(blob);
-          const base64Image = await base64Promise;
-          
           // Upload to backend (using public endpoint for registration)
+          console.log('🔐 Google Signup: Sending upload request to backend...');
           const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
             method: 'POST',
             headers: {
@@ -184,6 +235,7 @@ export default function GoogleSignupQuestions() {
             })
           });
           
+          console.log('🔐 Google Signup: Upload response status:', uploadResponse.status);
           const uploadData = await uploadResponse.json();
           console.log('🔐 Google Signup: Profile picture upload response:', uploadData);
           
@@ -192,6 +244,12 @@ export default function GoogleSignupQuestions() {
             console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
           } else {
             console.error('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
+            console.error('🔐 Google Signup: Upload response details:', {
+              success: uploadData.success,
+              hasData: !!uploadData.data,
+              hasUrl: !!uploadData.data?.profile_picture_url,
+              message: uploadData.message
+            });
           }
         } catch (error) {
           console.error('🔐 Google Signup: Error uploading profile picture:', error);
@@ -211,6 +269,12 @@ export default function GoogleSignupQuestions() {
         // Handle specializations for doctors
         specializations: answers.specializations ? JSON.stringify(answers.specializations) : null,
       };
+
+      console.log('🔐 Google Signup: Complete user data for registration:', {
+        ...completeUserData,
+        profile_picture: profilePictureUrl,
+        hasProfilePicture: !!profilePictureUrl
+      });
 
       // Call the backend to create the user
       const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/register', {
@@ -372,7 +436,7 @@ export default function GoogleSignupQuestions() {
               value={currentValue.toString()}
               onChangeText={(text) => handleAnswer(parseInt(text) || 0)}
               keyboardType="numeric"
-              placeholder={`Enter ${currentField.label.toLowerCase()}`}
+              placeholder="Enter number of years"
             />
           </View>
         );
@@ -487,6 +551,51 @@ export default function GoogleSignupQuestions() {
                   <Text style={styles.documentPickerButtonText}>Upload Document</Text>
                 </TouchableOpacity>
               )}
+            </View>
+          </View>
+        );
+
+      case 'documents':
+        return (
+          <View style={styles.questionContainer}>
+            <Text style={styles.questionLabel}>{currentField.label}</Text>
+            <Text style={styles.questionSubtext}>Upload clear photos of your verification documents</Text>
+            <View style={styles.documentsGroupContainer}>
+              {currentField.required_fields && Object.entries(currentField.required_fields).map(([key, fieldInfo]: [string, any]) => {
+                const fieldValue = answers[fieldInfo.field] || '';
+                const isRequired = fieldInfo.required;
+                
+                return (
+                  <View key={key} style={styles.documentFieldContainer}>
+                    <View style={styles.documentFieldHeader}>
+                      <Text style={styles.documentFieldLabel}>{fieldInfo.label}</Text>
+                      {isRequired && <Text style={styles.requiredIndicator}>*</Text>}
+                    </View>
+                    <View style={styles.documentPickerContainer}>
+                      {fieldValue ? (
+                        <View style={styles.documentPreviewContainer}>
+                          <Image source={{ uri: fieldValue }} style={styles.documentPreview} />
+                          <TouchableOpacity
+                            style={styles.changeDocumentButton}
+                            onPress={() => pickDocumentForField(fieldInfo.field)}
+                          >
+                            <Text style={styles.changeDocumentButtonText}>Change Document</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity 
+                          style={styles.documentPickerButton} 
+                          onPress={() => pickDocumentForField(fieldInfo.field)}
+                        >
+                          <Text style={styles.documentPickerButtonText}>
+                            {isRequired ? 'Upload Document' : 'Upload Document (Optional)'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
             </View>
           </View>
         );
@@ -618,10 +727,10 @@ export default function GoogleSignupQuestions() {
          <TouchableOpacity
            style={[
              styles.nextButton,
-             (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect') && styles.nextButtonDisabled
+             (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents') && styles.nextButtonDisabled
            ]}
            onPress={handleNext}
-           disabled={loading || (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect')}
+           disabled={loading || (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents')}
          >
           {loading ? (
             <ActivityIndicator color="#fff" />
@@ -912,5 +1021,33 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  documentsGroupContainer: {
+    marginTop: 10,
+  },
+  documentFieldContainer: {
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  documentFieldHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  documentFieldLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    flex: 1,
+  },
+  requiredIndicator: {
+    color: '#dc3545',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 5,
   },
 });

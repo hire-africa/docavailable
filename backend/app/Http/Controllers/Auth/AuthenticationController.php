@@ -437,6 +437,7 @@ class AuthenticationController extends Controller
             $validator = Validator::make($request->all(), [
                 'id_token' => 'required|string',
                 'user_type' => 'nullable|string|in:patient,doctor,admin',
+                'profile_picture' => 'nullable|string|url',
             ]);
 
             if ($validator->fails()) {
@@ -515,6 +516,7 @@ class AuthenticationController extends Controller
                     'user_type' => $userType,
                     'date_of_birth' => $googleUser['birthday'] ?? null,
                     'gender' => $googleUser['gender'] ?? null,
+                    'profile_picture' => $request->input('profile_picture') ?? $googleUser['picture'] ?? null,
                 ];
 
                 // Determine which fields are missing for the user type
@@ -692,7 +694,8 @@ class AuthenticationController extends Controller
                 'name' => $payload['name'] ?? '',
                 'given_name' => $payload['given_name'] ?? '',
                 'family_name' => $payload['family_name'] ?? '',
-                'email_verified' => $payload['email_verified'] ?? false
+                'email_verified' => $payload['email_verified'] ?? false,
+                'picture' => $payload['picture'] ?? null
             ];
             
             // Fetch additional data from Google People API if access token is available
@@ -1648,17 +1651,17 @@ class AuthenticationController extends Controller
         
         // Common required fields for all user types
         $requiredFields = [
-            'country' => 'Country',
-            'city' => 'City',
-            'profile_picture' => 'Profile Picture'
+            'country' => 'What country are you from?',
+            'city' => 'What city do you live in?',
+            'profile_picture' => 'Please upload a profile picture'
         ];
         
         // Add birthday and gender back if they're not provided by Google
         if (empty($googleUserData['date_of_birth'])) {
-            $requiredFields['date_of_birth'] = 'Date of Birth';
+            $requiredFields['date_of_birth'] = 'What is your date of birth?';
         }
         if (empty($googleUserData['gender'])) {
-            $requiredFields['gender'] = 'Gender';
+            $requiredFields['gender'] = 'What is your gender?';
         }
         
         // Check which fields are missing
@@ -1674,16 +1677,14 @@ class AuthenticationController extends Controller
         
         // Add user type specific fields
         if ($userType === 'doctor') {
-            $doctorFields = [
-                'specializations' => 'Specializations',
-                'years_of_experience' => 'Years of Experience',
-                'professional_bio' => 'Professional Bio',
-                'national_id' => 'National ID / Passport',
-                'medical_degree' => 'Medical Degree Certificate',
-                'medical_licence' => 'Medical Licence'
+            // Individual doctor fields
+            $individualDoctorFields = [
+                'specializations' => 'What are your medical specializations?',
+                'years_of_experience' => 'How many years of medical experience do you have?',
+                'professional_bio' => 'Tell us about your professional background'
             ];
             
-            foreach ($doctorFields as $field => $label) {
+            foreach ($individualDoctorFields as $field => $label) {
                 if (empty($googleUserData[$field])) {
                     $missingFields[] = [
                         'field' => $field,
@@ -1691,6 +1692,36 @@ class AuthenticationController extends Controller
                         'type' => $this->getFieldType($field)
                     ];
                 }
+            }
+            
+            // Grouped document fields - check if any are missing
+            $hasNationalId = !empty($googleUserData['national_id']);
+            $hasMedicalDegree = !empty($googleUserData['medical_degree']);
+            $hasMedicalLicence = !empty($googleUserData['medical_licence']);
+            
+            if (!$hasNationalId || !$hasMedicalDegree || !$hasMedicalLicence) {
+                $missingFields[] = [
+                    'field' => 'documents',
+                    'label' => 'Please upload your verification documents',
+                    'type' => 'documents',
+                    'required_fields' => [
+                        'national_id' => [
+                            'field' => 'national_id',
+                            'label' => 'National ID / Passport',
+                            'required' => true
+                        ],
+                        'medical_degree' => [
+                            'field' => 'medical_degree',
+                            'label' => 'Medical Degree Certificate',
+                            'required' => true
+                        ],
+                        'medical_licence' => [
+                            'field' => 'medical_licence',
+                            'label' => 'Medical Licence (Optional)',
+                            'required' => false
+                        ]
+                    ]
+                ];
             }
         }
         
@@ -1713,7 +1744,8 @@ class AuthenticationController extends Controller
             'professional_bio' => 'textarea',
             'national_id' => 'document',
             'medical_degree' => 'document',
-            'medical_licence' => 'document'
+            'medical_licence' => 'document',
+            'documents' => 'documents'
         ];
         
         return $fieldTypes[$field] ?? 'text';

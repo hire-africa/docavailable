@@ -50,7 +50,7 @@ export default function OAuthCallback() {
 
                 // Get user info from Google People API for additional data
                 const peopleApiResponse = await fetch(
-                    `https://people.googleapis.com/v1/people/me?personFields=names,emailAddresses,birthdays,genders&access_token=${tokenResponse.accessToken}`
+                    `https://people.googleapis.com/v1/people/me?personFields=names,emailAddresses,birthdays,genders,photos&access_token=${tokenResponse.accessToken}`
                 );
                 
                 console.log('🔐 OAuth Callback: People API response status:', peopleApiResponse.status);
@@ -81,6 +81,7 @@ export default function OAuthCallback() {
                         family_name: userInfo.family_name,
                         birthday: null, // Not available from basic API
                         gender: null,  // Not available from basic API
+                        picture: userInfo.picture || null,
                     };
                     
                     console.log('🔐 OAuth Callback: Fallback Google token:', googleToken);
@@ -112,12 +113,14 @@ export default function OAuthCallback() {
                 const emailAddresses = peopleData.emailAddresses?.[0] || {};
                 const birthdays = peopleData.birthdays?.[0] || {};
                 const genders = peopleData.genders?.[0] || {};
+                const photos = peopleData.photos?.[0] || {};
 
                 console.log('🔐 OAuth Callback: Extracted data:', {
                     names: names,
                     emailAddresses: emailAddresses,
                     birthdays: birthdays,
-                    genders: genders
+                    genders: genders,
+                    photos: photos
                 });
 
                 // Create a JWT-like token for your backend
@@ -129,6 +132,7 @@ export default function OAuthCallback() {
                     family_name: names.familyName,
                     birthday: birthdays.date ? `${birthdays.date.year}-${String(birthdays.date.month).padStart(2, '0')}-${String(birthdays.date.day).padStart(2, '0')}` : null,
                     gender: genders.value?.toLowerCase() || null,
+                    picture: photos.url || null,
                 };
 
                 console.log('🔐 OAuth Callback: Final Google token:', googleToken);

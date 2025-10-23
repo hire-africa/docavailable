@@ -237,7 +237,8 @@ export default function NativeGoogleSignIn({
         },
         body: JSON.stringify({
           id_token: idToken,
-          user_type: userType // Pass the chosen user type
+          user_type: userType, // Pass the chosen user type
+          profile_picture: googleUserData.profile_picture // Pass the profile picture URL
         })
       });
 
