@@ -172,8 +172,8 @@ export default function GoogleSignupQuestions() {
           reader.readAsDataURL(blob);
           const base64Image = await base64Promise;
           
-          // Upload to backend
-          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture', {
+          // Upload to backend (using public endpoint for registration)
+          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

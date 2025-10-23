@@ -908,6 +908,9 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/upload/chat-attachment', [FileUploadController::class, 'uploadChatAttachment']);
     Route::post('/upload/voice-message', [FileUploadController::class, 'uploadVoiceMessage']);
     
+    // Public upload routes (for registration process)
+    Route::post('/upload/profile-picture-public', [FileUploadController::class, 'uploadProfilePicturePublic']);
+    
     // Audio file serving route (no auth required for streaming)
     Route::get('/audio/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
     

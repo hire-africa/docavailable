@@ -102,6 +102,76 @@ class FileUploadController extends Controller
     }
 
     /**
+     * Upload profile picture (public - for registration process)
+     */
+    public function uploadProfilePicturePublic(Request $request)
+    {
+        // Debug logging
+        \Log::info('Public profile picture upload request:', [
+            'has_profile_picture' => $request->has('profile_picture'),
+            'profile_picture_type' => gettype($request->input('profile_picture')),
+            'all_data' => $request->all(),
+        ]);
+        
+        // Handle base64 image upload (from React Native)
+        if ($request->has('profile_picture') && is_string($request->input('profile_picture'))) {
+            $base64Image = $request->input('profile_picture');
+            
+            // Validate base64 image
+            if (strlen($base64Image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid image data provided.'
+                ], 422);
+            }
+            
+            // Decode base64 image
+            $image = preg_replace('/^data:image\/\w+;base64,/', '', $base64Image);
+            $image = base64_decode($image);
+            
+            if (!$image || strlen($image) < 100) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to decode image data.'
+                ], 422);
+            }
+            
+            // Generate filename
+            $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+            $path = 'profile_pictures/' . $filename;
+            
+            // Compress image before storing
+            $compressedImage = $this->compressImage($image);
+            
+            // Store compressed image in DigitalOcean Spaces
+            Storage::disk('spaces')->put($path, $compressedImage);
+            
+            // Get the public URL from DigitalOcean Spaces
+            $publicUrl = Storage::disk('spaces')->url($path);
+            
+            \Log::info('Public profile picture uploaded to DigitalOcean Spaces:', [
+                'path' => $path,
+                'public_url' => $publicUrl,
+                'compression_applied' => true
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile picture uploaded successfully to DigitalOcean Spaces.',
+                'data' => [
+                    'profile_picture_url' => $publicUrl
+                ],
+                'processing' => false
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => 'No profile picture data provided.'
+            ], 422);
+        }
+    }
+
+    /**
      * Compress image data for faster loading
      */
     private function compressImage($imageData, $quality = 75, $maxWidth = 800, $maxHeight = 800)
