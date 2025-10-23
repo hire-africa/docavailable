@@ -186,41 +186,59 @@ export default function GoogleSignupQuestions() {
   const handleComplete = async () => {
     setLoading(true);
     try {
-      // Handle profile picture - convert manually selected to base64, send Google URL directly
-      let profilePictureData = null;
+      // Handle profile picture - upload manually selected via separate endpoint, send Google URL directly
+      let profilePictureUrl = null;
       const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
       
       if (profilePictureToUpload) {
         if (answers.profile_picture) {
-          // Manually selected image - convert to base64
+          // Manually selected image - upload via separate endpoint like edit profile
           try {
-            console.log('🔐 Google Signup: Converting manually selected profile picture to base64...');
+            console.log('🔐 Google Signup: Uploading manually selected profile picture via separate endpoint...');
             console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
             
+            // Convert to base64 like edit profile does
             const response = await fetch(profilePictureToUpload);
             const blob = await response.blob();
-            profilePictureData = await Promise.race([
-              new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                  const base64String = reader.result as string;
-                  resolve(base64String);
-                };
-                reader.readAsDataURL(blob);
-              }),
-              new Promise<string>((_, reject) => 
-                setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
-              )
-            ]);
-            console.log('🔐 Google Signup: Manually selected profile picture converted to base64, length:', profilePictureData.length);
-          } catch (conversionError) {
-            console.warn('🔐 Google Signup: Profile picture conversion failed:', conversionError);
-            // Continue without profile picture if conversion fails
+            const base64 = await new Promise<string>((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                const base64String = reader.result as string;
+                resolve(base64String);
+              };
+              reader.readAsDataURL(blob);
+            });
+            
+            // Upload via separate endpoint like edit profile
+            const formData = new FormData();
+            formData.append('profile_picture', base64);
+            
+            const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
+                profile_picture: base64
+              })
+            });
+            
+            const uploadData = await uploadResponse.json();
+            if (uploadData.success && uploadData.data?.profile_picture_url) {
+              profilePictureUrl = uploadData.data.profile_picture_url;
+              console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
+            } else {
+              console.warn('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
+            }
+          } catch (uploadError) {
+            console.warn('🔐 Google Signup: Profile picture upload failed:', uploadError);
+            // Continue without profile picture if upload fails
           }
         } else {
           // Google profile picture - send URL directly (backend will handle downloading)
           console.log('🔐 Google Signup: Using Google profile picture URL directly:', profilePictureToUpload);
-          profilePictureData = profilePictureToUpload;
+          profilePictureUrl = profilePictureToUpload;
         }
       }
 
@@ -305,7 +323,7 @@ export default function GoogleSignupQuestions() {
       const completeUserData = {
         ...parsedGoogleUser,
         ...answers,
-        profile_picture: profilePictureData, // Send base64 data or URL directly
+        profile_picture: profilePictureUrl, // Send uploaded URL or Google URL directly
         national_id_passport: nationalIdBase64, // Use correct field name
         highest_medical_certificate: medicalDegreeBase64, // Use correct field name
         specialist_certificate: medicalLicenceBase64, // Use correct field name
@@ -319,11 +337,11 @@ export default function GoogleSignupQuestions() {
 
       console.log('🔐 Google Signup: Complete user data for registration:', {
         ...completeUserData,
-        profile_picture: profilePictureData ? (profilePictureData.startsWith('data:') ? 'base64 data' : 'URL') : 'none',
+        profile_picture: profilePictureUrl ? (profilePictureUrl.startsWith('data:') ? 'base64 data' : 'URL') : 'none',
         national_id_passport: nationalIdBase64 ? 'base64 data' : 'none',
         highest_medical_certificate: medicalDegreeBase64 ? 'base64 data' : 'none',
         specialist_certificate: medicalLicenceBase64 ? 'base64 data' : 'none',
-        hasProfilePicture: !!profilePictureData,
+        hasProfilePicture: !!profilePictureUrl,
         hasNationalId: !!nationalIdBase64,
         hasMedicalDegree: !!medicalDegreeBase64,
         hasMedicalLicence: !!medicalLicenceBase64
