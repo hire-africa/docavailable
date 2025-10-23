@@ -165,22 +165,28 @@ class ImageService {
       
       const responseData = await response.json();
       console.log('ImageService: Upload response data:', responseData);
+      console.log('ImageService: Response status:', response.status);
+      console.log('ImageService: Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
+        console.error('ImageService: Upload failed with status:', response.status, response.statusText);
         throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
       }
 
       if (responseData.success && responseData.data?.media_url) {
-        console.log('ImageService: Upload successful:', responseData.data.media_url);
+        console.log('ImageService: Upload successful!');
+        console.log('ImageService: Media URL from backend:', responseData.data.media_url);
+        console.log('ImageService: Full response data:', JSON.stringify(responseData, null, 2));
         return {
           success: true,
           mediaUrl: responseData.data.media_url,
         };
       } else {
-        console.error('ImageService: Upload failed:', responseData);
+        console.error('ImageService: Upload failed - no media_url in response');
+        console.error('ImageService: Full response:', JSON.stringify(responseData, null, 2));
         return {
           success: false,
-          error: responseData.message || 'Upload failed',
+          error: responseData.message || 'Upload failed - no media_url returned',
         };
       }
     } catch (error: any) {
