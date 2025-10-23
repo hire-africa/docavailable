@@ -118,6 +118,24 @@ export default function GoogleSignupQuestions() {
     }
   };
 
+  const pickDocument = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1.0, // Maximum quality for documents
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        handleAnswer(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
   const handleComplete = async () => {
     setLoading(true);
     try {
@@ -389,6 +407,31 @@ export default function GoogleSignupQuestions() {
           );
         }
         break;
+
+      case 'document':
+        return (
+          <View style={styles.questionContainer}>
+            <Text style={styles.questionLabel}>{currentField.label}</Text>
+            <Text style={styles.questionSubtext}>Upload a clear photo of your document</Text>
+            <View style={styles.documentPickerContainer}>
+              {currentValue ? (
+                <View style={styles.documentPreviewContainer}>
+                  <Image source={{ uri: currentValue }} style={styles.documentPreview} />
+                  <TouchableOpacity
+                    style={styles.changeDocumentButton}
+                    onPress={() => pickDocument()}
+                  >
+                    <Text style={styles.changeDocumentButtonText}>Change Document</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.documentPickerButton} onPress={() => pickDocument()}>
+                  <Text style={styles.documentPickerButtonText}>Upload Document</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        );
 
       default: // text
         // Special handling for country field even if backend returns 'text'
@@ -776,6 +819,44 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   changeImageButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  documentPickerContainer: {
+    marginTop: 10,
+  },
+  documentPickerButton: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  documentPickerButtonText: {
+    color: '#4CAF50',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  documentPreviewContainer: {
+    alignItems: 'center',
+  },
+  documentPreview: {
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  changeDocumentButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  changeDocumentButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',

@@ -1639,7 +1639,10 @@ class AuthenticationController extends Controller
             $doctorFields = [
                 'specializations' => 'Specializations',
                 'years_of_experience' => 'Years of Experience',
-                'professional_bio' => 'Professional Bio'
+                'professional_bio' => 'Professional Bio',
+                'national_id' => 'National ID / Passport',
+                'medical_degree' => 'Medical Degree Certificate',
+                'medical_licence' => 'Medical Licence'
             ];
             
             foreach ($doctorFields as $field => $label) {
@@ -1669,7 +1672,10 @@ class AuthenticationController extends Controller
             'profile_picture' => 'image',
             'specializations' => 'multiselect',
             'years_of_experience' => 'number',
-            'professional_bio' => 'textarea'
+            'professional_bio' => 'textarea',
+            'national_id' => 'document',
+            'medical_degree' => 'document',
+            'medical_licence' => 'document'
         ];
         
         return $fieldTypes[$field] ?? 'text';
