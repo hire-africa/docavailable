@@ -188,13 +188,16 @@ export default function GoogleSignupQuestions() {
     try {
       let profilePictureUrl = null;
       
-      // Handle profile picture upload if one was selected
-      if (answers.profile_picture) {
+      // Handle profile picture upload - check both Google profile picture and manually selected one
+      const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
+      
+      if (profilePictureToUpload) {
         try {
           console.log('🔐 Google Signup: Uploading profile picture...');
-          console.log('🔐 Google Signup: Profile picture URI:', answers.profile_picture);
+          console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
+          console.log('🔐 Google Signup: Profile picture source:', answers.profile_picture ? 'manually selected' : 'from Google');
           
-          // Convert local URI to base64 using React Native compatible method
+          // Convert image to base64 using React Native compatible method
           console.log('🔐 Google Signup: Converting image to base64...');
           
           // Use a more React Native compatible approach
@@ -217,7 +220,7 @@ export default function GoogleSignupQuestions() {
               console.error('🔐 Google Signup: XMLHttpRequest error:', error);
               reject(error);
             };
-            xhr.open('GET', answers.profile_picture);
+            xhr.open('GET', profilePictureToUpload);
             xhr.responseType = 'blob';
             xhr.send();
           });
@@ -253,15 +256,21 @@ export default function GoogleSignupQuestions() {
           }
         } catch (error) {
           console.error('🔐 Google Signup: Error uploading profile picture:', error);
-          // Continue without profile picture rather than failing completely
+          // Fall back to using the original Google profile picture URL
+          profilePictureUrl = parsedGoogleUser.profile_picture;
+          console.log('🔐 Google Signup: Falling back to Google profile picture URL:', profilePictureUrl);
         }
+      } else {
+        // If no profile picture to upload, use the Google profile picture URL if available
+        profilePictureUrl = parsedGoogleUser.profile_picture;
+        console.log('🔐 Google Signup: Using Google profile picture URL:', profilePictureUrl);
       }
       
       // Create the complete user data
       const completeUserData = {
         ...parsedGoogleUser,
         ...answers,
-        profile_picture: profilePictureUrl, // Use the uploaded URL instead of local URI
+        profile_picture: profilePictureUrl, // Use the uploaded URL or fallback to Google URL
         password: `google_user_${parsedGoogleUser.google_id}`,
         password_confirmation: `google_user_${parsedGoogleUser.google_id}`,
         user_type: parsedGoogleUser.user_type,

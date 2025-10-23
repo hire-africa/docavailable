@@ -125,30 +125,66 @@ class AuthenticationController extends Controller
             // Handle profile picture upload if provided
             $profilePicturePath = null;
             if ($request->profile_picture) {
-                $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
-                $image = base64_decode($image);
-                
-                // Debug logging
-                \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
-                    'original_length' => strlen($request->profile_picture),
-                    'decoded_length' => $image ? strlen($image) : 0,
-                    'is_valid' => $image && strlen($image) > 100
-                ]);
-                
-                // Validate that the decoded data is not empty and is actually an image
-                if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
-                    // Compress image before storing
-                    $compressedImage = $this->compressImage($image);
+                // Check if it's a URL (Google profile picture) or base64 data
+                if (filter_var($request->profile_picture, FILTER_VALIDATE_URL)) {
+                    // It's a URL - download and process the image
+                    \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', $request->profile_picture);
                     
-                    $filename = \Illuminate\Support\Str::uuid() . '.jpg';
-                    $path = 'profile_pictures/' . $filename;
+                    try {
+                        $imageContent = file_get_contents($request->profile_picture);
+                        if ($imageContent && strlen($imageContent) > 100) {
+                            // Compress image before storing
+                            $compressedImage = $this->compressImage($imageContent);
+                            
+                            $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+                            $path = 'profile_pictures/' . $filename;
+                            
+                            // Store compressed image in DigitalOcean Spaces
+                            \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                            
+                            // Get the public URL from DigitalOcean Spaces
+                            $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                            $profilePicturePath = $publicUrl;
+                            
+                            \Illuminate\Support\Facades\Log::info('Google profile picture uploaded successfully', [
+                                'original_url' => $request->profile_picture,
+                                'stored_path' => $path,
+                                'public_url' => $publicUrl
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        \Illuminate\Support\Facades\Log::error('Failed to download Google profile picture', [
+                            'url' => $request->profile_picture,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+                } else {
+                    // It's base64 data - process as before
+                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
+                    $image = base64_decode($image);
                     
-                    // Store compressed image in DigitalOcean Spaces
-                    \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                    // Debug logging
+                    \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
+                        'original_length' => strlen($request->profile_picture),
+                        'decoded_length' => $image ? strlen($image) : 0,
+                        'is_valid' => $image && strlen($image) > 100
+                    ]);
                     
-                    // Get the public URL from DigitalOcean Spaces
-                    $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
-                    $profilePicturePath = $publicUrl;
+                    // Validate that the decoded data is not empty and is actually an image
+                    if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
+                        // Compress image before storing
+                        $compressedImage = $this->compressImage($image);
+                        
+                        $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+                        $path = 'profile_pictures/' . $filename;
+                        
+                        // Store compressed image in DigitalOcean Spaces
+                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                        
+                        // Get the public URL from DigitalOcean Spaces
+                        $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                        $profilePicturePath = $publicUrl;
+                    }
                 }
             }
 
