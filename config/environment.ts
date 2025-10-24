@@ -26,6 +26,7 @@ export const environment = {
   // WebRTC Configuration (Production URLs with dedicated servers)
   WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://docavailable.org/call-signaling'),
   WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'wss://docavailable.org/chat-signaling'),
+  WEBRTC_CHAT_SERVER_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org:8081'),
   
   // App Configuration
   APP_NAME: getEnvVar('EXPO_PUBLIC_APP_NAME', 'DocAvailable'),

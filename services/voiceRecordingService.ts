@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
-import { apiService } from '../app/services/apiService';
 import { environment } from '../config/environment';
 
 export interface VoiceRecordingState {
@@ -160,8 +159,8 @@ class VoiceRecordingService {
       formData.append('file', fileObject as any);
       formData.append('appointment_id', appointmentId.toString());
 
-      // Use proper API service URL construction
-      const uploadUrl = `${apiService.baseURL}/upload/voice-message`;
+      // Use WebRTC chat server for voice message uploads
+      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
       console.log('📤 [VoiceService] Upload URL:', uploadUrl);
       console.log('📤 [VoiceService] Token present:', !!token);
       

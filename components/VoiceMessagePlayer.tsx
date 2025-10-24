@@ -66,13 +66,15 @@ export default function VoiceMessagePlayer({
         return;
       }
       
-      // Normalize audio URL: if it's not http(s) or file, prefix with audio serving endpoint
+      // Use the audio URI directly - it should already be a complete URL from the server
       let audioUrl = audioUri;
+      
+      // If it's a relative path, use the WebRTC chat server for file serving
       if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
-        // Remove leading slash if present
         const cleanPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
-        // Use the audio serving endpoint
-        audioUrl = `${environment.BASE_URL}/api/audio/${cleanPath}`;
+        
+        // Use WebRTC chat server for file serving
+        audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/audio/${cleanPath}`;
       }
 
       // Only handle local file:// URLs if they exist
@@ -90,7 +92,12 @@ export default function VoiceMessagePlayer({
           if (!headResponse.ok) {
             if (headResponse.status === 404) {
               console.warn('🎵 Audio file not found (404):', audioUrl);
-              setLoadError('Voice message file not found');
+              setLoadError('Voice message file not found - server configuration issue');
+              setIsLoading(false);
+              return;
+            } else if (headResponse.status === 403) {
+              console.warn('🎵 Audio file access denied (403):', audioUrl);
+              setLoadError('Voice message is not accessible');
               setIsLoading(false);
               return;
             } else {
@@ -263,7 +270,7 @@ export default function VoiceMessagePlayer({
               />
             </View>
             <Text style={[styles.errorText, { color: isOwnMessage ? "#fff" : "#FF3B30" }]}>
-              Voice message unavailable
+              {loadError || 'Voice message unavailable'}
             </Text>
           </View>
           {timestamp && (

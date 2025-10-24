@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { environment } from '../config/environment';
 import { apiService } from './apiService';
 
 interface QueuedUpload {
@@ -199,8 +200,17 @@ class MediaUploadQueueService {
       formData.append('appointment_id', upload.appointmentId.toString());
       
       console.log(`📤 [MediaQueue] Uploading voice: ${fileName}`);
-      const response = await apiService.uploadFile('/upload/voice-message', formData);
-      return response?.data?.media_url || response?.data?.url || null;
+      // Use WebRTC chat server for voice message uploads
+      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await AsyncStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+      const responseData = await response.json();
+      return responseData?.data?.media_url || responseData?.data?.url || null;
     }
     
     return null;
