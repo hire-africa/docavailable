@@ -114,6 +114,27 @@ class BackgroundSessionTimer {
       return;
     }
 
+    // Verify session is still active on the backend before processing deductions
+    try {
+      const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+      if (sessionResponse.data && (sessionResponse.data as any).success) {
+        const sessionData = (sessionResponse.data as any).data;
+        if (sessionData.status !== 'active') {
+          console.log('🕐 [BackgroundTimer] Session no longer active on backend, stopping timer:', sessionId, 'status:', sessionData.status);
+          this.endSessionTimer(sessionId);
+          return;
+        }
+      } else {
+        console.log('🕐 [BackgroundTimer] Failed to verify session status, stopping timer:', sessionId);
+        this.endSessionTimer(sessionId);
+        return;
+      }
+    } catch (error) {
+      console.error('❌ [BackgroundTimer] Failed to verify session status:', error);
+      // Don't stop the timer on network errors, just skip this tick
+      return;
+    }
+
     const now = new Date();
     const startTime = new Date(state.startTime);
     const elapsedMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
@@ -284,6 +305,28 @@ class BackgroundSessionTimer {
     }
     
     await this.persistStates();
+  }
+
+  // Clean up ended sessions by checking their status on the backend
+  async cleanupEndedSessions() {
+    console.log('🧹 [BackgroundTimer] Cleaning up ended sessions...');
+    
+    for (const [sessionId, state] of this.states.entries()) {
+      try {
+        const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+        if (sessionResponse.data && (sessionResponse.data as any).success) {
+          const sessionData = (sessionResponse.data as any).data;
+          if (sessionData.status !== 'active') {
+            console.log('🧹 [BackgroundTimer] Found ended session, cleaning up:', sessionId, 'status:', sessionData.status);
+            this.endSessionTimer(sessionId);
+          }
+        }
+      } catch (error) {
+        console.error('❌ [BackgroundTimer] Failed to check session status during cleanup:', sessionId, error);
+        // If we can't check the status, assume it's ended and clean it up
+        this.endSessionTimer(sessionId);
+      }
+    }
   }
 }
 

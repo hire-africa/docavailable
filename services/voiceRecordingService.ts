@@ -149,7 +149,17 @@ class VoiceRecordingService {
 
       // Try using fetch directly with proper headers for file upload
       const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`${apiService.baseURL}/upload/voice-message`, {
+      const uploadUrl = `${apiService.baseURL}/upload/voice-message`;
+      console.log('📤 Voice upload URL:', uploadUrl);
+      console.log('📤 Voice upload baseURL:', apiService.baseURL);
+      console.log('📤 Voice upload token present:', !!token);
+      
+      // Try with hardcoded URL to test if it's a URL construction issue
+      const hardcodedUrl = 'https://docavailable-3vbdv.ondigitalocean.app/api/upload/voice-message';
+      console.log('📤 Voice upload hardcoded URL:', hardcodedUrl);
+      
+      // Try the hardcoded URL first to test
+      const response = await fetch(hardcodedUrl, {
         method: 'POST',
         headers: {
           'Authorization': token ? `Bearer ${token}` : '',

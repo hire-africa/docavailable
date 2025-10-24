@@ -66,6 +66,9 @@ class GlobalSessionMonitor {
     try {
       console.log('🌍 [GlobalSessionMonitor] Checking for active sessions');
       
+      // First, clean up any ended sessions from the background timer
+      await backgroundSessionTimer.cleanupEndedSessions();
+      
       // Get all active text sessions
       const response = await apiService.get('/text-sessions/active');
       
