@@ -21,7 +21,7 @@ return new class extends Migration
             $table->enum('message_type', ['text', 'image', 'voice'])->default('text');
             $table->string('media_url')->nullable();
             $table->string('temp_id')->nullable(); // For temporary messages
-            $table->enum('delivery_status', ['sending', 'sent', 'delivered', 'read'])->default('sending');
+            $table->enum('delivery_status', ['sending', 'sent', 'delivered', 'read', 'failed'])->default('sending');
             $table->json('reactions')->nullable();
             $table->json('read_by')->nullable();
             $table->string('reply_to_id')->nullable();

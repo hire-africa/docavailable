@@ -113,8 +113,28 @@ class VoiceRecordingService {
     }
   }
 
-  async uploadVoiceMessage(appointmentId: number, uri: string): Promise<string | null> {
+  async uploadVoiceMessage(appointmentId: number, uri: string, retryCount: number = 0): Promise<string | null> {
+    const maxRetries = 3;
+    const retryDelay = 1000 * Math.pow(2, retryCount); // Exponential backoff
+    
     try {
+      console.log(`📤 [VoiceService] Upload attempt ${retryCount + 1}/${maxRetries + 1} for appointment ${appointmentId}`);
+      
+      // Validate inputs
+      if (!uri || uri.trim() === '') {
+        throw new Error('Invalid audio URI provided');
+      }
+      
+      if (!appointmentId || appointmentId <= 0) {
+        throw new Error('Invalid appointment ID provided');
+      }
+
+      // Get auth token with proper error handling
+      const token = await AsyncStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('No authentication token found. Please log in again.');
+      }
+
       // Create form data
       const formData = new FormData();
       
@@ -129,48 +149,34 @@ class VoiceRecordingService {
         name: fileName,
       };
       
-      console.log('📤 File object for FormData:', fileObject);
+      console.log('📤 [VoiceService] File object for FormData:', {
+        fileName,
+        type: fileObject.type,
+        hasUri: !!fileObject.uri,
+        uriLength: fileObject.uri?.length || 0
+      });
       
       // For React Native, we need to append the file object directly
       formData.append('file', fileObject as any);
-      
       formData.append('appointment_id', appointmentId.toString());
 
-      console.log('📤 Uploading voice message:', {
-        appointmentId,
-        fileName,
-        uri: uri.substring(0, 50) + '...', // Log partial URI for debugging
-        formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({
-          key,
-          type: typeof value,
-          hasUri: typeof value === 'object' && 'uri' in value,
-        })),
-      });
-
-      // Try using fetch directly with proper headers for file upload
-      const token = await AsyncStorage.getItem('auth_token');
+      // Use proper API service URL construction
       const uploadUrl = `${apiService.baseURL}/upload/voice-message`;
-      console.log('📤 Voice upload URL:', uploadUrl);
-      console.log('📤 Voice upload baseURL:', apiService.baseURL);
-      console.log('📤 Voice upload token present:', !!token);
+      console.log('📤 [VoiceService] Upload URL:', uploadUrl);
+      console.log('📤 [VoiceService] Token present:', !!token);
       
-      // Try with hardcoded URL to test if it's a URL construction issue
-      const hardcodedUrl = 'https://docavailable-3vbdv.ondigitalocean.app/api/upload/voice-message';
-      console.log('📤 Voice upload hardcoded URL:', hardcodedUrl);
-      
-      // Try the hardcoded URL first to test
-      const response = await fetch(hardcodedUrl, {
+      const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
+          'Authorization': `Bearer ${token}`,
           // Don't set Content-Type for FormData, let the system set it with boundary
         },
         body: formData,
       });
       
-      // Check if response is JSON or HTML
+      // Log response details
       const contentType = response.headers.get('content-type');
-      console.log('📤 Voice upload response headers:', {
+      console.log('📤 [VoiceService] Upload response:', {
         status: response.status,
         statusText: response.statusText,
         contentType: contentType,
@@ -180,50 +186,58 @@ class VoiceRecordingService {
       let responseData;
       if (contentType && contentType.includes('application/json')) {
         responseData = await response.json();
-        console.log('📤 Voice message upload response:', responseData);
+        console.log('📤 [VoiceService] Upload response data:', responseData);
       } else {
         // Server returned HTML (likely an error page)
         const htmlResponse = await response.text();
-        console.error('❌ Voice upload server returned HTML instead of JSON:', htmlResponse.substring(0, 500));
+        console.error('❌ [VoiceService] Server returned HTML instead of JSON:', htmlResponse.substring(0, 500));
         throw new Error(`Server returned HTML error page: ${response.status} ${response.statusText}`);
       }
       
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        const errorMessage = responseData?.message || `Upload failed: ${response.status} ${response.statusText}`;
+        throw new Error(errorMessage);
       }
 
-      // Support multiple possible response shapes: { data: { media_url } } or { data: { url } } or flat { media_url | url }
+      // Support multiple possible response shapes
       const uploadedUrl = responseData?.data?.media_url || responseData?.data?.url || responseData?.media_url || responseData?.url;
       if (responseData.success && uploadedUrl) {
+        console.log('✅ [VoiceService] Voice message uploaded successfully:', uploadedUrl);
         return uploadedUrl;
       }
 
-      console.error('❌ Voice message upload failed:', responseData);
-      return null;
-    } catch (error: any) {
-      console.error('❌ Error uploading voice message:', error);
-      console.error('❌ Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
+      throw new Error('Upload response missing required data');
       
-      // Provide more specific error messages for different scenarios
-      if (error.message?.includes('Authentication required')) {
-        console.error('❌ [VoiceService] Authentication error - user needs to log in again');
+    } catch (error: any) {
+      console.error(`❌ [VoiceService] Upload attempt ${retryCount + 1} failed:`, error);
+      
+      // Handle specific error types
+      if (error.message?.includes('Authentication') || error.message?.includes('token')) {
+        console.error('❌ [VoiceService] Authentication error');
         throw new Error('Please log in again to upload voice messages');
-      } else if (error.response?.status === 401) {
-        console.error('❌ [VoiceService] Unauthorized - token may be expired');
-        throw new Error('Session expired. Please log in again');
-      } else if (error.response?.status === 413) {
+      } else if (error.message?.includes('too large') || error.message?.includes('413')) {
         console.error('❌ [VoiceService] File too large');
         throw new Error('Voice message is too large. Please record a shorter message');
-      } else if (error.response?.status === 422) {
-        console.error('❌ [VoiceService] Invalid file format or missing data');
+      } else if (error.message?.includes('Invalid') || error.message?.includes('422')) {
+        console.error('❌ [VoiceService] Invalid file format');
         throw new Error('Invalid voice message format. Please try recording again');
       }
       
-      return null;
+      // Retry logic for network errors
+      if (retryCount < maxRetries && (
+        error.message?.includes('network') ||
+        error.message?.includes('timeout') ||
+        error.message?.includes('Connection') ||
+        error.message?.includes('fetch')
+      )) {
+        console.log(`🔄 [VoiceService] Retrying upload in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        return this.uploadVoiceMessage(appointmentId, uri, retryCount + 1);
+      }
+      
+      // Final error - no more retries
+      console.error('❌ [VoiceService] All upload attempts failed');
+      throw error;
     }
   }
 

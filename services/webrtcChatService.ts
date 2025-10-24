@@ -446,12 +446,58 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         numericAppointmentId = Number(appointmentId);
       }
 
-      // Upload the voice file first
-      const mediaUrl = await voiceRecordingService.uploadVoiceMessage(numericAppointmentId, audioUri);
-      
+      console.log('📤 [WebRTCChat] Starting voice message upload for appointment:', numericAppointmentId);
+
+      // Upload the voice file first with retry logic
+      let mediaUrl: string | null = null;
+      let uploadAttempts = 0;
+      const maxUploadAttempts = 3;
+
+      while (!mediaUrl && uploadAttempts < maxUploadAttempts) {
+        try {
+          uploadAttempts++;
+          console.log(`📤 [WebRTCChat] Voice upload attempt ${uploadAttempts}/${maxUploadAttempts}`);
+          
+          mediaUrl = await voiceRecordingService.uploadVoiceMessage(numericAppointmentId, audioUri);
+          
+          if (mediaUrl) {
+            console.log('✅ [WebRTCChat] Voice upload successful:', mediaUrl);
+            break;
+          } else {
+            console.warn(`⚠️ [WebRTCChat] Voice upload attempt ${uploadAttempts} returned null`);
+          }
+        } catch (uploadError: any) {
+          console.error(`❌ [WebRTCChat] Voice upload attempt ${uploadAttempts} failed:`, uploadError);
+          
+          if (uploadAttempts >= maxUploadAttempts) {
+            // Create a failed message for UI feedback
+            const failedMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const failedMessage: ChatMessage = {
+              id: failedMessageId,
+              sender_id: Number(this.config.userId),
+              sender_name: this.config.userName,
+              message: '🎤 Voice message (upload failed)',
+              message_type: 'voice',
+              media_url: '', // Empty URL indicates failed upload
+              created_at: new Date().toISOString(),
+              delivery_status: 'failed'
+            };
+            
+            await this.addMessage(failedMessage);
+            this.events.onMessage(failedMessage);
+            
+            throw new Error(`Failed to upload voice message after ${maxUploadAttempts} attempts: ${uploadError.message}`);
+          }
+          
+          // Wait before retry (exponential backoff)
+          const retryDelay = 1000 * Math.pow(2, uploadAttempts - 1);
+          console.log(`🔄 [WebRTCChat] Retrying voice upload in ${retryDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+
       if (!mediaUrl) {
-        console.error('❌ [WebRTCChat] Voice upload failed - not sending message');
-        throw new Error('Failed to upload voice message');
+        throw new Error('Failed to upload voice message after all attempts');
       }
 
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -469,7 +515,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         deliveryStatus: 'sending'
       };
 
-      console.log('📤 [WebRTCChat] Sending voice message:', messageId);
+      console.log('📤 [WebRTCChat] Sending voice message via WebSocket:', messageId);
       this.websocket.send(JSON.stringify(messageData));
       
       const messageHash = this.createMessageHash(messageData);
@@ -511,16 +557,24 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           });
           if (!resp.ok) {
             console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
+            // Update message status to indicate backend sync failed
+            chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
           } else {
             const json = await resp.json().catch(() => null);
             console.log('✅ [WebRTCChat] Backend persisted voice message:', json?.success);
+            chatMessage.delivery_status = 'delivered';
           }
         } else {
           console.warn('⚠️ [WebRTCChat] No auth token available to persist voice message to backend');
         }
       } catch (persistErr) {
         console.warn('⚠️ [WebRTCChat] Failed to persist voice message to backend:', persistErr);
+        // Update message status
+        chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
       }
+      
+      // Update the message in storage with final status
+      await this.addMessage(chatMessage);
       
       console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
       return chatMessage;

@@ -8,7 +8,7 @@ export interface ChatMessage {
   media_url?: string;
   created_at: string;
   timestamp?: string; // Made optional for WebRTC messages
-  delivery_status: 'sending' | 'sent' | 'delivered' | 'read';
+  delivery_status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   read_by?: Array<{
     user_id: number;
     user_name: string;

@@ -56,10 +56,12 @@ export default function VoiceMessagePlayer({
   const loadAudio = async () => {
     try {
       setIsLoading(true);
+      setLoadError(null);
       
       // Check if audioUri is valid
       if (!audioUri || audioUri.trim() === '') {
         console.error('🎵 VoiceMessagePlayer: No audio URI provided');
+        setLoadError('No audio file available');
         setIsLoading(false);
         return;
       }
@@ -80,6 +82,26 @@ export default function VoiceMessagePlayer({
       
       console.log('🎵 Loading audio URL:', audioUrl);
       console.log('🎵 Original audioUri:', audioUri);
+      
+      // First, check if the file exists by making a HEAD request for HTTP URLs
+      if (audioUrl.startsWith('http')) {
+        try {
+          const headResponse = await fetch(audioUrl, { method: 'HEAD' });
+          if (!headResponse.ok) {
+            if (headResponse.status === 404) {
+              console.warn('🎵 Audio file not found (404):', audioUrl);
+              setLoadError('Voice message file not found');
+              setIsLoading(false);
+              return;
+            } else {
+              console.warn('🎵 Audio file check failed:', headResponse.status, headResponse.statusText);
+            }
+          }
+        } catch (headError) {
+          console.warn('🎵 Could not check audio file availability:', headError);
+          // Continue with loading attempt anyway
+        }
+      }
       
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
@@ -104,7 +126,17 @@ export default function VoiceMessagePlayer({
       
     } catch (error) {
       console.error('Error loading audio:', error);
-      setLoadError(`Failed to load audio: ${error.message || 'Unknown error'}`);
+      
+      // Provide more specific error messages
+      if (error.message?.includes('404') || error.message?.includes('not found')) {
+        setLoadError('Voice message file not found');
+      } else if (error.message?.includes('network') || error.message?.includes('timeout')) {
+        setLoadError('Network error loading voice message');
+      } else if (error.message?.includes('format') || error.message?.includes('invalid')) {
+        setLoadError('Invalid audio format');
+      } else {
+        setLoadError(`Failed to load audio: ${error.message || 'Unknown error'}`);
+      }
       
       // For iOS, try alternative URL format if first attempt fails
       if (Platform.OS === 'ios' && !audioUri.startsWith('file://')) {
