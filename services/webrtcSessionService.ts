@@ -36,8 +36,10 @@ class WebRTCSessionService {
   private appointmentId: string | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
+  private maxReconnectAttempts = 3; // Reduced from 5 to prevent excessive reconnection attempts
+  private reconnectDelay = 2000; // Increased base delay from 1000ms to 2000ms
+  private connectionTimeout = 30000; // 30 seconds connection timeout
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private onTypingIndicator?: (isTyping: boolean, senderId?: number) => void;
 
   async initialize(appointmentId: string, events: WebRTCSessionEvents): Promise<void> {
@@ -82,11 +84,11 @@ class WebRTCSessionService {
         // Set connection timeout
         const connectionTimeout = setTimeout(() => {
           if (!this.isConnected) {
-            console.error('❌ [WebRTC] Connection timeout after 10 seconds');
+            console.error('❌ [WebRTC] Connection timeout after', this.connectionTimeout, 'ms');
             this.signalingChannel?.close();
             reject(new Error('WebSocket connection timeout'));
           }
-        }, 10000);
+        }, this.connectionTimeout);
         
         this.signalingChannel.onopen = () => {
           console.log('✅ [WebRTC] Connected to session signaling server successfully');
@@ -115,6 +117,33 @@ class WebRTCSessionService {
 
         this.signalingChannel.onerror = (error) => {
           console.error('❌ Session signaling WebSocket error:', error);
+          
+          // Clear connection timeout on error
+          clearTimeout(connectionTimeout);
+          
+          // Handle SSL/TLS connection errors with retry logic
+          const errorMessage = (error as any).message;
+          if (errorMessage && (
+            errorMessage.includes('Connection reset by peer') ||
+            errorMessage.includes('ssl') ||
+            errorMessage.includes('TLS') ||
+            errorMessage.includes('SSL') ||
+            errorMessage.includes('Connection closed by peer')
+          )) {
+            console.warn('🔄 [WebRTC Session] SSL/TLS connection error detected, will retry...');
+            this.events?.onError('Connection error, retrying...');
+            
+            // Don't reject immediately for SSL errors, let reconnection handle it
+            setTimeout(() => {
+              if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                this.attemptReconnect();
+              } else {
+                reject(new Error('SSL connection failed after multiple attempts'));
+              }
+            }, 3000);
+            return;
+          }
+          
           // Don't reject on error if we're already connected - just log it
           if (!this.isConnected) {
             this.events?.onError('Connection error');
@@ -343,25 +372,50 @@ class WebRTCSessionService {
       return;
     }
 
+    // Don't reconnect if already connected
+    if (this.isConnected && this.signalingChannel && this.signalingChannel.readyState === WebSocket.OPEN) {
+      console.log('✅ [WebRTC Session] Already connected, skipping reconnection');
+      return;
+    }
+
     this.reconnectAttempts++;
-    console.log(`🔄 Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
     
-    setTimeout(async () => {
+    // Exponential backoff with jitter for better reconnection
+    const baseDelay = this.reconnectDelay;
+    const exponentialDelay = baseDelay * Math.pow(2, this.reconnectAttempts - 1);
+    const jitter = Math.random() * 2000; // Add up to 2 seconds of jitter
+    const finalDelay = Math.min(exponentialDelay + jitter, 60000); // Cap at 60 seconds
+    
+    console.log(`🔄 [WebRTC Session] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${Math.round(finalDelay)}ms...`);
+    
+    // Clear any existing reconnection timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+    }
+    
+    this.reconnectTimeoutId = setTimeout(async () => {
       try {
         await this.connectSignaling();
       } catch (error) {
         console.error('❌ Reconnection failed:', error);
         this.attemptReconnect();
       }
-    }, this.reconnectDelay * this.reconnectAttempts);
+    }, finalDelay);
   }
 
   disconnect(): void {
+    // Clear any pending reconnection attempts
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+    
     if (this.signalingChannel) {
       this.signalingChannel.close();
       this.signalingChannel = null;
     }
     this.isConnected = false;
+    this.reconnectAttempts = 0; // Reset reconnection attempts on disconnect
   }
 
   isSessionConnected(): boolean {

@@ -10,15 +10,17 @@ export class WebRTCChatService {
   private websocket: WebSocket | null = null;
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private reconnectDelay: number = 1000;
+  private maxReconnectAttempts: number = 3; // Reduced from 5 to prevent excessive reconnection attempts
+  private reconnectDelay: number = 2000; // Increased base delay from 1000ms to 2000ms
   private messages: ChatMessage[] = [];
   private storageKey: string;
   private processedMessageHashes: Set<string> = new Set();
   private onTypingIndicator?: (isTyping: boolean) => void;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private lastPingTime = 0;
-  private pingTimeout = 30000; // 30 seconds
+  private pingTimeout = 60000; // Increased from 30 to 60 seconds for more stable connections
+  private connectionTimeout = 30000; // 30 seconds connection timeout
 
   constructor(config: ChatConfig, events: ChatEvents) {
     console.log('🔧 [WebRTCChat] Constructor called with config:', {
@@ -92,7 +94,17 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         
         this.websocket = new WebSocket(wsUrl);
         
+        // Set connection timeout
+        const connectionTimeoutId = setTimeout(() => {
+          if (!this.isConnected) {
+            console.error('❌ [WebRTCChat] Connection timeout after', this.connectionTimeout, 'ms');
+            this.websocket?.close();
+            reject(new Error('WebSocket connection timeout'));
+          }
+        }, this.connectionTimeout);
+        
         this.websocket.onopen = async () => {
+          clearTimeout(connectionTimeoutId);
           console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
@@ -122,10 +134,11 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             if (data.type === 'session-ended') {
               console.log('🏁 [WebRTCChat] Session ended message received:', data);
               if (this.events.onSessionEnded) {
+                const sessionType = this.config.sessionType === 'text_session' ? 'instant' : (this.config.sessionType || 'appointment');
                 this.events.onSessionEnded(
                   this.config.appointmentId, 
                   data.reason || 'manual_end', 
-                  this.config.sessionType || 'appointment'
+                  sessionType
                 );
               }
               return;
@@ -161,7 +174,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               
               const normalized: ChatMessage = {
                 id: messageId,
-                sender_id: String(raw.sender_id ?? raw.senderId ?? ''),
+                sender_id: Number(raw.sender_id ?? raw.senderId ?? 0),
                 sender_name: raw.sender_name ?? raw.senderName ?? '',
                 message: raw.message ?? raw.content ?? '',
                 message_type: raw.message_type ?? raw.messageType ?? 'text',
@@ -191,15 +204,15 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               console.log('📨 [WebRTCChat] Message sender ID:', normalized.sender_id, 'type:', typeof normalized.sender_id);
               console.log('📨 [WebRTCChat] Current user ID:', this.config.userId, 'type:', typeof this.config.userId);
               
-              // Convert both IDs to strings for reliable comparison
-              const senderIdStr = String(normalized.sender_id);
-              const userIdStr = String(this.config.userId);
+              // Convert both IDs to numbers for reliable comparison
+              const senderIdNum = Number(normalized.sender_id);
+              const userIdNum = Number(this.config.userId);
               
-              console.log('🔍 [WebRTCChat] Debug - senderIdStr:', senderIdStr, 'userIdStr:', userIdStr);
-              console.log('🔍 [WebRTCChat] Debug - comparison result:', senderIdStr === userIdStr);
+              console.log('🔍 [WebRTCChat] Debug - senderIdNum:', senderIdNum, 'userIdNum:', userIdNum);
+              console.log('🔍 [WebRTCChat] Debug - comparison result:', senderIdNum === userIdNum);
               
               // Check if this is our own message - if so, ignore it to prevent duplication
-              if (senderIdStr === userIdStr) {
+              if (senderIdNum === userIdNum) {
                 console.log('⚠️ [WebRTCChat] Received own message via WebSocket - ignoring to prevent duplication');
                 return; // Don't process our own message from WebSocket
               } else {
@@ -234,6 +247,9 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             readyState: (error as any).target?.readyState
           });
           
+          // Clear connection timeout on error
+          clearTimeout(connectionTimeoutId);
+          
           // Check if it's a connection error (HTTP 200 instead of 101)
           const errorMessage = (error as any).message;
           if (errorMessage && errorMessage.includes('Expected HTTP 101')) {
@@ -249,7 +265,8 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             errorMessage.includes('Connection reset by peer') ||
             errorMessage.includes('ssl') ||
             errorMessage.includes('TLS') ||
-            errorMessage.includes('SSL')
+            errorMessage.includes('SSL') ||
+            errorMessage.includes('Connection closed by peer')
           )) {
             console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected, will retry...');
             this.events.onError('Connection error, retrying...');
@@ -261,7 +278,13 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               } else {
                 reject(new Error('SSL connection failed after multiple attempts'));
               }
-            }, 2000);
+            }, 3000); // Increased delay from 2000ms to 3000ms
+            return;
+          }
+          
+          // For other errors, don't reject immediately if we're already connected
+          if (this.isConnected) {
+            console.warn('⚠️ [WebRTCChat] Connection error but already connected, continuing...');
             return;
           }
           
@@ -344,7 +367,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
-        sender_id: this.config.userId,
+        sender_id: Number(this.config.userId),
         sender_name: this.config.userName,
         message: message,
         message_type: 'text',
@@ -455,7 +478,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
-        sender_id: this.config.userId,
+        sender_id: Number(this.config.userId),
         sender_name: this.config.userName,
         message: '🎤 Voice message',
         message_type: 'voice',
@@ -558,7 +581,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
-        sender_id: this.config.userId,
+        sender_id: Number(this.config.userId),
         sender_name: this.config.userName,
         message: 'Image',
         message_type: 'image',
@@ -601,7 +624,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         // Create temporary message for immediate UI feedback
         const tempMessage: ChatMessage = {
           id: result.tempId,
-          sender_id: this.config.userId,
+          sender_id: Number(this.config.userId),
           sender_name: this.config.userName,
           message: 'Image uploading...',
           message_type: 'image',
@@ -652,7 +675,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         // Create temporary message for immediate UI feedback
         const tempMessage: ChatMessage = {
           id: result.tempId,
-          sender_id: this.config.userId,
+          sender_id: Number(this.config.userId),
           sender_name: this.config.userName,
           message: 'Voice uploading...',
           message_type: 'voice',
@@ -854,11 +877,19 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
   async disconnect(): Promise<void> {
     this.stopHealthCheck();
+    
+    // Clear any pending reconnection attempts
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+      this.reconnectTimeoutId = null;
+    }
+    
     if (this.websocket) {
       this.websocket.close(1000, 'Normal closure');
       this.websocket = null;
     }
     this.isConnected = false;
+    this.reconnectAttempts = 0; // Reset reconnection attempts on disconnect
   }
 
   private handleReconnect(): void {
@@ -868,17 +899,28 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       return;
     }
 
+    // Don't reconnect if already connected
+    if (this.isConnected && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+      console.log('✅ [WebRTCChat] Already connected, skipping reconnection');
+      return;
+    }
+
     this.reconnectAttempts++;
     
     // Exponential backoff with jitter for better reconnection
     const baseDelay = this.reconnectDelay;
     const exponentialDelay = baseDelay * Math.pow(2, this.reconnectAttempts - 1);
-    const jitter = Math.random() * 1000; // Add up to 1 second of jitter
-    const finalDelay = Math.min(exponentialDelay + jitter, 30000); // Cap at 30 seconds
+    const jitter = Math.random() * 2000; // Increased jitter from 1000ms to 2000ms
+    const finalDelay = Math.min(exponentialDelay + jitter, 60000); // Increased cap from 30s to 60s
     
     console.log(`🔄 [WebRTCChat] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${Math.round(finalDelay)}ms...`);
     
-    setTimeout(() => {
+    // Clear any existing reconnection timeout
+    if (this.reconnectTimeoutId) {
+      clearTimeout(this.reconnectTimeoutId);
+    }
+    
+    this.reconnectTimeoutId = setTimeout(() => {
       this.connect().catch(error => {
         console.error('❌ WebRTC chat reconnection failed:', error);
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -909,11 +951,18 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             this.lastPingTime = now;
           } catch (error) {
             console.error('❌ [WebRTCChat] Failed to send ping:', error);
-            this.handleReconnect();
+            // Only reconnect if the connection is actually broken
+            if (this.websocket.readyState !== WebSocket.OPEN) {
+              this.handleReconnect();
+            }
           }
         }
+      } else {
+        // Connection is not open, try to reconnect
+        console.warn('🔄 [WebRTCChat] Connection not open, attempting reconnection...');
+        this.handleReconnect();
       }
-    }, 10000); // Check every 10 seconds
+    }, 15000); // Increased from 10s to 15s to reduce frequency
   }
 
   private stopHealthCheck(): void {

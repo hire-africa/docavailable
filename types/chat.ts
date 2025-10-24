@@ -1,13 +1,13 @@
 export interface ChatMessage {
-  id: number;
-  appointment_id: number;
+  id: string | number; // Support both string and number IDs for compatibility - updated for WebRTC
+  appointment_id?: number; // Made optional for WebRTC messages
   sender_id: number;
   sender_name: string;
   message: string;
   message_type: 'text' | 'image' | 'voice';
   media_url?: string;
   created_at: string;
-  timestamp: string;
+  timestamp?: string; // Made optional for WebRTC messages
   delivery_status: 'sending' | 'sent' | 'delivered' | 'read';
   read_by?: Array<{
     user_id: number;
@@ -15,6 +15,7 @@ export interface ChatMessage {
     read_at: string;
   }>;
   temp_id?: string;
+  is_own_message?: boolean; // Added for UI purposes
 }
 
 export interface ChatConfig {
