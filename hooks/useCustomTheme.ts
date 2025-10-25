@@ -32,6 +32,8 @@ export function useCustomTheme() {
     userDataKeys: userData ? Object.keys(userData) : [],
     hasPreferences: !!userData?.preferences,
     privacyPreferences: userData?.privacy_preferences,
+    preferencesValue: userData?.preferences,
+    privacyPreferencesValue: userData?.privacy_preferences,
     note: 'Using custom theme system - anonymous mode forces dark theme'
   });
   
