@@ -25,14 +25,29 @@ export const useAnonymousMode = (): AnonymousModeSettings => {
         }
 
         // Check if user has anonymous mode enabled in their privacy preferences
-        const privacyPreferences = userData.privacy_preferences || {};
-        const anonymousMode = privacyPreferences.privacy?.anonymousMode || false;
+        // First try the new structure (privacy_preferences)
+        let privacyPreferences = userData.privacy_preferences || {};
+        let anonymousMode = privacyPreferences.privacy?.anonymousMode || false;
+        
+        // If not found, try the old structure (direct in userData)
+        if (!anonymousMode) {
+          anonymousMode = userData.anonymousMode || false;
+        }
+        
+        // If still not found, try checking if it's in preferences
+        if (!anonymousMode) {
+          anonymousMode = userData.preferences?.anonymousMode || false;
+        }
         
         // Debug logging
         console.log('🔍 [useAnonymousMode] Debug:', {
           userData: userData ? 'present' : 'null',
           privacyPreferences,
           anonymousMode,
+          userDataKeys: userData ? Object.keys(userData) : [],
+          hasPrivacyPreferences: !!userData?.privacy_preferences,
+          hasPreferences: !!userData?.preferences,
+          hasAnonymousMode: !!userData?.anonymousMode,
           fullUserData: userData
         });
         

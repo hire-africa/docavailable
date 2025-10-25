@@ -12,20 +12,27 @@ export function useCustomTheme() {
   // Get theme from user data preferences
   const userTheme = userData?.preferences?.theme;
   
-  // Always use our custom theme system - don't fall back to system theme
-  // If no user preference is set, default to 'light'
-  const theme = userTheme || 'light';
+  // Check if anonymous mode is enabled (this should trigger dark mode)
+  const isAnonymousMode = userData?.privacy_preferences?.privacy?.anonymousMode || 
+                         userData?.anonymousMode || 
+                         userData?.preferences?.anonymousMode || false;
+  
+  // If anonymous mode is enabled, force dark theme
+  // Otherwise use user theme preference or default to light
+  const theme = isAnonymousMode ? 'dark' : (userTheme || 'light');
   
   // Debug logging
   console.log('🎨 [useCustomTheme] Debug:', {
     userTheme,
     systemColorScheme,
     finalTheme: theme,
+    isAnonymousMode,
     userData: userData ? 'present' : 'null',
     preferences: userData?.preferences,
-    anonymousMode: userData?.privacy?.anonymousMode,
-    fullUserData: userData,
-    note: 'Using custom theme system - not falling back to system theme'
+    userDataKeys: userData ? Object.keys(userData) : [],
+    hasPreferences: !!userData?.preferences,
+    privacyPreferences: userData?.privacy_preferences,
+    note: 'Using custom theme system - anonymous mode forces dark theme'
   });
   
   return {
