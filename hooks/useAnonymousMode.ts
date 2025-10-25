@@ -28,6 +28,14 @@ export const useAnonymousMode = (): AnonymousModeSettings => {
         const privacyPreferences = userData.privacy_preferences || {};
         const anonymousMode = privacyPreferences.privacy?.anonymousMode || false;
         
+        // Debug logging
+        console.log('🔍 [useAnonymousMode] Debug:', {
+          userData: userData ? 'present' : 'null',
+          privacyPreferences,
+          anonymousMode,
+          fullUserData: userData
+        });
+        
         setIsAnonymousModeEnabled(anonymousMode);
       } catch (err) {
         console.error('Error loading anonymous mode:', err);

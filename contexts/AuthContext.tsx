@@ -67,6 +67,8 @@ const convertApiUserToUserData = (apiUser: any): UserData => {
     sub_specialization: apiUser.sub_specialization,
     specializations: apiUser.specializations,
     languages_spoken: apiUser.languages_spoken,
+    // User preferences
+    preferences: apiUser.preferences,
   };
 };
 

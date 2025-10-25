@@ -21,7 +21,9 @@ export function useCustomTheme() {
     systemColorScheme,
     finalTheme: theme,
     userData: userData ? 'present' : 'null',
-    preferences: userData?.preferences
+    preferences: userData?.preferences,
+    anonymousMode: userData?.privacy?.anonymousMode,
+    fullUserData: userData
   });
   
   return {

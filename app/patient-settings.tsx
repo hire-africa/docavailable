@@ -201,6 +201,7 @@ function PatientSettingsContent() {
                 }
             });
             console.log('🔍 Privacy settings save response:', privacyResponse);
+            console.log('🔍 Updated settings being saved:', updatedSettings);
 
             // Refresh user data to ensure settings are updated
             if (userData) {
