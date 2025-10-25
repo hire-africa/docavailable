@@ -205,7 +205,9 @@ function PatientSettingsContent() {
 
             // Refresh user data to ensure settings are updated
             if (userData) {
+                console.log('🔄 Refreshing user data after settings save...');
                 await refreshUserData();
+                console.log('✅ User data refreshed');
             }
 
             // Settings saved successfully
