@@ -71,10 +71,14 @@ export default function VoiceMessagePlayer({
       
       // If it's a relative path, use the WebRTC chat server for file serving
       if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
-        const cleanPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
-        
-        // Use WebRTC chat server for file serving
-        audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/audio/${cleanPath}`;
+        // If it already starts with /api/audio/, just prepend the server URL
+        if (audioUrl.startsWith('/api/audio/')) {
+          audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}${audioUrl}`;
+        } else {
+          // If it's a relative path without /api/audio/, add the prefix
+          const cleanPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
+          audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/audio/${cleanPath}`;
+        }
       }
 
       // Only handle local file:// URLs if they exist

@@ -160,7 +160,7 @@ class VoiceRecordingService {
       formData.append('appointment_id', appointmentId.toString());
 
       // Use WebRTC chat server for voice message uploads
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+      const uploadUrl = `http://46.101.123.123:8081/api/upload/voice-message`;
       console.log('📤 [VoiceService] Upload URL:', uploadUrl);
       console.log('📤 [VoiceService] Token present:', !!token);
       

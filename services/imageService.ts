@@ -1,7 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiService } from './apiService';
 
 export interface ImageUploadResult {
   success: boolean;
@@ -152,57 +151,40 @@ class ImageService {
         })),
       });
 
-      // Try using fetch directly with proper headers for file upload
+      // Try WebRTC server first, then fallback to Laravel API
       const token = await AsyncStorage.getItem('auth_token');
-      const response = await fetch(`${apiService.baseURL}/upload/chat-image`, {
-        method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-          // Don't set Content-Type for FormData, let the system set it with boundary
-        },
-        body: formData,
-      });
+      let response;
       
-      // Check if response is JSON or HTML
-      const contentType = response.headers.get('content-type');
-      console.log('ImageService: Upload response headers:', {
-        status: response.status,
-        statusText: response.statusText,
-        contentType: contentType,
-        contentLength: response.headers.get('content-length')
-      });
-      
-      let responseData;
-      if (contentType && contentType.includes('application/json')) {
-        responseData = await response.json();
-        console.log('ImageService: Upload response data:', responseData);
-      } else {
-        // Server returned HTML (likely an error page)
-        const htmlResponse = await response.text();
-        console.error('❌ Image upload server returned HTML instead of JSON:', htmlResponse.substring(0, 500));
-        throw new Error(`Server returned HTML error page: ${response.status} ${response.statusText}`);
-      }
-      
-      if (!response.ok) {
-        console.error('ImageService: Upload failed with status:', response.status, response.statusText);
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-      }
-
-      if (responseData.success && responseData.data?.media_url) {
-        console.log('ImageService: Upload successful!');
-        console.log('ImageService: Media URL from backend:', responseData.data.media_url);
-        console.log('ImageService: Full response data:', JSON.stringify(responseData, null, 2));
-        return {
-          success: true,
-          mediaUrl: responseData.data.media_url,
-        };
-      } else {
-        console.error('ImageService: Upload failed - no media_url in response');
-        console.error('ImageService: Full response:', JSON.stringify(responseData, null, 2));
-        return {
-          success: false,
-          error: responseData.message || 'Upload failed - no media_url returned',
-        };
+      try {
+        // First attempt: WebRTC server
+        console.log('📤 [ImageService] Trying WebRTC server first...');
+        response = await fetch(`http://46.101.123.123:8081/api/upload/voice-message`, {
+          method: 'POST',
+          headers: {
+            'Authorization': token ? `Bearer ${token}` : '',
+          },
+          body: formData,
+        });
+        
+        const webrtcData = await response.json();
+        if (webrtcData.success) {
+          console.log('✅ [ImageService] WebRTC upload successful');
+          return { success: true, mediaUrl: webrtcData.data.media_url };
+        } else {
+          throw new Error(`WebRTC upload failed: ${webrtcData.message}`);
+        }
+      } catch (webrtcError) {
+        console.warn('⚠️ [ImageService] WebRTC upload failed, trying Laravel API fallback:', webrtcError);
+        
+        // Fallback: Laravel API
+        const { apiService } = await import('./apiService');
+        response = await apiService.uploadFile('/upload/chat-image', formData);
+        if (response?.data?.media_url) {
+          console.log('✅ [ImageService] Laravel API fallback successful');
+          return { success: true, mediaUrl: response.data.media_url };
+        } else {
+          throw new Error('Both WebRTC and Laravel API uploads failed');
+        }
       }
     } catch (error: any) {
       console.error('ImageService: Upload error:', error);

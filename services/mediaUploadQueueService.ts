@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { environment } from '../config/environment';
 import { apiService } from './apiService';
 
 interface QueuedUpload {
@@ -188,8 +187,17 @@ class MediaUploadQueueService {
       formData.append('appointment_id', upload.appointmentId.toString());
       
       console.log(`📤 [MediaQueue] Uploading image: ${fileName}`);
-      const response = await apiService.uploadFile('/upload/chat-image', formData);
-      return response?.data?.media_url || null;
+      // Use WebRTC chat server for image uploads (direct connection)
+      const uploadUrl = `http://46.101.123.123:8081/api/upload/voice-message`;
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${await AsyncStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+      const responseData = await response.json();
+      return responseData?.data?.media_url || responseData?.data?.url || null;
     } else if (upload.type === 'voice') {
       const fileName = `voice_${uniqueId}.m4a`;
       formData.append('file', {
@@ -201,7 +209,7 @@ class MediaUploadQueueService {
       
       console.log(`📤 [MediaQueue] Uploading voice: ${fileName}`);
       // Use WebRTC chat server for voice message uploads
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+          const uploadUrl = `http://46.101.123.123:8081/api/upload/voice-message`;
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
