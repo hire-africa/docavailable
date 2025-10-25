@@ -43,9 +43,11 @@ export default function AudioCallModal({
   // Auto-start the outgoing call as soon as this modal becomes visible
   useEffect(() => {
     if (visible && !isIncomingCall) {
+      console.log('📞 [AudioCallModal] Starting outgoing call...');
       setShowAudioCall(true);
     }
     if (!visible) {
+      console.log('📞 [AudioCallModal] Modal closed, stopping call...');
       setShowAudioCall(false);
     }
   }, [visible, isIncomingCall]);

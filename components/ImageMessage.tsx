@@ -43,17 +43,32 @@ export default function ImageMessage({
       console.log('🖼️ ImageMessage: Using full URL:', uri);
       return uri;
     }
+    
     // If it's an absolute path on device
     if (uri.startsWith('/')) {
       const fileUrl = `file://${uri}`;
       console.log('🖼️ ImageMessage: Using file URL:', fileUrl);
       return fileUrl;
     }
-    // Otherwise, treat as relative path from backend and prefix with BASE_URL
-    const needsSlash = uri.startsWith('/') ? '' : '/';
-    const fullUrl = `${environment.BASE_URL}${needsSlash}${uri}`;
-    console.log('🖼️ ImageMessage: Constructed URL:', fullUrl, 'from base:', environment.BASE_URL, 'and uri:', uri);
-    return fullUrl;
+    
+    // If it's a WebRTC server image path
+    if (uri.startsWith('/api/images/')) {
+      const webrtcUrl = `https://docavailable.org:8089${uri}`;
+      console.log('🖼️ ImageMessage: Using WebRTC server URL:', webrtcUrl);
+      return webrtcUrl;
+    }
+    
+    // If it's a Laravel API path
+    if (uri.startsWith('/api/')) {
+      const laravelApiUrl = `${environment.BASE_URL}${uri}`;
+      console.log('🖼️ ImageMessage: Using Laravel API URL:', laravelApiUrl);
+      return laravelApiUrl;
+    }
+    
+    // Otherwise, try WebRTC server first, then Laravel API
+    const webrtcUrl = `https://docavailable.org:8089/api/images/${uri}`;
+    console.log('🖼️ ImageMessage: Trying WebRTC server URL:', webrtcUrl);
+    return webrtcUrl;
   };
 
   const [imageModalVisible, setImageModalVisible] = useState(false);

@@ -122,7 +122,10 @@ export class InstantSessionMessageDetector {
 
       const data = JSON.parse(event.data);
       console.log('📨 [InstantSessionDetector] Message received:', data.type);
-      console.log('📨 [InstantSessionDetector] Full message data:', data);
+      // Only log full data for important messages to reduce spam
+      if (data.type === 'chat-message' || data.type === 'doctor-response-timer-started' || data.type === 'session-activated') {
+        console.log('📨 [InstantSessionDetector] Full message data:', data);
+      }
       
       switch (data.type) {
         case 'chat-message':
@@ -172,8 +175,10 @@ export class InstantSessionMessageDetector {
           break;
           
         default:
-          console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
-          console.log('📨 [InstantSessionDetector] Full message data:', data);
+          // Only log unhandled messages occasionally to reduce spam
+          if (Math.random() < 0.1) {
+            console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
+          }
       }
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error parsing message:', error);
@@ -184,7 +189,30 @@ export class InstantSessionMessageDetector {
    * Handle chat messages and detect patient/doctor messages
    */
   private handleChatMessage(data: any): void {
+    // Check if data.message exists and is valid
+    if (!data || !data.message) {
+      console.error('❌ [InstantSessionDetector] Invalid chat message data - missing message object:', data);
+      return;
+    }
+
     const message = data.message;
+    
+    // Validate message object has required properties
+    if (!message || typeof message !== 'object') {
+      console.error('❌ [InstantSessionDetector] Invalid message object:', message);
+      return;
+    }
+
+    // Check if message has required properties
+    if (message.id === undefined || message.sender_id === undefined) {
+      console.error('❌ [InstantSessionDetector] Message missing required properties:', {
+        hasId: message.id !== undefined,
+        hasSenderId: message.sender_id !== undefined,
+        message: message
+      });
+      return;
+    }
+
     console.log('💬 [InstantSessionDetector] Processing chat message:', {
       id: message.id,
       senderId: message.sender_id,
@@ -215,6 +243,12 @@ export class InstantSessionMessageDetector {
    * Handle patient message - start 90-second timer if not already started
    */
   private handlePatientMessage(message: any): void {
+    // Validate message object
+    if (!message || typeof message !== 'object') {
+      console.error('❌ [InstantSessionDetector] Invalid patient message object:', message);
+      return;
+    }
+
     console.log('👤 [InstantSessionDetector] Patient message detected:', message.id);
     
     // Remember that a patient message exists
@@ -247,6 +281,12 @@ export class InstantSessionMessageDetector {
    * Manually trigger patient message detection (for integration with WebRTCChatService)
    */
   public triggerPatientMessageDetection(message: any): void {
+    // Validate message object
+    if (!message || typeof message !== 'object') {
+      console.error('❌ [InstantSessionDetector] Invalid message for patient detection:', message);
+      return;
+    }
+
     console.log('👤 [InstantSessionDetector] Manually triggering patient message detection:', message.id);
     this.handlePatientMessage(message);
   }
@@ -255,6 +295,12 @@ export class InstantSessionMessageDetector {
    * Manually trigger doctor message detection (for integration with WebRTCChatService)
    */
   public triggerDoctorMessageDetection(message: any): void {
+    // Validate message object
+    if (!message || typeof message !== 'object') {
+      console.error('❌ [InstantSessionDetector] Invalid message for doctor detection:', message);
+      return;
+    }
+
     console.log('👨‍⚕️ [InstantSessionDetector] Manually triggering doctor message detection:', message.id);
     console.log('👨‍⚕️ [InstantSessionDetector] Message details:', {
       id: message.id,
@@ -312,6 +358,12 @@ export class InstantSessionMessageDetector {
    * Handle doctor message - activate session and stop timer
    */
   private handleDoctorMessage(message: any): void {
+    // Validate message object
+    if (!message || typeof message !== 'object') {
+      console.error('❌ [InstantSessionDetector] Invalid doctor message object:', message);
+      return;
+    }
+
     console.log('👨‍⚕️ [InstantSessionDetector] Doctor message detected:', message.id);
     console.log('👨‍⚕️ [InstantSessionDetector] Current state:', {
       hasDoctorResponded: this.hasDoctorResponded,
@@ -401,8 +453,8 @@ export class InstantSessionMessageDetector {
       
       this.timerState.timeRemaining = remaining;
       
-      // Update every 5 seconds to avoid too many updates
-      if (remaining % 5 === 0 || remaining <= 10) {
+      // Update every 10 seconds to reduce logging frequency
+      if (remaining % 10 === 0 || remaining <= 10) {
         console.log('⏰ [InstantSessionDetector] Timer remaining:', remaining, 'seconds');
       }
       

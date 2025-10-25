@@ -54,7 +54,7 @@ export default function AudioCall({
   const [isInitializing, setIsInitializing] = useState(!isIncomingCall);
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Track speaker state
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false); // Track speaker state (start with earpiece)
   const [callAccepted, setCallAccepted] = useState(false); // Track if in-call UI should replace incoming UI
 
   // Freeze UI to connected once we detect a connected state to avoid regressions
@@ -95,7 +95,10 @@ export default function AudioCall({
         return;
       }
 
-      if (initOnceRef.current === appointmentId) return; // dedupe per session
+      if (initOnceRef.current === appointmentId) {
+        console.warn('⚠️ [AudioCall] Call already initialized for this appointment - preventing duplicate');
+        return; // dedupe per session
+      }
       initOnceRef.current = appointmentId;
       hasInitializedRef.current = true;
       
@@ -246,8 +249,8 @@ export default function AudioCall({
 
       await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
       
-      // Offer creation is now handled automatically in AudioCallService.initialize
-      console.log('📞 Call initialization completed - offer will be created automatically if needed');
+      // Audio calls start with earpiece mode by default (like normal phone calls)
+      console.log('📞 Call initialization completed - audio starts with earpiece mode');
       
     } catch (error) {
       console.error('Failed to initialize audio call:', error);
@@ -323,13 +326,24 @@ export default function AudioCall({
     Vibration.vibrate(50);
   };
 
-  const toggleSpeaker = () => {
-    Vibration.vibrate(50);
-    setIsSpeakerOn(prev => !prev);
-    
-    // Toggle speaker mode in AudioCallService
-    const audioCallService = AudioCallService.getInstance();
-    audioCallService.toggleSpeaker(!isSpeakerOn);
+  const toggleSpeaker = async () => {
+    try {
+      Vibration.vibrate(50);
+      const newSpeakerState = !isSpeakerOn;
+      setIsSpeakerOn(newSpeakerState);
+      
+      console.log('🔊 [AudioCall] Toggling speaker from', isSpeakerOn ? 'ON' : 'OFF', 'to', newSpeakerState ? 'ON' : 'OFF');
+      
+      // Toggle speaker mode in AudioCallService
+      const audioCallService = AudioCallService.getInstance();
+      await audioCallService.toggleSpeaker(newSpeakerState);
+      
+      console.log('🔊 [AudioCall] Speaker toggled successfully to:', newSpeakerState ? 'ON' : 'OFF');
+    } catch (error) {
+      console.error('❌ [AudioCall] Error toggling speaker:', error);
+      // Revert the state if there was an error
+      setIsSpeakerOn(!isSpeakerOn);
+    }
   };
 
   const endCall = async () => {
@@ -570,7 +584,7 @@ export default function AudioCall({
             activeOpacity={0.8}
           >
             <Ionicons 
-              name={isSpeakerOn ? "volume-high" : "volume-medium"} 
+              name={isSpeakerOn ? "volume-high" : "call"} 
               size={20} 
               color="white" 
             />

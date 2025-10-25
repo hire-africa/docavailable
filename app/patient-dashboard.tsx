@@ -47,6 +47,9 @@ import { apiService } from './services/apiService';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
+import { useAnonymousMode } from '@/hooks/useAnonymousMode';
+import { useCustomTheme } from '@/hooks/useCustomTheme';
+import { useThemeColor } from '@/hooks/useThemeColor';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
@@ -108,6 +111,13 @@ interface UserSubscription {
 export default function PatientDashboard() {
   const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
+  const { isAnonymousModeEnabled } = useAnonymousMode();
+  
+  // Theme support - automatically use dark mode when anonymous mode is enabled
+  const { theme, isDark } = useCustomTheme();
+  const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const isDarkMode = isAnonymousModeEnabled && isDark;
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('home');

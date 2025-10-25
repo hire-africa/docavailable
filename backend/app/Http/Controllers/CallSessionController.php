@@ -377,10 +377,21 @@ class CallSessionController extends Controller
             }
 
             // Calculate sessions to deduct based on duration and connection
-            $elapsedMinutes = $sessionDuration;
+            // Convert session duration from seconds to minutes
+            $elapsedMinutes = floor($sessionDuration / 60);
             $autoDeductions = floor($elapsedMinutes / 10); // Every 10 minutes
             $manualDeduction = $wasConnected ? 1 : 0; // Only deduct on hangup if connected
             $totalSessionsToDeduct = $autoDeductions + $manualDeduction;
+
+            // Log billing calculation for debugging
+            Log::info("Call session billing calculation", [
+                'session_duration_seconds' => $sessionDuration,
+                'elapsed_minutes' => $elapsedMinutes,
+                'auto_deductions' => $autoDeductions,
+                'manual_deduction' => $manualDeduction,
+                'total_sessions_to_deduct' => $totalSessionsToDeduct,
+                'was_connected' => $wasConnected
+            ]);
 
             // Update the call session status
             $callSession->update([
@@ -645,7 +656,8 @@ class CallSessionController extends Controller
             }
 
             // Calculate auto-deductions for every 10 minutes
-            $elapsedMinutes = $sessionDuration;
+            // Convert session duration from seconds to minutes
+            $elapsedMinutes = floor($sessionDuration / 60);
             $autoDeductions = floor($elapsedMinutes / 10);
             $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
             $newDeductions = $autoDeductions - $alreadyProcessed;

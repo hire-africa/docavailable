@@ -138,20 +138,17 @@ export const MediaUploadHandler: React.FC<MediaUploadHandlerProps> = ({
 
   return (
     <View style={styles.container}>
-      {/* Image Upload Button */}
+      {/* Image Upload Button - DISABLED */}
       <TouchableOpacity
-        style={styles.mediaButton}
-        onPress={() => setShowOptions(true)}
-        disabled={imageUploadState.isUploading}
+        style={[styles.mediaButton, styles.disabledButton]}
+        onPress={() => {}} // Disabled - no action
+        disabled={true}
       >
         <Ionicons 
           name="image-outline" 
           size={24} 
-          color={imageUploadState.isUploading ? '#999' : '#007AFF'} 
+          color="#999" 
         />
-        {imageUploadState.isUploading && (
-          <ActivityIndicator size="small" color="#007AFF" style={styles.loadingIndicator} />
-        )}
       </TouchableOpacity>
 
       {/* Voice Recording Button */}
@@ -253,19 +250,21 @@ export const MediaUploadHandler: React.FC<MediaUploadHandlerProps> = ({
             <Text style={styles.modalTitle}>Select Image Source</Text>
             
             <TouchableOpacity
-              style={styles.modalOption}
-              onPress={handleImagePick}
+              style={[styles.modalOption, styles.disabledOption]}
+              onPress={() => {}} // Disabled - no action
+              disabled={true}
             >
-              <Ionicons name="images-outline" size={24} color="#007AFF" />
-              <Text style={styles.modalOptionText}>Choose from Gallery</Text>
+              <Ionicons name="images-outline" size={24} color="#999" />
+              <Text style={[styles.modalOptionText, styles.disabledText]}>Choose from Gallery (Disabled)</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.modalOption}
-              onPress={handleTakePhoto}
+              style={[styles.modalOption, styles.disabledOption]}
+              onPress={() => {}} // Disabled - no action
+              disabled={true}
             >
-              <Ionicons name="camera-outline" size={24} color="#007AFF" />
-              <Text style={styles.modalOptionText}>Take Photo</Text>
+              <Ionicons name="camera-outline" size={24} color="#999" />
+              <Text style={[styles.modalOptionText, styles.disabledText]}>Take Photo (Disabled)</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
@@ -405,5 +404,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  disabledOption: {
+    backgroundColor: '#F5F5F5',
+    opacity: 0.6,
+  },
+  disabledText: {
+    color: '#999',
   },
 });

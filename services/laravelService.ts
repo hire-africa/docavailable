@@ -39,6 +39,12 @@ export interface UserData {
   // Additional fields that might be used
   role?: string;
   is_online_for_instant_sessions?: boolean;
+  // User preferences
+  preferences?: {
+    theme?: 'light' | 'dark' | 'auto';
+    language?: string;
+    timezone?: string;
+  };
 }
 
 // Appointment interfaces

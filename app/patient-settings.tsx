@@ -193,6 +193,11 @@ function PatientSettingsContent() {
                 security: {
                     loginNotifications: updatedSettings.security.loginNotifications,
                     sessionTimeout: updatedSettings.security.sessionTimeout,
+                },
+                preferences: {
+                    theme: updatedSettings.preferences.theme,
+                    language: updatedSettings.preferences.language,
+                    timezone: updatedSettings.preferences.timezone,
                 }
             });
             console.log('🔍 Privacy settings save response:', privacyResponse);
@@ -220,7 +225,7 @@ function PatientSettingsContent() {
             return;
         }
 
-        // Allow disabling anonymous mode without warning
+        // Allow disabling anonymous mode without warning and revert to light mode
         if (path === 'privacy.anonymousMode' && value === false) {
             const keys = path.split('.');
             const newSettings = { ...settings };
@@ -230,6 +235,9 @@ function PatientSettingsContent() {
                 current = current[keys[i]];
             }
             current[keys[keys.length - 1]] = value;
+            
+            // Automatically switch back to light mode when disabling anonymous mode
+            newSettings.preferences.theme = 'light';
             
             setSettings(newSettings);
             saveSettings(newSettings);
@@ -250,9 +258,10 @@ function PatientSettingsContent() {
     };
 
     const handleAnonymousModeConfirm = () => {
-        // Enable anonymous mode
+        // Enable anonymous mode and automatically enable dark mode
         const newSettings = { ...settings };
         newSettings.privacy.anonymousMode = true;
+        newSettings.preferences.theme = 'dark'; // Automatically enable dark mode
         setSettings(newSettings);
         saveSettings(newSettings);
         
@@ -368,7 +377,7 @@ function PatientSettingsContent() {
                             <Icon name="user" size={20} color="#4CAF50" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Anonymous Consultations</Text>
-                                <Text style={styles.settingDescription}>Hide your name and profile in all consultations</Text>
+                                <Text style={styles.settingDescription}>Hide your name and profile. Dark mode automatically enabled.</Text>
                             </View>
                         </View>
                         <Switch

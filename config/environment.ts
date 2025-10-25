@@ -39,6 +39,11 @@ export const environment = {
   USE_BACKEND_APPOINTMENTS: getEnvVar('EXPO_PUBLIC_USE_BACKEND_APPOINTMENTS', 'true') === 'true',
   BACKEND_ENABLED: getEnvVar('EXPO_PUBLIC_BACKEND_ENABLED', 'true') === 'true',
   
+  // Logging Configuration
+  LOG_LEVEL: getEnvVar('EXPO_PUBLIC_LOG_LEVEL', 'info').toLowerCase(),
+  ENABLE_VERBOSE_LOGGING: getEnvVar('EXPO_PUBLIC_ENABLE_VERBOSE_LOGGING', 'false') === 'true',
+  ENABLE_DEBUG_LOGGING: getEnvVar('EXPO_PUBLIC_ENABLE_DEBUG_LOGGING', 'false') === 'true',
+  
   // Payment Gateway Configuration
   PAYCHANGU_API_KEY: getEnvVar('PAYCHANGU_API_KEY', ''),
   PAYCHANGU_SECRET_KEY: getEnvVar('PAYCHANGU_SECRET_KEY', ''),

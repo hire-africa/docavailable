@@ -151,40 +151,41 @@ class ImageService {
         })),
       });
 
-      // Try WebRTC server first, then fallback to Laravel API
+      // Try WebRTC server first, fallback to Laravel API
       const token = await AsyncStorage.getItem('auth_token');
-      let response;
+      console.log('📤 [ImageService] Uploading image via WebRTC server...');
       
       try {
-        // First attempt: WebRTC server
-        console.log('📤 [ImageService] Trying WebRTC server first...');
-        response = await fetch(`http://46.101.123.123:8081/api/upload/voice-message`, {
+        // First try WebRTC server image endpoint
+        const webrtcResponse = await fetch('https://docavailable.org:8089/api/upload/image', {
           method: 'POST',
-          headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
-          },
           body: formData,
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
-        
-        const webrtcData = await response.json();
-        if (webrtcData.success) {
-          console.log('✅ [ImageService] WebRTC upload successful');
-          return { success: true, mediaUrl: webrtcData.data.media_url };
-        } else {
-          throw new Error(`WebRTC upload failed: ${webrtcData.message}`);
+
+        if (webrtcResponse.ok) {
+          const webrtcData = await webrtcResponse.json();
+          if (webrtcData.success && webrtcData.data?.media_url) {
+            console.log('✅ [ImageService] WebRTC server upload successful');
+            return { success: true, mediaUrl: webrtcData.data.media_url };
+          }
         }
       } catch (webrtcError) {
-        console.warn('⚠️ [ImageService] WebRTC upload failed, trying Laravel API fallback:', webrtcError);
-        
-        // Fallback: Laravel API
-        const { apiService } = await import('./apiService');
-        response = await apiService.uploadFile('/upload/chat-image', formData);
-        if (response?.data?.media_url) {
-          console.log('✅ [ImageService] Laravel API fallback successful');
-          return { success: true, mediaUrl: response.data.media_url };
-        } else {
-          throw new Error('Both WebRTC and Laravel API uploads failed');
-        }
+        console.warn('⚠️ [ImageService] WebRTC server upload failed, trying Laravel API:', webrtcError);
+      }
+
+      // Fallback to Laravel API
+      console.log('📤 [ImageService] Uploading image via Laravel API...');
+      const { apiService } = await import('./apiService');
+      const response = await apiService.uploadFile('/upload/chat-image', formData);
+      
+      if (response?.data?.media_url) {
+        console.log('✅ [ImageService] Laravel API upload successful');
+        return { success: true, mediaUrl: response.data.media_url };
+      } else {
+        throw new Error('Both WebRTC server and Laravel API upload failed');
       }
     } catch (error: any) {
       console.error('ImageService: Upload error:', error);

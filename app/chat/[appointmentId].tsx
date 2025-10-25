@@ -10,7 +10,6 @@ import {
     Image,
     KeyboardAvoidingView,
     Modal,
-    Platform,
     ScrollView,
     StatusBar,
     Text,
@@ -25,12 +24,17 @@ import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import InstantSessionTimer from '../../components/InstantSessionTimer';
 import RatingModal from '../../components/RatingModal';
+// import SecurityWatermark from '../../components/SecurityWatermark';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
+import { WhatsAppVoiceRecorder } from '../../components/WhatsAppVoiceRecorder';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
+import { useCustomTheme } from '../../hooks/useCustomTheme';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
+import { useThemeColor } from '../../hooks/useThemeColor';
+// import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
 import configService from '../../services/configService';
@@ -132,6 +136,13 @@ export default function ChatPage() {
   const router = useRouter();
   const { user, token, loading: authLoading, refreshUserData } = useAuth();
   const { isAnonymousModeEnabled } = useAnonymousMode();
+  // const { isEnabled: isScreenshotPreventionEnabled, config: screenshotConfig } = useScreenshotPrevention();
+  
+  // Theme support for anonymous mode
+  const { isDark } = useCustomTheme();
+  const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
+  const isDarkMode = isAnonymousModeEnabled && isDark;
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -176,6 +187,9 @@ export default function ChatPage() {
   const [showAudioCall, setShowAudioCall] = useState(false);
   const [incomingCallerName, setIncomingCallerName] = useState<string>('');
   const [incomingCallerProfilePicture, setIncomingCallerProfilePicture] = useState<string | null>(null);
+  
+  // Call button debouncing
+  const [isCallButtonPressed, setIsCallButtonPressed] = useState(false);
   const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
   
   // Video call modal state
@@ -841,20 +855,20 @@ export default function ChatPage() {
   // Debug chatInfo changes
   useEffect(() => {
     if (chatInfo) {
-      // console.log('🔍 Chat Header Profile Picture Props:', {
-      //   imageUri: chatInfo?.other_participant_profile_picture,
-      //   profilePictureUrl: chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture,
-      //   chatInfo: chatInfo
-      // });
+      console.log('🔍 Chat Header Profile Picture Props:', {
+        imageUri: chatInfo?.other_participant_profile_picture,
+        profilePictureUrl: chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture,
+        chatInfo: chatInfo
+      });
     }
     
     // Debug chat header rendering
-    // console.log('🔍 Chat Header Debug:', {
-    //   hasChatInfo: !!chatInfo,
-    //   profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
-    //   profilePicture: chatInfo?.other_participant_profile_picture,
-    //   participantName: chatInfo?.other_participant_profile_picture_url
-    // });
+    console.log('🔍 Chat Header Debug:', {
+      hasChatInfo: !!chatInfo,
+      profilePictureUrl: chatInfo?.other_participant_profile_picture_url,
+      profilePicture: chatInfo?.other_participant_profile_picture,
+      participantName: chatInfo?.other_participant_name
+    });
   }, [chatInfo]);
 
   // Initialize WebRTC Chat Service
@@ -2987,43 +3001,45 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
-        <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#151718' : '#fff' }} edges={['top']}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#4CAF50" />
-          <Text style={{ marginTop: 10, color: '#666' }}>Loading chat...</Text>
+          <Text style={{ marginTop: 10, color: isDarkMode ? '#ECEDEE' : '#666' }}>Loading chat...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top', 'bottom']}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#151718' : 'transparent' }} edges={['top', 'bottom']}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       
-      {/* Background Wallpaper */}
-      <Image
-        source={require('./white_wallpaper.jpg')}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          width: '100%',
-          height: '100%',
-          opacity: 0.8,
-          zIndex: -1,
-        }}
-        resizeMode="contain"
-        onLoad={() => console.log('✅ Wallpaper loaded successfully')}
-        onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
-      />
+      {/* Background Wallpaper - Only show in light mode */}
+      {!isDarkMode && (
+        <Image
+          source={require('./white_wallpaper.jpg')}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0.8,
+            zIndex: -1,
+          }}
+          resizeMode="contain"
+          onLoad={() => console.log('✅ Wallpaper loaded successfully')}
+          onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
+        />
+      )}
       
       <KeyboardAvoidingView 
-        style={{ flex: 1, backgroundColor: 'transparent' }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        behavior="padding"
+        keyboardVerticalOffset={0}
       >
         {/* Header */}
         <View style={{
@@ -3040,98 +3056,66 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           </TouchableOpacity>
           
           {/* Profile Picture and Name - Using Backend Anonymized Data */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-          {chatInfo?.other_participant_profile_picture_url ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {(chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture) ? (
             <Image
-              source={{ uri: chatInfo.other_participant_profile_picture_url }}
+                source={{ uri: chatInfo.other_participant_profile_picture_url || chatInfo.other_participant_profile_picture }}
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                marginRight: 12,
-              }}
-              onError={() => {
-                console.log('Failed to load profile picture, using default icon');
-              }}
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  marginRight: 10,
+                  borderWidth: 1,
+                  borderColor: '#E5E5E5',
+                }}
+                onError={(error) => {
+                  console.log('❌ Profile picture failed to load:', error);
+                  console.log('❌ URL was:', chatInfo.other_participant_profile_picture_url || chatInfo.other_participant_profile_picture);
+                }}
+                onLoad={() => {
+                  console.log('✅ Profile picture loaded successfully:', chatInfo.other_participant_profile_picture_url || chatInfo.other_participant_profile_picture);
+                }}
+                resizeMode="cover"
             />
           ) : (
             <View style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: '#E0E0E0',
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: '#4CAF50',
               justifyContent: 'center',
               alignItems: 'center',
-              marginRight: 12,
+                marginRight: 10,
+                borderWidth: 1,
+                borderColor: '#E5E5E5',
             }}>
-              <Icon name="user" size={20} color="#666" />
+                <Icon name="user" size={18} color="#fff" />
             </View>
           )}
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
+            <View style={{ flex: 1, justifyContent: 'center', minWidth: 0 }}>
+              <Text 
+                style={{ 
+                  fontSize: 16, 
+                  fontWeight: '600', 
+                  color: '#333',
+                  flexShrink: 1,
+                }}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
             {chatInfo?.other_participant_name || 'User'}
           </Text>
-        </View>
-        
-        {/* Typing Indicator */}
-        <View style={{ flex: 1 }}>
-          {/* Typing Indicator in Header */}
           {isOtherUserTyping && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              marginTop: 2,
-            }}>
               <Text style={{
-                fontSize: 12,
+                  fontSize: 11, 
                 color: '#4CAF50',
-                fontStyle: 'italic',
-                marginRight: 4,
+                  fontWeight: '500',
+                  marginTop: 1,
               }}>
-                typing
+                  Typing...
               </Text>
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-              }}>
-                {(() => {
-                  const { Animated } = require('react-native');
-                  return (
-                    <>
-                      <Animated.View style={{
-                        width: 3,
-                        height: 3,
-                        borderRadius: 1.5,
-                        backgroundColor: '#4CAF50',
-                        marginRight: 2,
-                        opacity: typingDotAnimation,
-                      }} />
-                      <Animated.View style={{
-                        width: 3,
-                        height: 3,
-                        borderRadius: 1.5,
-                        backgroundColor: '#4CAF50',
-                        marginRight: 2,
-                        opacity: typingDotAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.5, 1]
-                        }),
-                      }} />
-                      <Animated.View style={{
-                        width: 3,
-                        height: 3,
-                        borderRadius: 1.5,
-                        backgroundColor: '#4CAF50',
-                        opacity: typingDotAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [0.3, 1]
-                        }),
-                      }} />
-                    </>
-                  );
-                })()}
-              </View>
+              )}
             </View>
-          )}
         </View>
         
         {/* Call Icons - Role-based calling */}
@@ -3170,6 +3154,12 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 opacity: isCallButtonEnabled('voice') ? 1 : 0.3
               }}
               onPress={() => {
+                // Prevent multiple rapid button presses
+                if (isCallButtonPressed) {
+                  console.log('⚠️ [CallButton] Button already pressed, ignoring duplicate press');
+                  return;
+                }
+                
                 console.log('🎯 [CallButton] Press state:', {
                   userType: user?.user_type,
                   callEnabled: isCallEnabled(),
@@ -3189,6 +3179,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                     userType: user?.user_type
                   });
                   
+                  // Set button as pressed to prevent duplicates
+                  setIsCallButtonPressed(true);
+                  
                   // Clear any pending offer before starting new call
                   (global as any).pendingOffer = null;
                   // Clear incoming call flag for outgoing calls
@@ -3198,6 +3191,11 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   // AudioCallService is already imported as audioCallService
                   
                   setShowAudioCallModal(true);
+                  
+                  // Reset button state after a delay
+                  setTimeout(() => {
+                    setIsCallButtonPressed(false);
+                  }, 2000); // 2 second debounce
                 } else {
                   let message = '';
                   if (!isAudioCallEnabled()) {
@@ -3212,7 +3210,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
                 }
               }}
-              disabled={!isCallButtonEnabled('voice')}
+              disabled={!isCallButtonEnabled('voice') || isCallButtonPressed}
             >
               <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
             </TouchableOpacity>
@@ -3367,7 +3365,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             style={{ flex: 1, backgroundColor: 'transparent' }}
             contentContainerStyle={{ 
               padding: 16,
-              paddingBottom: 100, // Extra padding to ensure messages are visible above input and device menu
+              paddingBottom: 0, // No bottom padding to prevent extra space
             }}
             showsVerticalScrollIndicator={false}
           >
@@ -3542,16 +3540,27 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         {/* Input - Fixed at bottom with proper keyboard handling and safe area */}
         <View style={{ 
           flexDirection: 'row', 
-          alignItems: 'center',
+          alignItems: 'flex-end',
           paddingHorizontal: 16,
-          paddingVertical: 12,
-          paddingBottom: 20, // Extra padding for device bottom menu
+          paddingTop: 12,
+          paddingBottom: 0,
           borderTopWidth: 1,
           borderTopColor: '#E5E5E5',
           backgroundColor: '#fff',
           position: 'relative',
           zIndex: 1000,
+          minHeight: 60, // Ensure minimum height to cover any keyboard space
         }}>
+          {/* White overlay below input to hide grey space */}
+          <View style={{
+            position: 'absolute',
+            bottom: -100, // Extend below the input
+            left: 0,
+            right: 0,
+            height: 100,
+            backgroundColor: '#fff',
+            zIndex: -1,
+          }} />
           {/* Session Ended Message for Doctors */}
           {sessionEnded && !isPatient && (
             <View style={{
@@ -3577,69 +3586,43 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
-          {/* Image Button */}
+          {/* Image Button - DISABLED */}
           <TouchableOpacity
-            onPress={handleImagePicker}
-            disabled={
-              sending || 
-              sessionEnded || 
-              !sessionValid ||
-              (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
-            }
+            onPress={() => {}} // Disabled - no action
+            disabled={true}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sending || 
-                sessionEnded || 
-                !sessionValid ||
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+              opacity: 0.3,
             }}
           >
-            <Ionicons name="image" size={24} color={(sending || 
-              sessionEnded || 
-              !sessionValid ||
-              (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : "#4CAF50"} />
+            <Ionicons name="image" size={24} color="#999" />
           </TouchableOpacity>
           
-          {/* Camera Button */}
+          {/* Camera Button - DISABLED */}
           <TouchableOpacity
-            onPress={handleCameraPicker}
-            disabled={
-              sending || 
-              sessionEnded || 
-              !sessionValid ||
-              (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
-            }
+            onPress={() => {}} // Disabled - no action
+            disabled={true}
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: (sending || 
-                sessionEnded || 
-                !sessionValid ||
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+              opacity: 0.3,
             }}
           >
-            <Ionicons name="camera" size={24} color={(sending || 
-              sessionEnded || 
-              !sessionValid ||
-              (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : "#4CAF50"} />
+            <Ionicons name="camera" size={24} color="#999" />
           </TouchableOpacity>
           
-          {/* Voice Recording Button */}
-          <TouchableOpacity
-            onPress={isRecording ? stopRecording : startRecording}
+          {/* WhatsApp-like Voice Recording Button */}
+          <WhatsAppVoiceRecorder
+            onRecordingComplete={(uri) => {
+              setRecordingUri(uri);
+              setIsRecording(false);
+            }}
+            onRecordingCancel={() => {
+              setRecordingUri(null);
+              setIsRecording(false);
+              setRecordingDuration(0);
+            }}
             disabled={
               sending || 
               sessionEnded || 
@@ -3648,28 +3631,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
-            style={{
-              padding: 8,
-              marginRight: 8,
-              opacity: (sending || 
-                sessionEnded || 
-                !sessionValid ||
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
-            }}
-          >
-            <Ionicons 
-              name={isRecording ? "stop" : "mic"} 
-              size={24} 
-              color={(sending || 
-                sessionEnded || 
-                !sessionValid ||
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")} 
-            />
-          </TouchableOpacity>
+          />
           
           <TextInput
             value={newMessage}
@@ -3681,18 +3643,25 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               }
             }}
             editable={sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
-            placeholder=""
+            placeholder="Message..."
+            placeholderTextColor={isDarkMode ? '#9BA1A6' : '#999'}
             style={{
               flex: 1,
               borderWidth: 1,
-              borderColor: '#E5E5E5',
-              borderRadius: 20,
-              paddingHorizontal: 16,
-              paddingVertical: 12,
+              borderColor: newMessage.trim() ? '#4CAF50' : (isDarkMode ? '#444' : '#E5E5E5'),
+              borderRadius: 24,
+              paddingHorizontal: 18,
+              paddingVertical: 14,
               fontSize: 16,
               marginRight: 8,
               opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
-              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
+              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) 
+                ? (isDarkMode ? '#2A2A2A' : '#F5F5F5') 
+                : (isDarkMode ? '#2A2A2A' : 'white'),
+              color: isDarkMode ? '#ECEDEE' : '#000',
+              maxHeight: 100,
+              minHeight: 48,
+              textAlignVertical: 'center',
             }}
             multiline
             maxLength={1000}
@@ -3710,12 +3679,19 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
-              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5', // FIX: Removed recording states
-              borderRadius: 20,
-              padding: 12,
-              minWidth: 44,
+              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5',
+              borderRadius: 24,
+              padding: 14,
+              minWidth: 48,
+              height: 48,
               alignItems: 'center',
+              justifyContent: 'center',
               opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) ? 0.5 : 1,
+              shadowColor: newMessage.trim() && !sending ? '#4CAF50' : 'transparent',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.2,
+              shadowRadius: 4,
+              elevation: 3,
             }}
           >
             {sending ? (
@@ -3726,49 +3702,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           </TouchableOpacity>
         </View>
 
-        {/* Voice Recording Interface */}
-        {isRecording && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 16,
-            backgroundColor: '#f0f0f0',
-            borderTopWidth: 1,
-            borderTopColor: '#e0e0e0'
-          }}>
-            <View style={{
-              flex: 1,
-              flexDirection: 'row',
-              alignItems: 'center'
-            }}>
-              <View style={{
-                width: 12,
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: '#ff4444',
-                marginRight: 12
-              }} />
-              <Text style={{
-                fontSize: 16,
-                color: '#333',
-                fontWeight: '500'
-              }}>
-                Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={stopRecording}
-              style={{
-                padding: 8,
-                backgroundColor: '#ff4444',
-                borderRadius: 20
-              }}
-            >
-              <Ionicons name="stop" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        )}
-        
+        {/* Voice Recording Preview - handled by WhatsAppVoiceRecorder component */}
         {recordingUri && !isRecording && (
           <View style={{
             flexDirection: 'row',
@@ -4069,6 +4003,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           setShowAudioCallModal(false);
           // Clear the incoming call flag when closing
           (global as any).isIncomingCall = false;
+          // Reset button state when modal is closed
+          setIsCallButtonPressed(false);
         }}
         appointmentId={appointmentId}
         userId={currentUserId.toString()}
@@ -4296,6 +4232,15 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       )}
 
       {/* Note: Video call state transitions are handled internally by VideoCallModal */}
+      
+      {/* Security Watermark for Screenshot Prevention - COMMENTED OUT */}
+      {/* <SecurityWatermark 
+        visible={isScreenshotPreventionEnabled && screenshotConfig.showWatermark}
+        text={screenshotConfig.watermarkText}
+        opacity={0.05}
+        fontSize={12}
+        rotation={-15}
+      /> */}
     </SafeAreaView>
   );
 } 

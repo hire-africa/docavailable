@@ -452,7 +452,7 @@ class AudioCallService {
         audioTrackConstraints: this.localStream.getAudioTracks()[0]?.getConstraints()
       });
 
-      // Configure audio routing for phone calls
+      // Configure audio routing for phone calls (caller side)
       await this.configureAudioRouting();
 
       // Create peer connection
@@ -849,20 +849,20 @@ class AudioCallService {
    */
   private async configureAudioRouting(): Promise<void> {
     try {
-      console.log('📞 Configuring audio routing for earpiece...');
+      console.log('📞 Configuring audio routing for earpiece (default)...');
       
-      // Set audio mode for phone calls (earpiece)
+      // Set audio mode for phone calls (earpiece by default like normal phone calls)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: true, // This forces earpiece usage on Android
+        playThroughEarpieceAndroid: true, // Start with earpiece mode
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
       
-      console.log('✅ Audio routing configured for earpiece');
+      console.log('✅ Audio routing configured for earpiece (default)');
     } catch (error) {
       console.warn('⚠️ Could not configure audio routing:', error);
     }
@@ -1519,21 +1519,25 @@ class AudioCallService {
   /**
    * Toggle speaker on/off
    */
-  toggleSpeaker(speakerOn: boolean): void {
+  async toggleSpeaker(speakerOn: boolean): Promise<void> {
     try {
       console.log('🔊 Toggling speaker:', speakerOn ? 'ON' : 'OFF');
       
-      // For React Native, we need to use the Audio module to set speaker mode
-      // This is a simple implementation - in a real app you'd use react-native-audio or similar
-      if (this.remoteStream) {
-        // Set the audio output to speaker or earpiece
-        this.remoteStream.getAudioTracks().forEach(track => {
-          // This is a placeholder - actual implementation would use native audio routing
-          console.log('🔊 Audio track speaker mode set to:', speakerOn ? 'speaker' : 'earpiece');
-        });
-      }
+      // Import Audio from expo-av for proper audio routing
+      const { Audio, InterruptionModeAndroid, InterruptionModeIOS } = await import('expo-av');
       
-      console.log('✅ Speaker mode updated successfully');
+      // Set audio mode to control speaker/earpiece routing
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: !speakerOn, // false = speaker, true = earpiece
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
+      
+      console.log('✅ Speaker mode updated successfully:', speakerOn ? 'speaker' : 'earpiece');
     } catch (error) {
       console.error('❌ Error toggling speaker:', error);
     }
@@ -1610,6 +1614,9 @@ n   */
         if (!this.callTimer) {
           this.startCallTimer();
         }
+        
+        // Audio routing is already configured for earpiece by default
+        // Users can toggle to speaker using the speaker button if desired
       }
     } catch (e) {
       console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);
