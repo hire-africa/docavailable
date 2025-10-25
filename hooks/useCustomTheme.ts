@@ -1,12 +1,10 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 
 /**
  * Custom theme hook that respects user's theme preference from settings
  * Uses custom theme system instead of system color scheme
  */
 export function useCustomTheme() {
-  const systemColorScheme = useColorScheme();
   const { userData } = useAuth();
   
   // Get theme from user data preferences
@@ -24,7 +22,6 @@ export function useCustomTheme() {
   // Debug logging
   console.log('🎨 [useCustomTheme] Debug:', {
     userTheme,
-    systemColorScheme,
     finalTheme: theme,
     isAnonymousMode,
     userData: userData ? 'present' : 'null',
@@ -34,7 +31,7 @@ export function useCustomTheme() {
     privacyPreferences: userData?.privacy_preferences,
     preferencesValue: userData?.preferences,
     privacyPreferencesValue: userData?.privacy_preferences,
-    note: 'Using custom theme system - anonymous mode forces dark theme'
+    note: 'Using custom theme system - NO system theme dependency'
   });
   
   return {

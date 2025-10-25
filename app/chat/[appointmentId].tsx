@@ -24,22 +24,21 @@ import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import InstantSessionTimer from '../../components/InstantSessionTimer';
 import RatingModal from '../../components/RatingModal';
-// import SecurityWatermark from '../../components/SecurityWatermark';
+import ScreenshotDebugInfo from '../../components/ScreenshotDebugInfo';
+import ScreenshotTestButton from '../../components/ScreenshotTestButton';
+import SecurityWatermark from '../../components/SecurityWatermark';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
-import { WhatsAppVoiceRecorder } from '../../components/WhatsAppVoiceRecorder';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
-import { useCustomTheme } from '../../hooks/useCustomTheme';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
-import { useThemeColor } from '../../hooks/useThemeColor';
-// import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
+import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
-import sessionService from '../../services/sessionService';
+import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
@@ -136,13 +135,22 @@ export default function ChatPage() {
   const router = useRouter();
   const { user, token, loading: authLoading, refreshUserData } = useAuth();
   const { isAnonymousModeEnabled } = useAnonymousMode();
-  // const { isEnabled: isScreenshotPreventionEnabled, config: screenshotConfig } = useScreenshotPrevention();
+  const { isEnabled: isScreenshotPreventionEnabled, config: screenshotConfig, enable: enableScreenshotPrevention } = useScreenshotPrevention();
   
-  // Theme support for anonymous mode
-  const { isDark } = useCustomTheme();
-  const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
-  const isDarkMode = isAnonymousModeEnabled && isDark;
+  // Ensure screenshot prevention is enabled when chat loads
+  useEffect(() => {
+    const enableScreenshotProtection = async () => {
+      try {
+        console.log('🔒 [Chat] Ensuring screenshot prevention is enabled...');
+        await enableScreenshotPrevention();
+        console.log('✅ [Chat] Screenshot prevention enabled for chat');
+      } catch (error) {
+        console.error('❌ [Chat] Failed to enable screenshot prevention:', error);
+      }
+    };
+
+    enableScreenshotProtection();
+  }, [enableScreenshotPrevention]);
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -150,6 +158,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [chatInfo, setChatInfo] = useState<ChatInfo | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingChat, setIsLoadingChat] = useState(false);
   
   // Session ending modal state
   const [showEndSessionModal, setShowEndSessionModal] = useState(false);
@@ -187,9 +196,6 @@ export default function ChatPage() {
   const [showAudioCall, setShowAudioCall] = useState(false);
   const [incomingCallerName, setIncomingCallerName] = useState<string>('');
   const [incomingCallerProfilePicture, setIncomingCallerProfilePicture] = useState<string | null>(null);
-  
-  // Call button debouncing
-  const [isCallButtonPressed, setIsCallButtonPressed] = useState(false);
   const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
   
   // Video call modal state
@@ -218,6 +224,7 @@ export default function ChatPage() {
   // WebRTC chat service
   const [webrtcChatService, setWebrtcChatService] = useState<WebRTCChatService | null>(null);
   const [isWebRTCServiceActive, setIsWebRTCServiceActive] = useState(false);
+  const webrtcServiceRef = useRef<WebRTCChatService | null>(null);
   
   // Appointment time checking state
   const [isAppointmentTime, setIsAppointmentTime] = useState(false);
@@ -879,6 +886,12 @@ export default function ChatPage() {
       return;
     }
 
+    // Prevent multiple instances
+    if (webrtcServiceRef.current) {
+      console.log('⚠️ [WebRTC Chat] Service already exists, skipping initialization');
+      return;
+    }
+
     const initializeWebRTCChat = async () => {
       try {
         console.log('🔌 [WebRTC Chat] Initializing WebRTC chat for appointment:', appointmentId);
@@ -1025,6 +1038,7 @@ export default function ChatPage() {
           clearTimeout(connectionTimeout); // Clear timeout on successful connection
           console.log('✅ [WebRTC Chat] Connected successfully');
           console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
+          webrtcServiceRef.current = chatService;
           setWebrtcChatService(chatService);
           setIsWebRTCServiceActive(true);
           console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
@@ -1161,16 +1175,18 @@ export default function ChatPage() {
     initializeWebRTCChat();
 
     return () => {
-      if (webrtcChatService) {
+      if (webrtcServiceRef.current) {
         console.log('🔌 [WebRTCChat] Disconnecting service');
         
         // Clear health check interval if it exists
-        if ((webrtcChatService as any).healthCheckInterval) {
+        if ((webrtcServiceRef.current as any).healthCheckInterval) {
           console.log('🔄 [WebRTC Health] Clearing health check interval');
-          clearInterval((webrtcChatService as any).healthCheckInterval);
+          clearInterval((webrtcServiceRef.current as any).healthCheckInterval);
         }
         
-        webrtcChatService.disconnect();
+        webrtcServiceRef.current.disconnect();
+        webrtcServiceRef.current = null;
+        setWebrtcChatService(null);
         setIsWebRTCServiceActive(false);
       }
       
@@ -1181,7 +1197,7 @@ export default function ChatPage() {
         (window as any).fallbackInterval = null;
       }
     };
-  }, [isAuthenticated, appointmentId, currentUserId, user]);
+  }, [isAuthenticated, appointmentId, currentUserId]);
 
   // Initialize WebRTC session management
   useEffect(() => {
@@ -1705,7 +1721,19 @@ export default function ChatPage() {
 
   // Load chat info and messages
   const loadChat = async () => {
+    // Prevent multiple simultaneous loadChat calls
+    if (isLoadingChat) {
+      console.log('⚠️ [loadChat] Already loading chat, skipping duplicate call');
+      return;
+    }
+    
     try {
+      console.log('🔄 [loadChat] Starting chat load...', { 
+        userType: user?.user_type, 
+        appointmentId, 
+        hasWebRTCService: !!webrtcChatService 
+      });
+      setIsLoadingChat(true);
       setLoading(true);
       
       // Load chat info only if authenticated
@@ -1874,24 +1902,17 @@ export default function ChatPage() {
       
       // Load messages from WebRTC chat service or fallback to backend API
       if (webrtcChatService) {
-        const loadedMessages = await webrtcChatService.getMessages();
-        setMessages(loadedMessages);
-        
-        // FIXED: Also sync with server to get any messages that might not be in local storage
+        // First sync with server to get the latest messages
         try {
           console.log('🔄 [ChatComponent] Syncing with server to get latest messages...');
           const syncedMessages = await webrtcChatService.syncWithServer();
-          if (syncedMessages.length !== loadedMessages.length) {
-            console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
-            // Merge with existing messages to avoid duplicates
-            setMessages(prev => {
-const mergedMessages = safeMergeMessages(prev, syncedMessages);
-              console.log('✅ [ChatComponent] Messages merged from server sync:', mergedMessages.length);
-              return mergedMessages;
-            });
-          }
+          console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
+          setMessages(syncedMessages);
         } catch (error) {
           console.error('❌ [ChatComponent] Failed to sync with server, using local messages only:', error);
+          // Fallback to local messages if sync fails
+          const loadedMessages = await webrtcChatService.getMessages();
+          setMessages(loadedMessages);
         }
       } else {
         // Fallback to backend API for loading messages
@@ -1911,6 +1932,7 @@ const mergedMessages = safeMergeMessages(prev, syncedMessages);
       console.error('Error loading chat:', error);
     } finally {
       setLoading(false);
+      setIsLoadingChat(false);
     }
   };
 
@@ -2479,8 +2501,15 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       
       const sessionType = isTextSession ? 'text' : 'appointment';
       
-      // Call backend to end session
-      const result = await sessionService.endSession(sessionId, sessionType);
+      // Call backend to end session based on type
+      let result;
+      if (isTextSession) {
+        await sessionService.endTextSession(sessionId);
+        result = { status: 'success' };
+      } else {
+        await sessionService.endTextAppointmentSession(sessionId);
+        result = { status: 'success' };
+      }
       
       console.log('🔍 [End Session] Backend response:', result);
       
@@ -2641,7 +2670,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         comment: comment.substring(0, 50) + '...'
       });
       
-      const result = await sessionService.submitRating(sessionId, rating, comment, doctorId, patientId);
+      // Submit rating directly via API
+      const response = await apiService.post('/ratings', {
+        session_id: sessionId,
+        doctor_id: doctorId,
+        patient_id: patientId,
+        rating: rating,
+        comment: comment
+      });
+      
+      const result = response;
       
       console.log('✅ [Rating] Rating submitted successfully:', result);
       
@@ -3001,40 +3039,38 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#151718' : '#fff' }} edges={['top']}>
-        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+        <StatusBar barStyle="dark-content" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#4CAF50" />
-          <Text style={{ marginTop: 10, color: isDarkMode ? '#ECEDEE' : '#666' }}>Loading chat...</Text>
+          <Text style={{ marginTop: 10, color: '#666' }}>Loading chat...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#151718' : 'transparent' }} edges={['top', 'bottom']}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top', 'bottom']}>
+      <StatusBar barStyle="dark-content" />
       
-      {/* Background Wallpaper - Only show in light mode */}
-      {!isDarkMode && (
-        <Image
-          source={require('./white_wallpaper.jpg')}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            width: '100%',
-            height: '100%',
-            opacity: 0.8,
-            zIndex: -1,
-          }}
-          resizeMode="contain"
-          onLoad={() => console.log('✅ Wallpaper loaded successfully')}
-          onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
-        />
-      )}
+      {/* Background Wallpaper */}
+      <Image
+        source={require('./white_wallpaper.jpg')}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0.8,
+          zIndex: -1,
+        }}
+        resizeMode="cover"
+        onLoad={() => console.log('✅ Wallpaper loaded successfully')}
+        onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
+      />
       
       <KeyboardAvoidingView 
         style={{ flex: 1, backgroundColor: 'transparent' }}
@@ -3118,6 +3154,10 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
         </View>
         
+        {/* Screenshot Test Button - Remove this in production */}
+        <ScreenshotTestButton />
+        <ScreenshotDebugInfo />
+        
         {/* Call Icons - Role-based calling */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
           <TouchableOpacity 
@@ -3154,12 +3194,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 opacity: isCallButtonEnabled('voice') ? 1 : 0.3
               }}
               onPress={() => {
-                // Prevent multiple rapid button presses
-                if (isCallButtonPressed) {
-                  console.log('⚠️ [CallButton] Button already pressed, ignoring duplicate press');
-                  return;
-                }
-                
                 console.log('🎯 [CallButton] Press state:', {
                   userType: user?.user_type,
                   callEnabled: isCallEnabled(),
@@ -3179,9 +3213,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                     userType: user?.user_type
                   });
                   
-                  // Set button as pressed to prevent duplicates
-                  setIsCallButtonPressed(true);
-                  
                   // Clear any pending offer before starting new call
                   (global as any).pendingOffer = null;
                   // Clear incoming call flag for outgoing calls
@@ -3191,11 +3222,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   // AudioCallService is already imported as audioCallService
                   
                   setShowAudioCallModal(true);
-                  
-                  // Reset button state after a delay
-                  setTimeout(() => {
-                    setIsCallButtonPressed(false);
-                  }, 2000); // 2 second debounce
                 } else {
                   let message = '';
                   if (!isAudioCallEnabled()) {
@@ -3210,7 +3236,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                   Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
                 }
               }}
-              disabled={!isCallButtonEnabled('voice') || isCallButtonPressed}
+              disabled={!isCallButtonEnabled('voice')}
             >
               <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
             </TouchableOpacity>
@@ -3586,6 +3612,31 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
+          {/* Session Ended Message for Patients */}
+          {sessionEnded && isPatient && (
+            <View style={{
+              position: 'absolute',
+              top: -60,
+              left: 0,
+              right: 0,
+              backgroundColor: '#F8D7DA',
+              borderTopWidth: 1,
+              borderTopColor: '#F5C6CB',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              alignItems: 'center',
+            }}>
+              <Text style={{
+                fontSize: 14,
+                color: '#721C24',
+                fontWeight: '500',
+                textAlign: 'center',
+              }}>
+                Session has ended • You can no longer send messages
+              </Text>
+            </View>
+          )}
+
           {/* Image Button - DISABLED */}
           <TouchableOpacity
             onPress={() => {}} // Disabled - no action
@@ -3612,17 +3663,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             <Ionicons name="camera" size={24} color="#999" />
           </TouchableOpacity>
           
-          {/* WhatsApp-like Voice Recording Button */}
-          <WhatsAppVoiceRecorder
-            onRecordingComplete={(uri) => {
-              setRecordingUri(uri);
-              setIsRecording(false);
-            }}
-            onRecordingCancel={() => {
-              setRecordingUri(null);
-              setIsRecording(false);
-              setRecordingDuration(0);
-            }}
+          {/* Voice Recording Button */}
+          <TouchableOpacity
+            onPress={isRecording ? stopRecording : startRecording}
             disabled={
               sending || 
               sessionEnded || 
@@ -3631,7 +3674,28 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
-          />
+            style={{
+              padding: 8,
+              marginRight: 8,
+              opacity: (sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+            }}
+          >
+            <Ionicons 
+              name={isRecording ? "stop" : "mic"} 
+              size={24} 
+              color={(sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")} 
+            />
+          </TouchableOpacity>
           
           <TextInput
             value={newMessage}
@@ -3642,23 +3706,20 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
               }
             }}
-            editable={sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
+            editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
             placeholder="Message..."
-            placeholderTextColor={isDarkMode ? '#9BA1A6' : '#999'}
+            placeholderTextColor="#999"
             style={{
               flex: 1,
               borderWidth: 1,
-              borderColor: newMessage.trim() ? '#4CAF50' : (isDarkMode ? '#444' : '#E5E5E5'),
+              borderColor: newMessage.trim() ? '#4CAF50' : '#E5E5E5',
               borderRadius: 24,
               paddingHorizontal: 18,
               paddingVertical: 14,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionValid && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
-              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) 
-                ? (isDarkMode ? '#2A2A2A' : '#F5F5F5') 
-                : (isDarkMode ? '#2A2A2A' : 'white'),
-              color: isDarkMode ? '#ECEDEE' : '#000',
+              opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
+              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
               maxHeight: 100,
               minHeight: 48,
               textAlignVertical: 'center',
@@ -3702,7 +3763,51 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           </TouchableOpacity>
         </View>
 
-        {/* Voice Recording Preview - handled by WhatsAppVoiceRecorder component */}
+        {/* Voice Recording Interface */}
+        {isRecording && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            padding: 16,
+            backgroundColor: '#f0f0f0',
+            borderTopWidth: 1,
+            borderTopColor: '#e0e0e0',
+            zIndex: 1001, // Ensure it appears above the white overlay
+            position: 'relative'
+          }}>
+            <View style={{
+              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'center'
+            }}>
+              <View style={{
+                width: 12,
+                height: 12,
+                borderRadius: 6,
+                backgroundColor: '#ff4444',
+                marginRight: 12
+              }} />
+              <Text style={{
+                fontSize: 16,
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={stopRecording}
+              style={{
+                padding: 8,
+                backgroundColor: '#ff4444',
+                borderRadius: 20
+              }}
+            >
+              <Ionicons name="stop" size={20} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
+        
         {recordingUri && !isRecording && (
           <View style={{
             flexDirection: 'row',
@@ -3710,7 +3815,9 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             padding: 16,
             backgroundColor: '#f0f0f0',
             borderTopWidth: 1,
-            borderTopColor: '#e0e0e0'
+            borderTopColor: '#e0e0e0',
+            zIndex: 1001, // Ensure it appears above the white overlay
+            position: 'relative'
           }}>
             <View style={{
               flex: 1,
@@ -4003,8 +4110,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           setShowAudioCallModal(false);
           // Clear the incoming call flag when closing
           (global as any).isIncomingCall = false;
-          // Reset button state when modal is closed
-          setIsCallButtonPressed(false);
         }}
         appointmentId={appointmentId}
         userId={currentUserId.toString()}
@@ -4233,14 +4338,14 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
       {/* Note: Video call state transitions are handled internally by VideoCallModal */}
       
-      {/* Security Watermark for Screenshot Prevention - COMMENTED OUT */}
-      {/* <SecurityWatermark 
+      {/* Security Watermark for Screenshot Prevention */}
+      <SecurityWatermark 
         visible={isScreenshotPreventionEnabled && screenshotConfig.showWatermark}
         text={screenshotConfig.watermarkText}
         opacity={0.05}
         fontSize={12}
         rotation={-15}
-      /> */}
+      />
     </SafeAreaView>
   );
 } 

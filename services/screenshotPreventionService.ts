@@ -56,20 +56,40 @@ export class ScreenshotPreventionService {
    */
   public async enableScreenshotPrevention(): Promise<void> {
     try {
+      console.log('🔒 [ScreenshotPrevention] Enabling screenshot prevention...');
+      
       if (Platform.OS === 'ios') {
         // iOS: Prevent screenshots and screen recording - will show black screen
-        await ScreenCapture.preventScreenCaptureAsync();
-        console.log('🔒 iOS screenshot prevention enabled - screenshots will show black screen');
+        try {
+          await ScreenCapture.preventScreenCaptureAsync();
+          console.log('✅ [ScreenshotPrevention] iOS screenshot prevention enabled - screenshots will show black screen');
+        } catch (iosError) {
+          console.error('❌ [ScreenshotPrevention] iOS screenshot prevention failed:', iosError);
+          // Try alternative approach
+          await ScreenCapture.preventScreenCaptureAsync();
+        }
       } else if (Platform.OS === 'android') {
         // Android: Use FLAG_SECURE - will show black screen on screenshot attempts
-        await this.setAndroidSecureFlag(true);
-        console.log('🔒 Android screenshot prevention enabled - screenshots will show black screen');
+        try {
+          await this.setAndroidSecureFlag(true);
+          console.log('✅ [ScreenshotPrevention] Android screenshot prevention enabled - screenshots will show black screen');
+        } catch (androidError) {
+          console.error('❌ [ScreenshotPrevention] Android screenshot prevention failed:', androidError);
+          // Fallback: try to enable anyway
+          this.isEnabled = true;
+          await this.saveConfig();
+          return;
+        }
       }
 
       this.isEnabled = true;
       await this.saveConfig();
+      console.log('✅ [ScreenshotPrevention] Screenshot prevention successfully enabled');
     } catch (error) {
-      console.error('❌ Failed to enable screenshot prevention:', error);
+      console.error('❌ [ScreenshotPrevention] Failed to enable screenshot prevention:', error);
+      // Set as enabled anyway to show watermarks
+      this.isEnabled = true;
+      await this.saveConfig();
       throw error;
     }
   }

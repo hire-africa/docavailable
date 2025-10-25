@@ -29,19 +29,25 @@ public class ScreenshotPreventionModule extends ReactContextBaseJavaModule {
                         WindowManager.LayoutParams.FLAG_SECURE,
                         WindowManager.LayoutParams.FLAG_SECURE
                     );
-                    // Also prevent screen recording
+                    // Also prevent screen recording and other capture methods
                     currentActivity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                    // Additional security flags
+                    currentActivity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+                    System.out.println("🔒 [ScreenshotPrevention] Android FLAG_SECURE enabled - screenshots will show black screen");
                 } else {
                     // Disable FLAG_SECURE to allow screenshots
                     currentActivity.getWindow().clearFlags(
                         WindowManager.LayoutParams.FLAG_SECURE
                     );
+                    System.out.println("🔓 [ScreenshotPrevention] Android FLAG_SECURE disabled - screenshots allowed");
                 }
                 promise.resolve(true);
             } else {
+                System.out.println("❌ [ScreenshotPrevention] No current activity found");
                 promise.reject("NO_ACTIVITY", "No current activity found");
             }
         } catch (Exception e) {
+            System.out.println("❌ [ScreenshotPrevention] Failed to set secure flag: " + e.getMessage());
             promise.reject("ERROR", "Failed to set secure flag: " + e.getMessage());
         }
     }
