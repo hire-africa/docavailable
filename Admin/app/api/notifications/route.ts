@@ -1,28 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Mock notification storage - in real app, this would be a database
-let notifications: any[] = [
-  {
-    id: '1',
-    title: 'Welcome to DocAvailable Admin',
-    message: 'You can now send notifications to users, doctors, and patients from this admin panel.',
-    type: 'system',
-    recipientType: 'all',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    isRead: false,
-    sentBy: 'System'
-  },
-  {
-    id: '2',
-    title: 'System Maintenance Scheduled',
-    message: 'The app will be under maintenance from 2:00 AM to 4:00 AM EST tomorrow.',
-    type: 'system',
-    recipientType: 'all',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    isRead: false,
-    sentBy: 'Admin'
-  }
-];
+// Notification storage - in real app, this would be a database
+let notifications: any[] = [];
+
+// Function to completely reset notifications (for development/testing)
+function resetNotifications() {
+  notifications = [];
+  console.log('🔄 Notifications array reset to empty');
+}
+
+// Reset notifications on server start (for development)
+resetNotifications();
 
 // CORS headers for mobile app access
 const corsHeaders = {
@@ -37,6 +25,17 @@ export async function GET(request: NextRequest) {
     const userType = searchParams.get('userType');
     const userId = searchParams.get('userId');
     const isAdmin = request.headers.get('authorization')?.includes('Bearer');
+    const forceClear = searchParams.get('forceClear') === 'true';
+
+    // If forceClear is requested by admin, clear all notifications
+    if (forceClear && isAdmin) {
+      resetNotifications();
+      return NextResponse.json({
+        success: true,
+        notifications: [],
+        message: 'Notifications cleared successfully'
+      }, { headers: corsHeaders });
+    }
 
     // Filter notifications based on user type and ID
     let filteredNotifications = notifications;
@@ -126,6 +125,34 @@ export async function POST(request: NextRequest) {
     console.error('Error creating notification:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to create notification' },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    // Check if user is admin
+    const isAdmin = request.headers.get('authorization')?.includes('Bearer');
+    
+    if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, error: 'Admin access required' },
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // Clear all notifications using reset function
+    resetNotifications();
+
+    return NextResponse.json({
+      success: true,
+      message: 'Notification history cleared successfully'
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('Error clearing notifications:', error);
+    return NextResponse.json(
+      { success: false, error: 'Failed to clear notifications' },
       { status: 500, headers: corsHeaders }
     );
   }

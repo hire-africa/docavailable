@@ -23,123 +23,153 @@ if (firebase.apps.length === 0) {
 }
 
 // Import Firebase messaging after app initialization
+import notifee, { AndroidImportance } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
-import * as Notifications from 'expo-notifications';
 
-// Background/Killed handler: Display notifications for calls, messages, and appointments
+// Background/Killed handler: Display notifications for calls, messages, and appointments with notifee
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
     const data = remoteMessage?.data || {};
     const notification = remoteMessage?.notification || {};
-    const type = data?.type || '';
+    const type = (data?.type || '').toString();
 
-    // Set up notification channels
-    await Notifications.setNotificationChannelAsync('calls', {
-      name: 'Calls',
-      importance: Notifications.AndroidImportance.MAX,
-      sound: 'default',
-      vibrationPattern: [0, 250, 250, 250],
-      bypassDnd: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      enableLights: true,
-      enableVibrate: true,
-      showBadge: true,
+    console.log('📱 [Background] Received FCM message:', {
+      type,
+      title: notification.title,
+      body: notification.body
     });
 
-    await Notifications.setNotificationChannelAsync('messages', {
-      name: 'Messages',
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default',
-      vibrationPattern: [0, 250, 250, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    });
-
-    await Notifications.setNotificationChannelAsync('appointments', {
-      name: 'Appointments',
-      importance: Notifications.AndroidImportance.HIGH,
-      sound: 'default',
-      vibrationPattern: [0, 250, 250, 250],
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    });
-
-    // Handle different notification types
+    // For incoming calls, show system ringtone notification
     if (type === 'incoming_call') {
-      // Create WhatsApp-like call notification with actions
-      const callerName = data.doctor_name || data.doctorName || 'Unknown Caller';
-      const callType = data.call_type === 'video' ? 'Video Call' : 'Voice Call';
+      console.log('📱 [Background] Incoming call - showing system ringtone notification');
       
-      console.log('📞 [BackgroundHandler] Creating incoming call notification:', {
-        callerName,
-        callType,
-        data
+      // Create calls channel with system ringtone
+      await notifee.createChannel({
+        id: 'calls',
+        name: 'Incoming Calls',
+        importance: AndroidImportance.MAX,
+        sound: 'default', // Use system default ringtone
+        vibration: true,
+        vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
+        bypassDnd: true,
+        lights: true,
+        lightColor: '#FF0000',
+        showBadge: true,
       });
-      
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `${callerName} - ${callType}`,
-          body: 'Incoming call...',
-          data: {
-            ...data,
-            categoryId: 'incoming_call',
-            priority: 'high',
-            fullScreenAction: true
-          },
-          sound: 'default',
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          vibrate: [0, 250, 250, 250],
+
+      // Show notification with system ringtone
+      await notifee.displayNotification({
+        title: notification.title || 'Incoming Call',
+        body: notification.body || 'Incoming call...',
+        data,
+        android: {
           channelId: 'calls',
-          // Add caller profile picture if available
-          ...(data.doctor_profile_picture && {
-            attachments: [{
-              url: data.doctor_profile_picture,
-              type: 'image'
-            }]
-          })
+          importance: AndroidImportance.MAX,
+          pressAction: {
+            id: 'default',
+          },
+          fullScreenAction: {
+            id: 'default',
+          },
+          sound: 'default', // System ringtone
+          vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          color: '#FF0000', // Red for incoming calls
+          lights: ['#FF0000', 1000, 1000], // [color, on_ms, off_ms]
+          ongoing: true, // Make it ongoing so it can't be dismissed easily
+          autoCancel: false, // Don't auto-cancel
+          style: {
+            type: 1, // BigTextStyle
+            text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
+          },
         },
-        trigger: null,
       });
-    } else if (type === 'chat_message' || type === 'new_message') {
-      console.log('💬 [BackgroundHandler] Creating message notification');
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: notification.title || 'New Message',
-          body: notification.body || 'You have a new message',
-          data,
-          sound: 'default',
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-          channelId: 'messages',
-        },
-        trigger: null,
-      });
-    } else if (type.includes('appointment') || type.includes('session')) {
-      console.log('📅 [BackgroundHandler] Creating appointment notification');
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: notification.title || 'Appointment Update',
-          body: notification.body || 'You have an appointment update',
-          data,
-          sound: 'default',
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-          channelId: 'appointments',
-        },
-        trigger: null,
-      });
-    } else {
-      // Generic notification for other types
-      console.log('🔔 [BackgroundHandler] Creating generic notification');
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: notification.title || 'DocAvailable',
-          body: notification.body || 'You have a new notification',
-          data,
-          sound: 'default',
-          priority: Notifications.AndroidNotificationPriority.HIGH,
-        },
-        trigger: null,
-      });
+      return;
     }
+
+    // Create channels with notifee
+    await notifee.createChannel({
+      id: 'calls',
+      name: 'Incoming Calls',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+      vibration: true,
+      vibrationPattern: [250, 250, 250, 250],
+      bypassDnd: true,
+    });
+
+    await notifee.createChannel({
+      id: 'messages',
+      name: 'Messages',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+    });
+
+    await notifee.createChannel({
+      id: 'appointments',
+      name: 'Appointments',
+      importance: AndroidImportance.HIGH,
+      sound: 'default',
+    });
+
+
+    // For other notifications, determine channel and display
+    const channelId = type.includes('message') ? 'messages' : 
+                     type.includes('appointment') ? 'appointments' : 'default';
+
+    // For message notifications, try to fetch the actual message content
+    let messageContent = notification.body || 'You have a new notification';
+    let expandedText = messageContent;
+
+    if (type.includes('message') && data.appointment_id) {
+      try {
+        // Fetch the latest message from the chat
+        const response = await fetch(`https://docavailable.com/api/appointments/${data.appointment_id}/messages?limit=1&order=desc`);
+        if (response.ok) {
+          const messagesData = await response.json();
+          if (messagesData.messages && messagesData.messages.length > 0) {
+            const latestMessage = messagesData.messages[0];
+            messageContent = latestMessage.message || latestMessage.content || messageContent;
+            expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+            console.log('📱 [Background] Fetched actual message content:', messageContent);
+          }
+        }
+      } catch (error) {
+        console.log('📱 [Background] Could not fetch message content, using generic:', error);
+        expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+      }
+    } else if (type.includes('message')) {
+      expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+    } else if (type.includes('appointment')) {
+      expandedText = `Appointment Update: ${messageContent}`;
+    }
+
+    await notifee.displayNotification({
+      title: notification.title || 'DocAvailable',
+      body: messageContent,
+      data,
+      android: {
+        channelId,
+        importance: AndroidImportance.HIGH,
+        pressAction: {
+          id: 'default',
+        },
+        sound: 'default',
+        vibrationPattern: [250, 250, 250, 250],
+        smallIcon: 'ic_launcher',
+        largeIcon: 'ic_launcher',
+        color: type.includes('message') ? '#2196F3' : 
+               type.includes('appointment') ? '#FF9800' : '#4CAF50',
+        // Add expanded text for better context
+        style: {
+          type: 1, // BigTextStyle
+          text: expandedText,
+        },
+      },
+    });
+
   } catch (e) {
-    // headless errors must be swallowed
     console.error('Background message handler error:', e);
   }
 });

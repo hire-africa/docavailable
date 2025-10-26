@@ -21,6 +21,7 @@ export class WebRTCChatService {
   private lastPingTime = 0;
   private pingTimeout = 60000; // Increased from 30 to 60 seconds for more stable connections
   private connectionTimeout = 30000; // 30 seconds connection timeout
+  private isSyncing = false; // Flag to prevent multiple simultaneous syncs
 
   constructor(config: ChatConfig, events: ChatEvents) {
     console.log('🔧 [WebRTCChat] Constructor called with config:', {
@@ -245,8 +246,8 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             } else if (data.type === 'pong') {
               // Update last ping time when we receive pong
               this.lastPingTime = Date.now();
-              // Only log pong every 10th time to reduce spam
-              if (Math.random() < 0.1) {
+              // Only log pong every 50th time to reduce spam (2% chance)
+              if (Math.random() < 0.02) {
                 console.log('🏓 [WebRTCChat] Pong received, connection healthy');
               }
             }
@@ -855,8 +856,19 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
   // Sync messages with server to ensure we have the latest messages
   async syncWithServer(): Promise<ChatMessage[]> {
+    // Prevent multiple simultaneous syncs
+    if (this.isSyncing) {
+      console.log('⚠️ [WebRTCChat] Already syncing with server, skipping duplicate call');
+      return this.messages;
+    }
+    
     try {
-      console.log('🔄 [WebRTCChat] Syncing with server...');
+      this.isSyncing = true;
+      console.log('🔄 [WebRTCChat] Syncing with server...', {
+        currentMessageCount: this.messages.length,
+        appointmentId: this.config.appointmentId,
+        userId: this.config.userId
+      });
       
       // Get auth token for API calls
       const authToken = await this.getAuthToken();
@@ -896,27 +908,18 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages');
       
-      // Create a map of local messages by ID for quick lookup
-      const localMessageMap = new Map(this.messages.map(msg => [msg.id, msg]));
+      // Replace local messages with server messages to ensure consistency
+      // This prevents duplicates when navigating back to chat
+      this.messages = serverMessages;
+      await this.saveMessages();
       
-      // Add server messages that aren't already in local storage
-      const newMessages = serverMessages.filter(serverMsg => !localMessageMap.has(serverMsg.id));
-      
-      if (newMessages.length > 0) {
-        console.log('✅ [WebRTCChat] Found', newMessages.length, 'new messages from server');
-        
-        // Add new messages to local storage
-        for (const message of newMessages) {
-          await this.addMessage(message);
-        }
-      } else {
-        console.log('✅ [WebRTCChat] No new messages from server');
-      }
-      
+      console.log('✅ [WebRTCChat] Messages synced and saved to storage:', this.messages.length);
       return this.messages;
     } catch (error) {
       console.error('❌ [WebRTCChat] Error syncing with server:', error);
       return this.messages;
+    } finally {
+      this.isSyncing = false;
     }
   }
 

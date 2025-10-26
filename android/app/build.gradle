@@ -87,15 +87,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.docavailable.app'
+    namespace "com.docavailable"
     defaultConfig {
-        applicationId 'com.docavailable.app'
+        applicationId "com.docavailable"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.0"
-        
-        // App Auth redirect scheme is now hardcoded in AndroidManifest.xml
+        versionName "1.0"
     }
     signingConfigs {
         debug {
@@ -177,5 +175,3 @@ dependencies {
         implementation jscFlavor
     }
 }
-
-apply plugin: 'com.google.gms.google-services'

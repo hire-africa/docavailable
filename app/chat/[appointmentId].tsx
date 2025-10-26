@@ -24,9 +24,6 @@ import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import InstantSessionTimer from '../../components/InstantSessionTimer';
 import RatingModal from '../../components/RatingModal';
-import ScreenshotDebugInfo from '../../components/ScreenshotDebugInfo';
-import ScreenshotTestButton from '../../components/ScreenshotTestButton';
-import SecurityWatermark from '../../components/SecurityWatermark';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
@@ -135,13 +132,15 @@ export default function ChatPage() {
   const router = useRouter();
   const { user, token, loading: authLoading, refreshUserData } = useAuth();
   const { isAnonymousModeEnabled } = useAnonymousMode();
-  const { isEnabled: isScreenshotPreventionEnabled, config: screenshotConfig, enable: enableScreenshotPrevention } = useScreenshotPrevention();
+  const { enable: enableScreenshotPrevention } = useScreenshotPrevention();
   
   // Ensure screenshot prevention is enabled when chat loads
   useEffect(() => {
     const enableScreenshotProtection = async () => {
       try {
         console.log('🔒 [Chat] Ensuring screenshot prevention is enabled...');
+        
+        // Enable screenshot prevention
         await enableScreenshotPrevention();
         console.log('✅ [Chat] Screenshot prevention enabled for chat');
       } catch (error) {
@@ -3154,9 +3153,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
         </View>
         
-        {/* Screenshot Test Button - Remove this in production */}
-        <ScreenshotTestButton />
-        <ScreenshotDebugInfo />
         
         {/* Call Icons - Role-based calling */}
         <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}>
@@ -4338,14 +4334,6 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
       {/* Note: Video call state transitions are handled internally by VideoCallModal */}
       
-      {/* Security Watermark for Screenshot Prevention */}
-      <SecurityWatermark 
-        visible={isScreenshotPreventionEnabled && screenshotConfig.showWatermark}
-        text={screenshotConfig.watermarkText}
-        opacity={0.05}
-        fontSize={12}
-        rotation={-15}
-      />
     </SafeAreaView>
   );
 } 

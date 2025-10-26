@@ -78,6 +78,12 @@ const chatWss = new WebSocket.Server({
 function log(level, message, data = null) {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [${level}]`;
+  
+  // Filter out DEBUG level ping/pong messages to reduce spam
+  if (level === 'DEBUG' && (message.includes('Ping received') || message.includes('Pong received'))) {
+    return; // Skip logging ping/pong messages
+  }
+  
   console.log(`${prefix} ${message}`);
   if (data) {
     console.log(`${prefix} Data:`, JSON.stringify(data, null, 2));

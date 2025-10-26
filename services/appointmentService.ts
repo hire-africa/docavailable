@@ -1,5 +1,6 @@
 // Real appointment service
 import { apiService } from './apiService';
+import { RealTimeEventService } from './realTimeEventService';
 
 export const APPOINTMENT_STATUS = {
   PENDING: 'pending',
@@ -40,37 +41,72 @@ export const appointmentService = {
   },
   
   createAppointment: async (appointmentData: any): Promise<Appointment> => {
-    return {
-      id: '1',
-      doctorId: appointmentData.doctorId,
-      patientId: appointmentData.patientId,
-      date: appointmentData.date,
-      time: appointmentData.time,
-      status: APPOINTMENT_STATUS.PENDING,
-      type: appointmentData.type,
-      notes: appointmentData.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    try {
+      const response = await apiService.post('/appointments', appointmentData);
+      if (response.success && response.data) {
+        const appointment = response.data;
+        
+        // Trigger real-time event for appointment creation
+        await RealTimeEventService.handleAppointmentEvent(
+          'created',
+          appointment,
+          'patient'
+        );
+        
+        return appointment;
+      }
+      throw new Error(response.message || 'Failed to create appointment');
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      throw error;
+    }
   },
   
   updateAppointment: async (id: string, data: any): Promise<Appointment> => {
-    return {
-      id,
-      doctorId: data.doctorId,
-      patientId: data.patientId,
-      date: data.date,
-      time: data.time,
-      status: data.status,
-      type: data.type,
-      notes: data.notes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    try {
+      const response = await apiService.put(`/appointments/${id}`, data);
+      if (response.success && response.data) {
+        const appointment = response.data;
+        
+        // Trigger real-time event for appointment status changes
+        if (data.status) {
+          const action = data.status === 'confirmed' ? 'confirmed' : 
+                       data.status === 'cancelled' ? 'cancelled' : 
+                       data.status === 'completed' ? 'completed' : 'created';
+          
+          await RealTimeEventService.handleAppointmentEvent(
+            action,
+            appointment,
+            'patient' // This would need to be determined based on user context
+          );
+        }
+        
+        return appointment;
+      }
+      throw new Error(response.message || 'Failed to update appointment');
+    } catch (error) {
+      console.error('Error updating appointment:', error);
+      throw error;
+    }
   },
   
   cancelAppointment: async (id: string): Promise<void> => {
-    // Placeholder implementation
+    try {
+      const response = await apiService.delete(`/appointments/${id}/cancel`);
+      if (response.success) {
+        // Trigger real-time event for appointment cancellation
+        await RealTimeEventService.handleAppointmentEvent(
+          'cancelled',
+          { id, ...response.data },
+          'patient' // This would need to be determined based on user context
+        );
+      } else {
+        throw new Error(response.message || 'Failed to cancel appointment');
+      }
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      throw error;
+    }
   },
   
   getAppointmentById: async (id: string): Promise<Appointment | null> => {

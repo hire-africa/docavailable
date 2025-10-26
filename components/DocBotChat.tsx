@@ -17,6 +17,7 @@ import {
     View
 } from 'react-native';
 import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
+import { PromptLimitService, PromptLimitStatus } from '../services/promptLimitService';
 import AIDocHistory from './DocAvaHistory';
 
 const { width, height } = Dimensions.get('window');
@@ -53,6 +54,12 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState(false);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [promptLimitStatus, setPromptLimitStatus] = useState<PromptLimitStatus>({
+    remaining: 5,
+    total: 5,
+    resetTime: '',
+    isLimitReached: false
+  });
   const scrollViewRef = useRef<ScrollView>(null);
   
   // Animation value for history panel
@@ -339,10 +346,21 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
     onBottomHiddenChange?.(newState);
   };
 
+  // Load prompt limit status
+  const loadPromptLimitStatus = async () => {
+    try {
+      const status = await PromptLimitService.getPromptLimitStatus();
+      setPromptLimitStatus(status);
+    } catch (error) {
+      console.error('Error loading prompt limit status:', error);
+    }
+  };
+
   // Load chat history and current chat on component mount
   useEffect(() => {
     loadChatHistory();
     loadCurrentChat();
+    loadPromptLimitStatus();
   }, []);
 
   // Save current chat when messages change
@@ -552,6 +570,17 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
   const sendMessage = async () => {
     if (!inputText.trim() || isGeneratingResponse) return;
 
+    // Check prompt limit before sending
+    const canMakePrompt = await PromptLimitService.canMakePrompt();
+    if (!canMakePrompt) {
+      Alert.alert(
+        'Daily Limit Reached',
+        `You've used all ${promptLimitStatus.total} daily prompts. Your limit will reset tomorrow.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputText.trim(),
@@ -560,6 +589,10 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Record prompt usage
+    const newStatus = await PromptLimitService.recordPromptUsage();
+    setPromptLimitStatus(newStatus);
     
     // Save chat to history if this is the first message
     if (messages.length === 0) {
@@ -661,6 +694,16 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
             <View style={styles.botNameContainer}>
               <Text style={styles.botName}>AI Doc</Text>
               <FontAwesome name="check-circle" size={16} color="#4CAF50" style={styles.verifiedBadge} />
+            </View>
+            <View style={styles.promptCounterContainer}>
+              <Text style={styles.promptCounterText}>
+                {promptLimitStatus.remaining}/{promptLimitStatus.total} prompts left
+              </Text>
+              {promptLimitStatus.isLimitReached && (
+                <Text style={styles.promptResetText}>
+                  Resets in {PromptLimitService.getTimeUntilReset()}
+                </Text>
+              )}
             </View>
           </View>
           
@@ -950,9 +993,12 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
           {/* Input Field - Inside animated view for bottom tab animation */}
           <View style={styles.inputWrapper}>
             <TextInput
-              style={styles.textInput}
-              placeholder="Ask AI Doc"
-              placeholderTextColor="#999"
+              style={[
+                styles.textInput,
+                promptLimitStatus.isLimitReached && styles.textInputDisabled
+              ]}
+              placeholder={promptLimitStatus.isLimitReached ? "Daily limit reached" : "Ask AI Doc"}
+              placeholderTextColor={promptLimitStatus.isLimitReached ? "#FF6B6B" : "#999"}
               value={inputText}
               onChangeText={setInputText}
               multiline
@@ -960,16 +1006,20 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
               returnKeyType="send"
               onSubmitEditing={sendMessage}
               blurOnSubmit={false}
+              editable={!promptLimitStatus.isLimitReached}
             />
             <TouchableOpacity
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              style={[
+                styles.sendButton, 
+                (!inputText.trim() || promptLimitStatus.isLimitReached) && styles.sendButtonDisabled
+              ]}
               onPress={sendMessage}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || promptLimitStatus.isLimitReached}
             >
               <FontAwesome 
                 name="send" 
                 size={18} 
-                color={inputText.trim() ? "#FFFFFF" : "#CCC"} 
+                color={(inputText.trim() && !promptLimitStatus.isLimitReached) ? "#FFFFFF" : "#CCC"} 
               />
             </TouchableOpacity>
           </View>
@@ -1118,6 +1168,20 @@ const styles = StyleSheet.create({
   },
   verifiedBadge: {
     marginLeft: 2,
+  },
+  promptCounterContainer: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  promptCounterText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  promptResetText: {
+    fontSize: 10,
+    color: '#FF6B6B',
+    marginTop: 2,
   },
   headerLeftButton: {
     position: 'absolute',
@@ -1384,6 +1448,10 @@ const styles = StyleSheet.create({
     color: '#222',
     maxHeight: 120,
     minHeight: 60,
+  },
+  textInputDisabled: {
+    backgroundColor: '#F5F5F5',
+    color: '#999',
   },
   sendButton: {
     width: 44,

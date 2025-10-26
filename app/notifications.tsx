@@ -15,8 +15,8 @@ import {
     View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { NotificationService, Notification as ServiceNotification } from '../services/notificationService';
-import { Activity, generateUserActivities } from '../utils/activityUtils';
+import { NotificationService } from '../services/notificationService';
+import { RealTimeEventService } from '../services/realTimeEventService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -30,7 +30,6 @@ interface Notification {
   type: 'appointment' | 'message' | 'system' | 'payment' | 'reminder';
   isRead: boolean;
   timestamp: Date;
-  actionUrl?: string;
 }
 
 export default function Notifications() {
@@ -51,11 +50,22 @@ function NotificationsContent() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
 
   useEffect(() => {
     loadNotifications();
+  }, []);
+
+  // Subscribe to real-time events
+  useEffect(() => {
+    const unsubscribe = RealTimeEventService.subscribe((event) => {
+      console.log('📡 [Notifications] Received real-time event:', event);
+      
+      // Reload notifications when new events arrive
+      loadNotifications();
+    });
+
+    return unsubscribe;
   }, []);
 
   // Mark all notifications as read when page opens
@@ -74,70 +84,23 @@ function NotificationsContent() {
         return;
       }
 
+      // Clear old notifications first
+      await NotificationService.clearOldNotifications();
+
       // Load notifications from service filtered by user type
       const userType = userData.role === 'doctor' ? 'doctor' : 'patient';
       console.log('🔔 Loading notifications for user type:', userType, 'user ID:', userData.id);
       let serviceNotifications = await NotificationService.getNotificationsForUser(userType, userData.id?.toString());
       console.log('🔔 Service notifications received:', serviceNotifications.length, serviceNotifications);
       
-      // Always generate automated notifications from activities
-      const generatedActivities = generateUserActivities(
-        userType,
-        userData,
-        [], // appointments - would be loaded from API
-        [], // messages - would be loaded from API
-        null // subscription - would be loaded from API
-      );
-
-      setActivities(generatedActivities);
-
-      // Convert activities to notifications
-      const activityNotifications: ServiceNotification[] = generatedActivities.map((activity, index) => {
-        const notificationType = mapActivityTypeToNotificationType(activity.type);
-        console.log('🔔 Mapping activity type:', activity.type, 'to notification type:', notificationType);
-        return {
-          id: `activity_${activity.id}`,
-          title: activity.title,
-          message: activity.description,
-          type: notificationType as any,
-          isRead: index > 2, // Mark older activities as read
-          timestamp: activity.timestamp,
-          actionUrl: getActionUrlForActivity(activity.type)
-        };
-      });
-
-      // Add some system notifications
-      const systemNotifications: ServiceNotification[] = [
-        {
-          id: 'system_1',
-          title: 'Welcome to DocAvailable!',
-          message: 'Thank you for joining DocAvailable. Start by exploring our features and booking your first appointment.',
-          type: 'system',
-          isRead: true,
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-        }
-      ];
-
-      // Combine automated notifications with service notifications
-      const automatedNotifications = [...activityNotifications, ...systemNotifications];
-      console.log('🔔 Automated notifications generated:', automatedNotifications.length, automatedNotifications);
-      
-      // Merge with existing notifications, avoiding duplicates
+      // Only show real notifications from the service, no mock data
       const allNotifications = [...serviceNotifications];
-      automatedNotifications.forEach(autoNotif => {
-        const exists = allNotifications.find(n => n.id === autoNotif.id);
-        if (!exists) {
-          allNotifications.push(autoNotif);
-        }
-      });
 
       // Sort by timestamp (newest first)
       allNotifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-      console.log('🔔 Final combined notifications:', allNotifications.length, allNotifications);
+      console.log('🔔 Final notifications (real-time only):', allNotifications.length, allNotifications);
 
-      // Save combined notifications
-      await NotificationService.saveNotifications(allNotifications);
       setNotifications(allNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);
@@ -147,33 +110,6 @@ function NotificationsContent() {
     }
   };
 
-  const mapActivityTypeToNotificationType = (activityType: string): 'appointment' | 'message' | 'system' | 'payment' | 'reminder' | 'wallet' => {
-    switch (activityType) {
-      case 'appointment':
-        return 'appointment';
-      case 'message':
-        return 'message';
-      case 'wallet':
-        return 'wallet';
-      case 'welcome':
-        return 'system';
-      default:
-        return 'system';
-    }
-  };
-
-  const getActionUrlForActivity = (activityType: string): string | undefined => {
-    switch (activityType) {
-      case 'appointment':
-        return '/appointments';
-      case 'message':
-        return '/messages';
-      case 'wallet':
-        return '/earnings';
-      default:
-        return undefined;
-    }
-  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -181,15 +117,6 @@ function NotificationsContent() {
     setRefreshing(false);
   };
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, isRead: true }
-          : notification
-      )
-    );
-  };
 
   const markAllAsRead = async () => {
     try {
@@ -425,18 +352,12 @@ function NotificationsContent() {
           {filteredNotifications.length > 0 ? (
             <View style={styles.notificationsList}>
               {filteredNotifications.map((notification) => (
-                <TouchableOpacity
+                <View
                   key={notification.id}
                   style={[
                     styles.notificationItem,
                     !notification.isRead && styles.unreadNotification
                   ]}
-                  onPress={() => {
-                    markAsRead(notification.id);
-                    if (notification.actionUrl) {
-                      router.push(notification.actionUrl as any);
-                    }
-                  }}
                 >
                   <View style={styles.notificationContent}>
                     <View style={styles.notificationHeader}>
@@ -476,7 +397,7 @@ function NotificationsContent() {
                   >
                     <FontAwesome name="trash" size={14} color="#999" />
                   </TouchableOpacity>
-                </TouchableOpacity>
+                </View>
               ))}
             </View>
           ) : (
@@ -491,37 +412,6 @@ function NotificationsContent() {
                   : 'You\'re all caught up! New notifications will appear here.'
                 }
               </Text>
-        <View style={styles.testButtonsContainer}>
-          <TouchableOpacity
-            style={styles.testButton}
-            onPress={loadNotifications}
-          >
-            <FontAwesome name="refresh" size={16} color="#4CAF50" />
-            <Text style={styles.testButtonText}>Test Load Notifications</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.testButton, {backgroundColor: '#E3F2FD'}]}
-            onPress={() => {
-              const testNotification: ServiceNotification = {
-                id: 'test_' + Date.now(),
-                title: 'Test Admin Notification',
-                message: 'This is a test notification from admin',
-                type: 'system' as any,
-                timestamp: new Date(),
-                isRead: false,
-                actionUrl: undefined,
-                recipientType: 'all' as any,
-                recipientId: undefined,
-                sentBy: 'Test'
-              };
-              setNotifications(prev => [testNotification, ...prev]);
-            }}
-          >
-            <FontAwesome name="plus" size={16} color="#2196F3" />
-            <Text style={[styles.testButtonText, {color: '#2196F3'}]}>Add Test Notification</Text>
-          </TouchableOpacity>
-        </View>
             </View>
           )}
         </ScrollView>
@@ -733,23 +623,5 @@ const styles = StyleSheet.create({
   },
   activeFilterTabText: {
     color: '#fff',
-  },
-  testButtonsContainer: {
-    gap: 12,
-    marginTop: 16,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F8F0',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  testButtonText: {
-    color: '#4CAF50',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });

@@ -62,6 +62,7 @@ export default function CommunicationsPage() {
   const [notifications, setNotifications] = useState<NotificationTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [clearing, setClearing] = useState(false);
   
   // Form state
   const [selectedIcon, setSelectedIcon] = useState(NOTIFICATION_ICONS[0]);
@@ -190,6 +191,60 @@ export default function CommunicationsPage() {
     }
   };
 
+  const handleClearHistory = async () => {
+    if (!confirm('Are you sure you want to clear all notification history? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setClearing(true);
+      
+      // Get admin token
+      const token = localStorage.getItem('admin_token');
+      if (!token) {
+        toast.error('Admin authentication required');
+        return;
+      }
+
+      // Try DELETE method first, then fallback to GET with forceClear
+      let response = await fetch('/api/notifications', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      // If DELETE fails, try GET with forceClear parameter
+      if (!response.ok) {
+        response = await fetch('/api/notifications?forceClear=true', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Clear local state
+          setNotifications([]);
+          toast.success('Notification history cleared successfully!');
+        } else {
+          toast.error(data.error || 'Failed to clear notification history');
+        }
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Failed to clear notification history');
+      }
+    } catch (error) {
+      console.error('Error clearing notification history:', error);
+      toast.error('Failed to clear notification history. Please try again.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
@@ -260,6 +315,17 @@ export default function CommunicationsPage() {
               <History className="h-4 w-4 mr-2" />
               {loading ? 'Refreshing...' : 'Refresh'}
             </button>
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                disabled={clearing}
+                className="ml-3 inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                <X className="h-4 w-4 mr-2" />
+                {clearing ? 'Clearing...' : 'Clear History'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowForm(true)}

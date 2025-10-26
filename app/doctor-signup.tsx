@@ -24,6 +24,8 @@ import MultipleSpecializationPicker from '../components/MultipleSpecializationPi
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { navigateToLogin } from '../utils/navigationUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
+import SignUpErrorHandler from '../utils/errorHandler';
+import ValidationUtils from '../utils/validationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -725,73 +727,38 @@ export default function DoctorSignUp() {
     const [errors, setErrors] = useState<any>({});
 
     const validateStep1 = () => {
-        const newErrors: any = {};
-        
-        if (!firstName.trim()) {
-            newErrors.firstName = 'First name is required.';
-        } else if (firstName.length < 3) {
-            newErrors.firstName = 'First name must be at least 3 characters.';
-        }
-        
-        if (!surname.trim()) {
-            newErrors.surname = 'Surname is required.';
-        } else if (surname.length < 3) {
-            newErrors.surname = 'Surname must be at least 3 characters.';
-        }
-        
-        if (!dob.trim()) {
-            newErrors.dob = 'Date of Birth is required.';
-        }
-        
-        if (!gender) {
-            newErrors.gender = 'Please select a gender.';
-        }
-        
-        if (!email.trim()) {
-            newErrors.email = 'Email is required.';
-        } else if (!/\S+@\S+\.\S+/.test(email)) {
-            newErrors.email = 'Please enter a valid email.';
-        }
-        
-        if (!password) {
-            newErrors.password = 'Password is required.';
-        } else if (password.length < 8) {
-            newErrors.password = 'Password must be at least 8 characters.';
-        }
-        
-        if (specializations.length === 0) {
-            newErrors.specializations = 'At least one specialization is required.';
-        }
-        
-        if (!yearsOfExperience.trim()) {
-            newErrors.yearsOfExperience = 'Years of experience is required.';
-        } else if (isNaN(Number(yearsOfExperience)) || Number(yearsOfExperience) < 0) {
-            newErrors.yearsOfExperience = 'Please enter a valid number of years.';
-        }
-        
-        if (!professionalBio.trim()) {
-            newErrors.professionalBio = 'Professional bio is required.';
-        } else if (professionalBio.length < 10) {
-            newErrors.professionalBio = 'Bio must be at least 10 characters.';
+        const formData = {
+            firstName,
+            surname,
+            email,
+            password,
+            dateOfBirth: dob,
+            gender,
+            country,
+            city,
+            specializations,
+            yearsOfExperience: Number(yearsOfExperience),
+            professionalBio,
+            languagesSpoken,
+            acceptPolicies
+        };
+
+        const rules = ValidationUtils.getSignUpRules('doctor');
+        const newErrors = ValidationUtils.validateFields(formData, rules);
+
+        // Additional validation for profile picture
+        if (profilePicture) {
+            const fileError = ValidationUtils.validateFileUpload(profilePicture, {
+                maxSize: 5 * 1024 * 1024, // 5MB
+                allowedTypes: ['image/jpeg', 'image/png', 'image/jpg'],
+                required: false
+            });
+            if (fileError) {
+                newErrors.profilePicture = fileError;
+            }
         }
 
-        if (!country.trim()) {
-            newErrors.country = 'Country is required.';
-        }
-
-        if (!city.trim()) {
-            newErrors.city = 'City is required.';
-        }
-
-        if (languagesSpoken.length === 0) {
-            newErrors.languagesSpoken = 'At least one language is required.';
-        }
-
-        if (!acceptPolicies) {
-            newErrors.acceptPolicies = 'You must accept the platform policies.';
-        }
-
-        setErrors(newErrors);
+        setErrors(newErrors as any);
         
         // Scroll to first error if validation fails
         if (Object.keys(newErrors).length > 0) {
@@ -806,15 +773,46 @@ export default function DoctorSignUp() {
     const validateStep2 = () => {
         const newErrors: any = {};
 
+        // Validate required documents
         if (!nationalIdPassport) {
             newErrors.nationalIdPassport = 'National ID or Passport is required.';
+        } else {
+            const fileError = ValidationUtils.validateFileUpload(nationalIdPassport, {
+                maxSize: 10 * 1024 * 1024, // 10MB
+                allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
+                required: true
+            });
+            if (fileError) {
+                newErrors.nationalIdPassport = fileError;
+            }
         }
 
         if (!highestMedicalCertificate) {
             newErrors.highestMedicalCertificate = 'Highest Medical Certificate is required.';
+        } else {
+            const fileError = ValidationUtils.validateFileUpload(highestMedicalCertificate, {
+                maxSize: 10 * 1024 * 1024, // 10MB
+                allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
+                required: true
+            });
+            if (fileError) {
+                newErrors.highestMedicalCertificate = fileError;
+            }
         }
 
-        setErrors(newErrors);
+        // Validate optional specialist certificate
+        if (specialistCertificate) {
+            const fileError = ValidationUtils.validateFileUpload(specialistCertificate, {
+                maxSize: 10 * 1024 * 1024, // 10MB
+                allowedTypes: ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'],
+                required: false
+            });
+            if (fileError) {
+                newErrors.specialistCertificate = fileError;
+            }
+        }
+
+        setErrors(newErrors as any);
         
         // Scroll to first error if validation fails
         if (Object.keys(newErrors).length > 0) {
@@ -827,27 +825,19 @@ export default function DoctorSignUp() {
     };
 
     const validateStep3 = () => {
-        const newErrors: any = {};
-        let isValid = true;
+        const verificationError = ValidationUtils.validateVerificationCode(verificationCode);
+        const newErrors = verificationError ? { verificationCode: verificationError } : {};
 
-        if (!verificationCode.trim()) {
-            newErrors.verificationCode = 'Please enter the verification code.';
-            isValid = false;
-        } else if (verificationCode.length !== 6) {
-            newErrors.verificationCode = 'Verification code must be 6 digits.';
-            isValid = false;
-        }
-
-        setErrors(newErrors);
+        setErrors(newErrors as any);
         
         // Scroll to first error if validation fails
-        if (!isValid) {
+        if (Object.keys(newErrors).length > 0) {
             setTimeout(() => {
                 scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
             }, 100);
         }
         
-        return isValid;
+        return Object.keys(newErrors).length === 0;
     };
 
     const sendVerificationCode = async () => {
@@ -1068,45 +1058,21 @@ export default function DoctorSignUp() {
             // Only throw error if we get an unexpected response
             throw new Error('Unexpected response from registration');
         } catch (error: any) {
-            console.error('DoctorSignup: Registration error:', error);
-            
             // Only show errors if registration was not successful
             if (!registrationSuccessful) {
-                let errorMessage = 'Registration failed. Please try again.';
-                
-                // Handle timeout errors
-                if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-                    errorMessage = 'Registration timed out. Your account may have been created successfully. Please try logging in.';
-                    Alert.alert('Timeout', errorMessage, [
-                        {
-                            text: 'Try Login',
-                            onPress: () => router.replace('/login')
-                        },
-                        {
-                            text: 'OK',
-                            style: 'cancel'
-                        }
-                    ]);
-                    return;
-                }
-                
-                // Parse validation errors
-                if (error.message && error.message.includes('Validation failed:')) {
-                    const validationErrors = error.message
-                        .replace('Validation failed:\n', '')
-                        .split('\n')
-                        .reduce((acc: any, curr: string) => {
-                            const [field, message] = curr.split(': ');
-                            acc[field] = message;
-                            return acc;
-                        }, {});
-                    setErrors(validationErrors);
-                } else {
-                    Alert.alert(
-                        'Registration Error',
-                        errorMessage || 'An error occurred during registration. Please try again.'
-                    );
-                }
+                SignUpErrorHandler.handleSignUpError(
+                    error,
+                    (validationErrors) => {
+                        // Handle validation errors by setting them in state
+                        setErrors(validationErrors);
+                        // Scroll to first error field
+                        setTimeout(() => {
+                            scrollToFirstError(scrollViewRef, validationErrors, fieldRefs);
+                        }, 100);
+                    },
+                    () => handleSignUp(), // Retry function
+                    () => router.replace('/login') // Login function
+                );
             }
         } finally {
             setLoading(false);

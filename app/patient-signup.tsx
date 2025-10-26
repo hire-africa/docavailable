@@ -23,6 +23,8 @@ import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { navigateToLogin } from '../utils/navigationUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
+import SignUpErrorHandler from '../utils/errorHandler';
+import ValidationUtils from '../utils/validationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -691,81 +693,59 @@ export default function PatientSignUp() {
     }, []);
 
     const validateStep1 = () => {
-        const newErrors: any = {};
-        let isValid = true;
+        const formData = {
+            firstName,
+            surname,
+            email,
+            password,
+            dateOfBirth: dob,
+            gender,
+            country,
+            city,
+            acceptPolicies
+        };
 
-        if (firstName.length < 3) {
-            newErrors.firstName = 'First name must be at least 3 characters.';
-            isValid = false;
-        }
-        if (surname.length < 3) {
-            newErrors.surname = 'Surname must be at least 3 characters.';
-            isValid = false;
-        }
-        if (!dob) {
-            newErrors.dob = 'Please enter your Date of Birth.';
-            isValid = false;
-        }
-        if (!gender) {
-            newErrors.gender = 'Please select a gender.';
-            isValid = false;
-        }
-        if (!email.includes('@')) {
-            newErrors.email = 'Please enter a valid email address.';
-            isValid = false;
-        }
-        if (password.length < 6) {
-            newErrors.password = 'Password must be at least 6 characters long.';
-            isValid = false;
-        }
-        if (!country) {
-            newErrors.country = 'Please select a country.';
-            isValid = false;
-        }
-        if (!city.trim()) {
-            newErrors.city = 'Please enter your city.';
-            isValid = false;
+        const rules = ValidationUtils.getSignUpRules('patient');
+        const newErrors = ValidationUtils.validateFields(formData, rules);
+
+        // Additional validation for profile picture
+        if (profilePicture) {
+            const fileError = ValidationUtils.validateFileUpload(profilePicture, {
+                maxSize: 5 * 1024 * 1024, // 5MB
+                allowedTypes: ['image/jpeg', 'image/png', 'image/jpg'],
+                required: false
+            });
+            if (fileError) {
+                newErrors.profilePicture = fileError;
+            }
         }
 
-        if (!acceptPolicies) {
-            newErrors.acceptPolicies = 'You must accept the platform policies.';
-            isValid = false;
-        }
-
-        setErrors(newErrors);
+        setErrors(newErrors as any);
         
         // Scroll to first error if validation fails
-        if (!isValid) {
+        if (Object.keys(newErrors).length > 0) {
             setTimeout(() => {
                 scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
             }, 100);
         }
         
-        return isValid;
+        return Object.keys(newErrors).length === 0;
     };
 
     const validateStep3 = () => {
-        const newErrors: any = {};
-        let isValid = true;
+        const verificationError = ValidationUtils.validateVerificationCode(verificationCode);
+        const newErrors = verificationError ? { verificationCode: verificationError } : {};
 
-        if (!verificationCode.trim()) {
-            newErrors.verificationCode = 'Please enter the verification code.';
-            isValid = false;
-        } else if (verificationCode.length !== 6) {
-            newErrors.verificationCode = 'Verification code must be 6 digits.';
-            isValid = false;
-        }
-
-        setErrors(newErrors);
+        setErrors(newErrors as any);
         
         // Scroll to first error if validation fails
-        if (!isValid) {
+        if (Object.keys(newErrors).length > 0) {
             setTimeout(() => {
                 scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
             }, 100);
         }
         
-        return isValid;
+        return Object.keys(newErrors).length === 0;
     };
 
     const sendVerificationCode = async () => {
@@ -900,64 +880,21 @@ export default function PatientSignUp() {
                 throw new Error('User data not received after signup');
             }
         } catch (error: any) {
-            console.error('Sign up error:', error);
-            
             // Only show errors if registration was not successful
             if (!registrationSuccessful) {
-                let errorMessage = 'Sign up failed. Please try again.';
-                
-                // Handle timeout errors
-                if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-                    errorMessage = 'Registration timed out. Your account may have been created successfully. Please try logging in.';
-                    Alert.alert('Timeout', errorMessage, [
-                        {
-                            text: 'Try Login',
-                            onPress: () => router.replace('/login')
-                        },
-                        {
-                            text: 'OK',
-                            style: 'cancel'
-                        }
-                    ]);
-                    return;
-                }
-                
-                // Handle Laravel backend validation errors
-                if (error.response?.status === 422) {
-                    console.log('PatientSignup: 422 Validation error details:', error.response.data);
-                    if (error.response.data && error.response.data.errors) {
-                        const validationErrors = error.response.data.errors;
-                        console.log('PatientSignup: Validation errors:', validationErrors);
-                        const errorFields = Object.keys(validationErrors);
-                        if (errorFields.length > 0) {
-                            const firstError = validationErrors[errorFields[0]][0];
-                            errorMessage = firstError;
-                        }
-                    } else {
-                        errorMessage = 'Please check your input and try again.';
-                    }
-                } else if (error.message && error.message.includes('Validation failed')) {
-                    if (error.data && error.data.errors) {
-                        const validationErrors = error.data.errors;
-                        const errorFields = Object.keys(validationErrors);
-                        if (errorFields.length > 0) {
-                            const firstError = validationErrors[errorFields[0]][0];
-                            errorMessage = firstError;
-                        }
-                    } else {
-                        errorMessage = 'Please check your input and try again.';
-                    }
-                } else if (error.message && error.message.includes('email already exists')) {
-                    errorMessage = 'An account with this email already exists.';
-                } else if (error.message && error.message.includes('password')) {
-                    errorMessage = 'Password is too weak. Please choose a stronger password.';
-                } else if (error.message && error.message.includes('email')) {
-                    errorMessage = 'Please enter a valid email address.';
-                } else if (error.message) {
-                    errorMessage = error.message;
-                }
-                
-                Alert.alert('Error', errorMessage);
+                SignUpErrorHandler.handleSignUpError(
+                    error,
+                    (validationErrors) => {
+                        // Handle validation errors by setting them in state
+                        setErrors(validationErrors as any);
+                        // Scroll to first error field
+                        setTimeout(() => {
+                            scrollToFirstError(scrollViewRef, validationErrors, fieldRefs);
+                        }, 100);
+                    },
+                    () => handleSignUp(), // Retry function
+                    () => router.replace('/login') // Login function
+                );
             }
         } finally {
             setLoading(false);

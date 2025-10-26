@@ -64,14 +64,18 @@ export function generateUserActivities(
     if (appointments && appointments.length > 0) {
       appointments.forEach((appointment, index) => {
         if (index < 5) { // Limit to recent 5 appointments
+          const status = appointment.status === 'confirmed' ? 'Confirmed' : 
+                        appointment.status === 'pending' ? 'Pending' : 
+                        appointment.status === 'cancelled' ? 'Cancelled' : 'Scheduled';
+          
           activities.push({
             id: `appointment_${appointment.id || index}`,
             type: 'appointment',
-            title: `Appointment with Dr. ${appointment.doctor_name || 'Doctor'}`,
-            description: `Scheduled for ${new Date(appointment.appointment_date || Date.now()).toLocaleDateString()}`,
+            title: `${status} Appointment`,
+            description: `Dr. ${appointment.doctor_name || 'Doctor'} - ${new Date(appointment.appointment_date || Date.now()).toLocaleDateString()}`,
             timestamp: new Date(appointment.created_at || Date.now()),
-            icon: 'calendarCheck',
-            color: '#4CAF50'
+            icon: status === 'Confirmed' ? 'calendarCheck' : status === 'Pending' ? 'clock' : status === 'Cancelled' ? 'times' : 'calendar',
+            color: status === 'Confirmed' ? '#4CAF50' : status === 'Pending' ? '#FF9800' : status === 'Cancelled' ? '#F44336' : '#2196F3'
           });
         }
       });
@@ -82,11 +86,11 @@ export function generateUserActivities(
       activities.push({
         id: `subscription_${subscription.id || 'current'}`,
         type: 'subscription',
-        title: 'Active Subscription',
-        description: `Plan: ${subscription.plan_name || 'Premium'}`,
+        title: 'Health Plan Active',
+        description: `Plan: ${subscription.plan_name || 'Premium'} - ${subscription.isActive ? 'Active' : 'Inactive'}`,
         timestamp: new Date(subscription.created_at || Date.now()),
-        icon: 'checkmark',
-        color: '#4CAF50'
+        icon: 'heart',
+        color: subscription.isActive ? '#E91E63' : '#999'
       });
     }
 
@@ -99,9 +103,30 @@ export function generateUserActivities(
         description: 'Your account has been created successfully',
         timestamp: new Date(userData.created_at),
         icon: 'heart',
-        color: '#FF6B6B'
+        color: '#E91E63'
       });
     }
+
+    // Add admin notifications as activities
+    activities.push({
+      id: 'admin_notification_1',
+      type: 'system',
+      title: 'System Update',
+      description: 'New features and improvements have been added to the app',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+      icon: 'infoCircle',
+      color: '#607D8B'
+    });
+
+    activities.push({
+      id: 'admin_notification_2',
+      type: 'system',
+      title: 'Health Tips',
+      description: 'Remember to stay hydrated and maintain regular exercise',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
+      icon: 'heart',
+      color: '#E91E63'
+    });
 
   } else if (userType === 'doctor') {
     // Doctor-specific activities
@@ -118,7 +143,7 @@ export function generateUserActivities(
             description: `Patient: ${appointment.patient_name || 'Unknown'}`,
             timestamp: new Date(appointment.created_at || Date.now()),
             icon: status === 'Confirmed' ? 'checkmark' : status === 'Pending' ? 'clock' : 'userMd',
-            color: status === 'Confirmed' ? '#4CAF50' : status === 'Pending' ? '#FF9500' : '#2196F3'
+            color: status === 'Confirmed' ? '#4CAF50' : status === 'Pending' ? '#FF9800' : '#2196F3'
           });
         }
       });
@@ -129,11 +154,11 @@ export function generateUserActivities(
       activities.push({
         id: `wallet_${userData.id}`,
         type: 'wallet',
-        title: 'Wallet Balance',
+        title: 'Payment Received',
         description: `Current balance: $${userData.wallet_balance || 0}`,
         timestamp: new Date(),
-        icon: 'money',
-        color: '#4CAF50'
+        icon: 'dollar',
+        color: '#FF9800'
       });
     }
 
@@ -149,6 +174,17 @@ export function generateUserActivities(
         color: '#2196F3'
       });
     }
+
+    // Add admin notifications for doctors
+    activities.push({
+      id: 'admin_notification_doctor_1',
+      type: 'system',
+      title: 'Platform Update',
+      description: 'New consultation features and payment improvements available',
+      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
+      icon: 'infoCircle',
+      color: '#607D8B'
+    });
   }
 
   // Add message activities if any
@@ -161,10 +197,32 @@ export function generateUserActivities(
         description: message.content?.substring(0, 50) + '...' || 'You have a new message',
         timestamp: new Date(message.created_at || Date.now()),
         icon: 'message',
-        color: '#9C27B0'
+        color: '#2196F3'
       });
     });
   }
+
+  // Add payment activities
+  activities.push({
+    id: 'payment_activity_1',
+    type: 'payment',
+    title: 'Payment Processed',
+    description: 'Your recent transaction has been completed successfully',
+    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+    icon: 'dollar',
+    color: '#FF9800'
+  });
+
+  // Add reminder activities
+  activities.push({
+    id: 'reminder_activity_1',
+    type: 'reminder',
+    title: 'Appointment Reminder',
+    description: 'Your upcoming appointment is in 2 hours',
+    timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
+    icon: 'clock',
+    color: '#9C27B0'
+  });
 
   // Sort activities by timestamp (newest first)
   return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());

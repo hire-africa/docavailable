@@ -35,6 +35,12 @@ class VoiceRecordingService {
 
   async startRecording(): Promise<boolean> {
     try {
+      // Check if already recording
+      if (this.recording) {
+        console.log('Recording already in progress, stopping previous recording first');
+        await this.cancelRecording();
+      }
+
       // Request permissions
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -42,23 +48,34 @@ class VoiceRecordingService {
         return false;
       }
 
+      // Clean up any existing recording state
+      this.recording = null;
+      this.recordingUri = null;
+      this.recordingStartTime = 0;
+      this.stopDurationTimer();
+
       // Prepare recording
-      await Audio.Recording.createAsync(
+      const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY,
         (status) => {
           // This callback is called when recording status changes
           console.log('Recording status:', status);
         },
         100 // Update every 100ms
-      ).then(({ recording }) => {
-        this.recording = recording;
-        this.recordingStartTime = Date.now();
-        this.startDurationTimer();
-      });
+      );
+
+      this.recording = recording;
+      this.recordingStartTime = Date.now();
+      this.startDurationTimer();
 
       return true;
     } catch (error) {
       console.error('Error starting recording:', error);
+      // Clean up on error
+      this.recording = null;
+      this.recordingUri = null;
+      this.recordingStartTime = 0;
+      this.stopDurationTimer();
       return false;
     }
   }
@@ -94,9 +111,14 @@ class VoiceRecordingService {
       }
       this.stopDurationTimer();
       this.recordingUri = null;
+      this.recordingStartTime = 0;
     } catch (error) {
       console.error('Error canceling recording:', error);
     }
+  }
+
+  isRecording(): boolean {
+    return this.recording !== null;
   }
 
   private startDurationTimer() {
@@ -159,8 +181,8 @@ class VoiceRecordingService {
       formData.append('file', fileObject as any);
       formData.append('appointment_id', appointmentId.toString());
 
-      // Use WebRTC chat server for voice message uploads
-      const uploadUrl = `http://46.101.123.123:8081/api/upload/voice-message`;
+      // Use docavailable.org for voice message uploads (same as calls)
+      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
       console.log('📤 [VoiceService] Upload URL:', uploadUrl);
       console.log('📤 [VoiceService] Token present:', !!token);
       

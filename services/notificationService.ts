@@ -124,8 +124,14 @@ export class NotificationService {
     userId?: string
   ): Promise<Notification[]> {
     try {
-      // Get existing local notifications (includes automated ones)
+      // Only get real-time notifications from local storage (no old mock data)
       const localNotifications = await this.getNotifications();
+      
+      // Filter to only show notifications from the last 24 hours (real-time events)
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentNotifications = localNotifications.filter(notification => 
+        notification.timestamp > oneDayAgo
+      );
       
       // Try to get admin notifications from API
       let adminNotifications: Notification[] = [];
@@ -173,8 +179,8 @@ export class NotificationService {
         console.log('🔔 Admin API not available, using local storage only:', apiError);
       }
 
-      // Combine local and admin notifications
-      const allNotifications = [...localNotifications, ...adminNotifications];
+      // Combine recent local notifications and admin notifications
+      const allNotifications = [...recentNotifications, ...adminNotifications];
       
       // Remove duplicates based on ID
       const uniqueNotifications = allNotifications.reduce((acc, current) => {
@@ -190,7 +196,7 @@ export class NotificationService {
 
       // Filter based on recipient type
       const filteredNotifications = uniqueNotifications.filter(notification => {
-        // If no recipient type specified, show to all (automated notifications)
+        // If no recipient type specified, show to all (real-time notifications)
         if (!notification.recipientType) return true;
         
         // Filter based on recipient type (admin notifications)
@@ -208,13 +214,27 @@ export class NotificationService {
         }
       });
 
-      // Save combined notifications back to local storage
-      await this.saveNotifications(filteredNotifications);
+      console.log('🔔 Final filtered notifications (real-time only):', filteredNotifications.length, filteredNotifications);
       
       return filteredNotifications;
     } catch (error) {
       console.error('Error getting notifications for user:', error);
       return [];
+    }
+  }
+
+  static async clearOldNotifications(): Promise<void> {
+    try {
+      // Clear all notifications older than 24 hours
+      const notifications = await this.getNotifications();
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentNotifications = notifications.filter(notification => 
+        notification.timestamp > oneDayAgo
+      );
+      await this.saveNotifications(recentNotifications);
+      console.log('🧹 Cleared old notifications, kept:', recentNotifications.length);
+    } catch (error) {
+      console.error('Error clearing old notifications:', error);
     }
   }
 

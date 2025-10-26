@@ -80,12 +80,10 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      "@notifee/react-native"
     ],
     "extra": {
-      "eas": {
-        "projectId": "2eb40af4-b32e-462e-b070-a1b171e65485"
-      },
       "firebaseApiKey": "AIzaSyAfRKBWJ8otf8VEo5nVZv5cG7qDX-t4ksc"
     }
   }

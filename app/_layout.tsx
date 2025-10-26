@@ -1,8 +1,10 @@
+import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportance } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
-import { AndroidImportance, AndroidNotificationVisibility } from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import { PermissionsAndroid, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../contexts/AuthContext';
 import pushNotificationService from '../services/pushNotificationService';
@@ -16,44 +18,105 @@ import apiService from './services/apiService';
 
 export default function RootLayout() {
   const router = useRouter();
+  
+  // Request phone permissions for call handling
+  const requestPhonePermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const permissions = [
+          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+          PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+          PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
+        ];
+        
+        const results = await PermissionsAndroid.requestMultiple(permissions);
+        console.log('📞 Phone permissions requested:', results);
+        
+        // Check if all permissions were granted
+        const allGranted = Object.values(results).every(result => result === PermissionsAndroid.RESULTS.GRANTED);
+        if (allGranted) {
+          console.log('✅ All phone permissions granted');
+        } else {
+          console.log('⚠️ Some phone permissions denied');
+        }
+      } catch (error) {
+        console.error('❌ Error requesting phone permissions:', error);
+      }
+    }
+  };
+
   useEffect(() => {
+    // Request phone permissions first
+    requestPhonePermissions();
+    
     // Warm the backend on app start to reduce initial timeouts due to cold starts
     apiService.healthCheck().catch(() => {
       // Ignore errors here; this is a best-effort warm-up
     });
 
-    // Configure Android notification channels and default handler
+    // Configure Android notification channels and default handler with notifee
     (async () => {
       try {
-        // Calls channel - Enhanced for WhatsApp-like behavior
-        await Notifications.setNotificationChannelAsync('calls', {
-          name: 'Calls',
-          importance: AndroidImportance.MAX,
+        // Request notification permissions first
+        console.log('🔔 Requesting notification permissions...');
+        const permission = await notifee.requestPermission({
+          alert: true,
+          badge: true,
+          sound: true,
+          lockScreen: true,
+          notificationCenter: true,
+          carPlay: true,
+          criticalAlert: false,
+          announcement: true,
+        });
+        console.log('🔔 Permission request result:', permission);
+
+        // Request floating notification permission (Android 5.0+)
+        if (Platform.OS === 'android') {
+          try {
+            console.log('🔔 Requesting floating notification permission...');
+            const floatingPermission = await notifee.requestPermission({
+              alert: true,
+              badge: true,
+              sound: true,
+              lockScreen: true,
+              notificationCenter: true,
+              carPlay: true,
+              criticalAlert: false,
+              announcement: true,
+            });
+            console.log('🔔 Floating permission result:', floatingPermission);
+          } catch (error) {
+            console.log('🔔 Floating permission not available:', error);
+          }
+        }
+
+        // Create channels with notifee for better popup control
+        await notifee.createChannel({
+          id: 'calls',
+          name: 'Incoming Calls',
+          importance: NotifeeAndroidImportance.HIGH,
           sound: 'default',
-          vibrationPattern: [0, 250, 250, 250],
+          vibration: true,
+          vibrationPattern: [250, 250, 250, 250],
           bypassDnd: true,
-          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
-          enableLights: true,
-          enableVibrate: true,
-          showBadge: true,
+          visibility: AndroidVisibility.PUBLIC,
         });
 
-        // Messages channel
-        await Notifications.setNotificationChannelAsync('messages', {
+        await notifee.createChannel({
+          id: 'messages',
           name: 'Messages',
-          importance: AndroidImportance.HIGH,
+          importance: NotifeeAndroidImportance.HIGH,
           sound: 'default',
-          vibrationPattern: [0, 250, 250, 250],
-          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+          vibration: true,
         });
 
-        // Appointments channel
-        await Notifications.setNotificationChannelAsync('appointments', {
+        await notifee.createChannel({
+          id: 'appointments',
           name: 'Appointments',
-          importance: AndroidImportance.HIGH,
+          importance: NotifeeAndroidImportance.HIGH,
           sound: 'default',
-          vibrationPattern: [0, 250, 250, 250],
-          lockscreenVisibility: AndroidNotificationVisibility.PUBLIC,
+          vibration: true,
         });
 
         // Set up notification categories for call actions
@@ -88,28 +151,16 @@ export default function RootLayout() {
               data
             });
 
-            // For incoming calls, show as full-screen notification
-            if (type === 'incoming_call') {
-              console.log('📞 [NotificationHandler] Incoming call notification - showing popup');
-              return {
-                shouldShowAlert: true,
-                shouldPlaySound: true,
-                shouldSetBadge: false,
-                shouldShowBanner: true,
-                shouldShowList: true,
-                priority: Notifications.AndroidNotificationPriority.MAX,
-              };
-            }
-
-            // Always show pop-up notifications for all other types
-            console.log('🔔 [NotificationHandler] Regular notification - showing popup');
+            // Always show popup for all notifications
             return {
               shouldShowAlert: true,
               shouldPlaySound: true,
-              shouldSetBadge: false,
+              shouldSetBadge: true,
               shouldShowBanner: true,
               shouldShowList: true,
-              priority: Notifications.AndroidNotificationPriority.HIGH,
+              priority: type === 'incoming_call' 
+                ? Notifications.AndroidNotificationPriority.MAX 
+                : Notifications.AndroidNotificationPriority.HIGH,
             };
           }
         });
@@ -135,70 +186,143 @@ export default function RootLayout() {
       //   routeIncomingCall(router, callData);
       // });
 
-    // Foreground handler for all notification types
+    // Foreground handler for all notification types with notifee
     const onMessageUnsub = messaging().onMessage(async (remoteMessage) => {
       try {
         const data: any = remoteMessage?.data || {};
         const notification = remoteMessage?.notification || {};
-        const type = data?.type || '';
+        const type = (data?.type || '').toString();
 
-        console.log('🔔 [Foreground] Received notification:', { type, data, notification });
+        console.log('📱 [Foreground] Received FCM message:', {
+          type,
+          title: notification.title,
+          body: notification.body,
+          data
+        });
 
-        // For incoming calls, show enhanced notification and route
+        // For incoming calls, show system ringtone notification and route to call screen
         if (type === 'incoming_call') {
-          const callerName = data.doctor_name || data.doctorName || 'Unknown Caller';
-          const callType = data.call_type === 'video' ? 'Video Call' : 'Voice Call';
+          console.log('📱 [Foreground] Incoming call - showing ringtone notification and routing');
+          console.log('📱 [Foreground] Call data:', data);
+          console.log('📱 [Foreground] Router available:', !!router);
           
-          // Show enhanced call notification
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: `${callerName} - ${callType}`,
-              body: 'Incoming call...',
-              data: {
-                ...data,
-                categoryId: 'incoming_call',
-                priority: 'high',
-                fullScreenAction: true
-              },
-              sound: 'default',
-              priority: Notifications.AndroidNotificationPriority.HIGH,
-              vibrate: [0, 250, 250, 250],
-            },
-            trigger: null,
+          // Create calls channel with system ringtone
+          await notifee.createChannel({
+            id: 'calls',
+            name: 'Incoming Calls',
+            importance: NotifeeAndroidImportance.MAX,
+            sound: 'default', // Use system default ringtone
+            vibration: true,
+            vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
+            bypassDnd: true,
+            lights: true,
+            lightColor: '#FF0000',
+            showBadge: true,
           });
-          
-          // Also route to call screen
+
+          // Show notification with system ringtone
+          await notifee.displayNotification({
+            title: notification.title || 'Incoming Call',
+            body: notification.body || 'Incoming call...',
+            data,
+            android: {
+              channelId: 'calls',
+              importance: NotifeeAndroidImportance.MAX,
+              pressAction: {
+                id: 'default',
+              },
+              fullScreenAction: {
+                id: 'default',
+              },
+              sound: 'default', // System ringtone
+              vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
+              smallIcon: 'ic_launcher',
+              largeIcon: 'ic_launcher',
+              color: '#FF0000', // Red for incoming calls
+              lights: ['#FF0000', 1000, 1000], // [color, on_ms, off_ms]
+              ongoing: true, // Make it ongoing so it can't be dismissed easily
+              autoCancel: false, // Don't auto-cancel
+              style: {
+                type: 1, // BigTextStyle
+                text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
+              },
+            },
+          });
+
+          // Route to call screen
           routeIncomingCall(router, data);
+          console.log('📱 [Foreground] Call routing completed');
           return;
         }
 
-        // For messages and appointments, show pop-up notification
-        if (type === 'chat_message' || type === 'new_message' || type.includes('appointment') || type.includes('session')) {
-          // Show immediate pop-up notification
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: notification.title || (type === 'chat_message' ? 'New Message' : 'Appointment Update'),
-              body: notification.body || (type === 'chat_message' ? 'You have a new message' : 'You have an appointment update'),
-              data,
-              sound: 'default',
-            },
-            trigger: null,
-          });
-        } else {
-          // For other notification types, show generic pop-up notification
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: notification.title || 'DocAvailable',
-              body: notification.body || 'You have a new notification',
-              data,
-              sound: 'default',
-            },
-            trigger: null,
-          });
+        // For other notifications, determine channel and display
+        const channelId = type.includes('message') ? 'messages' : 
+                         type.includes('appointment') ? 'appointments' : 'default';
+
+        // Ensure channel exists before displaying notification
+        await notifee.createChannel({
+          id: channelId,
+          name: channelId === 'messages' ? 'Messages' : 
+                channelId === 'appointments' ? 'Appointments' : 'Default',
+          importance: NotifeeAndroidImportance.HIGH,
+          sound: 'default',
+          vibration: true,
+          vibrationPattern: [250, 250, 250, 250],
+        });
+
+        // For message notifications, try to fetch the actual message content
+        let messageContent = notification.body || 'You have a new notification';
+        let expandedText = messageContent;
+
+        if (type.includes('message') && data.appointment_id) {
+          try {
+            // Fetch the latest message from the chat
+            const response = await fetch(`https://docavailable.com/api/appointments/${data.appointment_id}/messages?limit=1&order=desc`);
+            if (response.ok) {
+              const messagesData = await response.json();
+              if (messagesData.messages && messagesData.messages.length > 0) {
+                const latestMessage = messagesData.messages[0];
+                messageContent = latestMessage.message || latestMessage.content || messageContent;
+                expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+                console.log('📱 [Foreground] Fetched actual message content:', messageContent);
+              }
+            }
+          } catch (error) {
+            console.log('📱 [Foreground] Could not fetch message content, using generic:', error);
+            expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+          }
+        } else if (type.includes('message')) {
+          expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
+        } else if (type.includes('appointment')) {
+          expandedText = `Appointment Update: ${messageContent}`;
         }
 
-        // Let the centralized router process (it will no-op for non-call events in foreground)
-        routePushEvent(router, data, 'foreground');
+        // Use notifee for reliable popup display
+        await notifee.displayNotification({
+          title: notification.title || 'DocAvailable',
+          body: messageContent,
+          data,
+          android: {
+            channelId,
+            importance: NotifeeAndroidImportance.HIGH,
+            pressAction: {
+              id: 'default',
+            },
+            sound: 'default',
+            vibrationPattern: [250, 250, 250, 250],
+            smallIcon: 'ic_launcher',
+            largeIcon: 'ic_launcher',
+            color: type.includes('message') ? '#2196F3' : 
+                   type.includes('appointment') ? '#FF9800' : '#4CAF50',
+            // Add expanded text for better context
+            style: {
+              type: 1, // BigTextStyle
+              text: expandedText,
+            },
+          },
+        });
+
+        console.log('📱 [Foreground] Notification displayed');
       } catch (e) {
         console.error('Failed to handle foreground FCM:', e);
       }
@@ -228,9 +352,10 @@ export default function RootLayout() {
     };
   }, []);
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <Stack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <Stack>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
           <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
@@ -275,7 +400,8 @@ export default function RootLayout() {
           <Stack.Screen name="test-webview" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" options={{ headerShown: false }} />
         </Stack>
-      </AuthProvider>
-    </SafeAreaProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 } 

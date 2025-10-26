@@ -14,6 +14,8 @@ import {
     View,
 } from 'react-native';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
+import SignUpErrorHandler from '../utils/errorHandler';
+import ValidationUtils from '../utils/validationUtils';
 
 export default function AdminSignUp() {
   const [firstName, setFirstName] = useState('');
@@ -43,52 +45,31 @@ export default function AdminSignUp() {
   });
 
   const validateForm = () => {
-    const newErrors: any = {};
-    let isValid = true;
+    const formData = {
+      firstName,
+      surname: lastName,
+      email,
+      password,
+      dateOfBirth,
+      gender,
+      country,
+      city,
+      acceptPolicies: true // Admin signup doesn't have this field, so set to true
+    };
 
-    if (firstName.length < 2) {
-      newErrors.firstName = 'First name must be at least 2 characters.';
-      isValid = false;
-    }
-    if (lastName.length < 2) {
-      newErrors.lastName = 'Last name must be at least 2 characters.';
-      isValid = false;
-    }
-    if (!email.includes('@')) {
-      newErrors.email = 'Please enter a valid email address.';
-      isValid = false;
-    }
-    if (password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long.';
-      isValid = false;
-    }
-    if (!dateOfBirth) {
-      newErrors.dateOfBirth = 'Date of birth is required.';
-      isValid = false;
-    }
-    if (!gender) {
-      newErrors.gender = 'Gender is required.';
-      isValid = false;
-    }
-    if (!country) {
-      newErrors.country = 'Country is required.';
-      isValid = false;
-    }
-    if (!city) {
-      newErrors.city = 'City is required.';
-      isValid = false;
-    }
+    const rules = ValidationUtils.getSignUpRules('admin');
+    const newErrors = ValidationUtils.validateFields(formData, rules);
 
     setErrors(newErrors);
     
     // Scroll to first error if validation fails
-    if (!isValid) {
+    if (Object.keys(newErrors).length > 0) {
       setTimeout(() => {
         scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
       }, 100);
     }
     
-    return isValid;
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSignUp = async () => {
@@ -121,18 +102,19 @@ export default function AdminSignUp() {
         ]
       );
     } catch (error: any) {
-      console.error('Sign up error:', error);
-      let errorMessage = 'Sign up failed. Please try again.';
-      
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'An account with this email already exists.';
-      } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'Password is too weak. Please choose a stronger password.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address.';
-      }
-      
-      Alert.alert('Error', errorMessage);
+      SignUpErrorHandler.handleSignUpError(
+        error,
+        (validationErrors) => {
+          // Handle validation errors by setting them in state
+          setErrors(validationErrors);
+          // Scroll to first error field
+          setTimeout(() => {
+            scrollToFirstError(scrollViewRef, validationErrors, fieldRefs);
+          }, 100);
+        },
+        () => handleSignUp(), // Retry function
+        () => router.replace('/login') // Login function
+      );
     } finally {
       setLoading(false);
     }

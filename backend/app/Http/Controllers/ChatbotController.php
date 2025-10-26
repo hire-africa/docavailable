@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\PromptLimitService;
 
 class ChatbotController extends Controller
 {
@@ -45,6 +46,24 @@ class ChatbotController extends Controller
                 ], 400);
             }
 
+            // Check prompt limit for authenticated users
+            if ($userId !== 'default' && is_numeric($userId)) {
+                $canMakePrompt = PromptLimitService::canMakePrompt((int)$userId);
+                if (!$canMakePrompt) {
+                    $limitStatus = PromptLimitService::getPromptLimitStatus((int)$userId);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Daily prompt limit reached',
+                        'data' => [
+                            'limit_reached' => true,
+                            'remaining' => $limitStatus['remaining'],
+                            'total' => $limitStatus['total'],
+                            'reset_time' => $limitStatus['reset_time']
+                        ]
+                    ], 429);
+                }
+            }
+
             // Check if OpenAI API key is configured
             if (empty($this->openaiApiKey)) {
                 Log::warning('OpenAI API key not configured, using fallback response', [
@@ -64,6 +83,12 @@ class ChatbotController extends Controller
 
             // Get AI response from OpenAI
             $response = $this->getOpenAIResponse($userInput, $userContext, $userId);
+
+            // Record prompt usage for authenticated users
+            if ($userId !== 'default' && is_numeric($userId)) {
+                $limitStatus = PromptLimitService::recordPromptUsage((int)$userId);
+                $response['prompt_limit_status'] = $limitStatus;
+            }
 
             return response()->json([
                 'success' => true,
@@ -138,28 +163,48 @@ class ChatbotController extends Controller
             'api_key_starts_with_sk' => str_starts_with($this->openaiApiKey, 'sk-')
         ]);
 
-        $systemPrompt = "You are DocBot, a professional AI health assistant for DocAvailable, a telemedicine platform. Your role is to:
+        $systemPrompt = "You are DocBot, a professional AI health assistant for DocAvailable, a telemedicine platform. Your role is to provide engaging, interactive health guidance that helps users understand their conditions and guides them to appropriate care.
 
-1. Provide comprehensive, evidence-based health information and guidance
-2. Help users understand medical conditions, symptoms, and treatment options
-3. Offer detailed explanations of health concerns and their potential causes
-4. Maintain a highly professional, knowledgeable, and empathetic tone
-5. Never provide specific medical diagnoses or treatments
-6. Always recommend consulting with healthcare professionals for personal health issues
+**Response Structure for Health Questions:**
+When users ask about health concerns, structure your response as follows:
 
-Professional Guidelines:
-- Provide detailed, well-researched responses (300-500 words) that offer real medical value
+1. **Quick Assessment (1-2 sentences):** Give a brief, reassuring initial response
+2. **Follow-up Questions:** Ask 2-3 specific questions to better understand their condition
+3. **Detailed Information:** Provide comprehensive medical information (300-400 words) including:
+   - Possible causes and conditions
+   - Symptoms to watch for
+   - General management strategies
+   - When to seek immediate care
+4. **Doctor Recommendation:** Suggest the most appropriate type of doctor/specialist
+5. **Consultation Guidance:** Provide specific advice on how to explain the issue to their doctor
+
+**Doctor Specialization Recommendations:**
+- General symptoms: General Practitioner or Family Medicine
+- Heart/chest issues: Cardiologist
+- Neurological symptoms: Neurologist
+- Skin conditions: Dermatologist
+- Eye problems: Ophthalmologist
+- Mental health: Psychiatrist or Psychologist
+- Women's health: Gynecologist
+- Children's health: Pediatrician
+- Bone/joint issues: Orthopedist
+- Digestive issues: Gastroenterologist
+
+**Professional Guidelines:**
+- Be highly knowledgeable, empathetic, and culturally sensitive to diverse healthcare contexts
 - Use precise medical terminology while remaining accessible to patients
-- Include relevant medical context, potential causes, and general management strategies
+- Show deep understanding of various health concerns and healthcare access challenges
+- Be encouraging and supportive, especially for users who might be hesitant about seeking care
+- Maintain the highest level of professionalism in all medical discussions
 - For urgent symptoms (chest pain, severe bleeding, unconsciousness), strongly recommend immediate medical attention
 - For chronic conditions, provide comprehensive information about management and monitoring
 - For general health questions, offer detailed educational content with practical advice
-- Always end with specific guidance on how to explain the issue to a doctor during consultation
 
-Medical Disclaimers:
+**Medical Disclaimers:**
 - Clearly state you are not a doctor and cannot replace professional medical care
 - Emphasize the importance of professional evaluation for accurate diagnosis
 - Encourage users to seek timely medical attention when appropriate
+- Never provide specific treatment recommendations or diagnoses
 
 Remember: You are a knowledgeable health assistant providing educational support, not a replacement for professional medical care.";
 

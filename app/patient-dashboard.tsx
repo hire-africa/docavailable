@@ -2,6 +2,7 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
+import notifee, { AndroidImportance } from '@notifee/react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -16,6 +17,7 @@ import {
   Image,
   Linking,
   Modal,
+  PermissionsAndroid,
   Platform,
   RefreshControl,
   ScrollView,
@@ -29,7 +31,8 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
 import Icon, { IconName } from '../components/Icon';
-import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { RealTimeEventService } from '../services/realTimeEventService';
+import { Activity, addRealtimeActivity, formatTimestamp } from '../utils/activityUtils';
 
 import AlertDialog from '../components/AlertDialog';
 import CacheManagementModal from '../components/CacheManagementModal';
@@ -122,6 +125,215 @@ export default function PatientDashboard() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Test function for popup notifications
+  const testPopupNotification = async () => {
+    try {
+      console.log('🔔 Starting popup notification test...');
+      
+      // Check and request notification permissions
+      console.log('0. Checking notification permissions...');
+      const settings = await notifee.getNotificationSettings();
+      console.log('Current notification settings:', settings);
+      
+      if (settings.authorizationStatus !== 1 || settings.alert !== 1) { // 1 = authorized/enabled
+        console.log('Requesting full notification permissions...');
+        const permission = await notifee.requestPermission({
+          alert: true,
+          badge: true,
+          sound: true,
+          lockScreen: true,
+          notificationCenter: true,
+          carPlay: true,
+          criticalAlert: false,
+          announcement: true,
+        });
+        console.log('Permission request result:', permission);
+        
+        // Check settings again after request
+        const newSettings = await notifee.getNotificationSettings();
+        console.log('Updated notification settings:', newSettings);
+        
+        // If alert is still disabled, show instructions for floating notifications
+        if (newSettings.alert !== 1) {
+          Alert.alert(
+            'Floating Notifications Required',
+            'To show popup notifications, please enable "Floating Notifications" in your device settings:\n\n' +
+            '1. Go to Settings > Apps > DocAvailable\n' +
+            '2. Tap "Notifications"\n' +
+            '3. Enable "Floating Notifications" or "Heads-up Notifications"\n\n' +
+            'This allows notifications to appear as popups on your screen.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => notifee.openNotificationSettings() }
+            ]
+          );
+        }
+      }
+      
+      // First create the channel
+      console.log('1. Creating notification channel...');
+      await notifee.createChannel({
+        id: 'calls',
+        name: 'Incoming Calls',
+        importance: AndroidImportance.MAX,
+        sound: 'default',
+        vibration: true,
+        vibrationPattern: [250, 250, 250, 250],
+        bypassDnd: true,
+        lights: true,
+        lightColor: '#FF0000',
+        showBadge: true,
+      });
+      console.log('✅ Channel created successfully');
+
+      // Test basic notification first
+      console.log('2. Testing basic notification...');
+      await notifee.displayNotification({
+        title: 'Test Popup Notification',
+        body: 'This should appear as a popup notification on your screen',
+        android: {
+          channelId: 'calls',
+          importance: AndroidImportance.MAX,
+          pressAction: {
+            id: 'default',
+          },
+          sound: 'default',
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          color: '#4CAF50',
+          style: {
+            type: 1, // BigTextStyle
+            text: 'This is a detailed message that shows more context about the notification. It can contain multiple lines of text to provide better information to the user.',
+          },
+        },
+      });
+      console.log('✅ Basic notification sent');
+
+      // Test with full screen action
+      console.log('3. Testing full-screen notification...');
+      await notifee.displayNotification({
+        title: 'Test Full-Screen Notification',
+        body: 'This should appear as a full-screen notification',
+        android: {
+          channelId: 'calls',
+          importance: AndroidImportance.MAX,
+          pressAction: {
+            id: 'default',
+          },
+          fullScreenAction: {
+            id: 'default',
+          },
+          sound: 'default',
+          vibrationPattern: [250, 250, 250, 250],
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          color: '#4CAF50',
+          style: {
+            type: 1, // BigTextStyle
+            text: 'This is a detailed full-screen notification with expanded text content. It provides more context and information about the notification.',
+          },
+        },
+      });
+      console.log('✅ Full-screen notification sent');
+      
+      // Check notification settings after sending
+      const finalSettings = await notifee.getNotificationSettings();
+      console.log('Final notification settings:', finalSettings);
+      
+      showSuccess('Test Notification', 'Both notifications sent! Check your screen for popups.');
+    } catch (error) {
+      console.error('❌ Test popup notification failed:', error);
+      console.error('Error details:', error.message);
+      showError('Test Failed', `Failed to send test notification: ${error.message}`);
+    }
+  };
+
+  // Test function for message notifications with context
+  const testMessageNotification = async () => {
+    try {
+      console.log('💬 Testing message notification with context...');
+      
+      // Create messages channel
+      await notifee.createChannel({
+        id: 'messages',
+        name: 'Messages',
+        importance: AndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+        vibrationPattern: [250, 250, 250, 250],
+      });
+
+      await notifee.displayNotification({
+        title: 'Dr. Sarah Johnson',
+        body: 'Hello! I have reviewed your test results and everything looks great. Your blood pressure is normal and your cholesterol levels are within healthy ranges. Please continue with your current medication and schedule a follow-up in 3 months.',
+        data: {
+          type: 'chat_message',
+          sender_name: 'Dr. Sarah Johnson',
+          appointment_id: '123',
+        },
+        android: {
+          channelId: 'messages',
+          importance: AndroidImportance.HIGH,
+          pressAction: {
+            id: 'default',
+          },
+          sound: 'default',
+          vibrationPattern: [250, 250, 250, 250],
+          smallIcon: 'ic_launcher',
+          largeIcon: 'ic_launcher',
+          color: '#2196F3',
+          style: {
+            type: 1, // BigTextStyle
+            text: 'Message from Dr. Sarah Johnson: Hello! I have reviewed your test results and everything looks great. Your blood pressure is normal and your cholesterol levels are within healthy ranges. Please continue with your current medication and schedule a follow-up in 3 months.',
+          },
+        },
+      });
+      
+      console.log('✅ Message notification sent');
+      showSuccess('Message Test', 'Message notification sent with context!');
+    } catch (error) {
+      console.error('❌ Message notification test failed:', error);
+      showError('Test Failed', 'Failed to send message notification');
+    }
+  };
+
+  // Check phone permissions
+  const checkPhonePermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const permissions = [
+          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
+          PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+          PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
+        ];
+        
+        const results = await PermissionsAndroid.requestMultiple(permissions);
+        console.log('📞 Phone permissions check:', results);
+        
+        const allGranted = Object.values(results).every(result => result === PermissionsAndroid.RESULTS.GRANTED);
+        
+        if (allGranted) {
+          Alert.alert('Phone Permissions', 'All phone permissions granted! DocAvailable can now handle calls properly.');
+        } else {
+          Alert.alert(
+            'Phone Permissions Required', 
+            'DocAvailable needs phone permissions to handle incoming calls properly. Please grant these permissions in Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() }
+            ]
+          );
+        }
+      } catch (error) {
+        console.error('❌ Error checking phone permissions:', error);
+        Alert.alert('Error', 'Failed to check phone permissions');
+      }
+    } else {
+      Alert.alert('Info', 'Phone permissions are only required on Android');
+    }
+  };
+
   const [appointments, setAppointments] = useState<any[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
@@ -162,56 +374,14 @@ export default function PatientDashboard() {
     animateBottomNav(hidden);
   };
 
-  // Helper function to get action URL for activity type
-  const getActionUrlForActivity = (activityType: string): string | undefined => {
-    switch (activityType) {
-      case 'appointment':
-        return '/appointments';
-      case 'message':
-        return '/messages';
-      case 'wallet':
-        return '/earnings';
-      default:
-        return undefined;
-    }
-  };
 
   // Load unread notification count from service
   const loadUnreadCount = async () => {
     try {
-      // Generate automated activities first
-      const generatedActivities = generateUserActivities(
-        'patient',
-        userData,
-        [], // appointments - would be loaded from API
-        [], // messages - would be loaded from API
-        null // subscription - would be loaded from API
-      );
-
-      // Convert activities to notifications
-      const activityNotifications = generatedActivities.map((activity, index) => ({
-        id: `activity_${activity.id}`,
-        title: activity.title,
-        message: activity.description,
-        type: activity.type as any,
-        timestamp: activity.timestamp,
-        isRead: index > 2, // Mark older activities as read
-        actionUrl: getActionUrlForActivity(activity.type)
-      }));
-
-      // Get all notifications (including admin ones)
+      // Only get real notifications from the service (no fake activities)
       const allNotifications = await NotificationService.getNotificationsForUser('patient', userData?.id?.toString());
       
-      // Combine with automated notifications
-      const combinedNotifications = [...allNotifications];
-      activityNotifications.forEach(autoNotif => {
-        const exists = combinedNotifications.find(n => n.id === autoNotif.id);
-        if (!exists) {
-          combinedNotifications.push(autoNotif);
-        }
-      });
-
-      const unreadCount = combinedNotifications.filter(n => !n.isRead).length;
+      const unreadCount = allNotifications.filter(n => !n.isRead).length;
       setUnreadNotificationCount(unreadCount);
     } catch (error) {
       console.error('Error loading unread count:', error);
@@ -259,38 +429,86 @@ export default function PatientDashboard() {
 
   const loadActivities = async () => {
     try {
-      // Small delay to ensure data is loaded
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Generate activities from real user data
-      const userActivities = generateUserActivities(
-        'patient',
-        userData,
-        appointments, // patient appointments
-        [], // messages - you can add this if you have message data
-        currentSubscription // subscription data
-      );
-      
-      // Merge with existing activities, preserving real-time activities
+      // Clear old activities and only load real-time activities
       setActivities(prevActivities => {
-        // Keep real-time activities (those created in the last 5 minutes)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        // Keep only real-time activities (those created in the last 24 hours)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const realtimeActivities = prevActivities.filter(activity => 
-          activity.timestamp > fiveMinutesAgo
+          activity.timestamp > oneDayAgo
         );
         
-        // Combine real-time activities with generated activities
-        const combinedActivities = [...realtimeActivities, ...userActivities];
+        // Sort by timestamp (newest first)
+        const sortedActivities = realtimeActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         
-        // Remove duplicates and sort by timestamp
-        const uniqueActivities = combinedActivities.filter((activity, index, self) => 
-          index === self.findIndex(a => a.id === activity.id)
-        );
+        // Log for debugging
+        console.log('📱 Real-time activities loaded:', sortedActivities.length, 'items');
+        console.log('📱 Activity types:', sortedActivities.map(a => a.type));
         
-        return uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        return sortedActivities;
       });
     } catch (error) {
       console.error('Error loading activities:', error);
+    }
+  };
+
+  // Subscribe to real-time events
+  useEffect(() => {
+    const unsubscribe = RealTimeEventService.subscribe((event) => {
+      console.log('📡 [PatientDashboard] Received real-time event:', event);
+      
+      // Add real-time activity
+      const newActivity: Activity = {
+        id: event.id,
+        type: event.type,
+        title: event.title,
+        description: event.description,
+        timestamp: event.timestamp,
+        icon: getIconForEventType(event.type, event.action),
+        color: getColorForEventType(event.type, event.action)
+      };
+      
+      setActivities(prevActivities => 
+        addRealtimeActivity(prevActivities, event.type, event.title, event.description, newActivity.icon, newActivity.color)
+      );
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Helper functions for event icons and colors
+  const getIconForEventType = (type: string, action: string): string => {
+    switch (type) {
+      case 'appointment':
+        return action === 'created' ? 'calendarPlus' : 
+               action === 'confirmed' ? 'calendarCheck' : 
+               action === 'cancelled' ? 'calendarTimes' : 'calendar';
+      case 'session':
+        return action === 'started' ? 'play' : 
+               action === 'ended' ? 'stop' : 'clock';
+      case 'payment':
+        return 'dollar';
+      case 'message':
+        return 'message';
+      default:
+        return 'infoCircle';
+    }
+  };
+
+  const getColorForEventType = (type: string, action: string): string => {
+    switch (type) {
+      case 'appointment':
+        return action === 'created' ? '#2196F3' : 
+               action === 'confirmed' ? '#4CAF50' : 
+               action === 'cancelled' ? '#F44336' : '#FF9800';
+      case 'session':
+        return action === 'started' ? '#4CAF50' : 
+               action === 'ended' ? '#F44336' : '#FF9800';
+      case 'payment':
+        return '#FF9800';
+      case 'message':
+        return '#2196F3';
+      default:
+        return '#607D8B';
     }
   };
 
@@ -1582,6 +1800,134 @@ export default function PatientDashboard() {
                 </ThemedText>
           </ThemedView>
 
+          {/* Test Notification Button - Remove in production */}
+          <ThemedView style={{
+            backgroundColor: '#FFFFFF', 
+            borderRadius: 20, 
+            padding: 20, 
+            marginBottom: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            elevation: 4,
+          }}>
+            <TouchableOpacity
+              onPress={testPopupNotification}
+              style={{
+                backgroundColor: '#4CAF50',
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <FontAwesome name="bell" size={16} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Test Popup Notification
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={testMessageNotification}
+              style={{
+                backgroundColor: '#2196F3',
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              <FontAwesome name="comments" size={16} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Test Message Notification
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              onPress={checkPhonePermissions}
+              style={{
+                backgroundColor: '#FF9800',
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+                borderRadius: 12,
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              <FontAwesome name="phone" size={16} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Check Phone Permissions
+              </Text>
+            </TouchableOpacity>
+            <Text style={{ 
+              color: '#666', 
+              fontSize: 12, 
+              textAlign: 'center', 
+              marginTop: 8,
+              fontStyle: 'italic'
+            }}>
+              Tap to test if notifications pop up on screen
+            </Text>
+            
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  const settings = await notifee.getNotificationSettings();
+                  console.log('Device notification settings:', settings);
+                  
+                  const isAlertEnabled = settings.alert === 1;
+                  const isSoundEnabled = settings.sound === 1;
+                  
+                  Alert.alert(
+                    'Notification Settings',
+                    `Authorization: ${settings.authorizationStatus === 1 ? 'Granted' : 'Denied'}\n` +
+                    `Alert (Floating): ${isAlertEnabled ? 'Enabled ✅' : 'Disabled ❌'}\n` +
+                    `Badge: ${settings.badge === 1 ? 'Enabled' : 'Disabled'}\n` +
+                    `Sound: ${isSoundEnabled ? 'Enabled' : 'Disabled'}\n` +
+                    `Lock Screen: ${settings.lockScreen === 1 ? 'Enabled' : 'Disabled'}\n` +
+                    `Notification Center: ${settings.notificationCenter === 1 ? 'Enabled' : 'Disabled'}\n` +
+                    `Car Play: ${settings.carPlay === 1 ? 'Enabled' : 'Disabled'}\n` +
+                    `Critical Alert: ${settings.criticalAlert === 1 ? 'Enabled' : 'Disabled'}\n` +
+                    `Announcement: ${settings.announcement === 1 ? 'Enabled' : 'Disabled'}\n\n` +
+                    `${!isAlertEnabled ? '⚠️ Alert (Floating) must be enabled for popup notifications!' : '✅ Popup notifications are working!'}`,
+                    [
+                      { text: 'OK', style: 'cancel' },
+                      ...(isAlertEnabled && isSoundEnabled ? [] : [{
+                        text: 'Open Settings',
+                        onPress: () => notifee.openNotificationSettings(),
+                      }])
+                    ]
+                  );
+                } catch (error) {
+                  console.error('Error checking settings:', error);
+                }
+              }}
+              style={{
+                backgroundColor: '#2196F3',
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderRadius: 8,
+                alignItems: 'center',
+                marginTop: 8,
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '500' }}>
+                Check Device Settings
+              </Text>
+            </TouchableOpacity>
+          </ThemedView>
+
           {/* Remaining Sessions Section */}
           {currentSubscription && (
             <ThemedView style={styles.remainingSessionsSection}>
@@ -1677,17 +2023,21 @@ export default function PatientDashboard() {
                     {/* Quick Actions and My Appointments badge */}
           <View style={styles.quickActions}>
             <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
-            <View style={styles.cardsGrid}>
-              <TouchableOpacity style={styles.patientCard} onPress={() => setActiveTab('discover')}>
-                <Icon name="user" size={20} color="#4CAF50" />
-                <ThemedText style={styles.actionTitle}>Find Doctor</ThemedText>
-                <ThemedText style={styles.actionSubtitle}>Book an appointment</ThemedText>
+            <View style={styles.actionGrid}>
+              <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('discover')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="user" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.actionTitle}>Find Doctor</Text>
+                <Text style={styles.actionSubtitle}>Book an appointment</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.patientCard} onPress={() => router.push('/my-appointments')}>
-                <Icon name="calendar" size={20} color="#4CAF50" />
-                <ThemedText style={styles.actionTitle}>My Appointments</ThemedText>
-                <ThemedText style={styles.actionSubtitle}>View scheduled visits</ThemedText>
+              <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/my-appointments')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="calendar" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.actionTitle}>My Appointments</Text>
+                <Text style={styles.actionSubtitle}>View scheduled visits</Text>
                 {/* Badge for recent activity */}
                 {(() => {
                   // Show badge if there is a recent activity
@@ -1718,16 +2068,20 @@ export default function PatientDashboard() {
                 })()}
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.patientCard} onPress={handleEmergencyContact}>
-                <Icon name="voice" size={20} color="#4CAF50" />
-                <ThemedText style={styles.actionTitle}>Emergency Calls</ThemedText>
-                <ThemedText style={styles.actionSubtitle}>Quick emergency access</ThemedText>
+              <TouchableOpacity style={styles.actionCard} onPress={handleEmergencyContact}>
+                <View style={styles.actionIcon}>
+                  <Icon name="voice" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.actionTitle}>Emergency Calls</Text>
+                <Text style={styles.actionSubtitle}>Quick emergency access</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.patientCard} onPress={() => setShowSubscriptions(true)}>
-                <Icon name="heart" size={20} color="#4CAF50" />
-                <ThemedText style={styles.actionTitle}>My Health Plan</ThemedText>
-                <ThemedText style={styles.actionSubtitle}>Manage your plan</ThemedText>
+              <TouchableOpacity style={styles.actionCard} onPress={() => setShowSubscriptions(true)}>
+                <View style={styles.actionIcon}>
+                  <Icon name="heart" size={20} color="#4CAF50" />
+                </View>
+                <Text style={styles.actionTitle}>My Health Plan</Text>
+                <Text style={styles.actionSubtitle}>Manage your plan</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1743,23 +2097,66 @@ export default function PatientDashboard() {
             shadowRadius: 12,
             elevation: 4,
           }}>
-            <ThemedText style={{
-              fontSize: 20,
-              fontWeight: 'bold',
-              color: '#222',
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               marginBottom: 16,
-              textAlign: 'center'
-            }}>Recent Activity</ThemedText>
+            }}>
+              <ThemedText style={{
+                fontSize: 20,
+                fontWeight: 'bold',
+                color: '#222',
+              }}>Recent Activity</ThemedText>
+              <TouchableOpacity 
+                onPress={() => router.push('/notifications')}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#F0F8FF',
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 20,
+                }}
+              >
+                <ThemedText style={{
+                  fontSize: 14,
+                  color: '#2196F3',
+                  marginRight: 4,
+                }}>View All</ThemedText>
+                <Icon name="chevronRight" size={14} color="#2196F3" />
+              </TouchableOpacity>
+            </View>
             {activities.length > 0 ? (
               activities.slice(0, 5).map((activity, index) => (
-                <View key={activity.id} style={{
-                  backgroundColor: '#F8F9FA',
-                  borderRadius: 16,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: '#E8F5E8',
-                  marginBottom: index < 2 ? 12 : 0,
-                }}>
+                <TouchableOpacity 
+                  key={activity.id} 
+                  style={{
+                    backgroundColor: '#F8F9FA',
+                    borderRadius: 16,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: activity.color + '30',
+                    marginBottom: index < 2 ? 12 : 0,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.05,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                  onPress={() => {
+                    // Navigate to relevant section based on activity type
+                    if (activity.type === 'appointment') {
+                      router.push('/my-appointments');
+                    } else if (activity.type === 'message') {
+                      setActiveTab('messages');
+                    } else if (activity.type === 'payment' || activity.type === 'wallet') {
+                      setShowSubscriptions(true);
+                    } else if (activity.type === 'system') {
+                      router.push('/notifications');
+                    }
+                  }}
+                >
                   <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -1788,13 +2185,14 @@ export default function PatientDashboard() {
                         color: '#666',
                       }}>{formatTimestamp(activity.timestamp)}</ThemedText>
                     </View>
+                    <Icon name="chevronRight" size={16} color="#999" />
                   </View>
                   <ThemedText style={{
                     fontSize: 14,
                     color: '#666',
                     lineHeight: 20,
                   }}>{activity.description}</ThemedText>
-                </View>
+                </TouchableOpacity>
               ))
             ) : (
               <View style={{
@@ -1882,13 +2280,12 @@ export default function PatientDashboard() {
           // Get active appointments
           const activeAppointments = getSafeAppointments()
             .filter(appt => {
-              // Check both string and numeric status values
+              // Only show confirmed appointments in messages
               const status = appt.status;
-              const isPendingOrConfirmed = 
-                status === 'pending' || status === 'confirmed' ||
-                status === 0 || status === 1; // 0 = pending, 1 = confirmed
+              const isConfirmed = 
+                status === 'confirmed' || status === 1; // Only confirmed appointments
               
-              return isPendingOrConfirmed && (
+              return isConfirmed && (
                 !messageSearchQuery || 
                 (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())
@@ -2227,7 +2624,7 @@ export default function PatientDashboard() {
         {(() => {
           const activeAppointments = getSafeAppointments().filter(appt => {
             const status = appt.status;
-            return status === 'pending' || status === 'confirmed' || status === 0 || status === 1;
+            return status === 'confirmed' || status === 1; // Only confirmed appointments
           });
           const hasActiveAppointments = activeAppointments.length > 0;
           const hasEndedSessions = endedSessions.length > 0;
@@ -2713,17 +3110,26 @@ export default function PatientDashboard() {
   };
 
   // Helper to get status badge information
-  const getStatusBadge = (status: string) => {
-    switch(status) {
+  const getStatusBadge = (status: string | number) => {
+    // Handle both string and numeric status values
+    const statusStr = String(status);
+    const statusNum = Number(status);
+    
+    switch(statusStr) {
       case 'pending':
+      case '0':
         return { color: '#FFA500', text: 'Pending', icon: 'clock' };
       case 'confirmed':
+      case '1':
         return { color: '#4CAF50', text: 'Confirmed', icon: 'check' };
       case 'cancelled':
+      case '2':
         return { color: '#F44336', text: 'Cancelled', icon: 'times' };
       case 'completed':
+      case '3':
         return { color: '#2196F3', text: 'Completed', icon: 'check-square-o' };
       default:
+        // Fallback for any other values
         return { color: '#666', text: 'Unknown', icon: 'question' };
     }
   };
@@ -2740,17 +3146,17 @@ export default function PatientDashboard() {
   };
 
   // Helper to get status color
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | number) => {
     return getStatusBadge(status).color;
   };
 
   // Helper to get status text
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string | number) => {
     return getStatusBadge(status).text;
   };
 
   // Helper to get status icon
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: string | number) => {
     return getStatusBadge(status).icon;
   };
 
@@ -3895,7 +4301,7 @@ export default function PatientDashboard() {
             style={styles.notificationButton}
             onPress={() => router.push('/notifications')}
           >
-            <FontAwesome name="bell" size={20} color="#4CAF50" />
+            <FontAwesome name="bell" size={20} color="#FF9800" />
             {/* Unread notification badge */}
             {unreadNotificationCount > 0 && (
               <View style={styles.notificationBadge}>
@@ -4066,38 +4472,38 @@ export default function PatientDashboard() {
             {/* Profile Section */}
             <View style={styles.sectionGroup}>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); setShowSubscriptions(true); }}>
-                <View style={styles.iconBox}><Icon name="heart" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="heart" size={20} color="#E91E63" /></View>
                 <Text style={styles.sidebarMenuItemText}>My Health Plan</Text>
                 <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                  <Icon name="chevronRight" size={20} color="#999" />
                 </View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/patient-profile'); }}>
-                <View style={styles.iconBox}><Icon name="eye" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="eye" size={20} color="#2196F3" /></View>
                 <Text style={styles.sidebarMenuItemText}>View Profile</Text>
                 <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                  <Icon name="chevronRight" size={20} color="#999" />
                 </View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/edit-patient-profile'); }}>
-                <View style={styles.iconBox}><Icon name="edit" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="edit" size={20} color="#FF9800" /></View>
                 <Text style={styles.sidebarMenuItemText}>Edit Profile</Text>
                 <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                  <Icon name="chevronRight" size={20} color="#999" />
                 </View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/help-support'); }}>
-                <View style={styles.iconBox}><Icon name="questionCircle" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="questionCircle" size={20} color="#9C27B0" /></View>
                 <Text style={styles.sidebarMenuItemText}>Help & Support</Text>
                 <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                  <Icon name="chevronRight" size={20} color="#999" />
                 </View>
               </TouchableOpacity>
               <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/patient-settings'); }}>
-                <View style={styles.iconBox}><Icon name="cog" size={20} color="#4CAF50" /></View>
+                <View style={styles.iconBox}><Icon name="cog" size={20} color="#607D8B" /></View>
                 <Text style={styles.sidebarMenuItemText}>Settings</Text>
                 <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#4CAF50" />
+                  <Icon name="chevronRight" size={20} color="#999" />
                 </View>
               </TouchableOpacity>
             </View>
@@ -4244,47 +4650,47 @@ const styles = StyleSheet.create({
   quickActions: {
     marginBottom: 30,
   },
-  cardsGrid: {
+  actionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  patientCard: {
+  actionCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: isWeb ? 32 : 28,
-    marginBottom: 24,
+    padding: isWeb ? 24 : 20,
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 2,
     },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
     width: '48%',
-    marginRight: '2%',
-    minHeight: 140,
+    marginBottom: 16,
   },
   actionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#F0F8FF',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 16,
   },
   actionTitle: {
     fontSize: isLargeScreen ? 16 : 14,
     fontWeight: 'bold',
     color: '#000',
     marginBottom: 4,
+    textAlign: 'center',
   },
   actionSubtitle: {
     fontSize: isLargeScreen ? 14 : 12,
     color: '#666',
-    lineHeight: 18,
+    textAlign: 'center',
   },
   recentActivity: {
     marginBottom: 30,

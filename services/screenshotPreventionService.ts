@@ -1,11 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ScreenCapture from 'expo-screen-capture';
 import { NativeModules, Platform } from 'react-native';
 
 export interface ScreenshotPreventionConfig {
   enabled: boolean;
-  showWatermark: boolean;
-  watermarkText?: string;
   notifyOnScreenshot: boolean;
   securityLevel: 'basic' | 'enhanced' | 'maximum';
 }
@@ -15,8 +12,6 @@ export class ScreenshotPreventionService {
   private isEnabled: boolean = false;
   private config: ScreenshotPreventionConfig = {
     enabled: true,
-    showWatermark: true,
-    watermarkText: 'Doc Available - Confidential',
     notifyOnScreenshot: true,
     securityLevel: 'enhanced'
   };
@@ -58,17 +53,10 @@ export class ScreenshotPreventionService {
     try {
       console.log('🔒 [ScreenshotPrevention] Enabling screenshot prevention...');
       
-      if (Platform.OS === 'ios') {
-        // iOS: Prevent screenshots and screen recording - will show black screen
-        try {
-          await ScreenCapture.preventScreenCaptureAsync();
-          console.log('✅ [ScreenshotPrevention] iOS screenshot prevention enabled - screenshots will show black screen');
-        } catch (iosError) {
-          console.error('❌ [ScreenshotPrevention] iOS screenshot prevention failed:', iosError);
-          // Try alternative approach
-          await ScreenCapture.preventScreenCaptureAsync();
-        }
-      } else if (Platform.OS === 'android') {
+        if (Platform.OS === 'ios') {
+          // iOS: Screenshot prevention requires native module rebuild
+          console.log('⚠️ [ScreenshotPrevention] iOS screenshot prevention requires native module rebuild');
+        } else if (Platform.OS === 'android') {
         // Android: Use FLAG_SECURE - will show black screen on screenshot attempts
         try {
           await this.setAndroidSecureFlag(true);
@@ -100,8 +88,7 @@ export class ScreenshotPreventionService {
   public async disableScreenshotPrevention(): Promise<void> {
     try {
       if (Platform.OS === 'ios') {
-        await ScreenCapture.allowScreenCaptureAsync();
-        console.log('🔓 iOS screenshot prevention disabled');
+        console.log('⚠️ [ScreenshotPrevention] iOS screenshot prevention requires native module rebuild');
       } else if (Platform.OS === 'android') {
         await this.setAndroidSecureFlag(false);
         console.log('🔓 Android screenshot prevention disabled');

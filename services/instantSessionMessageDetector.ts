@@ -121,9 +121,10 @@ export class InstantSessionMessageDetector {
       }
 
       const data = JSON.parse(event.data);
-      console.log('📨 [InstantSessionDetector] Message received:', data.type);
-      // Only log full data for important messages to reduce spam
-      if (data.type === 'chat-message' || data.type === 'doctor-response-timer-started' || data.type === 'session-activated') {
+      
+      // Only log non-ping/pong messages to reduce spam
+      if (data.type !== 'ping' && data.type !== 'pong') {
+        console.log('📨 [InstantSessionDetector] Message received:', data.type);
         console.log('📨 [InstantSessionDetector] Full message data:', data);
       }
       
@@ -174,11 +175,14 @@ export class InstantSessionMessageDetector {
           console.log('🧪 [InstantSessionDetector] Test message received!');
           break;
           
+        case 'ping':
+        case 'pong':
+          // Silently handle ping/pong messages - no logging needed
+          break;
+          
         default:
-          // Only log unhandled messages occasionally to reduce spam
-          if (Math.random() < 0.1) {
-            console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
-          }
+          console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
+          console.log('📨 [InstantSessionDetector] Full message data:', data);
       }
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error parsing message:', error);
@@ -453,8 +457,8 @@ export class InstantSessionMessageDetector {
       
       this.timerState.timeRemaining = remaining;
       
-      // Update every 10 seconds to reduce logging frequency
-      if (remaining % 10 === 0 || remaining <= 10) {
+      // Update every 5 seconds to avoid too many updates
+      if (remaining % 5 === 0 || remaining <= 10) {
         console.log('⏰ [InstantSessionDetector] Timer remaining:', remaining, 'seconds');
       }
       

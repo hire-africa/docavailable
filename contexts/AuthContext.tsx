@@ -99,11 +99,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Handle the wrapped response structure
       if (apiResponse && apiResponse.success && apiResponse.data) {
-        // console.log('AuthContext: Retrieved user data from Laravel:', apiResponse.data);
+        console.log('🔍 [AuthContext] Raw API response:', apiResponse.data);
+        console.log('🔍 [AuthContext] Has preferences:', !!apiResponse.data.preferences);
+        console.log('🔍 [AuthContext] Has privacy_preferences:', !!apiResponse.data.privacy_preferences);
+        console.log('🔍 [AuthContext] API response keys:', Object.keys(apiResponse.data));
+        
         const userData = convertApiUserToUserData(apiResponse.data);
-        // console.log('AuthContext: Converted to UserData format:', userData);
-        // console.log('AuthContext: User type:', userData.user_type);
-        // console.log('AuthContext: User status:', userData.status);
+        console.log('🔍 [AuthContext] Converted userData:', userData);
+        console.log('🔍 [AuthContext] Converted preferences:', userData.preferences);
+        console.log('🔍 [AuthContext] Converted privacy_preferences:', userData.privacy_preferences);
         return userData;
       } else {
         // console.log('AuthContext: API response indicates failure:', apiResponse?.message);

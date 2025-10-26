@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
@@ -76,6 +77,7 @@ export default function PatientSettings() {
 
 function PatientSettingsContent() {
     const { user, userData, refreshUserData } = useAuth();
+    const insets = useSafeAreaInsets();
     const [loading, setLoading] = useState(false);
     const [showAnonymousWarning, setShowAnonymousWarning] = useState(false);
     const [pendingAnonymousMode, setPendingAnonymousMode] = useState(false);
@@ -290,7 +292,7 @@ function PatientSettingsContent() {
     }
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity 
@@ -303,14 +305,18 @@ function PatientSettingsContent() {
                 <View style={styles.placeholder} />
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                style={styles.content} 
+                contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+                showsVerticalScrollIndicator={false}
+            >
                 {/* Notifications Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Notifications</Text>
                     
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="calendar" size={20} color="#4CAF50" />
+                            <Icon name="calendar" size={20} color="#FF9800" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Appointment Notifications</Text>
                                 <Text style={styles.settingDescription}>Reminders and updates about appointments</Text>
@@ -326,7 +332,7 @@ function PatientSettingsContent() {
 
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="comments" size={20} color="#4CAF50" />
+                            <Icon name="comments" size={20} color="#2196F3" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Message Notifications</Text>
                                 <Text style={styles.settingDescription}>New messages and consultation updates</Text>
@@ -342,7 +348,7 @@ function PatientSettingsContent() {
 
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="bell" size={20} color="#4CAF50" />
+                            <Icon name="bell" size={20} color="#9C27B0" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>System Notifications</Text>
                                 <Text style={styles.settingDescription}>Security alerts and system updates</Text>
@@ -361,25 +367,10 @@ function PatientSettingsContent() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Privacy & Security</Text>
                     
-                    <View style={styles.settingItem}>
-                        <View style={styles.settingInfo}>
-                            <Icon name="eye" size={20} color="#4CAF50" />
-                            <View style={styles.settingText}>
-                                <Text style={styles.settingLabel}>Profile Visibility</Text>
-                                <Text style={styles.settingDescription}>Show profile to doctors</Text>
-                            </View>
-                        </View>
-                        <Switch
-                            value={settings.privacy.profileVisibility}
-                            onValueChange={(value) => updateSetting('privacy.profileVisibility', value)}
-                            trackColor={{ false: '#E0E0E0', true: '#4CAF50' }}
-                            thumbColor={settings.privacy.profileVisibility ? '#FFFFFF' : '#FFFFFF'}
-                        />
-                    </View>
 
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="user" size={20} color="#4CAF50" />
+                            <Icon name="user" size={20} color="#E91E63" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Anonymous Consultations</Text>
                                 <Text style={styles.settingDescription}>Hide your name and profile. Dark mode automatically enabled.</Text>
@@ -395,7 +386,7 @@ function PatientSettingsContent() {
 
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
-                            <Icon name="lock" size={20} color="#4CAF50" />
+                            <Icon name="lock" size={20} color="#607D8B" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Login Notifications</Text>
                                 <Text style={styles.settingDescription}>Get notified of new login attempts</Text>
@@ -512,7 +503,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
         borderBottomColor: '#E0E0E0',
-        marginTop: 20,
     },
     backButton: {
         padding: 8,
