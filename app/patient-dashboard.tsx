@@ -2,7 +2,6 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
-import notifee, { AndroidImportance } from '@notifee/react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,7 +16,6 @@ import {
   Image,
   Linking,
   Modal,
-  PermissionsAndroid,
   Platform,
   RefreshControl,
   ScrollView,
@@ -126,213 +124,8 @@ export default function PatientDashboard() {
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Test function for popup notifications
-  const testPopupNotification = async () => {
-    try {
-      console.log('🔔 Starting popup notification test...');
-      
-      // Check and request notification permissions
-      console.log('0. Checking notification permissions...');
-      const settings = await notifee.getNotificationSettings();
-      console.log('Current notification settings:', settings);
-      
-      if (settings.authorizationStatus !== 1 || settings.alert !== 1) { // 1 = authorized/enabled
-        console.log('Requesting full notification permissions...');
-        const permission = await notifee.requestPermission({
-          alert: true,
-          badge: true,
-          sound: true,
-          lockScreen: true,
-          notificationCenter: true,
-          carPlay: true,
-          criticalAlert: false,
-          announcement: true,
-        });
-        console.log('Permission request result:', permission);
-        
-        // Check settings again after request
-        const newSettings = await notifee.getNotificationSettings();
-        console.log('Updated notification settings:', newSettings);
-        
-        // If alert is still disabled, show instructions for floating notifications
-        if (newSettings.alert !== 1) {
-          Alert.alert(
-            'Floating Notifications Required',
-            'To show popup notifications, please enable "Floating Notifications" in your device settings:\n\n' +
-            '1. Go to Settings > Apps > DocAvailable\n' +
-            '2. Tap "Notifications"\n' +
-            '3. Enable "Floating Notifications" or "Heads-up Notifications"\n\n' +
-            'This allows notifications to appear as popups on your screen.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open Settings', onPress: () => notifee.openNotificationSettings() }
-            ]
-          );
-        }
-      }
-      
-      // First create the channel
-      console.log('1. Creating notification channel...');
-      await notifee.createChannel({
-        id: 'calls',
-        name: 'Incoming Calls',
-        importance: AndroidImportance.MAX,
-        sound: 'default',
-        vibration: true,
-        vibrationPattern: [250, 250, 250, 250],
-        bypassDnd: true,
-        lights: true,
-        lightColor: '#FF0000',
-        showBadge: true,
-      });
-      console.log('✅ Channel created successfully');
 
-      // Test basic notification first
-      console.log('2. Testing basic notification...');
-      await notifee.displayNotification({
-        title: 'Test Popup Notification',
-        body: 'This should appear as a popup notification on your screen',
-        android: {
-          channelId: 'calls',
-          importance: AndroidImportance.MAX,
-          pressAction: {
-            id: 'default',
-          },
-          sound: 'default',
-          smallIcon: 'ic_launcher',
-          largeIcon: 'ic_launcher',
-          color: '#4CAF50',
-          style: {
-            type: 1, // BigTextStyle
-            text: 'This is a detailed message that shows more context about the notification. It can contain multiple lines of text to provide better information to the user.',
-          },
-        },
-      });
-      console.log('✅ Basic notification sent');
 
-      // Test with full screen action
-      console.log('3. Testing full-screen notification...');
-      await notifee.displayNotification({
-        title: 'Test Full-Screen Notification',
-        body: 'This should appear as a full-screen notification',
-        android: {
-          channelId: 'calls',
-          importance: AndroidImportance.MAX,
-          pressAction: {
-            id: 'default',
-          },
-          fullScreenAction: {
-            id: 'default',
-          },
-          sound: 'default',
-          vibrationPattern: [250, 250, 250, 250],
-          smallIcon: 'ic_launcher',
-          largeIcon: 'ic_launcher',
-          color: '#4CAF50',
-          style: {
-            type: 1, // BigTextStyle
-            text: 'This is a detailed full-screen notification with expanded text content. It provides more context and information about the notification.',
-          },
-        },
-      });
-      console.log('✅ Full-screen notification sent');
-      
-      // Check notification settings after sending
-      const finalSettings = await notifee.getNotificationSettings();
-      console.log('Final notification settings:', finalSettings);
-      
-      showSuccess('Test Notification', 'Both notifications sent! Check your screen for popups.');
-    } catch (error) {
-      console.error('❌ Test popup notification failed:', error);
-      console.error('Error details:', error.message);
-      showError('Test Failed', `Failed to send test notification: ${error.message}`);
-    }
-  };
-
-  // Test function for message notifications with context
-  const testMessageNotification = async () => {
-    try {
-      console.log('💬 Testing message notification with context...');
-      
-      // Create messages channel
-      await notifee.createChannel({
-        id: 'messages',
-        name: 'Messages',
-        importance: AndroidImportance.HIGH,
-        sound: 'default',
-        vibration: true,
-        vibrationPattern: [250, 250, 250, 250],
-      });
-
-      await notifee.displayNotification({
-        title: 'Dr. Sarah Johnson',
-        body: 'Hello! I have reviewed your test results and everything looks great. Your blood pressure is normal and your cholesterol levels are within healthy ranges. Please continue with your current medication and schedule a follow-up in 3 months.',
-        data: {
-          type: 'chat_message',
-          sender_name: 'Dr. Sarah Johnson',
-          appointment_id: '123',
-        },
-        android: {
-          channelId: 'messages',
-          importance: AndroidImportance.HIGH,
-          pressAction: {
-            id: 'default',
-          },
-          sound: 'default',
-          vibrationPattern: [250, 250, 250, 250],
-          smallIcon: 'ic_launcher',
-          largeIcon: 'ic_launcher',
-          color: '#2196F3',
-          style: {
-            type: 1, // BigTextStyle
-            text: 'Message from Dr. Sarah Johnson: Hello! I have reviewed your test results and everything looks great. Your blood pressure is normal and your cholesterol levels are within healthy ranges. Please continue with your current medication and schedule a follow-up in 3 months.',
-          },
-        },
-      });
-      
-      console.log('✅ Message notification sent');
-      showSuccess('Message Test', 'Message notification sent with context!');
-    } catch (error) {
-      console.error('❌ Message notification test failed:', error);
-      showError('Test Failed', 'Failed to send message notification');
-    }
-  };
-
-  // Check phone permissions
-  const checkPhonePermissions = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const permissions = [
-          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-          PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-          PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
-        ];
-        
-        const results = await PermissionsAndroid.requestMultiple(permissions);
-        console.log('📞 Phone permissions check:', results);
-        
-        const allGranted = Object.values(results).every(result => result === PermissionsAndroid.RESULTS.GRANTED);
-        
-        if (allGranted) {
-          Alert.alert('Phone Permissions', 'All phone permissions granted! DocAvailable can now handle calls properly.');
-        } else {
-          Alert.alert(
-            'Phone Permissions Required', 
-            'DocAvailable needs phone permissions to handle incoming calls properly. Please grant these permissions in Settings.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open Settings', onPress: () => Linking.openSettings() }
-            ]
-          );
-        }
-      } catch (error) {
-        console.error('❌ Error checking phone permissions:', error);
-        Alert.alert('Error', 'Failed to check phone permissions');
-      }
-    } else {
-      Alert.alert('Info', 'Phone permissions are only required on Android');
-    }
-  };
 
   const [appointments, setAppointments] = useState<any[]>([]);
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
@@ -978,7 +771,7 @@ export default function PatientDashboard() {
                     profile_picture: doctor.profile_picture,
                     profile_picture_url: doctor.profile_picture_url,
                     // Add availability data
-                    is_online: doctor.is_online || false,
+                    is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
                     working_hours: doctor.working_hours,
                     max_patients_per_day: doctor.max_patients_per_day
                   };
@@ -1201,7 +994,7 @@ export default function PatientDashboard() {
               profile_picture: doctor.profile_picture,
               profile_picture_url: doctor.profile_picture_url,
               // Add availability data
-              is_online: doctor.is_online || false,
+              is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
               working_hours: doctor.working_hours,
               max_patients_per_day: doctor.max_patients_per_day
             }));
@@ -1719,6 +1512,7 @@ export default function PatientDashboard() {
       <View style={{ flex: 1 }}>
         <ScrollView 
           style={{ flex: 1, paddingHorizontal: isWeb ? 40 : 20, paddingTop: 20, backgroundColor: '#F8F9FA' }} 
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -1800,133 +1594,6 @@ export default function PatientDashboard() {
                 </ThemedText>
           </ThemedView>
 
-          {/* Test Notification Button - Remove in production */}
-          <ThemedView style={{
-            backgroundColor: '#FFFFFF', 
-            borderRadius: 20, 
-            padding: 20, 
-            marginBottom: 24,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
-          }}>
-            <TouchableOpacity
-              onPress={testPopupNotification}
-              style={{
-                backgroundColor: '#4CAF50',
-                paddingVertical: 12,
-                paddingHorizontal: 20,
-                borderRadius: 12,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              <FontAwesome name="bell" size={16} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
-                Test Popup Notification
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={testMessageNotification}
-              style={{
-                backgroundColor: '#2196F3',
-                paddingVertical: 12,
-                paddingHorizontal: 20,
-                borderRadius: 12,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                marginTop: 8,
-              }}
-            >
-              <FontAwesome name="comments" size={16} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
-                Test Message Notification
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              onPress={checkPhonePermissions}
-              style={{
-                backgroundColor: '#FF9800',
-                paddingVertical: 12,
-                paddingHorizontal: 20,
-                borderRadius: 12,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-                marginTop: 8,
-              }}
-            >
-              <FontAwesome name="phone" size={16} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
-                Check Phone Permissions
-              </Text>
-            </TouchableOpacity>
-            <Text style={{ 
-              color: '#666', 
-              fontSize: 12, 
-              textAlign: 'center', 
-              marginTop: 8,
-              fontStyle: 'italic'
-            }}>
-              Tap to test if notifications pop up on screen
-            </Text>
-            
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  const settings = await notifee.getNotificationSettings();
-                  console.log('Device notification settings:', settings);
-                  
-                  const isAlertEnabled = settings.alert === 1;
-                  const isSoundEnabled = settings.sound === 1;
-                  
-                  Alert.alert(
-                    'Notification Settings',
-                    `Authorization: ${settings.authorizationStatus === 1 ? 'Granted' : 'Denied'}\n` +
-                    `Alert (Floating): ${isAlertEnabled ? 'Enabled ✅' : 'Disabled ❌'}\n` +
-                    `Badge: ${settings.badge === 1 ? 'Enabled' : 'Disabled'}\n` +
-                    `Sound: ${isSoundEnabled ? 'Enabled' : 'Disabled'}\n` +
-                    `Lock Screen: ${settings.lockScreen === 1 ? 'Enabled' : 'Disabled'}\n` +
-                    `Notification Center: ${settings.notificationCenter === 1 ? 'Enabled' : 'Disabled'}\n` +
-                    `Car Play: ${settings.carPlay === 1 ? 'Enabled' : 'Disabled'}\n` +
-                    `Critical Alert: ${settings.criticalAlert === 1 ? 'Enabled' : 'Disabled'}\n` +
-                    `Announcement: ${settings.announcement === 1 ? 'Enabled' : 'Disabled'}\n\n` +
-                    `${!isAlertEnabled ? '⚠️ Alert (Floating) must be enabled for popup notifications!' : '✅ Popup notifications are working!'}`,
-                    [
-                      { text: 'OK', style: 'cancel' },
-                      ...(isAlertEnabled && isSoundEnabled ? [] : [{
-                        text: 'Open Settings',
-                        onPress: () => notifee.openNotificationSettings(),
-                      }])
-                    ]
-                  );
-                } catch (error) {
-                  console.error('Error checking settings:', error);
-                }
-              }}
-              style={{
-                backgroundColor: '#2196F3',
-                paddingVertical: 8,
-                paddingHorizontal: 16,
-                borderRadius: 8,
-                alignItems: 'center',
-                marginTop: 8,
-              }}
-            >
-              <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '500' }}>
-                Check Device Settings
-              </Text>
-            </TouchableOpacity>
-          </ThemedView>
 
           {/* Remaining Sessions Section */}
           {currentSubscription && (
@@ -2257,6 +1924,7 @@ export default function PatientDashboard() {
       {/* Unified Chat List - WhatsApp Style Inbox */}
       <ScrollView 
         style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => setShowEndedSessionMenu(null)}
         refreshControl={
@@ -2670,6 +2338,7 @@ export default function PatientDashboard() {
   const renderProfileContent = () => (
     <ScrollView 
       style={{...styles.content, backgroundColor: '#F8F9FA'}} 
+      contentContainerStyle={{ paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -2778,6 +2447,7 @@ export default function PatientDashboard() {
     return (
       <ScrollView 
         style={styles.content} 
+        contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -3223,6 +2893,7 @@ export default function PatientDashboard() {
     return (
       <ScrollView 
         style={styles.content} 
+        contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -3655,6 +3326,7 @@ export default function PatientDashboard() {
         </View>
         <ScrollView 
           style={{ flex: 1, paddingHorizontal: 12 }} 
+          contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -5510,7 +5182,7 @@ const styles = StyleSheet.create({
   // New Search and Filter Styles
   searchFilterContainer: {
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   searchBarContainer: {
     marginBottom: 16,
@@ -5654,8 +5326,8 @@ const styles = StyleSheet.create({
   },
   doctorsListNew: {
     flexDirection: 'column',
-    gap: 18,
-    marginBottom: 20,
+    gap: 2,
+    marginBottom: 40,
     paddingHorizontal: 0,
   },
   doctorCardNew: {
@@ -5664,7 +5336,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 4,
+    marginBottom: -8,
     marginHorizontal: -9,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

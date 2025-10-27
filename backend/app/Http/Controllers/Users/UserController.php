@@ -301,10 +301,20 @@ class UserController extends Controller
                     $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
                 }
                 
-                // Set default availability info
-                $doctorData['is_online'] = true;
-                $doctorData['working_hours'] = null;
-                $doctorData['max_patients_per_day'] = 10;
+                // Get actual availability info from doctor_availabilities table
+                $availability = \App\Models\DoctorAvailability::where('doctor_id', $doctor->id)->first();
+                if ($availability) {
+                    $doctorData['is_online'] = $availability->is_online;
+                    $doctorData['is_online_for_instant_sessions'] = $availability->is_online;
+                    $doctorData['working_hours'] = json_decode($availability->working_hours, true);
+                    $doctorData['max_patients_per_day'] = $availability->max_patients_per_day;
+                } else {
+                    // Set default availability info if no record exists
+                    $doctorData['is_online'] = false;
+                    $doctorData['is_online_for_instant_sessions'] = false;
+                    $doctorData['working_hours'] = null;
+                    $doctorData['max_patients_per_day'] = 10;
+                }
                 
                 return $doctorData;
             });
