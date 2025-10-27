@@ -4,11 +4,13 @@ import {
     Dimensions,
     Platform,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import ProfilePictureDisplay from '../components/ProfilePictureDisplay';
@@ -182,7 +184,8 @@ export default function DoctorProfile() {
     };
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar barStyle="dark-content" />
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={[styles.content, { maxWidth }]}>
                     {/* Header */}
@@ -361,7 +364,7 @@ export default function DoctorProfile() {
                     </View>
                 </View>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -375,7 +378,8 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        padding: 20,
+        paddingHorizontal: 20,
+        paddingBottom: 20,
         alignSelf: 'center',
         width: '100%',
     },
@@ -383,9 +387,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 30,
-        marginTop: 20,
+        marginBottom: 20,
         paddingHorizontal: 10,
+        paddingTop: 10,
     },
     backButton: {
         padding: 10,
