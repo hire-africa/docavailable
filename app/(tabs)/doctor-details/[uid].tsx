@@ -65,6 +65,12 @@ export default function DoctorProfilePage() {
   const [showVideoCallModal, setShowVideoCallModal] = useState(false);
   const [directSessionId, setDirectSessionId] = useState<string | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  // Similar doctors
+  const [similarDoctors, setSimilarDoctors] = useState<any[]>([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+  // Reviews
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   useEffect(() => {
     if (uid) {
@@ -109,6 +115,118 @@ export default function DoctorProfilePage() {
       setLoading(false);
     }
   };
+
+  // Load similar doctors when main doctor is loaded
+  useEffect(() => {
+    const loadSimilarDoctors = async () => {
+      if (!doctor) return;
+      setLoadingSimilar(true);
+      try {
+        const resp = await apiService.get('/doctors/active');
+        const all = resp?.success && resp?.data ? (resp.data.data || resp.data) : [];
+        if (!Array.isArray(all)) {
+          setSimilarDoctors([]);
+          return;
+        }
+
+        // Build current doctor specialization set
+        const currentSpecs: string[] = Array.isArray(doctor.specializations) && doctor.specializations.length > 0
+          ? doctor.specializations
+          : (doctor.specialization ? [doctor.specialization] : []);
+        const currentSpecSet = new Set(currentSpecs.map(s => (s || '').toLowerCase()));
+
+        // Helper to get doctor specs array from list item
+        const getSpecs = (d: any): string[] => {
+          if (Array.isArray(d.specializations) && d.specializations.length > 0) return d.specializations;
+          if (typeof d.specialization === 'string' && d.specialization.length > 0) return [d.specialization];
+          if (typeof d.occupation === 'string' && d.occupation.length > 0) return [d.occupation];
+          return [];
+        };
+
+        const filtered = all
+          .filter((d: any) => d && d.id !== doctor.id && (d.status === 'approved' || d.status === 'active'))
+          .map((d: any) => ({
+            ...d,
+            _specs: getSpecs(d),
+          }))
+          .filter((d: any) => {
+            const candSpecsLower = d._specs.map((s: string) => (s || '').toLowerCase());
+            if (candSpecsLower.some((s: string) => currentSpecSet.has(s))) return true;
+            const currentSpecsLower = Array.from(currentSpecSet);
+            return candSpecsLower.some((s: string) => currentSpecsLower.some(cs => s.includes(cs) || cs.includes(s)));
+          });
+
+        // Proximity score: same city (2), same country (1), else 0
+        const city = (doctor.city || '').toLowerCase();
+        const country = (doctor.country || '').toLowerCase();
+        let withScores = filtered.map((d: any) => {
+          const dCity = (d.city || '').toLowerCase();
+          const dCountry = (d.country || '').toLowerCase();
+          const score = (city && dCity && dCity === city ? 2 : 0) + (country && dCountry && dCountry === country ? 1 : 0);
+          return { ...d, _score: score };
+        });
+
+        // Fallback: if no specialization matches, show nearest by location
+        if (withScores.length === 0) {
+          withScores = all
+            .filter((d: any) => d && d.id !== doctor.id && (d.status === 'approved' || d.status === 'active'))
+            .map((d: any) => {
+              const dCity = (d.city || '').toLowerCase();
+              const dCountry = (d.country || '').toLowerCase();
+              const score = (city && dCity && dCity === city ? 2 : 0) + (country && dCountry && dCountry === country ? 1 : 0);
+              return { ...d, _score: score };
+            });
+        }
+
+        // Sort by score desc, then rating desc, then years_of_experience desc
+        withScores.sort((a: any, b: any) => {
+          if (b._score !== a._score) return b._score - a._score;
+          const ar = typeof a.rating === 'number' ? a.rating : 0;
+          const br = typeof b.rating === 'number' ? b.rating : 0;
+          if (br !== ar) return br - ar;
+          const axp = typeof a.years_of_experience === 'number' ? a.years_of_experience : 0;
+          const bxp = typeof b.years_of_experience === 'number' ? b.years_of_experience : 0;
+          return bxp - axp;
+        });
+
+        if (withScores.length === 0) {
+          // Final fallback: top approved doctors by experience
+          const top = all
+            .filter((d: any) => d && d.id !== doctor.id && (d.status === 'approved' || d.status === 'active'))
+            .sort((a: any, b: any) => (b.years_of_experience || 0) - (a.years_of_experience || 0))
+            .slice(0, 6);
+          setSimilarDoctors(top);
+        } else {
+          setSimilarDoctors(withScores.slice(0, 6));
+        }
+      } catch (e) {
+        console.error('Error loading similar doctors:', e);
+        setSimilarDoctors([]);
+      } finally {
+        setLoadingSimilar(false);
+      }
+    };
+
+    loadSimilarDoctors();
+  }, [doctor]);
+
+  // Load top reviews when main doctor is loaded
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!uid) return;
+      setLoadingReviews(true);
+      try {
+        const resp = await apiService.get(`/doctors/${uid}/reviews?limit=3`);
+        const list = resp?.success && Array.isArray(resp?.data) ? resp.data : [];
+        setReviews(list);
+      } catch (e) {
+        setReviews([]);
+      } finally {
+        setLoadingReviews(false);
+      }
+    };
+    loadReviews();
+  }, [uid]);
 
   const renderStars = (rating: number, size: number = 16) => {
     const stars = [];
@@ -465,18 +583,71 @@ export default function DoctorProfilePage() {
           
           {/* Individual Reviews Placeholder */}
           <View style={styles.reviewsList}>
-            <Text style={styles.noReviewsText}>
-              {doctor.total_ratings === 0 ? 'No reviews yet' : 'Reviews will be displayed here'}
-            </Text>
+            {loadingReviews ? (
+              <Text style={styles.noReviewsText}>Loading reviews...</Text>
+            ) : reviews.length === 0 ? (
+              <Text style={styles.noReviewsText}>No reviews yet</Text>
+            ) : (
+              reviews.slice(0, 3).map((rev: any) => (
+                <View key={rev.id} style={styles.reviewItem}>
+                  <View style={styles.reviewHeader}>
+                    <Text style={styles.reviewReviewer} numberOfLines={1}>
+                      {rev.reviewer?.display_name || `${rev.reviewer?.first_name || ''} ${rev.reviewer?.last_name || ''}`.trim() || 'Patient'}
+                    </Text>
+                    <View style={styles.reviewStars}>{renderStars(rev.rating || 0, 14)}</View>
+                  </View>
+                  {!!rev.comment && (
+                    <Text style={styles.reviewComment} numberOfLines={3}>{rev.comment}</Text>
+                  )}
+                  {!!rev.created_at && (
+                    <Text style={styles.reviewDate}>{new Date(rev.created_at).toLocaleDateString()}</Text>
+                  )}
+                </View>
+              ))
+            )}
           </View>
         </View>
 
         {/* Similar Doctors Section */}
         <View style={styles.similarDoctorsCard}>
           <Text style={styles.sectionTitle}>Similar Doctors</Text>
-          <Text style={styles.similarDoctorsText}>
-            Recommended doctors in the same specialization will appear here
-          </Text>
+          {loadingSimilar ? (
+            <Text style={styles.similarDoctorsText}>Loading recommendations...</Text>
+          ) : similarDoctors.length === 0 ? (
+            <Text style={styles.similarDoctorsText}>
+              Recommended doctors in the same specialization will appear here
+            </Text>
+          ) : (
+            <View style={styles.similarDoctorsList}>
+              {similarDoctors.map((d: any) => (
+                <TouchableOpacity
+                  key={d.id}
+                  style={styles.similarDoctorItem}
+                  onPress={() => router.push({ pathname: '/(tabs)/doctor-details/[uid]', params: { uid: d.id.toString() } })}
+                >
+                  <DoctorProfilePicture
+                    profilePictureUrl={d.profile_picture_url}
+                    profilePicture={d.profile_picture}
+                    size={48}
+                    name={`${d.first_name || ''} ${d.last_name || ''}`.trim()}
+                  />
+                  <View style={styles.similarDoctorInfo}>
+                    <Text style={styles.similarDoctorName} numberOfLines={1}>
+                      {d.display_name || `Dr. ${(d.first_name || '')} ${(d.last_name || '')}`.trim()}
+                    </Text>
+                    <Text style={styles.similarDoctorSpec} numberOfLines={1}>
+                      {Array.isArray(d.specializations) && d.specializations.length > 0 ? d.specializations.join(', ') : (d.specialization || 'General Medicine')}
+                    </Text>
+                    {(d.city || d.country) && (
+                      <Text style={styles.similarDoctorLoc} numberOfLines={1}>
+                        {[d.city, d.country].filter(Boolean).join(', ')}
+                      </Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -870,4 +1041,65 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 8,
   },
-}); 
+  similarDoctorsList: {
+    gap: 12,
+  },
+  similarDoctorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  similarDoctorInfo: {
+    flex: 1,
+  },
+  similarDoctorName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#222',
+  },
+  similarDoctorSpec: {
+    fontSize: 13,
+    color: '#4CAF50',
+    marginTop: 2,
+  },
+  similarDoctorLoc: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  reviewItem: {
+    width: '100%',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewReviewer: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#222',
+    flex: 1,
+    marginRight: 8,
+  },
+  reviewStars: {
+    flexDirection: 'row',
+    marginLeft: 8,
+  },
+  reviewComment: {
+    fontSize: 14,
+    color: '#444',
+    marginTop: 6,
+    lineHeight: 20,
+    alignSelf: 'stretch',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+  },
+});

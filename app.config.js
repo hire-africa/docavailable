@@ -18,7 +18,8 @@ module.exports = {
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.docavailable.minimal"
+      bundleIdentifier: "com.docavailable.minimal",
+      scheme: "com.docavailable.app"
     },
     android: {
       package: "com.docavailable.app",
@@ -39,6 +40,16 @@ module.exports = {
             }
           ],
           category: ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          action: "VIEW",
+          data: [
+            {
+              scheme: "com.docavailable.app",
+              host: "*"
+            }
+          ],
+          category: ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
@@ -50,6 +61,7 @@ module.exports = {
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
+      "./app.plugin.js",
       [
         "@react-native-google-signin/google-signin",
         {

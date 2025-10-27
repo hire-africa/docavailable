@@ -9,6 +9,45 @@ use App\Http\Requests\ReviewRequest;
 
 class ReviewController extends Controller
 {
+    public function doctor_reviews(Request $request, $id)
+    {
+        try {
+            $limit = (int) $request->query('limit', 10);
+            if ($limit <= 0 || $limit > 50) { $limit = 10; }
+
+            $reviews = Reviews::with(['reviewer'])
+                ->where('doctor_id', $id)
+                ->where('status', 'approved')
+                ->orderBy('created_at', 'desc')
+                ->limit($limit)
+                ->get()
+                ->map(function ($rev) {
+                    return [
+                        'id' => $rev->id,
+                        'rating' => $rev->rating,
+                        'comment' => $rev->comment,
+                        'created_at' => $rev->created_at,
+                        'reviewer' => $rev->reviewer ? [
+                            'id' => $rev->reviewer->id,
+                            'display_name' => $rev->reviewer->display_name,
+                            'first_name' => $rev->reviewer->first_name,
+                            'last_name' => $rev->reviewer->last_name,
+                            'profile_picture_url' => $rev->reviewer->profile_picture_url,
+                        ] : null,
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $reviews
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch doctor reviews: ' . $e->getMessage()
+            ], 500);
+        }
+    }
     public function reviews(Request $request)
     {
         try {
