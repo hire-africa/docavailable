@@ -5,13 +5,14 @@ import {
     Alert,
     Dimensions,
     Platform,
-    SafeAreaView,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCallModal from '../../../components/AudioCallModal';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
@@ -233,7 +234,8 @@ export default function DoctorProfilePage() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
           <View style={styles.header}>
             <TouchableOpacity 
               style={styles.backButton} 
@@ -255,7 +257,8 @@ export default function DoctorProfilePage() {
   if (!doctor) {
     return (
       <View style={styles.container}>
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
           <View style={styles.header}>
             <TouchableOpacity 
               style={styles.backButton} 
@@ -279,7 +282,8 @@ export default function DoctorProfilePage() {
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
         {/* Header with back button */}
         <View style={styles.header}>
           <TouchableOpacity 
