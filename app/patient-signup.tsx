@@ -18,6 +18,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
@@ -1005,9 +1006,16 @@ export default function PatientSignUp() {
         }
     };
 
+    const insets = useSafeAreaInsets();
+
     return (
         <SafeAreaView style={styles.safeArea}>
-            <ScrollView ref={scrollViewRef} style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                ref={scrollViewRef}
+                style={styles.scrollContainer}
+                contentContainerStyle={{ paddingBottom: Math.max(24, insets.bottom + 24) }}
+                showsVerticalScrollIndicator={false}
+            >
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>
@@ -1095,6 +1103,7 @@ export default function PatientSignUp() {
                         )}
                     </TouchableOpacity>
                 </View>
+                <View style={{ height: Math.max(12, insets.bottom) }} />
                 
             </View>
             </ScrollView>

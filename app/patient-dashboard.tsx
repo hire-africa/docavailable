@@ -614,16 +614,18 @@ export default function PatientDashboard() {
     const initializeLocationTracking = async () => {
       if (!userData) {
         // Default to Malawi pricing if no user data
-        const locationInfo = LocationService.getLocationInfo('Malawi');
-        setCurrentLocationInfo(locationInfo);
-        
-        // Load plans from Laravel API instead of hardcoded plans
+        const registrationCountry = 'Malawi';
+        const userCurrency = 'MWK';
+        setUserCountry(registrationCountry);
+        setCurrentLocationInfo({ country: registrationCountry, currency: userCurrency });
+
+        // Load plans from Laravel API, filtered by currency
         try {
           const response = await apiService.get('/plans');
           if (response.success && (response as any).plans) {
-            // Transform Laravel plan data to match SubscriptionPlan interface
-            const transformedPlans = (response as any).plans.map((plan: any) => ({
-              id: plan.id.toString(), // Convert to string to match interface
+            const filtered = (response as any).plans.filter((plan: any) => plan.currency === userCurrency);
+            const transformedPlans = filtered.map((plan: any) => ({
+              id: plan.id.toString(),
               name: plan.name,
               price: plan.price,
               currency: plan.currency,
@@ -634,34 +636,32 @@ export default function PatientDashboard() {
               popular: plan.name.toLowerCase().includes('executive')
             }));
             setSubscriptionPlans(transformedPlans);
-                  } else {
-          // Handle invalid API response
-          // console.log('PatientDashboard: Invalid plans API response');
-          setPlansError('Unable to load subscription plans. Please try again later.');
+          } else {
+            setPlansError('Unable to load subscription plans. Please try again later.');
+            setSubscriptionPlans([]);
+          }
+        } catch (error) {
+          console.error('Error loading plans from API:', error);
+          setPlansError('Failed to load subscription plans. Please check your connection and try again.');
           setSubscriptionPlans([]);
         }
-      } catch (error) {
-        console.error('Error loading plans from API:', error);
-        setPlansError('Failed to load subscription plans. Please check your connection and try again.');
-        setSubscriptionPlans([]);
-      }
         return;
       }
 
       const registrationCountry = userData.country || 'Malawi';
       setUserCountry(registrationCountry);
 
-      // Use registration location for pricing
-      const locationInfo = LocationService.getLocationInfo(registrationCountry);
-      setCurrentLocationInfo(locationInfo);
-      
-      // Load plans from Laravel API instead of hardcoded plans
+      // Pricing rule: Malawi -> MWK, everyone else -> USD
+      const userCurrency = (registrationCountry || '').toLowerCase() === 'malawi' ? 'MWK' : 'USD';
+      setCurrentLocationInfo({ country: registrationCountry, currency: userCurrency });
+
+      // Load plans from Laravel API, filtered by currency
       try {
         const response = await apiService.get('/plans');
         if (response.success && (response as any).plans) {
-          // Transform Laravel plan data to match SubscriptionPlan interface
-          const transformedPlans = (response as any).plans.map((plan: any) => ({
-            id: plan.id.toString(), // Convert to string to match interface
+          const filtered = (response as any).plans.filter((plan: any) => plan.currency === userCurrency);
+          const transformedPlans = filtered.map((plan: any) => ({
+            id: plan.id.toString(),
             name: plan.name,
             price: plan.price,
             currency: plan.currency,
@@ -673,8 +673,6 @@ export default function PatientDashboard() {
           }));
           setSubscriptionPlans(transformedPlans);
         } else {
-          // Handle invalid API response
-          // console.log('PatientDashboard: Invalid plans API response');
           setPlansError('Unable to load subscription plans. Please try again later.');
           setSubscriptionPlans([]);
         }
@@ -3242,6 +3240,8 @@ export default function PatientDashboard() {
         top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: '#F8F9FA',
         zIndex: 999,
+        paddingTop: insets.top,
+        paddingBottom: insets.bottom,
       }}>
         {/* Modern Header with gradient background */}
         <View style={{
@@ -3326,7 +3326,7 @@ export default function PatientDashboard() {
         </View>
         <ScrollView 
           style={{ flex: 1, paddingHorizontal: 12 }} 
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: Math.max(100, insets.bottom + 24) }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

@@ -2,15 +2,15 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCallModal from '../../../components/AudioCallModal';
@@ -618,35 +618,41 @@ export default function DoctorProfilePage() {
               Recommended doctors in the same specialization will appear here
             </Text>
           ) : (
-            <View style={styles.similarDoctorsList}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.similarDoctorsHorizontalContent}
+            >
               {similarDoctors.map((d: any) => (
                 <TouchableOpacity
                   key={d.id}
-                  style={styles.similarDoctorItem}
+                  style={styles.similarDoctorCard}
                   onPress={() => router.push({ pathname: '/(tabs)/doctor-details/[uid]', params: { uid: d.id.toString() } })}
                 >
-                  <DoctorProfilePicture
-                    profilePictureUrl={d.profile_picture_url}
-                    profilePicture={d.profile_picture}
-                    size={48}
-                    name={`${d.first_name || ''} ${d.last_name || ''}`.trim()}
-                  />
-                  <View style={styles.similarDoctorInfo}>
-                    <Text style={styles.similarDoctorName} numberOfLines={1}>
-                      {d.display_name || `Dr. ${(d.first_name || '')} ${(d.last_name || '')}`.trim()}
-                    </Text>
-                    <Text style={styles.similarDoctorSpec} numberOfLines={1}>
-                      {Array.isArray(d.specializations) && d.specializations.length > 0 ? d.specializations.join(', ') : (d.specialization || 'General Medicine')}
-                    </Text>
-                    {(d.city || d.country) && (
-                      <Text style={styles.similarDoctorLoc} numberOfLines={1}>
-                        {[d.city, d.country].filter(Boolean).join(', ')}
+                  <View style={styles.similarDoctorCardHeader}>
+                    <DoctorProfilePicture
+                      profilePictureUrl={d.profile_picture_url}
+                      profilePicture={d.profile_picture}
+                      size={56}
+                      name={`${d.first_name || ''} ${d.last_name || ''}`.trim()}
+                    />
+                    <View style={styles.similarDoctorInfo}>
+                      <Text style={styles.similarDoctorName} numberOfLines={2}>
+                        {d.display_name || `Dr. ${(d.first_name || '')} ${(d.last_name || '')}`.trim()}
                       </Text>
-                    )}
+                      <Text style={styles.similarDoctorSpec} numberOfLines={2}>
+                        {Array.isArray(d.specializations) && d.specializations.length > 0 ? d.specializations.join(', ') : (d.specialization || 'General Medicine')}
+                      </Text>
+                      {(d.city || d.country) && (
+                        <Text style={styles.similarDoctorLoc} numberOfLines={1}>
+                          {[d.city, d.country].filter(Boolean).join(', ')}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
       </ScrollView>
@@ -1044,6 +1050,26 @@ const styles = StyleSheet.create({
   similarDoctorsList: {
     gap: 12,
   },
+  similarDoctorsHorizontalContent: {
+    paddingVertical: 6,
+    paddingRight: 8,
+  },
+  similarDoctorCard: {
+    width: 200,
+    minHeight: 165,
+    marginRight: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#EEF2F7',
+    justifyContent: 'center',
+  },
+  similarDoctorCardHeader: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 10,
+  },
   similarDoctorItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1052,21 +1078,26 @@ const styles = StyleSheet.create({
   },
   similarDoctorInfo: {
     flex: 1,
+    alignItems: 'center',
+    width: '100%',
   },
   similarDoctorName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#222',
+    textAlign: 'center',
   },
   similarDoctorSpec: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#4CAF50',
     marginTop: 2,
+    textAlign: 'center',
   },
   similarDoctorLoc: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666',
     marginTop: 2,
+    textAlign: 'center',
   },
   reviewItem: {
     width: '100%',

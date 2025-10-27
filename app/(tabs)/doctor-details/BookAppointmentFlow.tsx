@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { apiService } from '../../../app/services/apiService';
 import CustomTimePicker from '../../../components/CustomTimePicker';
@@ -34,6 +35,7 @@ const consultationTypes = [
 export default function BookAppointmentFlow() {
   const params = useLocalSearchParams();
   const { user, userData } = useAuth();
+  const insets = useSafeAreaInsets();
   const [showCustomTimePicker, setShowCustomTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [customTime, setCustomTime] = useState('');
@@ -361,7 +363,7 @@ export default function BookAppointmentFlow() {
         <Text style={styles.headerTitle}>Select date & time</Text>
         <View style={{ width: 32 }} />
       </View>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 24) }}>
         {/* Enhanced Calendar Section */}
         <View style={styles.calendarSection}>
           <View style={styles.sectionHeader}>
@@ -684,7 +686,7 @@ export default function BookAppointmentFlow() {
           </Text>
         </View>
       </View>
-      <View style={styles.confirmBtnRow}>
+      <View style={[styles.confirmBtnRow, { marginBottom: Math.max(12, insets.bottom) } ]}>
         <TouchableOpacity style={styles.editBtn} onPress={() => setStep(1)}>
           <Text style={styles.editBtnText}>Edit</Text>
         </TouchableOpacity>
@@ -706,7 +708,7 @@ export default function BookAppointmentFlow() {
         <View style={{ width: 32 }} />
       </View>
       
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 24) }}>
         {/* Success Animation Card */}
         <View style={styles.successAnimationCard}>
           <View style={styles.successAnimationContainer}>
