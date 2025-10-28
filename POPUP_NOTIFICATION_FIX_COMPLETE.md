@@ -134,3 +134,4 @@ If notifications still don't pop up:
 5. **Test on different Android versions** if possible
 
 The popup notification issue should now be resolved! 🎉
+

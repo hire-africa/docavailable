@@ -452,8 +452,7 @@ export default function AudioCall({
           bottom: 0,
           width: '100%',
           height: '100%',
-          opacity: 0.8,
-          zIndex: -1,
+          opacity: 1,
         }}
         resizeMode="cover"
         onLoad={() => console.log('✅ Audio call background loaded successfully')}
@@ -627,7 +626,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 1000,
-    backgroundColor: 'transparent',
+    backgroundColor: '#000',
     width: '100%',
     height: '100%',
   },

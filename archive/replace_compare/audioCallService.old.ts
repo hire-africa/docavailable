@@ -8,7 +8,6 @@ import {
     RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
-import configService from './configService';
 
 export interface AudioCallState {
   isConnected: boolean;
@@ -453,7 +452,7 @@ class AudioCallService {
         audioTrackConstraints: this.localStream.getAudioTracks()[0]?.getConstraints()
       });
 
-      // Configure audio routing for phone calls (caller side)
+      // Configure audio routing for phone calls
       await this.configureAudioRouting();
 
       // Create peer connection
@@ -850,20 +849,20 @@ class AudioCallService {
    */
   private async configureAudioRouting(): Promise<void> {
     try {
-      console.log('📞 Configuring audio routing for earpiece (default)...');
+      console.log('📞 Configuring audio routing for earpiece...');
       
-      // Set audio mode for phone calls (earpiece by default like normal phone calls)
+      // Set audio mode for phone calls (earpiece)
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: true, // Start with earpiece mode
+        playThroughEarpieceAndroid: true, // This forces earpiece usage on Android
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       });
       
-      console.log('✅ Audio routing configured for earpiece (default)');
+      console.log('✅ Audio routing configured for earpiece');
     } catch (error) {
       console.warn('⚠️ Could not configure audio routing:', error);
     }
@@ -934,16 +933,12 @@ class AudioCallService {
           hasSdp: !!answer.sdp
         });
         console.log('📞 Setting local description (answer)...');
-        const mungedAnswer = {
-          type: answer.type,
-          sdp: this.mungeSdpForAudio(answer.sdp || '')
-        } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        await this.peerConnection.setLocalDescription(answer);
         
         console.log('📞 Sending answer message...');
         this.sendSignalingMessage({
           type: 'answer',
-          answer: mungedAnswer,
+          answer: answer,
           senderId: this.userId,
           appointmentId: this.appointmentId,
           userId: this.userId,
@@ -981,15 +976,11 @@ class AudioCallService {
         console.log('📞 Retrying offer handling...');
         await this.peerConnection.setRemoteDescription(offer);
         const answer = await this.peerConnection.createAnswer();
-        const mungedAnswer = {
-          type: answer.type,
-          sdp: this.mungeSdpForAudio(answer.sdp || '')
-        } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        await this.peerConnection.setLocalDescription(answer);
         
         this.sendSignalingMessage({
           type: 'answer',
-          answer: mungedAnswer,
+          answer: answer,
           senderId: this.userId,
         });
         console.log('✅ Offer handled and answer sent successfully after reset');
@@ -1347,16 +1338,12 @@ class AudioCallService {
       
       const offer = await this.peerConnection.createOffer();
       console.log('📞 [AudioCallService] Offer created, setting local description...');
-      const mungedOffer = {
-        type: offer.type,
-        sdp: this.mungeSdpForAudio(offer.sdp || '')
-      } as RTCSessionDescriptionInit;
-      await this.peerConnection.setLocalDescription(mungedOffer);
+      await this.peerConnection.setLocalDescription(offer);
       
       console.log('📞 [AudioCallService] Sending offer via signaling...');
       this.sendSignalingMessage({
         type: 'offer',
-        offer: mungedOffer,
+        offer: offer,
         senderId: this.userId,
         appointmentId: this.appointmentId,
         userId: this.userId,
@@ -1493,113 +1480,25 @@ class AudioCallService {
    * Compute ICE servers, including optional TURN from env/config
    */
   private getIceServers() {
+    const base = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+    ];
     try {
-      const w = configService.getWebRTCConfig();
-      const servers: any[] = [];
-      const stun = Array.isArray(w.stunServers) && w.stunServers.length ? w.stunServers : [
-        'stun:stun.l.google.com:19302',
-        'stun:stun1.l.google.com:19302',
-        'stun:stun2.l.google.com:19302',
-      ];
-      stun.forEach(u => servers.push({ urls: u }));
-      if (w.turnServerUrl && w.turnUsername && w.turnPassword) {
-        servers.push({ urls: w.turnServerUrl, username: w.turnUsername, credential: w.turnPassword } as any);
-        console.log('🌐 [AudioCallService] TURN server configured via configService');
+      const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
+      const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
+      const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
+      if (turnUrl && turnUsername && turnCredential) {
+        base.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
+        console.log('🌐 [AudioCallService] TURN server configured');
       } else {
-        // Fallback to env if present
-        const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
-        const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
-        const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
-        if (turnUrl && turnUsername && turnCredential) {
-          servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
-          console.log('🌐 [AudioCallService] TURN server configured via env fallback');
-        } else {
-          console.log('🌐 [AudioCallService] No TURN configured (using STUN only)');
-        }
+        console.log('🌐 [AudioCallService] No TURN configured (using STUN only)');
       }
-      return servers;
     } catch (e) {
-      console.warn('⚠️ [AudioCallService] Failed to read ICE config:', e);
-      return [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-      ];
+      console.warn('⚠️ [AudioCallService] Failed to read TURN config:', e);
     }
-  }
-
-  private mungeSdpForAudio(sdp: string): string {
-    let out = sdp;
-    out = this.preferCodec(out, 'audio', 'opus');
-    out = this.setMediaBitrate(out, 'audio', 64); // kbps target budget
-    out = this.setOpusAttributes(out, { maxaveragebitrate: 48000, stereo: 0, usedtx: 1, ptime: 20 });
-    return out;
-  }
-
-  private preferCodec(sdp: string, kind: 'audio' | 'video', codec: string): string {
-    const lines = sdp.split('\n');
-    const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
-    if (mLineIndex === -1) return sdp;
-    const rtpMap: Record<string, string> = {};
-    for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(/^a=rtpmap:(\d+)\s+([^\/]+)\//i);
-      if (m) rtpMap[m[1]] = m[2].toUpperCase();
-    }
-    const parts = lines[mLineIndex].split(' ');
-    const header = parts.slice(0, 3);
-    const pts = parts.slice(3);
-    const preferred: string[] = [];
-    const others: string[] = [];
-    pts.forEach(pt => {
-      const name = rtpMap[pt];
-      if (name && name.includes(codec.toUpperCase())) preferred.push(pt); else others.push(pt);
-    });
-    if (preferred.length) lines[mLineIndex] = [...header, ...preferred, ...others].join(' ');
-    return lines.join('\n');
-  }
-
-  private setMediaBitrate(sdp: string, kind: 'audio' | 'video', kbps: number): string {
-    const lines = sdp.split('\n');
-    const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
-    if (mLineIndex === -1) return sdp;
-    let i = mLineIndex + 1;
-    while (i < lines.length && lines[i].startsWith('i=')) i++;
-    if (i < lines.length && lines[i].startsWith('b=')) {
-      lines[i] = 'b=AS:' + kbps;
-    } else {
-      lines.splice(i, 0, 'b=AS:' + kbps);
-    }
-    return lines.join('\n');
-  }
-
-  private setOpusAttributes(sdp: string, opts: { maxaveragebitrate?: number; stereo?: 0 | 1; usedtx?: 0 | 1; ptime?: number; }): string {
-    const lines = sdp.split('\n');
-    const opusPt = (() => {
-      for (const l of lines) {
-        const m = l.match(/^a=rtpmap:(\d+)\s+opus\//i);
-        if (m) return m[1];
-      }
-      return null;
-    })();
-    if (!opusPt) return sdp;
-    const fmtpIndex = lines.findIndex(l => l.startsWith('a=fmtp:' + opusPt));
-    const params: Record<string, string> = {};
-    if (fmtpIndex !== -1) {
-      const cur = lines[fmtpIndex].split(' ');
-      const kv = cur.slice(1).join(' ').split(';');
-      kv.forEach(p => {
-        const [k, v] = p.split('=');
-        if (k) params[k.trim()] = (v || '').trim();
-      });
-    }
-    if (opts.maxaveragebitrate) params['maxaveragebitrate'] = String(opts.maxaveragebitrate);
-    if (typeof opts.stereo === 'number') params['stereo'] = String(opts.stereo);
-    if (typeof opts.usedtx === 'number') params['usedtx'] = String(opts.usedtx);
-    if (opts.ptime) params['ptime'] = String(opts.ptime);
-    const serialized = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(';');
-    const line = `a=fmtp:${opusPt} ${serialized}`;
-    if (fmtpIndex !== -1) lines[fmtpIndex] = line; else lines.push(line);
-    return lines.join('\n');
+    return base;
   }
 
   /**
@@ -1620,25 +1519,21 @@ class AudioCallService {
   /**
    * Toggle speaker on/off
    */
-  async toggleSpeaker(speakerOn: boolean): Promise<void> {
+  toggleSpeaker(speakerOn: boolean): void {
     try {
       console.log('🔊 Toggling speaker:', speakerOn ? 'ON' : 'OFF');
       
-      // Import Audio from expo-av for proper audio routing
-      const { Audio, InterruptionModeAndroid, InterruptionModeIOS } = await import('expo-av');
+      // For React Native, we need to use the Audio module to set speaker mode
+      // This is a simple implementation - in a real app you'd use react-native-audio or similar
+      if (this.remoteStream) {
+        // Set the audio output to speaker or earpiece
+        this.remoteStream.getAudioTracks().forEach(track => {
+          // This is a placeholder - actual implementation would use native audio routing
+          console.log('🔊 Audio track speaker mode set to:', speakerOn ? 'speaker' : 'earpiece');
+        });
+      }
       
-      // Set audio mode to control speaker/earpiece routing
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: false,
-        playThroughEarpieceAndroid: !speakerOn, // false = speaker, true = earpiece
-        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-      });
-      
-      console.log('✅ Speaker mode updated successfully:', speakerOn ? 'speaker' : 'earpiece');
+      console.log('✅ Speaker mode updated successfully');
     } catch (error) {
       console.error('❌ Error toggling speaker:', error);
     }
@@ -1715,9 +1610,6 @@ n   */
         if (!this.callTimer) {
           this.startCallTimer();
         }
-        
-        // Audio routing is already configured for earpiece by default
-        // Users can toggle to speaker using the speaker button if desired
       }
     } catch (e) {
       console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);

@@ -9,8 +9,6 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    TouchableWithoutFeedback,
-    Animated,
     Vibration,
     View,
 } from 'react-native';
@@ -65,23 +63,8 @@ export default function VideoCallModal({
   const [isInitializing, setIsInitializing] = useState(!isIncomingCall);
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [callAccepted, setCallAccepted] = useState(false);
-  // Auto-hide chrome (header/content/controls) like WhatsApp during dialing/connected (not incoming UI)
-  const uiOpacity = useRef(new Animated.Value(1)).current;
-  const [uiVisible, setUiVisible] = useState(true);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Caller PiP transition: fade out full-screen self, fade+scale in fixed-size PiP
-  const fullOpacity = useRef(new Animated.Value(1)).current;
-  const pipAppear = useRef(new Animated.Value(0)).current; // 0..1 controls opacity/scale for PiP during transition
-  // PiP scale when UI hides (more space like WhatsApp): 1 when visible, 0.7 when hidden
-  const pipScale = useRef(new Animated.Value(1)).current;
-  const PIP_WIDTH = 120;
-  const PIP_HEIGHT = 160;
-  const PIP_MARGIN_LEFT = 20;
-  const PIP_MARGIN_BOTTOM = 100;
-  const [pipTransitioning, setPipTransitioning] = useState(false);
-  const [pipSettled, setPipSettled] = useState(false);
   
   const videoCallService = useRef<VideoCallService | null>(null);
   const initOnceRef = useRef<string | null>(null);
@@ -134,96 +117,12 @@ export default function VideoCallModal({
     if (callState.connectionState === 'connected') {
       setIsInitializing(false);
       setIsRinging(false);
-      if (!isIncomingCall) {
-        // Start cross-fade: full-screen self fades out, fixed-size PiP fades/scales in
-        setPipSettled(false);
-        setPipTransitioning(true);
-        fullOpacity.setValue(1);
-        pipAppear.setValue(0);
-        Animated.parallel([
-          Animated.timing(fullOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
-          Animated.timing(pipAppear, { toValue: 1, duration: 300, useNativeDriver: true }),
-        ]).start(() => {
-          setPipSettled(true);
-          setPipTransitioning(false);
-        });
-      }
     } else if (callState.connectionState === 'connecting') {
       setIsRinging(true);
-      // Reset transition states for next call
-      setPipSettled(false);
-      setPipTransitioning(false);
-      fullOpacity.setValue(1);
-      pipAppear.setValue(0);
     }
   }, [callState.connectionState]);
 
-  // Start/Reset auto-hide only AFTER connected. Keep UI visible while ringing/connecting or incoming UI.
-  useEffect(() => {
-    // If incoming UI is visible, never auto-hide
-    if (shouldShowIncomingUI) {
-      clearAutoHide();
-      showUI(true);
-      return () => clearAutoHide();
-    }
-
-    // Only auto-hide when connected
-    if (callState.connectionState === 'connected') {
-      startAutoHide();
-      return () => clearAutoHide();
-    }
-
-    // Not connected (ringing/connecting/failed/disconnected): keep UI visible
-    clearAutoHide();
-    showUI(true);
-    return () => clearAutoHide();
-  }, [shouldShowIncomingUI, callState.connectionState]);
-
-  const clearAutoHide = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
-  };
-
-  const showUI = (immediate = false) => {
-    setUiVisible(true);
-    Animated.timing(uiOpacity, {
-      toValue: 1,
-      duration: immediate ? 0 : 180,
-      useNativeDriver: true,
-    }).start();
-    Animated.timing(pipScale, {
-      toValue: 1,
-      duration: immediate ? 0 : 180,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const hideUI = () => {
-    setUiVisible(false);
-    Animated.timing(uiOpacity, {
-      toValue: 0,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
-    Animated.timing(pipScale, {
-      toValue: 0.7,
-      duration: 220,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const startAutoHide = () => {
-    clearAutoHide();
-    // Keep UI visible for 3 seconds after any change
-    showUI(true);
-    hideTimerRef.current = setTimeout(() => {
-      hideUI();
-    }, 3000);
-  };
-
-  // Monitor local stream availability (aggressive polling for outgoing to show camera ASAP)
+  // Monitor local stream availability
   useEffect(() => {
     if (videoCallService.current && !localStream) {
       const checkLocalStream = () => {
@@ -235,23 +134,15 @@ export default function VideoCallModal({
             audioTracks: stream.getAudioTracks().length
           });
           setLocalStream(stream);
-          return true;
         }
-        return false;
       };
-
-      // Immediate check
-      if (checkLocalStream()) return;
-
-      // Poll every 200ms up to 4s
-      let elapsed = 0;
-      const interval = setInterval(() => {
-        elapsed += 200;
-        if (checkLocalStream() || elapsed >= 4000) {
-          clearInterval(interval);
-        }
-      }, 200);
-      return () => clearInterval(interval);
+      
+      // Check immediately
+      checkLocalStream();
+      
+      // Also check after a short delay in case it's still being set up
+      const timeout = setTimeout(checkLocalStream, 1000);
+      return () => clearTimeout(timeout);
     }
   }, [videoCallService.current, localStream]);
 
@@ -427,20 +318,12 @@ export default function VideoCallModal({
 
   const toggleSpeaker = () => {
     Vibration.vibrate(50);
-    const newState = !isSpeakerOn;
-    setIsSpeakerOn(newState);
+    setIsSpeakerOn(prev => !prev);
     
-    // Toggle speaker mode in VideoCallService
-    if (videoCallService.current && typeof (videoCallService.current as any).toggleSpeaker === 'function') {
-      Promise.resolve((videoCallService.current as any).toggleSpeaker())
-        .then(() => {
-          console.log('🔊 [VideoCallModal] Speaker toggled to', newState ? 'ON' : 'OFF');
-        })
-        .catch((err: any) => {
-          console.error('❌ [VideoCallModal] Failed toggling speaker:', err);
-          // Revert UI if service call fails
-          setIsSpeakerOn(!newState);
-        });
+    // Toggle speaker mode in VideoCallService (if implemented)
+    if (videoCallService.current) {
+      // Note: Speaker toggle would need to be implemented in VideoCallService
+      // For now, just update the UI state
     }
   };
 
@@ -523,174 +406,74 @@ export default function VideoCallModal({
 
 
   return (
-    <TouchableWithoutFeedback
-      onPress={() => {
-        if (shouldShowIncomingUI) return; // keep UI visible during incoming screen
-        showUI();
-        startAutoHide();
-      }}
-    >
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
-      {shouldShowIncomingUI && (
-        <Image
-          source={require('../app/chat/black1.jpg')}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
-          resizeMode="cover"
-        />
-      )}
-      {/** Determine outgoing pre-connected state to show self preview */}
-      {/** Outgoing (caller) and not yet connected */}
-      {/** We'll use this to render local stream full-screen as background */}
-      
-      {/* Caller self-preview as background when dialing (outgoing only) */}
-      {!isIncomingCall && callState.connectionState !== 'connected' && localStream && (
-        <RTCView
-          style={styles.remoteVideo}
-          streamURL={localStream.toURL()}
-          objectFit="cover"
-          mirror={callState.isFrontCamera}
-          pointerEvents="none"
-        />
-      )}
       
       {/* Remote Video (Full Screen Background) */}
-      {remoteStream && callState.connectionState === 'connected' && (
+      {remoteStream && (
         <RTCView
           style={styles.remoteVideo}
           streamURL={remoteStream.toURL()}
           objectFit="cover"
-          pointerEvents="none"
         />
       )}
       
-      {/* Local Video (PiP). Caller uses cross-fade transition; receiver shows static PiP. */}
-      {localStream && callState.connectionState !== 'connected' && !isIncomingCall && (
-        // Pre-connect full-screen caller self view (visible until connected)
+      {/* Local Video (Picture-in-Picture) */}
+      {localStream ? (
         <RTCView
-          style={styles.remoteVideo}
+          style={styles.localVideo}
           streamURL={localStream.toURL()}
           objectFit="cover"
           mirror={callState.isFrontCamera}
-          pointerEvents="none"
+          zOrder={1}
+          onLoad={() => console.log('📹 [RTCView] Local video loaded successfully')}
+          onError={(error) => console.error('❌ [RTCView] Local video error:', error)}
         />
-      )}
-
-      {localStream && callState.connectionState === 'connected' && (
-        !isIncomingCall ? (
-          <>
-            {/* Fading-out full-screen self view during transition */}
-            {pipTransitioning && (
-              <Animated.View
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: fullOpacity, zIndex: 1 }}
-                pointerEvents="none"
-              >
-                <RTCView
-                  style={{ flex: 1 }}
-                  streamURL={localStream.toURL()}
-                  objectFit="cover"
-                  mirror={callState.isFrontCamera}
-                  pointerEvents="none"
-                />
-              </Animated.View>
-            )}
-            {/* Appearing fixed-size PiP at bottom-left */}
-            <Animated.View
-              style={{
-                position: 'absolute',
-                bottom: PIP_MARGIN_BOTTOM,
-                left: PIP_MARGIN_LEFT,
-                width: PIP_WIDTH,
-                height: PIP_HEIGHT,
-                borderRadius: 10,
-                borderWidth: 2,
-                borderColor: '#4CAF50',
-                zIndex: 1,
-                overflow: 'hidden',
-                opacity: pipTransitioning ? pipAppear : 1,
-                transform: [
-                  { scale: pipTransitioning ? pipAppear.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) : pipScale },
-                ],
-              }}
-              pointerEvents="none"
-            >
-              <RTCView
-                style={{ flex: 1 }}
-                streamURL={localStream.toURL()}
-                objectFit="cover"
-                mirror={callState.isFrontCamera}
-                zOrder={1}
-                pointerEvents="none"
-              />
-            </Animated.View>
-          </>
-        ) : (
-          <Animated.View
-            style={{
-              position: 'absolute',
-              bottom: PIP_MARGIN_BOTTOM,
-              left: PIP_MARGIN_LEFT,
-              width: PIP_WIDTH,
-              height: PIP_HEIGHT,
-              borderRadius: 10,
-              borderWidth: 2,
-              borderColor: '#4CAF50',
-              zIndex: 1,
-              overflow: 'hidden',
-              transform: [{ scale: pipScale }],
-            }}
-            pointerEvents="none"
-          >
-            <RTCView
-              style={{ flex: 1 }}
-              streamURL={localStream.toURL()}
-              objectFit="cover"
-              mirror={callState.isFrontCamera}
-              zOrder={1}
-              pointerEvents="none"
-            />
-          </Animated.View>
-        )
+      ) : (
+        <View style={styles.localVideoPlaceholder}>
+          <Text style={styles.localVideoPlaceholderText}>No Camera</Text>
+        </View>
       )}
       
       
       {/* Dynamic Header based on call state */}
-      {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
-        // Incoming/connecting header
-        <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
-          pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
-        >
+      {shouldShowIncomingUI ? (
+        // Incoming call header
+        <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
+          <Text style={styles.headerTitle}>Incoming Video Call</Text>
           <View style={styles.placeholder} />
-        </Animated.View>
+        </View>
       ) : (
-        // Connected call header - vertical: name then duration
-        <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+        // Connected call header - horizontal layout
+        <View style={styles.connectedHeader}>
           <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-
+          
           <View style={styles.connectedHeaderCenter}>
             <Text style={styles.connectedUserName}>
               {isDoctor ? patientName : doctorName}
             </Text>
+            <Text style={styles.connectedUserRole}>
+              {isDoctor ? 'Patient' : 'Doctor'}
+            </Text>
+          </View>
+          
+          <View style={styles.connectedHeaderRight}>
             <Text style={styles.callDuration}>
               {formatDuration(callState.callDuration)}
             </Text>
+            <View style={[styles.connectionIndicator, { backgroundColor: getConnectionIndicatorColor() }]} />
           </View>
-
-          <View style={styles.placeholder} />
-        </Animated.View>
+        </View>
       )}
       
       {/* Main Content - Streamlined for connected calls */}
-      {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
-        <Animated.View style={[styles.content, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
-          pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
-        >
+      {shouldShowIncomingUI ? (
+        <View style={styles.content}>
           {/* Profile Picture - Small and Simple */}
           <View style={styles.profileContainer}>
             {otherParticipantProfilePictureUrl ? (
@@ -725,13 +508,22 @@ export default function VideoCallModal({
               {getStatusText()}
             </Text>
           </View>
-        </Animated.View>
-      ) : null}
+        </View>
+      ) : (
+        // Connected call - minimal content to give more space to video
+        <View style={styles.connectedContent}>
+          {/* Connection status indicator */}
+          <View style={styles.connectionStatus}>
+            <View style={[styles.connectionDot, { backgroundColor: getConnectionIndicatorColor() }]} />
+            <Text style={styles.connectionText}>Connected</Text>
+          </View>
+        </View>
+      )}
 
       {/* Dynamic Controls based on call state */}
       {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
         /* Incoming Call Controls - Accept/Decline */
-        <Animated.View style={[styles.controls, { zIndex: 2 }]}>
+        <View style={styles.controls}>
           {/* Decline Button */}
           <TouchableOpacity
             style={[styles.controlButton, styles.declineButton]}
@@ -753,96 +545,77 @@ export default function VideoCallModal({
           >
             <Ionicons name="videocam" size={20} color="white" />
           </TouchableOpacity>
-        </Animated.View>
-      ) : callState.connectionState !== 'connected' ? (
-        /* Outgoing (connecting) minimal controls - End Call only at bottom center */
-        <Animated.View style={[styles.bottomCenterControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+        </View>
+      ) : (
+        /* Connected Call Controls - Speaker/Mute/Video/Camera/End */
+        <View style={styles.controls}>
+          {/* Speaker Button */}
+          <TouchableOpacity 
+            style={[
+              styles.controlButton,
+              isSpeakerOn && styles.activeButton
+            ]}
+            onPress={toggleSpeaker}
+            activeOpacity={0.8}
+          >
+            <Ionicons 
+              name={isSpeakerOn ? "volume-high" : "volume-medium"} 
+              size={20} 
+              color="white" 
+            />
+          </TouchableOpacity>
+
+          {/* Mute/Unmute Button */}
+          <TouchableOpacity
+            style={[
+              styles.controlButton,
+              !callState.isAudioEnabled && styles.disabledButton
+            ]}
+            onPress={toggleAudio}
+            disabled={!callState.isConnected}
+          >
+            <Ionicons
+              name={callState.isAudioEnabled ? "mic" : "mic-off"}
+              size={20}
+              color="white"
+            />
+          </TouchableOpacity>
+
+          {/* Video Toggle Button */}
+          <TouchableOpacity
+            style={[
+              styles.controlButton,
+              !callState.isVideoEnabled && styles.disabledButton
+            ]}
+            onPress={toggleVideo}
+            disabled={!callState.isConnected}
+          >
+            <Ionicons
+              name={callState.isVideoEnabled ? "videocam" : "videocam-off"}
+              size={20}
+              color="white"
+            />
+          </TouchableOpacity>
+
+          {/* Camera Switch Button */}
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={switchCamera}
+            disabled={!callState.isConnected}
+          >
+            <Ionicons name="camera-reverse" size={20} color="white" />
+          </TouchableOpacity>
+
+          {/* End Call Button */}
           <TouchableOpacity
             style={[styles.controlButton, styles.endCallButton]}
             onPress={endCall}
           >
             <Ionicons name="call" size={20} color="white" />
           </TouchableOpacity>
-        </Animated.View>
-      ) : (
-        /* Connected Call Controls */
-        <>
-          {/* Vertical tools on right side */}
-          <Animated.View style={[styles.rightControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            {/* Speaker */}
-            <TouchableOpacity 
-              style={[
-                styles.controlButton,
-                styles.sideControlButton,
-                isSpeakerOn && styles.activeButton
-              ]}
-              onPress={toggleSpeaker}
-              activeOpacity={0.8}
-            >
-              <Ionicons 
-                name={isSpeakerOn ? "volume-high" : "volume-medium"} 
-                size={20} 
-                color="white" 
-              />
-            </TouchableOpacity>
-
-            {/* Mute */}
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                styles.sideControlButton,
-                !callState.isAudioEnabled && styles.disabledButton
-              ]}
-              onPress={toggleAudio}
-              disabled={!localStream}
-            >
-              <Ionicons
-                name={callState.isAudioEnabled ? "mic" : "mic-off"}
-                size={20}
-                color="white"
-              />
-            </TouchableOpacity>
-
-            {/* Video */}
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                styles.sideControlButton,
-                !callState.isVideoEnabled && styles.disabledButton
-              ]}
-              onPress={toggleVideo}
-              disabled={!localStream}
-            >
-              <Ionicons
-                name={callState.isVideoEnabled ? "videocam" : "videocam-off"}
-                size={20}
-                color="white"
-              />
-            </TouchableOpacity>
-
-            {/* Switch camera */}
-            <TouchableOpacity
-              style={[styles.controlButton, styles.sideControlButton]}
-              onPress={switchCamera}
-              disabled={!localStream}
-            >
-              <Ionicons name="camera-reverse" size={20} color="white" />
-            </TouchableOpacity>
-          </Animated.View>
-
-          {/* End call at bottom center */}
-          <Animated.View style={[styles.bottomCenterControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            <TouchableOpacity
-              style={[styles.controlButton, styles.endCallButton]}
-              onPress={endCall}
-            >
-              <Ionicons name="call" size={20} color="white" />
-            </TouchableOpacity>
-          </Animated.View>
-        </>
+        </View>
       )}
     </SafeAreaView>
-    </TouchableWithoutFeedback>
   );
 }
 
@@ -873,6 +646,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     marginHorizontal: 20,
     marginTop: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   connectedHeaderCenter: {
     flex: 1,
@@ -1024,25 +801,6 @@ const styles = StyleSheet.create({
   endCallButton: {
     backgroundColor: '#F44336',
   },
-  rightControls: {
-    position: 'absolute',
-    right: 20,
-    top: 140,
-    bottom: 140,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sideControlButton: {
-    marginVertical: 10,
-  },
-  bottomCenterControls: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   declineButton: {
     backgroundColor: '#F44336',
   },
@@ -1053,13 +811,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
-    right: 0,
-    bottom: 0,
+    width: screenWidth,
+    height: screenHeight,
   },
   localVideo: {
     position: 'absolute',
-    bottom: 30,
-    left: 20,
+    top: 50,
+    right: 20,
     width: 120,
     height: 160,
     borderRadius: 10,

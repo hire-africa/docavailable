@@ -123,7 +123,7 @@ export default function AudioCall({
             bottom: 0,
             width: '100%',
             height: '100%',
-            opacity: 0.8,
+            opacity: 1,
             zIndex: -1,
           }}
           resizeMode="cover"
@@ -153,7 +153,7 @@ export default function AudioCall({
             bottom: 0,
             width: '100%',
             height: '100%',
-            opacity: 0.8,
+            opacity: 1,
             zIndex: -1,
           }}
           resizeMode="cover"
@@ -203,7 +203,7 @@ export default function AudioCall({
           bottom: 0,
           width: '100%',
           height: '100%',
-          opacity: 0.8,
+          opacity: 1,
           zIndex: -1,
         }}
         resizeMode="cover"
