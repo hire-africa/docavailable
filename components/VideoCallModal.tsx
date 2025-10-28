@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -86,6 +87,25 @@ export default function VideoCallModal({
   const heroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Reverse animation on hang up
   const [isReverseAnimating, setIsReverseAnimating] = useState(false);
+  // Sounds
+  const connectSoundRef = useRef<Audio.Sound | null>(null);
+  const hangupSoundRef = useRef<Audio.Sound | null>(null);
+  const ringtoneSoundRef = useRef<Audio.Sound | null>(null);
+  const hasPlayedConnectRef = useRef(false);
+  const soundsLoadedRef = useRef(false);
+  const pendingConnectSoundRef = useRef(false);
+  const connectSoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const playSound = async (soundRef: React.MutableRefObject<Audio.Sound | null>) => {
+    try {
+      const s = soundRef.current;
+      if (!s) return;
+      try { await s.setIsMutedAsync(false); } catch {}
+      await s.setPositionAsync(0);
+      await s.playAsync();
+    } catch (e) {
+      console.warn('[VideoCallModal] playSound failed:', e);
+    }
+  };
   
   const videoCallService = useRef<VideoCallService | null>(null);
   const initOnceRef = useRef<string | null>(null);
@@ -124,6 +144,41 @@ export default function VideoCallModal({
       }
     };
     
+    // Preload sounds
+    (async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        const connectModule = require('../assets/sounds/facetime-connect.mp3');
+        const hangupModule = require('../assets/sounds/facetime-hang-up.mp3');
+        const connect = new Audio.Sound();
+        const hangup = new Audio.Sound();
+        const ringtone = new Audio.Sound();
+        await connect.loadAsync(connectModule, { volume: 1.0 }, false);
+        await hangup.loadAsync(hangupModule, { volume: 1.0 }, false);
+        const ringtoneModule = require('../assets/sounds/facetime-call.mp3');
+        await ringtone.loadAsync(ringtoneModule, { volume: 1.0 }, false);
+        try { await ringtone.setIsLoopingAsync(true); } catch {}
+        connectSoundRef.current = connect;
+        hangupSoundRef.current = hangup;
+        ringtoneSoundRef.current = ringtone;
+        soundsLoadedRef.current = true;
+        // If connection already happened before sounds loaded, play now
+        if (pendingConnectSoundRef.current && !hasPlayedConnectRef.current && callState.connectionState === 'connected') {
+          await playSound(connectSoundRef);
+          hasPlayedConnectRef.current = true;
+          pendingConnectSoundRef.current = false;
+        }
+      } catch (e) {
+        console.warn('[VideoCallModal] Sound preload failed:', e);
+      }
+    })();
+
     setupCall();
     return () => {
       console.log('🧹 VideoCallModal cleanup - ending call');
@@ -132,16 +187,77 @@ export default function VideoCallModal({
         clearTimeout(heroTimerRef.current);
         heroTimerRef.current = null;
       }
+      if (connectSoundTimeoutRef.current) {
+        clearTimeout(connectSoundTimeoutRef.current);
+        connectSoundTimeoutRef.current = null;
+      }
+      // Unload sounds
+      (async () => {
+        try {
+          await connectSoundRef.current?.unloadAsync();
+          await hangupSoundRef.current?.unloadAsync();
+          await ringtoneSoundRef.current?.unloadAsync();
+        } catch {}
+        connectSoundRef.current = null;
+        hangupSoundRef.current = null;
+        ringtoneSoundRef.current = null;
+      })();
       if (videoCallService.current) {
         videoCallService.current.reset();
       }
     };
   }, [isIncomingCall, appointmentId]);
 
+  // Handle incoming ringtone: play while incoming UI is visible (ringing) and stop on answer/reject/timeout/connect
+  useEffect(() => {
+    const shouldRing = shouldShowIncomingUI && !isProcessingAnswer;
+    (async () => {
+      try {
+        if (shouldRing) {
+          // start ringtone if loaded
+          if (ringtoneSoundRef.current) {
+            await ringtoneSoundRef.current.setIsMutedAsync(false);
+            const status = await ringtoneSoundRef.current.getStatusAsync();
+            if (!('isPlaying' in status) || !status.isPlaying) {
+              await ringtoneSoundRef.current.setPositionAsync(0);
+              await ringtoneSoundRef.current.playAsync();
+            }
+          }
+        } else {
+          // stop ringtone
+          if (ringtoneSoundRef.current) {
+            try { await ringtoneSoundRef.current.stopAsync(); } catch {}
+            try { await ringtoneSoundRef.current.setPositionAsync(0); } catch {}
+          }
+        }
+      } catch (e) {
+        console.warn('[VideoCallModal] Ringtone control failed:', e);
+      }
+    })();
+    // Also stop on unmount via the main cleanup above
+  }, [shouldShowIncomingUI, isProcessingAnswer]);
+
   useEffect(() => {
     if (callState.connectionState === 'connected') {
       setIsInitializing(false);
       setIsRinging(false);
+      // Play connect sound once per call (delayed 150ms to avoid session race)
+      if (!hasPlayedConnectRef.current) {
+        if (connectSoundTimeoutRef.current) {
+          clearTimeout(connectSoundTimeoutRef.current);
+        }
+        connectSoundTimeoutRef.current = setTimeout(() => {
+          if (soundsLoadedRef.current) {
+            (async () => {
+              await playSound(connectSoundRef);
+              hasPlayedConnectRef.current = true;
+            })();
+          } else {
+            // Defer play until sounds finish loading
+            pendingConnectSoundRef.current = true;
+          }
+        }, 150);
+      }
       // Start hero mode: show full-screen self for 2.5s, then shrink to PiP
       setHeroMode(true);
       setPipSettled(false);
@@ -499,6 +615,8 @@ export default function VideoCallModal({
       // Cancel auto-hide and show UI during reverse animation
       clearAutoHide();
       showUI(true);
+      // Play hang-up sound right away
+      await playSound(hangupSoundRef);
       
       // Reverse: expand PiP back to full-screen
       await new Promise<void>((resolve) => {
