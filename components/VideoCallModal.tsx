@@ -71,9 +71,8 @@ export default function VideoCallModal({
   const uiOpacity = useRef(new Animated.Value(1)).current;
   const [uiVisible, setUiVisible] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Caller PiP transition: fade out full-screen self, fade+scale in fixed-size PiP
-  const fullOpacity = useRef(new Animated.Value(1)).current;
-  const pipAppear = useRef(new Animated.Value(0)).current; // 0..1 controls opacity/scale for PiP during transition
+  // Caller PiP transition: shrink from full-screen to PiP corner
+  const shrinkProgress = useRef(new Animated.Value(0)).current; // 0 = full-screen, 1 = PiP
   // PiP scale when UI hides (more space like WhatsApp): 1 when visible, 0.7 when hidden
   const pipScale = useRef(new Animated.Value(1)).current;
   const PIP_WIDTH = 120;
@@ -82,6 +81,11 @@ export default function VideoCallModal({
   const PIP_MARGIN_BOTTOM = 100;
   const [pipTransitioning, setPipTransitioning] = useState(false);
   const [pipSettled, setPipSettled] = useState(false);
+  // Hero mode: show full-screen self for 2.5s after connect before PiP transition
+  const [heroMode, setHeroMode] = useState(false);
+  const heroTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Reverse animation on hang up
+  const [isReverseAnimating, setIsReverseAnimating] = useState(false);
   
   const videoCallService = useRef<VideoCallService | null>(null);
   const initOnceRef = useRef<string | null>(null);
@@ -124,6 +128,10 @@ export default function VideoCallModal({
     return () => {
       console.log('🧹 VideoCallModal cleanup - ending call');
       initOnceRef.current = null;
+      if (heroTimerRef.current) {
+        clearTimeout(heroTimerRef.current);
+        heroTimerRef.current = null;
+      }
       if (videoCallService.current) {
         videoCallService.current.reset();
       }
@@ -134,31 +142,46 @@ export default function VideoCallModal({
     if (callState.connectionState === 'connected') {
       setIsInitializing(false);
       setIsRinging(false);
-      if (!isIncomingCall) {
-        // Start cross-fade: full-screen self fades out, fixed-size PiP fades/scales in
-        setPipSettled(false);
+      // Start hero mode: show full-screen self for 2.5s, then shrink to PiP
+      setHeroMode(true);
+      setPipSettled(false);
+      setPipTransitioning(false);
+      shrinkProgress.setValue(0); // Start at full-screen
+      
+      // Clear any existing hero timer
+      if (heroTimerRef.current) {
+        clearTimeout(heroTimerRef.current);
+      }
+      
+      // After 2.5s, animate shrink from full-screen to PiP
+      heroTimerRef.current = setTimeout(() => {
+        setHeroMode(false);
         setPipTransitioning(true);
-        fullOpacity.setValue(1);
-        pipAppear.setValue(0);
-        Animated.parallel([
-          Animated.timing(fullOpacity, { toValue: 0, duration: 250, useNativeDriver: true }),
-          Animated.timing(pipAppear, { toValue: 1, duration: 300, useNativeDriver: true }),
-        ]).start(() => {
+        Animated.timing(shrinkProgress, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start(() => {
           setPipSettled(true);
           setPipTransitioning(false);
         });
-      }
+      }, 2500);
     } else if (callState.connectionState === 'connecting') {
       setIsRinging(true);
-      // Reset transition states for next call
+      // Reset all transition states
+      setHeroMode(false);
       setPipSettled(false);
       setPipTransitioning(false);
-      fullOpacity.setValue(1);
-      pipAppear.setValue(0);
+      setIsReverseAnimating(false);
+      shrinkProgress.setValue(0);
+      if (heroTimerRef.current) {
+        clearTimeout(heroTimerRef.current);
+        heroTimerRef.current = null;
+      }
     }
   }, [callState.connectionState]);
 
-  // Start/Reset auto-hide only AFTER connected. Keep UI visible while ringing/connecting or incoming UI.
+  // Start/Reset auto-hide only AFTER connected AND after hero mode ends. Keep UI visible while ringing/connecting or incoming UI.
   useEffect(() => {
     // If incoming UI is visible, never auto-hide
     if (shouldShowIncomingUI) {
@@ -167,17 +190,17 @@ export default function VideoCallModal({
       return () => clearAutoHide();
     }
 
-    // Only auto-hide when connected
-    if (callState.connectionState === 'connected') {
+    // Only auto-hide when connected AND hero mode is done (pipSettled)
+    if (callState.connectionState === 'connected' && pipSettled && !heroMode) {
       startAutoHide();
       return () => clearAutoHide();
     }
 
-    // Not connected (ringing/connecting/failed/disconnected): keep UI visible
+    // Not connected or still in hero/transition: keep UI visible
     clearAutoHide();
     showUI(true);
     return () => clearAutoHide();
-  }, [shouldShowIncomingUI, callState.connectionState]);
+  }, [shouldShowIncomingUI, callState.connectionState, pipSettled, heroMode]);
 
   const clearAutoHide = () => {
     if (hideTimerRef.current) {
@@ -457,14 +480,46 @@ export default function VideoCallModal({
           text: 'End Call', 
           style: 'destructive',
           onPress: async () => {
-            if (videoCallService.current) {
-              await videoCallService.current.endCall();
-            }
-            onEndCall();
+            await performEndCallWithAnimation();
           }
         }
       ]
     );
+  };
+
+  const performEndCallWithAnimation = async () => {
+    // Only animate if we're connected and have settled into PiP
+    if (callState.connectionState === 'connected' && (pipSettled || heroMode)) {
+      setIsReverseAnimating(true);
+      // Cancel hero timer if still running
+      if (heroTimerRef.current) {
+        clearTimeout(heroTimerRef.current);
+        heroTimerRef.current = null;
+      }
+      // Cancel auto-hide and show UI during reverse animation
+      clearAutoHide();
+      showUI(true);
+      
+      // Reverse: expand PiP back to full-screen
+      await new Promise<void>((resolve) => {
+        Animated.timing(shrinkProgress, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }).start(() => {
+          resolve();
+        });
+      });
+      
+      // Small delay to ensure final frame is visible
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Now cleanup
+    if (videoCallService.current) {
+      await videoCallService.current.endCall();
+    }
+    onEndCall();
   };
 
   const formatDuration = (seconds: number) => {
@@ -554,7 +609,7 @@ export default function VideoCallModal({
         />
       )}
       
-      {/* Remote Video (Full Screen Background) */}
+      {/* Remote Video (Full Screen Background) - always visible when connected */}
       {remoteStream && callState.connectionState === 'connected' && (
         <RTCView
           style={styles.remoteVideo}
@@ -577,24 +632,68 @@ export default function VideoCallModal({
       )}
 
       {localStream && callState.connectionState === 'connected' && (
-        !isIncomingCall ? (
-          <>
-            {/* Fading-out full-screen self view during transition */}
-            {pipTransitioning && (
-              <Animated.View
-                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: fullOpacity, zIndex: 1 }}
+        <>
+          {/* Shrinking self-view: transitions from full-screen to PiP */}
+          {(heroMode || pipTransitioning || isReverseAnimating) && (
+            <Animated.View
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: screenWidth,
+                height: screenHeight,
+                borderRadius: shrinkProgress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 10],
+                }),
+                borderWidth: shrinkProgress.interpolate({
+                  inputRange: [0, 0.5, 1],
+                  outputRange: [0, 1, 2],
+                }),
+                borderColor: '#4CAF50',
+                overflow: 'hidden',
+                zIndex: 2,
+                transform: [
+                  {
+                    translateX: shrinkProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, PIP_MARGIN_LEFT + PIP_WIDTH/2 - screenWidth/2],
+                    }),
+                  },
+                  {
+                    translateY: shrinkProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, screenHeight - PIP_MARGIN_BOTTOM - PIP_HEIGHT/2 - screenHeight/2],
+                    }),
+                  },
+                  {
+                    scaleX: shrinkProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, PIP_WIDTH / screenWidth],
+                    }),
+                  },
+                  {
+                    scaleY: shrinkProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, PIP_HEIGHT / screenHeight],
+                    }),
+                  },
+                ],
+              }}
+              pointerEvents="none"
+            >
+              <RTCView
+                style={{ flex: 1 }}
+                streamURL={localStream.toURL()}
+                objectFit="cover"
+                mirror={callState.isFrontCamera}
                 pointerEvents="none"
-              >
-                <RTCView
-                  style={{ flex: 1 }}
-                  streamURL={localStream.toURL()}
-                  objectFit="cover"
-                  mirror={callState.isFrontCamera}
-                  pointerEvents="none"
-                />
-              </Animated.View>
-            )}
-            {/* Appearing fixed-size PiP at bottom-left */}
+              />
+            </Animated.View>
+          )}
+
+          {/* Static PiP after transition settles */}
+          {pipSettled && !isReverseAnimating && (
             <Animated.View
               style={{
                 position: 'absolute',
@@ -607,10 +706,7 @@ export default function VideoCallModal({
                 borderColor: '#4CAF50',
                 zIndex: 1,
                 overflow: 'hidden',
-                opacity: pipTransitioning ? pipAppear : 1,
-                transform: [
-                  { scale: pipTransitioning ? pipAppear.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) : pipScale },
-                ],
+                transform: [{ scale: pipScale }],
               }}
               pointerEvents="none"
             >
@@ -623,34 +719,8 @@ export default function VideoCallModal({
                 pointerEvents="none"
               />
             </Animated.View>
-          </>
-        ) : (
-          <Animated.View
-            style={{
-              position: 'absolute',
-              bottom: PIP_MARGIN_BOTTOM,
-              left: PIP_MARGIN_LEFT,
-              width: PIP_WIDTH,
-              height: PIP_HEIGHT,
-              borderRadius: 10,
-              borderWidth: 2,
-              borderColor: '#4CAF50',
-              zIndex: 1,
-              overflow: 'hidden',
-              transform: [{ scale: pipScale }],
-            }}
-            pointerEvents="none"
-          >
-            <RTCView
-              style={{ flex: 1 }}
-              streamURL={localStream.toURL()}
-              objectFit="cover"
-              mirror={callState.isFrontCamera}
-              zOrder={1}
-              pointerEvents="none"
-            />
-          </Animated.View>
-        )
+          )}
+        </>
       )}
       
       
