@@ -3247,7 +3247,7 @@ export default function PatientDashboard() {
         <View style={{
           backgroundColor: '#FFFFFF',
           paddingHorizontal: 20,
-          paddingTop: 50,
+          paddingTop: 16,
           paddingBottom: 16,
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
@@ -3865,7 +3865,7 @@ export default function PatientDashboard() {
           bottom: 0,
           backgroundColor: '#FFFFFF',
           paddingTop: 20,
-          paddingBottom: 24,
+          paddingBottom: insets.bottom + 24,
           paddingHorizontal: 20,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
@@ -4121,7 +4121,7 @@ export default function PatientDashboard() {
           >
             <ScrollView 
               style={styles.sidebarScrollView}
-              contentContainerStyle={styles.sidebarContent}
+              contentContainerStyle={[styles.sidebarContent, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20, flexGrow: 1 }]}
               showsVerticalScrollIndicator={true}
               bounces={true}
               alwaysBounceVertical={false}
@@ -4129,6 +4129,7 @@ export default function PatientDashboard() {
               nestedScrollEnabled={true}
               keyboardShouldPersistTaps="handled"
             >
+            <View style={{ flexGrow: 1 }}>
             {/* Profile Header */}
             <View style={styles.profileHeader}>
               {user?.profile_picture_url ? (
@@ -4181,7 +4182,9 @@ export default function PatientDashboard() {
             </View>
               
             
+            </View>
             {/* Logout */}
+            <View style={{ paddingTop: 12 }}>
             <TouchableOpacity style={[styles.sidebarMenuItem, styles.lastMenuItem]} onPress={() => { closeSidebar(); handleLogout(); }}>
               <View style={styles.iconBox}><Icon name="signOut" size={20} color="#FF3B30" /></View>
               <Text style={[styles.sidebarMenuItemText, { color: '#FF3B30' }]}>Logout</Text>
@@ -4189,6 +4192,7 @@ export default function PatientDashboard() {
                 <Icon name="chevronRight" size={20} color="#FF3B30" />
               </View>
             </TouchableOpacity>
+            </View>
             </ScrollView>
           </Animated.View>
         </View>

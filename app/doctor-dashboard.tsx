@@ -2456,12 +2456,13 @@ export default function DoctorDashboard() {
           >
             <ScrollView 
               style={styles.sidebarScrollView}
-              contentContainerStyle={styles.sidebarContent}
+              contentContainerStyle={[styles.sidebarContent, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20, flexGrow: 1 }]}
               showsVerticalScrollIndicator={true}
               bounces={true}
               alwaysBounceVertical={false}
               scrollEnabled={true}
             >
+            <View style={{ flexGrow: 1 }}>
             {/* Profile Header */}
             <View style={styles.sidebarHeader}>
               {user?.profile_picture_url ? (
@@ -2510,7 +2511,9 @@ export default function DoctorDashboard() {
             </View>
               
             
+            </View>
             {/* Logout */}
+            <View style={{ paddingTop: 12 }}>
             <TouchableOpacity style={[styles.sidebarMenuItem, styles.lastMenuItem]} onPress={() => { closeSidebar(); handleLogout(); }}>
               <View style={styles.iconBox}><Icon name="signOut" size={20} color="#FF3B30" /></View>
               <Text style={[styles.sidebarMenuItemText, { color: '#FF3B30' }]}>Logout</Text>
@@ -2518,6 +2521,7 @@ export default function DoctorDashboard() {
                 <Icon name="chevronRight" size={20} color="#FF3B30" />
               </View>
             </TouchableOpacity>
+            </View>
             </ScrollView>
           </Animated.View>
         </View>

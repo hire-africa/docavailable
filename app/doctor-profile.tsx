@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import ProfilePictureDisplay from '../components/ProfilePictureDisplay';
@@ -21,6 +22,7 @@ const isLargeScreen = width > 768;
 
 export default function DoctorProfile() {
     const { user, userData, refreshUserData } = useAuth();
+    const insets = useSafeAreaInsets();
     const [appointmentData, setAppointmentData] = useState<any[]>([]);
     const [weeklyData, setWeeklyData] = useState<any[]>([]);
     const [timeFrame, setTimeFrame] = useState<'monthly' | 'weekly'>('monthly');
@@ -182,8 +184,8 @@ export default function DoctorProfile() {
     };
 
     return (
-        <View style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+        <SafeAreaView style={styles.container} edges={['top','bottom']}>
+            <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}>
                 <View style={[styles.content, { maxWidth }]}>
                     {/* Header */}
                     <View style={styles.header}>
@@ -361,7 +363,7 @@ export default function DoctorProfile() {
                     </View>
                 </View>
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 

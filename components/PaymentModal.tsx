@@ -11,6 +11,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { paymentService } from '../services/paymentService';
 
 // Local interface for SubscriptionPlan
@@ -37,6 +38,7 @@ type PaymentMethod = 'bank' | 'mobile';
 
 export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess }: PaymentModalProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('mobile');
   const [isProcessing, setIsProcessing] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -174,7 +176,7 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
           </View>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}>
           {/* Plan Summary */}
           {plan && (
             <View style={styles.planSummary}>
@@ -303,7 +305,7 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
         </ScrollView>
 
         {/* Payment Button */}
-        <View style={styles.footer}>
+        <SafeAreaView edges={['bottom']} style={styles.footer}>
           {/* Test Navigation Button */}
           <TouchableOpacity
             style={[styles.payButton, { backgroundColor: '#FF9800', marginBottom: 10 }]}
@@ -335,7 +337,7 @@ export default function PaymentModal({ visible, onClose, plan, onPaymentSuccess 
             )}
           </TouchableOpacity>
           
-        </View>
+        </SafeAreaView>
       </View>
     </Modal>
   );
