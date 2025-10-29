@@ -103,7 +103,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
             },
             fullScreenAction: {
               id: 'incoming_call',
-              launchActivity: 'default', // Use default activity (MainActivity)
+              launchActivity: 'com.docavailable.app.MainActivity', // Explicit MainActivity
             },
             sound: 'default', // System ringtone
             vibrationPattern: [1000, 500, 1000, 500],
@@ -153,7 +153,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
               lightUpScreen: true, // FORCE screen wake up
               fullScreenAction: {
                 id: 'wake_trigger',
-                launchActivity: 'default',
+                launchActivity: 'com.docavailable.app.MainActivity',
               },
               // Add more aggressive wake flags
               showTimestamp: false,
