@@ -29,7 +29,7 @@ const withIncomingCallModule = (config) => {
       }
     });
 
-    // Add IncomingCallActivity to manifest
+    // Add dedicated IncomingCallActivity for WhatsApp-style calls
     const application = androidManifest.manifest.application[0];
     if (!application.activity) {
       application.activity = [];
@@ -50,14 +50,16 @@ const withIncomingCallModule = (config) => {
           'android:turnScreenOn': 'true',
           'android:excludeFromRecents': 'true',
           'android:taskAffinity': '',
-          'android:theme': '@style/Theme.App.SplashScreen',
-          'android:configChanges': 'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode'
+          'android:theme': '@android:style/Theme.Translucent.NoTitleBar',
+          'android:configChanges': 'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode',
+          'android:screenOrientation': 'portrait'
         },
         'intent-filter': [{
           action: [{ $: { 'android:name': 'com.docavailable.app.INCOMING_CALL' } }],
           category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }]
         }]
       });
+      console.log('Added IncomingCallActivity to manifest');
     }
 
     // Add IncomingCallService to manifest
