@@ -29,6 +29,21 @@ import { NativeModules } from 'react-native';
 
 const { IncomingCallModule } = NativeModules;
 
+// Set up Notifee background event handler
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  console.log('🔔 [Notifee] Background event:', type, detail);
+  
+  if (type === EventType.PRESS) {
+    console.log('🔔 [Notifee] Notification pressed in background');
+    // Handle notification press - could navigate to call screen
+  }
+  
+  if (type === EventType.ACTION_PRESS && detail.pressAction?.id === 'incoming_call') {
+    console.log('🔔 [Notifee] Full-screen action pressed');
+    // Handle full-screen action press
+  }
+});
+
 // Background/Killed handler: Display notifications for calls, messages, and appointments with notifee
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
   try {
@@ -121,31 +136,32 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
         console.log(`✅ [Background] Notification displayed with ID: ${notificationId}`);
         console.log('✅ [Background] Full-screen call notification displayed');
         
-        // Additional trigger: Create a second high-priority notification to force wake
-        setTimeout(async () => {
-          try {
-            await notifee.displayNotification({
-              id: `wake_${Date.now()}`,
-              title: 'Wake Up',
-              body: 'Screen wake trigger',
-              android: {
-                channelId: 'calls',
-                importance: AndroidImportance.HIGH,
-                category: AndroidCategory.CALL,
-                visibility: 1,
-                autoCancel: true,
-                timeoutAfter: 2000, // Auto-dismiss quickly
-                fullScreenAction: {
-                  id: 'wake_trigger',
-                  launchActivity: 'default',
-                },
+        // Additional trigger: Create a second high-priority notification to force wake (immediate)
+        try {
+          const wakeId = await notifee.displayNotification({
+            id: `wake_${Date.now()}`,
+            title: 'Incoming Call',
+            body: 'Wake up notification',
+            android: {
+              channelId: 'calls',
+              importance: AndroidImportance.HIGH,
+              category: AndroidCategory.CALL,
+              visibility: 1,
+              autoCancel: true,
+              timeoutAfter: 3000, // Auto-dismiss after 3 seconds
+              fullScreenAction: {
+                id: 'wake_trigger',
+                launchActivity: 'default',
               },
-            });
-            console.log('🔔 [Background] Wake trigger notification sent');
-          } catch (error) {
-            console.warn('⚠️ [Background] Wake trigger failed:', error);
-          }
-        }, 500); // Delay slightly
+              // Add more aggressive wake flags
+              showTimestamp: false,
+              ongoing: false,
+            },
+          });
+          console.log(`🔔 [Background] Wake trigger notification sent with ID: ${wakeId}`);
+        } catch (wakeError) {
+          console.warn('⚠️ [Background] Wake trigger failed:', wakeError);
+        }
       } catch (error) {
         console.error('❌ [Background] Failed to display call notification:', error);
       }
