@@ -16,7 +16,6 @@ import appInitializer from '../services/appInitializer';
 import '../services/cryptoPolyfill';
 import apiService from './services/apiService';
 import fullScreenPermissionService from '../services/fullScreenPermissionService';
-import IncomingCallHandler from '../services/incomingCallHandler';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -370,15 +369,9 @@ export default function RootLayout() {
       } catch {}
     }).catch(() => {});
 
-    // Initialize incoming call handler
-    console.log('📞 [Layout] Initializing incoming call handler...');
-    const incomingCallHandler = IncomingCallHandler.getInstance();
-    console.log('✅ [Layout] Incoming call handler initialized');
-
     return () => {
       onMessageUnsub();
       onOpenedUnsub();
-      incomingCallHandler.destroy();
     };
   }, []);
   return (
