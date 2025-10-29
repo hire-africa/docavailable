@@ -47,16 +47,8 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
       console.log('📱 [Background] Incoming call - launching native activity');
       
       try {
-        // Launch IncomingCallService (foreground service - works even when app is killed)
-        if (IncomingCallModule) {
-          const callerName = String(data.doctor_name || data.doctorName || 'Doctor');
-          const callType = String(data.call_type || 'audio');
-          
-          console.log(`📱 [Background] Starting IncomingCallService for ${callerName} (${callType})`);
-          IncomingCallModule.launchIncomingCallActivity(callerName, callType);
-        } else {
-          console.warn('⚠️ [Background] IncomingCallModule not available');
-        }
+        // Use enhanced Notifee full-screen notification with maximum priority
+        console.log('📱 [Background] Using enhanced full-screen notification approach');
         
         // Create calls channel with MAXIMUM priority for screen wake-up
         await notifee.createChannel({
