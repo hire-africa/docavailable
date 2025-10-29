@@ -87,7 +87,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
             },
             fullScreenAction: {
               id: 'incoming_call',
-              launchActivity: 'com.docavailable.app.IncomingCallActivity', // Custom activity that wakes screen
+              launchActivity: 'default', // Use default activity (MainActivity)
             },
             sound: 'default', // System ringtone
             vibrationPattern: [1000, 500, 1000, 500],
@@ -118,9 +118,34 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
           },
         });
         
-        console.log('✅ [Background] Notification displayed with ID:', notificationId);
-        
+        console.log(`✅ [Background] Notification displayed with ID: ${notificationId}`);
         console.log('✅ [Background] Full-screen call notification displayed');
+        
+        // Additional trigger: Create a second high-priority notification to force wake
+        setTimeout(async () => {
+          try {
+            await notifee.displayNotification({
+              id: `wake_${Date.now()}`,
+              title: 'Wake Up',
+              body: 'Screen wake trigger',
+              android: {
+                channelId: 'calls',
+                importance: AndroidImportance.HIGH,
+                category: AndroidCategory.CALL,
+                visibility: 1,
+                autoCancel: true,
+                timeoutAfter: 2000, // Auto-dismiss quickly
+                fullScreenAction: {
+                  id: 'wake_trigger',
+                  launchActivity: 'default',
+                },
+              },
+            });
+            console.log('🔔 [Background] Wake trigger notification sent');
+          } catch (error) {
+            console.warn('⚠️ [Background] Wake trigger failed:', error);
+          }
+        }, 500); // Delay slightly
       } catch (error) {
         console.error('❌ [Background] Failed to display call notification:', error);
       }
