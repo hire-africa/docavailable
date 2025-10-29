@@ -1,4 +1,4 @@
-import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
@@ -15,6 +15,7 @@ import { routePushEvent } from '../utils/notificationRouter';
 import appInitializer from '../services/appInitializer';
 import '../services/cryptoPolyfill';
 import apiService from './services/apiService';
+import fullScreenPermissionService from '../services/fullScreenPermissionService';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -70,6 +71,23 @@ export default function RootLayout() {
           announcement: true,
         });
         console.log('🔔 Permission request result:', permission);
+
+        // Request full-screen intent permissions for incoming calls (Android 12+)
+        if (Platform.OS === 'android') {
+          try {
+            console.log('📱 Requesting full-screen intent permissions...');
+            await fullScreenPermissionService.requestFullScreenPermission();
+            
+            // Perform complete setup check
+            const setupResult = await fullScreenPermissionService.performCompleteSetup();
+            if (!setupResult.success) {
+              console.log('⚠️ Some permissions missing for full-screen calls:', setupResult.missingPermissions);
+              console.log('💡 User needs to enable: Settings → Apps → DocAvailable → Display over other apps');
+            }
+          } catch (error) {
+            console.log('⚠️ Could not check full-screen permissions:', error);
+          }
+        }
 
         // Request floating notification permission (Android 5.0+)
         if (Platform.OS === 'android') {
@@ -200,58 +218,63 @@ export default function RootLayout() {
           data
         });
 
-        // For incoming calls, show system ringtone notification and route to call screen
+        // For incoming calls, display notification and route to call screen
         if (type === 'incoming_call') {
-          console.log('📱 [Foreground] Incoming call - showing ringtone notification and routing');
+          console.log('📱 [Foreground] Incoming call - displaying notification and routing');
           console.log('📱 [Foreground] Call data:', data);
-          console.log('📱 [Foreground] Router available:', !!router);
           
-          // Create calls channel with system ringtone
-          await notifee.createChannel({
-            id: 'calls',
-            name: 'Incoming Calls',
-            importance: NotifeeAndroidImportance.MAX,
-            sound: 'default', // Use system default ringtone
-            vibration: true,
-            vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
-            bypassDnd: true,
-            lights: true,
-            lightColor: '#FF0000',
-            showBadge: true,
-          });
-
-          // Show notification with system ringtone
-          await notifee.displayNotification({
-            title: notification.title || 'Incoming Call',
-            body: notification.body || 'Incoming call...',
-            data,
-            android: {
-              channelId: 'calls',
-              importance: NotifeeAndroidImportance.MAX,
-              pressAction: {
-                id: 'default',
+          try {
+            // Display call notification with actions
+            await notifee.displayNotification({
+              title: notification.title || 'Incoming Call',
+              body: notification.body || `Incoming ${data.call_type === 'video' ? 'video' : 'voice'} call...`,
+              data: {
+                ...data,
+                notificationId: `call_${data.appointment_id || Date.now()}`,
               },
-              fullScreenAction: {
-                id: 'default',
+              android: {
+                channelId: 'calls',
+                importance: NotifeeAndroidImportance.HIGH,
+                category: AndroidCategory.CALL,
+                pressAction: {
+                  id: 'default',
+                  launchActivity: 'default',
+                },
+                sound: 'default',
+                vibrationPattern: [1000, 500, 1000, 500],
+                smallIcon: 'ic_launcher',
+                largeIcon: 'ic_launcher',
+                color: '#FF0000',
+                lights: ['#FF0000', 1000, 1000],
+                ongoing: true,
+                autoCancel: false,
+                timeoutAfter: 30000,
+                actions: [
+                  {
+                    title: 'Answer',
+                    pressAction: { id: 'answer' },
+                    icon: 'ic_launcher',
+                  },
+                  {
+                    title: 'Decline',
+                    pressAction: { id: 'decline' },
+                    icon: 'ic_launcher',
+                  },
+                ],
+                style: {
+                  type: 1,
+                  text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
+                },
               },
-              sound: 'default', // System ringtone
-              vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
-              smallIcon: 'ic_launcher',
-              largeIcon: 'ic_launcher',
-              color: '#FF0000', // Red for incoming calls
-              lights: ['#FF0000', 1000, 1000], // [color, on_ms, off_ms]
-              ongoing: true, // Make it ongoing so it can't be dismissed easily
-              autoCancel: false, // Don't auto-cancel
-              style: {
-                type: 1, // BigTextStyle
-                text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
-              },
-            },
-          });
-
-          // Route to call screen
-          routeIncomingCall(router, data);
-          console.log('📱 [Foreground] Call routing completed');
+            });
+            
+            // Automatically route to call screen since app is in foreground
+            routeIncomingCall(router, data);
+            
+            console.log('✅ [Foreground] Call notification displayed and routed');
+          } catch (error) {
+            console.error('❌ [Foreground] Failed to display call notification:', error);
+          }
           return;
         }
 

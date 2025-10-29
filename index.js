@@ -23,8 +23,11 @@ if (firebase.apps.length === 0) {
 }
 
 // Import Firebase messaging after app initialization
-import notifee, { AndroidImportance } from '@notifee/react-native';
+import notifee, { AndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
+import { NativeModules } from 'react-native';
+
+const { IncomingCallModule } = NativeModules;
 
 // Background/Killed handler: Display notifications for calls, messages, and appointments with notifee
 messaging().setBackgroundMessageHandler(async (remoteMessage) => {
@@ -39,52 +42,96 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
       body: notification.body
     });
 
-    // For incoming calls, show system ringtone notification
+    // For incoming calls, launch native activity directly + show notification
     if (type === 'incoming_call') {
-      console.log('📱 [Background] Incoming call - showing system ringtone notification');
+      console.log('📱 [Background] Incoming call - launching native activity');
       
-      // Create calls channel with system ringtone
-      await notifee.createChannel({
-        id: 'calls',
-        name: 'Incoming Calls',
-        importance: AndroidImportance.MAX,
-        sound: 'default', // Use system default ringtone
-        vibration: true,
-        vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
-        bypassDnd: true,
-        lights: true,
-        lightColor: '#FF0000',
-        showBadge: true,
-      });
-
-      // Show notification with system ringtone
-      await notifee.displayNotification({
-        title: notification.title || 'Incoming Call',
-        body: notification.body || 'Incoming call...',
-        data,
-        android: {
-          channelId: 'calls',
-          importance: AndroidImportance.MAX,
-          pressAction: {
-            id: 'default',
-          },
-          fullScreenAction: {
-            id: 'default',
-          },
+      try {
+        // Launch IncomingCallService (foreground service - works even when app is killed)
+        if (IncomingCallModule) {
+          const callerName = String(data.doctor_name || data.doctorName || 'Doctor');
+          const callType = String(data.call_type || 'audio');
+          
+          console.log(`📱 [Background] Starting IncomingCallService for ${callerName} (${callType})`);
+          IncomingCallModule.launchIncomingCallActivity(callerName, callType);
+        } else {
+          console.warn('⚠️ [Background] IncomingCallModule not available');
+        }
+        
+        // Create calls channel with MAXIMUM priority for screen wake-up
+        await notifee.createChannel({
+          id: 'calls',
+          name: 'Incoming Calls',
+          importance: AndroidImportance.HIGH,
           sound: 'default', // System ringtone
+          vibration: true,
           vibrationPattern: [1000, 500, 1000, 500], // Ring pattern
-          smallIcon: 'ic_launcher',
-          largeIcon: 'ic_launcher',
-          color: '#FF0000', // Red for incoming calls
-          lights: ['#FF0000', 1000, 1000], // [color, on_ms, off_ms]
-          ongoing: true, // Make it ongoing so it can't be dismissed easily
-          autoCancel: false, // Don't auto-cancel
-          style: {
-            type: 1, // BigTextStyle
-            text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
+          bypassDnd: true,
+          lights: true,
+          lightColor: '#FF0000',
+          visibility: 1, // VISIBILITY_PUBLIC - show on lock screen
+        });
+
+        // Display full-screen intent notification WITH TRIGGER (wakes device immediately)
+        const notificationId = await notifee.displayNotification({
+          id: `call_${data.appointment_id || Date.now()}`,
+          title: notification.title || 'Incoming Call',
+          body: notification.body || `Incoming ${data.call_type === 'video' ? 'video' : 'voice'} call...`,
+          data: {
+            ...data,
+            notificationId: `call_${data.appointment_id || Date.now()}`,
           },
-        },
-      });
+          android: {
+            channelId: 'calls',
+            importance: AndroidImportance.HIGH,
+            category: AndroidCategory.CALL, // Marks as call notification
+            visibility: 1, // Show on lock screen
+            showTimestamp: true,
+            timestamp: Date.now(),
+            showChronometer: true, // Shows ongoing timer
+            pressAction: {
+              id: 'default',
+              launchActivity: 'default',
+            },
+            fullScreenAction: {
+              id: 'incoming_call',
+              launchActivity: 'com.docavailable.app.IncomingCallActivity', // Custom activity that wakes screen
+            },
+            sound: 'default', // System ringtone
+            vibrationPattern: [1000, 500, 1000, 500],
+            smallIcon: 'ic_launcher',
+            largeIcon: 'ic_launcher',
+            color: '#FF0000',
+            lights: ['#FF0000', 1000, 1000],
+            ongoing: true, // Persistent until dismissed
+            autoCancel: false,
+            timeoutAfter: 30000, // Auto-dismiss after 30 seconds
+            tag: 'incoming_call', // Group related notifications
+            actions: [
+              {
+                title: '📞 Answer',
+                pressAction: { id: 'answer' },
+                icon: 'ic_launcher',
+              },
+              {
+                title: '❌ Decline',
+                pressAction: { id: 'decline' },
+                icon: 'ic_launcher',
+              },
+            ],
+            style: {
+              type: 1, // BigTextStyle
+              text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
+            },
+          },
+        });
+        
+        console.log('✅ [Background] Notification displayed with ID:', notificationId);
+        
+        console.log('✅ [Background] Full-screen call notification displayed');
+      } catch (error) {
+        console.error('❌ [Background] Failed to display call notification:', error);
+      }
       return;
     }
 
