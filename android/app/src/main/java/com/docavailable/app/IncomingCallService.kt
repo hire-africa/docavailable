@@ -44,9 +44,10 @@ class IncomingCallService : Service() {
         val callerName = intent?.getStringExtra("caller_name") ?: "Unknown"
         val callType = intent?.getStringExtra("call_type") ?: "audio"
         
+        // Show foreground notification with FullScreenIntent.
+        // This is the Android-sanctioned way to display a full-screen activity from background.
         startForeground(NOTIFICATION_ID, createServiceNotification(callerName, callType))
-        launchIncomingCallActivity()
-        
+
         android.os.Handler(mainLooper).postDelayed({
             stopSelfAndRelease()
         }, 30000)
@@ -70,21 +71,8 @@ class IncomingCallService : Service() {
         }
     }
 
-    private fun launchIncomingCallActivity() {
-        try {
-            val intent = Intent(this, IncomingCallActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or 
-                       Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                       Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            
-            Log.d("IncomingCallService", "Launching IncomingCallActivity from service...")
-            startActivity(intent)
-            Log.d("IncomingCallService", "Activity launched successfully")
-        } catch (e: Exception) {
-            Log.e("IncomingCallService", "Failed to launch activity", e)
-        }
-    }
+    // Do not start the activity directly from the service. The FullScreenIntent on the
+    // foreground notification will reliably launch IncomingCallActivity on Android 10+.
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -121,6 +109,7 @@ class IncomingCallService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
             .setFullScreenIntent(pendingIntent, true)
