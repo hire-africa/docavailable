@@ -96,6 +96,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
             showTimestamp: true,
             timestamp: Date.now(),
             showChronometer: true, // Shows ongoing timer
+            lightUpScreen: true, // FORCE screen wake up
             pressAction: {
               id: 'default',
               launchActivity: 'default',
@@ -149,6 +150,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
               visibility: 1,
               autoCancel: true,
               timeoutAfter: 3000, // Auto-dismiss after 3 seconds
+              lightUpScreen: true, // FORCE screen wake up
               fullScreenAction: {
                 id: 'wake_trigger',
                 launchActivity: 'default',
