@@ -26,6 +26,7 @@ export interface VideoCallEvents {
   onCallRejected: () => void;
   onCallTimeout: () => void;
   onCallAnswered?: () => void;
+  onPeerMediaStateChange?: (payload: { audioEnabled: boolean; videoEnabled: boolean }) => void;
 }
 
 class VideoCallService {
@@ -369,6 +370,14 @@ class VideoCallService {
             connectionState: 'connected' 
           });
           this.startCallTimer();
+          // Broadcast current media state to peer on connect
+          this.sendSignalingMessage({
+            type: 'media-state',
+            audioEnabled: this.state.isAudioEnabled,
+            videoEnabled: this.state.isVideoEnabled,
+            senderId: this.userId,
+            appointmentId: this.appointmentId,
+          });
         } else if (state === 'disconnected' || state === 'failed') {
           // Only update state if call is not answered and not already ended and not being accepted
           if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
@@ -463,6 +472,13 @@ class VideoCallService {
               case 'call-answered':
                 console.log('📞 [VideoCallService] Received call-answered');
                 this.handleCallAnswered();
+                break;
+              case 'media-state':
+                console.log('🎛️ [VideoCallService] Received media-state', message);
+                this.events?.onPeerMediaStateChange?.({
+                  audioEnabled: !!message.audioEnabled,
+                  videoEnabled: !!message.videoEnabled,
+                });
                 break;
               case 'call-rejected':
                 console.log('📞 [VideoCallService] Received call-rejected');
@@ -576,6 +592,14 @@ class VideoCallService {
           this.clearReofferLoop();
           this.updateState({ isConnected: true, connectionState: 'connected' });
           this.startCallTimer();
+          // Broadcast current media state to peer on connect
+          this.sendSignalingMessage({
+            type: 'media-state',
+            audioEnabled: this.state.isAudioEnabled,
+            videoEnabled: this.state.isVideoEnabled,
+            senderId: this.userId,
+            appointmentId: this.appointmentId,
+          });
         } else if (state === 'disconnected' || state === 'failed') {
           // Only update state if call is not answered and not already ended
           if (!this.isCallAnswered && !this.hasEnded) {
@@ -819,6 +843,14 @@ class VideoCallService {
       this.updateState({ 
         isAudioEnabled: audioTracks[0]?.enabled ?? false 
       });
+      // Inform peer of media state change
+      this.sendSignalingMessage({
+        type: 'media-state',
+        audioEnabled: this.state.isAudioEnabled,
+        videoEnabled: this.state.isVideoEnabled,
+        senderId: this.userId,
+        appointmentId: this.appointmentId,
+      });
       
       console.log('🔊 Audio toggled:', audioTracks[0]?.enabled ? 'ON' : 'OFF');
     }
@@ -860,8 +892,16 @@ class VideoCallService {
       this.updateState({ 
         isVideoEnabled: videoTracks[0]?.enabled ?? false 
       });
+      // Inform peer of media state change
+      this.sendSignalingMessage({
+        type: 'media-state',
+        audioEnabled: this.state.isAudioEnabled,
+        videoEnabled: this.state.isVideoEnabled,
+        senderId: this.userId,
+        appointmentId: this.appointmentId,
+      });
       
-      console.log('📹 Video toggled:', videoTracks[0]?.enabled ? 'ON' : 'OFF');
+      console.log('🎥 Video toggled:', videoTracks[0]?.enabled ? 'ON' : 'OFF');
     }
   }
 
@@ -987,11 +1027,18 @@ class VideoCallService {
     this.clearCallTimeout();
     this.stopCallTimer();
     
-    // Stop local stream
+    // Notify UI first so it can detach/hide RTCViews before media teardown
+    try {
+      this.events?.onCallEnded();
+    } catch {}
+    // Give UI a brief moment to update before tearing down tracks/PC
+    await new Promise(resolve => setTimeout(resolve, 80));
+
+    // Now stop local stream after UI updated
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop());
     }
-    
+
     // Reset audio routing to default
     await this.resetAudioRouting();
     
@@ -1014,7 +1061,6 @@ class VideoCallService {
     await this.updateCallSessionInBackend(sessionDuration, wasConnected);
     
     this.cleanup();
-    this.events?.onCallEnded();
   }
 
   /**

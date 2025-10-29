@@ -349,22 +349,8 @@ export default function AudioCall({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
-    
-    Alert.alert(
-      'End Call',
-      'Are you sure you want to end this call?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'End Call', 
-          style: 'destructive',
-          onPress: async () => {
-            await AudioCallService.getInstance().endCall();
-            onEndCall();
-          }
-        }
-      ]
-    );
+    await AudioCallService.getInstance().endCall();
+    onEndCall();
   };
 
   const formatDuration = (seconds: number) => {

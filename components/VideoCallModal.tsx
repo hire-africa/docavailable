@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    Animated,
-    Vibration,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Vibration,
+  View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import { VideoCallEvents, VideoCallService, VideoCallState } from '../services/videoCallService';
@@ -90,20 +90,41 @@ export default function VideoCallModal({
   // Sounds
   const connectSoundRef = useRef<Audio.Sound | null>(null);
   const hangupSoundRef = useRef<Audio.Sound | null>(null);
-  const ringtoneSoundRef = useRef<Audio.Sound | null>(null);
   const hasPlayedConnectRef = useRef(false);
+  const hasPlayedHangupRef = useRef(false);
   const soundsLoadedRef = useRef(false);
   const pendingConnectSoundRef = useRef(false);
   const connectSoundTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectTargetTimeRef = useRef<number | null>(null);
+  // To avoid freezes when WebRTC tears down, animate a placeholder instead of RTCView on reverse
+  const [usePlaceholderOnReverse, setUsePlaceholderOnReverse] = useState(false);
+  // Remote left banner
+  const [peerLeftVisible, setPeerLeftVisible] = useState(false);
+  const peerLeftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track if this device initiated the hang-up
+  const localEndedRef = useRef(false);
+  // Remote peer media state
+  const [peerAudioEnabled, setPeerAudioEnabled] = useState(true);
+  const [peerVideoEnabled, setPeerVideoEnabled] = useState(true);
+  const [containerSize, setContainerSize] = useState({ w: screenWidth, h: screenHeight });
+  const callStateRef = useRef(callState);
+
   const playSound = async (soundRef: React.MutableRefObject<Audio.Sound | null>) => {
+    const sound = soundRef.current;
+    if (!sound) {
+      console.warn('[VideoCallModal] playSound: sound ref is null');
+      return;
+    }
     try {
-      const s = soundRef.current;
-      if (!s) return;
-      try { await s.setIsMutedAsync(false); } catch {}
-      await s.setPositionAsync(0);
-      await s.playAsync();
+      console.log('[VideoCallModal] Playing sound...');
+      await sound.stopAsync().catch(() => {});
+      await sound.setIsMutedAsync(false);
+      await sound.setVolumeAsync(1.0);
+      await sound.setPositionAsync(0);
+      await sound.playAsync();
+      console.log('[VideoCallModal] Sound played successfully');
     } catch (e) {
-      console.warn('[VideoCallModal] playSound failed:', e);
+      console.error('[VideoCallModal] playSound failed:', e);
     }
   };
   
@@ -135,6 +156,12 @@ export default function VideoCallModal({
       }
       initOnceRef.current = appointmentId;
       
+      // Reset sound flags for new session
+      hasPlayedConnectRef.current = false;
+      hasPlayedHangupRef.current = false;
+      soundsLoadedRef.current = false;
+      pendingConnectSoundRef.current = false;
+
       if (!isIncomingCall) {
         console.log('🚀 VideoCallModal: Initializing call (outgoing)');
         await initializeVideoCall();
@@ -147,31 +174,39 @@ export default function VideoCallModal({
     // Preload sounds
     (async () => {
       try {
+        console.log('[VideoCallModal] Setting audio mode...');
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           allowsRecordingIOS: true,
           staysActiveInBackground: false,
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
+          interruptionModeIOS: 1,
+          interruptionModeAndroid: 1,
         });
+        console.log('[VideoCallModal] Loading sound files...');
         const connectModule = require('../assets/sounds/facetime-connect.mp3');
         const hangupModule = require('../assets/sounds/facetime-hang-up.mp3');
         const connect = new Audio.Sound();
         const hangup = new Audio.Sound();
-        const ringtone = new Audio.Sound();
+        console.log('[VideoCallModal] Loading connect sound...');
         await connect.loadAsync(connectModule, { volume: 1.0 }, false);
+        console.log('[VideoCallModal] Loading hangup sound...');
         await hangup.loadAsync(hangupModule, { volume: 1.0 }, false);
-        const ringtoneModule = require('../assets/sounds/facetime-call.mp3');
-        await ringtone.loadAsync(ringtoneModule, { volume: 1.0 }, false);
-        try { await ringtone.setIsLoopingAsync(true); } catch {}
         connectSoundRef.current = connect;
         hangupSoundRef.current = hangup;
-        ringtoneSoundRef.current = ringtone;
         soundsLoadedRef.current = true;
+        console.log('[VideoCallModal] Sounds loaded successfully');
         // If connection already happened before sounds loaded, play now
-        if (pendingConnectSoundRef.current && !hasPlayedConnectRef.current && callState.connectionState === 'connected') {
-          await playSound(connectSoundRef);
-          hasPlayedConnectRef.current = true;
+        if (pendingConnectSoundRef.current && !hasPlayedConnectRef.current && callStateRef.current.connectionState === 'connected') {
+          const now = Date.now();
+          const target = connectTargetTimeRef.current ?? now;
+          const remaining = Math.max(0, target - now);
+          if (connectSoundTimeoutRef.current) clearTimeout(connectSoundTimeoutRef.current);
+          connectSoundTimeoutRef.current = setTimeout(async () => {
+            await playSound(connectSoundRef);
+            hasPlayedConnectRef.current = true;
+          }, remaining);
           pendingConnectSoundRef.current = false;
         }
       } catch (e) {
@@ -191,16 +226,18 @@ export default function VideoCallModal({
         clearTimeout(connectSoundTimeoutRef.current);
         connectSoundTimeoutRef.current = null;
       }
+      if (peerLeftTimerRef.current) {
+        clearTimeout(peerLeftTimerRef.current);
+        peerLeftTimerRef.current = null;
+      }
       // Unload sounds
       (async () => {
         try {
           await connectSoundRef.current?.unloadAsync();
           await hangupSoundRef.current?.unloadAsync();
-          await ringtoneSoundRef.current?.unloadAsync();
         } catch {}
         connectSoundRef.current = null;
         hangupSoundRef.current = null;
-        ringtoneSoundRef.current = null;
       })();
       if (videoCallService.current) {
         videoCallService.current.reset();
@@ -208,55 +245,39 @@ export default function VideoCallModal({
     };
   }, [isIncomingCall, appointmentId]);
 
-  // Handle incoming ringtone: play while incoming UI is visible (ringing) and stop on answer/reject/timeout/connect
   useEffect(() => {
-    const shouldRing = shouldShowIncomingUI && !isProcessingAnswer;
-    (async () => {
-      try {
-        if (shouldRing) {
-          // start ringtone if loaded
-          if (ringtoneSoundRef.current) {
-            await ringtoneSoundRef.current.setIsMutedAsync(false);
-            const status = await ringtoneSoundRef.current.getStatusAsync();
-            if (!('isPlaying' in status) || !status.isPlaying) {
-              await ringtoneSoundRef.current.setPositionAsync(0);
-              await ringtoneSoundRef.current.playAsync();
-            }
-          }
-        } else {
-          // stop ringtone
-          if (ringtoneSoundRef.current) {
-            try { await ringtoneSoundRef.current.stopAsync(); } catch {}
-            try { await ringtoneSoundRef.current.setPositionAsync(0); } catch {}
-          }
-        }
-      } catch (e) {
-        console.warn('[VideoCallModal] Ringtone control failed:', e);
-      }
-    })();
-    // Also stop on unmount via the main cleanup above
-  }, [shouldShowIncomingUI, isProcessingAnswer]);
+    callStateRef.current = callState;
+  }, [callState]);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
+      console.log('[VideoCallModal] Call connected! Setting up connect sound...');
       setIsInitializing(false);
       setIsRinging(false);
-      // Play connect sound once per call (delayed 150ms to avoid session race)
+      setUsePlaceholderOnReverse(false);
+      // Play connect sound once per call (delayed 2000ms to align with transition)
       if (!hasPlayedConnectRef.current) {
+        console.log('[VideoCallModal] Scheduling connect sound (2s delay)...');
         if (connectSoundTimeoutRef.current) {
           clearTimeout(connectSoundTimeoutRef.current);
         }
+        connectTargetTimeRef.current = Date.now() + 2000;
         connectSoundTimeoutRef.current = setTimeout(() => {
+          console.log('[VideoCallModal] Connect sound timeout fired. soundsLoaded:', soundsLoadedRef.current);
           if (soundsLoadedRef.current) {
             (async () => {
+              console.log('[VideoCallModal] Attempting to play connect sound...');
               await playSound(connectSoundRef);
               hasPlayedConnectRef.current = true;
             })();
           } else {
             // Defer play until sounds finish loading
+            console.log('[VideoCallModal] Sounds not loaded yet, deferring connect sound');
             pendingConnectSoundRef.current = true;
           }
-        }, 150);
+        }, 2000);
+      } else {
+        console.log('[VideoCallModal] Connect sound already played, skipping');
       }
       // Start hero mode: show full-screen self for 2.5s, then shrink to PiP
       setHeroMode(true);
@@ -414,9 +435,46 @@ export default function VideoCallModal({
           console.log('📹 Remote video stream received');
           setRemoteStream(stream);
         },
-        onCallEnded: () => {
+        onPeerMediaStateChange: ({ audioEnabled, videoEnabled }) => {
+          setPeerAudioEnabled(audioEnabled);
+          setPeerVideoEnabled(videoEnabled);
+        },
+        onCallEnded: async () => {
           console.log('📞 Video call ended');
-          onEndCall();
+          // Fire-and-forget sound, don't block UI
+          if (!hasPlayedHangupRef.current) {
+            console.log('[VideoCallModal] Playing hangup sound (incoming call ended)...');
+            hasPlayedHangupRef.current = true;
+            playSound(hangupSoundRef).catch(() => {});
+          } else {
+            console.log('[VideoCallModal] Hangup sound already played, skipping');
+          }
+          if (localEndedRef.current) {
+            // Local user initiated hang-up: keep UI as-is, just close shortly
+            if (heroTimerRef.current) { clearTimeout(heroTimerRef.current); heroTimerRef.current = null; }
+            clearAutoHide();
+            showUI(true);
+            setIsReverseAnimating(false);
+            setUsePlaceholderOnReverse(false);
+            if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            peerLeftTimerRef.current = setTimeout(() => {
+              onEndCall();
+              localEndedRef.current = false;
+            }, 300);
+          } else {
+            // Remote user hung up: show banner and remove remote stream
+            if (heroTimerRef.current) { clearTimeout(heroTimerRef.current); heroTimerRef.current = null; }
+            clearAutoHide();
+            showUI(true);
+            setIsReverseAnimating(false);
+            setUsePlaceholderOnReverse(false);
+            setPeerLeftVisible(true);
+            setRemoteStream(null as any);
+            if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            peerLeftTimerRef.current = setTimeout(() => {
+              onEndCall();
+            }, 1200);
+          }
         },
         onCallRejected: () => {
           console.log('❌ Video call rejected');
@@ -461,8 +519,42 @@ export default function VideoCallModal({
           console.log('📹 Remote video stream received');
           setRemoteStream(stream);
         },
-        onCallEnded: () => {
-          onEndCall();
+        onPeerMediaStateChange: ({ audioEnabled, videoEnabled }) => {
+          setPeerAudioEnabled(audioEnabled);
+          setPeerVideoEnabled(videoEnabled);
+        },
+        onCallEnded: async () => {
+          if (!hasPlayedHangupRef.current) {
+            console.log('[VideoCallModal] Playing hangup sound (outgoing call ended)...');
+            hasPlayedHangupRef.current = true;
+            playSound(hangupSoundRef).catch(() => {});
+          } else {
+            console.log('[VideoCallModal] Hangup sound already played, skipping');
+          }
+          if (localEndedRef.current) {
+            if (heroTimerRef.current) { clearTimeout(heroTimerRef.current); heroTimerRef.current = null; }
+            clearAutoHide();
+            showUI(true);
+            setIsReverseAnimating(false);
+            setUsePlaceholderOnReverse(false);
+            if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            peerLeftTimerRef.current = setTimeout(() => {
+              onEndCall();
+              localEndedRef.current = false;
+            }, 300);
+          } else {
+            if (heroTimerRef.current) { clearTimeout(heroTimerRef.current); heroTimerRef.current = null; }
+            clearAutoHide();
+            showUI(true);
+            setIsReverseAnimating(false);
+            setUsePlaceholderOnReverse(false);
+            setPeerLeftVisible(true);
+            setRemoteStream(null as any);
+            if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            peerLeftTimerRef.current = setTimeout(() => {
+              onEndCall();
+            }, 1200);
+          }
         },
         onCallRejected: () => {
           console.log('❌ Video call rejected');
@@ -560,6 +652,11 @@ export default function VideoCallModal({
   const switchCamera = async () => {
     if (videoCallService.current) {
       await videoCallService.current.switchCamera();
+      // Refresh the local stream reference so PiP updates to the new track
+      const updated = videoCallService.current.getLocalStream?.();
+      if (updated) {
+        setLocalStream(updated);
+      }
       Vibration.vibrate(50);
     }
   };
@@ -586,58 +683,33 @@ export default function VideoCallModal({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
-    
-    Alert.alert(
-      'End Call',
-      'Are you sure you want to end this video call?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'End Call', 
-          style: 'destructive',
-          onPress: async () => {
-            await performEndCallWithAnimation();
-          }
-        }
-      ]
-    );
+    await performEndCallWithAnimation();
   };
 
   const performEndCallWithAnimation = async () => {
-    // Only animate if we're connected and have settled into PiP
-    if (callState.connectionState === 'connected' && (pipSettled || heroMode)) {
-      setIsReverseAnimating(true);
-      // Cancel hero timer if still running
-      if (heroTimerRef.current) {
-        clearTimeout(heroTimerRef.current);
-        heroTimerRef.current = null;
-      }
-      // Cancel auto-hide and show UI during reverse animation
-      clearAutoHide();
-      showUI(true);
-      // Play hang-up sound right away
-      await playSound(hangupSoundRef);
-      
-      // Reverse: expand PiP back to full-screen
-      await new Promise<void>((resolve) => {
-        Animated.timing(shrinkProgress, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }).start(() => {
-          resolve();
-        });
-      });
-      
-      // Small delay to ensure final frame is visible
-      await new Promise(resolve => setTimeout(resolve, 100));
+    // Local end: no animations, keep UI as-is until service signals end
+    localEndedRef.current = true;
+    // Cancel timers and keep UI visible
+    if (heroTimerRef.current) {
+      clearTimeout(heroTimerRef.current);
+      heroTimerRef.current = null;
     }
-    
-    // Now cleanup
+    clearAutoHide();
+    showUI(true);
+    setIsReverseAnimating(false);
+    setUsePlaceholderOnReverse(false);
+    // Play hang-up sound immediately once
+    if (!hasPlayedHangupRef.current) {
+      console.log('[VideoCallModal] Playing hangup sound (local end call)...');
+      hasPlayedHangupRef.current = true;
+      await playSound(hangupSoundRef);
+    } else {
+      console.log('[VideoCallModal] Hangup sound already played, skipping');
+    }
+    // Trigger service end; onCallEnded will close
     if (videoCallService.current) {
       await videoCallService.current.endCall();
     }
-    onEndCall();
   };
 
   const formatDuration = (seconds: number) => {
@@ -703,7 +775,10 @@ export default function VideoCallModal({
         startAutoHide();
       }}
     >
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} onLayout={(e) => {
+      const { width, height } = e.nativeEvent.layout;
+      if (width && height) setContainerSize({ w: width, h: height });
+    }}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
       {shouldShowIncomingUI && (
         <Image
@@ -727,14 +802,23 @@ export default function VideoCallModal({
         />
       )}
       
-      {/* Remote Video (Full Screen Background) - always visible when connected */}
-      {remoteStream && callState.connectionState === 'connected' && (
-        <RTCView
-          style={styles.remoteVideo}
-          streamURL={remoteStream.toURL()}
-          objectFit="cover"
-          pointerEvents="none"
-        />
+      {/* Remote Video (Full Screen Background) */}
+      {callState.connectionState === 'connected' && !(isReverseAnimating && usePlaceholderOnReverse) && (
+        peerVideoEnabled && remoteStream ? (
+          <RTCView
+            style={styles.remoteVideo}
+            streamURL={remoteStream.toURL()}
+            objectFit="cover"
+            pointerEvents="none"
+          />
+        ) : (
+          <View style={[styles.remoteVideo, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'black' }]} pointerEvents="none">
+            <View style={{ alignItems: 'center' }}>
+              <Ionicons name="videocam-off" size={28} color="#fff" />
+              <Text style={{ color: 'white', marginTop: 6 }}>Camera off</Text>
+            </View>
+          </View>
+        )
       )}
       
       {/* Local Video (PiP). Caller uses cross-fade transition; receiver shows static PiP. */}
@@ -758,8 +842,8 @@ export default function VideoCallModal({
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                width: screenWidth,
-                height: screenHeight,
+                width: containerSize.w,
+                height: containerSize.h,
                 borderRadius: shrinkProgress.interpolate({
                   inputRange: [0, 1],
                   outputRange: [0, 10],
@@ -775,38 +859,43 @@ export default function VideoCallModal({
                   {
                     translateX: shrinkProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, PIP_MARGIN_LEFT + PIP_WIDTH/2 - screenWidth/2],
+                      outputRange: [0, PIP_MARGIN_LEFT + PIP_WIDTH/2 - containerSize.w/2],
                     }),
                   },
                   {
                     translateY: shrinkProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0, screenHeight - PIP_MARGIN_BOTTOM - PIP_HEIGHT/2 - screenHeight/2],
+                      outputRange: [0, containerSize.h - PIP_MARGIN_BOTTOM - PIP_HEIGHT/2 - containerSize.h/2],
                     }),
                   },
                   {
                     scaleX: shrinkProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [1, PIP_WIDTH / screenWidth],
+                      outputRange: [1, PIP_WIDTH / containerSize.w],
                     }),
                   },
                   {
                     scaleY: shrinkProgress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [1, PIP_HEIGHT / screenHeight],
+                      outputRange: [1, PIP_HEIGHT / containerSize.h],
                     }),
                   },
                 ],
               }}
               pointerEvents="none"
             >
-              <RTCView
-                style={{ flex: 1 }}
-                streamURL={localStream.toURL()}
-                objectFit="cover"
-                mirror={callState.isFrontCamera}
-                pointerEvents="none"
-              />
+              {isReverseAnimating && usePlaceholderOnReverse ? (
+                <View style={{ flex: 1, backgroundColor: 'black' }} />
+              ) : (
+                <RTCView
+                  key={(localStream as any)?.id || 'local-hero'}
+                  style={{ flex: 1 }}
+                  streamURL={localStream.toURL()}
+                  objectFit="cover"
+                  mirror={callState.isFrontCamera}
+                  pointerEvents="none"
+                />
+              )}
             </Animated.View>
           )}
 
@@ -828,20 +917,67 @@ export default function VideoCallModal({
               }}
               pointerEvents="none"
             >
-              <RTCView
-                style={{ flex: 1 }}
-                streamURL={localStream.toURL()}
-                objectFit="cover"
-                mirror={callState.isFrontCamera}
-                zOrder={1}
-                pointerEvents="none"
-              />
+              {peerLeftVisible ? (
+                <View style={{ flex: 1, backgroundColor: 'black' }} />
+              ) : (
+                <RTCView
+                  key={(localStream as any)?.id || 'local-pip'}
+                  style={{ flex: 1 }}
+                  streamURL={localStream.toURL()}
+                  objectFit="cover"
+                  mirror={callState.isFrontCamera}
+                  zOrder={1}
+                  pointerEvents="none"
+                />
+              )}
             </Animated.View>
           )}
         </>
       )}
       
-      
+      {/* Peer left banner */}
+      {peerLeftVisible && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 80,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+            zIndex: 3,
+          }}
+          pointerEvents="none"
+        >
+          <View style={styles.peerLeftBanner}>
+            <Text style={styles.peerLeftBannerText}>
+              {(isDoctor ? patientName : doctorName)} left the call
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Peer mic off badge */}
+      {callState.connectionState === 'connected' && !peerAudioEnabled && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 56,
+            right: 20,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            borderRadius: 12,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            zIndex: 3,
+          }}
+          pointerEvents="none"
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="mic-off" size={14} color="#fff" />
+            <Text style={{ color: 'white', marginLeft: 4, fontSize: 12 }}>Mic off</Text>
+          </View>
+        </View>
+      )}
+
       {/* Dynamic Header based on call state */}
       {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
         // Incoming/connecting header
@@ -1271,5 +1407,16 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  peerLeftBanner: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  peerLeftBannerText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
