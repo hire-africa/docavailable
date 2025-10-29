@@ -5,17 +5,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../../components/AudioCall';
@@ -43,8 +43,8 @@ import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import {
-    getUserTimezone,
-    isAppointmentTimeReached
+  getUserTimezone,
+  isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { apiService } from '../services/apiService';
 
@@ -203,6 +203,11 @@ export default function ChatPage() {
   const [isAnsweringVideoCall, setIsAnsweringVideoCall] = useState(false);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [appointmentType, setAppointmentType] = useState<string | null>(null);
+  
+  // Track if incoming call modal is already showing to prevent duplicates
+  const incomingCallShownRef = useRef(false);
+  // Track processed offer messages to prevent duplicates
+  const processedOffersRef = useRef<Set<string>>(new Set());
   
   // WebRTC session management state
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
@@ -2283,7 +2288,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     // Clean up any existing connection
     if ((global as any).incomingCallWebSocket) {
       console.log('🧹 Cleaning up existing incoming call WebSocket');
-      (global as any).incomingCallWebSocket.close();
+      try {
+        // Remove event handlers before closing to prevent stale listeners
+        (global as any).incomingCallWebSocket.onopen = null;
+        (global as any).incomingCallWebSocket.onmessage = null;
+        (global as any).incomingCallWebSocket.onerror = null;
+        (global as any).incomingCallWebSocket.onclose = null;
+        (global as any).incomingCallWebSocket.close();
+      } catch (e) {
+        console.warn('Error cleaning up WebSocket:', e);
+      }
     }
     
     // Create WebSocket connection for incoming calls
@@ -2304,6 +2318,16 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
         
         // If we receive an offer, handle the incoming call
         if (message.type === 'offer') {
+          // CRITICAL: Generate unique message ID for deduplication
+          const messageId = `${message.senderId}-${message.appointmentId}-${message.callType || 'audio'}-${Date.now()}`;
+          const offerHash = message.offer?.sdp ? message.offer.sdp.substring(0, 50) : messageId;
+          
+          // Check if we've already processed this offer (within last 5 seconds)
+          if (processedOffersRef.current.has(offerHash)) {
+            console.log('📞 Duplicate offer detected and ignored:', offerHash.substring(0, 20));
+            return;
+          }
+          
           console.log('📞 Offer received - FULL MESSAGE:', JSON.stringify(message, null, 2));
           console.log('📞 Offer received - checking senderId filter:', {
             messageSenderId: message.senderId,
@@ -2313,7 +2337,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             userType: user?.user_type,
             appointmentId: appointmentId,
             userObject: user,
-            callType: message.callType || 'audio' // Check if it's video or audio call
+            callType: message.callType || 'audio', // Check if it's video or audio call
+            offerHash: offerHash.substring(0, 20)
           });
           
           // Check if this offer is from ourselves (ignore our own offers)
@@ -2380,13 +2405,34 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
           setIncomingCallerName(callerName);
           setIncomingCallerProfilePicture(callerProfilePicture);
           
+          // Mark this offer as processed immediately to prevent race conditions
+          processedOffersRef.current.add(offerHash);
+          
+          // Clean up old processed offers after 10 seconds to prevent memory leak
+          setTimeout(() => {
+            processedOffersRef.current.delete(offerHash);
+          }, 10000);
+          
           // Determine call type and show appropriate incoming call screen
           const callType = message.callType || 'audio';
+          
+          // CRITICAL FIX: Use global flag to prevent duplicate modals across all connections
+          const globalKey = `incomingCall_${appointmentId}_${callType}`;
+          if ((global as any)[globalKey]) {
+            console.log(`📞 Incoming ${callType} call already shown globally, ignoring duplicate offer`);
+            return;
+          }
+          
+          // Set global flag immediately
+          (global as any)[globalKey] = true;
+          
           if (callType === 'video') {
             console.log('📹 Showing incoming video call screen');
+            incomingCallShownRef.current = true;
             setShowIncomingVideoCall(true);
           } else {
             console.log('📞 Showing incoming audio call screen');
+            incomingCallShownRef.current = true;
             setShowIncomingCall(true);
           }
         }
@@ -4298,10 +4344,14 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             onEndCall={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
+              incomingCallShownRef.current = false; // Reset flag when call ends
+              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
             }}
             onCallTimeout={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
+              incomingCallShownRef.current = false; // Reset flag when call times out
+              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
               // Only show "Doctor Unavailable" modal to patients (callers)
               if (isPatient) {
                 setShowDoctorUnavailableModal(true);
@@ -4310,6 +4360,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             onCallRejected={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
+              incomingCallShownRef.current = false; // Reset flag when call is rejected
+              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
               // Only show "Doctor Unavailable" modal to patients (callers)
               if (isPatient) {
                 setShowDoctorUnavailableModal(true);
@@ -4327,6 +4379,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             onRejectCall={() => {
               setShowIncomingVideoCall(false);
               setIsAnsweringVideoCall(false);
+              incomingCallShownRef.current = false; // Reset flag when user rejects call
+              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
             }}
           />
         </Modal>

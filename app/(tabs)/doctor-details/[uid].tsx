@@ -65,6 +65,8 @@ export default function DoctorProfilePage() {
   const [showVideoCallModal, setShowVideoCallModal] = useState(false);
   const [directSessionId, setDirectSessionId] = useState<string | null>(null);
   const [startingSession, setStartingSession] = useState(false);
+  // Track if call has been initiated to prevent duplicates
+  const [callInitiated, setCallInitiated] = useState(false);
   // Similar doctors
   const [similarDoctors, setSimilarDoctors] = useState<any[]>([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
@@ -269,8 +271,15 @@ export default function DoctorProfilePage() {
   const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
     if (!doctor || !userData) return;
     
+    // CRITICAL: Prevent duplicate call initiations
+    if (startingSession || callInitiated) {
+      console.log('⚠️ Call already in progress, ignoring duplicate request');
+      return;
+    }
+    
     try {
       setStartingSession(true);
+      setCallInitiated(true);
       let response;
       
       if (sessionType === 'text') {
@@ -304,19 +313,27 @@ export default function DoctorProfilePage() {
           // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
           const sessionData = response.data as any;
           const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
+          
+          // Set session ID and show modal atomically to prevent race conditions
           setDirectSessionId(appointmentId);
           if (sessionType === 'audio') {
             setShowAudioCallModal(true);
           } else {
             setShowVideoCallModal(true);
           }
+          
+          console.log('✅ Call modal opened for session:', appointmentId);
         }
       } else {
         Alert.alert('Error', response?.message || 'Failed to start session');
+        // Reset flags on error so user can retry
+        setCallInitiated(false);
       }
     } catch (error) {
       console.error('Error starting session:', error);
       Alert.alert('Error', 'Failed to start session. Please try again.');
+      // Reset flags on error so user can retry
+      setCallInitiated(false);
     } finally {
       setStartingSession(false);
     }
@@ -688,7 +705,10 @@ export default function DoctorProfilePage() {
       {directSessionId && (
         <AudioCallModal
           visible={showAudioCallModal}
-          onClose={() => setShowAudioCallModal(false)}
+          onClose={() => {
+            setShowAudioCallModal(false);
+            setCallInitiated(false); // Reset flag when audio modal closes
+          }}
           appointmentId={directSessionId}
           userId={(user?.id ?? userData?.id ?? 0).toString()}
           isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
@@ -712,9 +732,20 @@ export default function DoctorProfilePage() {
           doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
           patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
           otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
-          onEndCall={() => setShowVideoCallModal(false)}
-          onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
-          onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
+          onEndCall={() => {
+            setShowVideoCallModal(false);
+            setCallInitiated(false); // Reset flag when call ends
+          }}
+          onCallTimeout={() => {
+            Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.');
+            setShowVideoCallModal(false);
+            setCallInitiated(false); // Reset flag on timeout
+          }}
+          onCallRejected={() => {
+            Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+            setShowVideoCallModal(false);
+            setCallInitiated(false); // Reset flag on rejection
+          }}
           isIncomingCall={false}
         />
       )}

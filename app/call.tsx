@@ -37,10 +37,23 @@ export default function CallScreen() {
   // Call services
   const audioCallService = useRef<AudioCallService | null>(null);
   const videoCallService = useRef<VideoCallService | null>(null);
+  
+  // CRITICAL: Track initialized session to prevent duplicate initialization
+  const initializedSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Derive incoming flag from params on mount
     setIsIncomingCall(incomingParam);
+    
+    // Prevent duplicate initialization for the same session
+    const currentSession = String(sessionId);
+    if (initializedSessionRef.current === currentSession) {
+      console.log('⚠️ [CallScreen] Call already initialized for session:', currentSession);
+      return;
+    }
+    
+    initializedSessionRef.current = currentSession;
+    console.log('✅ [CallScreen] Initializing call for new session:', currentSession);
     initializeCall();
   }, []);
 
