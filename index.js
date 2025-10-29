@@ -25,7 +25,7 @@ if (firebase.apps.length === 0) {
 // Import Firebase messaging after app initialization
 import notifee, { AndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
-import { NativeModules } from 'react-native';
+import { NativeModules, DeviceEventEmitter } from 'react-native';
 
 const { IncomingCallModule } = NativeModules;
 
@@ -103,7 +103,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
             },
             fullScreenAction: {
               id: 'incoming_call',
-              launchActivity: 'com.docavailable.app.IncomingCallActivity', // Dedicated call activity
+              launchActivity: 'com.docavailable.app.MainActivity', // Back to MainActivity with instant navigation
             },
             sound: 'default', // System ringtone
             vibrationPattern: [1000, 500, 1000, 500],
@@ -137,6 +137,20 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
         console.log(`✅ [Background] Notification displayed with ID: ${notificationId}`);
         console.log('✅ [Background] Full-screen call notification displayed');
         
+        // Emit event for React Native app to handle when it comes to foreground
+        try {
+          DeviceEventEmitter.emit('INCOMING_CALL', {
+            appointment_id: data.appointment_id || Date.now().toString(),
+            call_type: data.call_type || 'video',
+            doctor_name: data.doctor_name || 'Doctor',
+            doctor_id: data.doctor_id || '1',
+            doctor_profile_picture: data.doctor_profile_picture || ''
+          });
+          console.log('📡 [Background] Emitted INCOMING_CALL event for React Native');
+        } catch (emitError) {
+          console.warn('⚠️ [Background] Failed to emit INCOMING_CALL event:', emitError);
+        }
+        
         // Additional trigger: Create a second high-priority notification to force wake (immediate)
         try {
           const wakeId = await notifee.displayNotification({
@@ -153,7 +167,7 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
               lightUpScreen: true, // FORCE screen wake up
               fullScreenAction: {
                 id: 'wake_trigger',
-                launchActivity: 'com.docavailable.app.IncomingCallActivity',
+                launchActivity: 'com.docavailable.app.MainActivity',
               },
               // Add more aggressive wake flags
               showTimestamp: false,
