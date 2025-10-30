@@ -8,6 +8,8 @@ export type IncomingCallData = {
   doctorName?: string;
   doctor_profile_picture?: string;
   doctorProfilePicture?: string;
+  caller_name?: string;
+  callerName?: string;
 };
 
 // Track processed calls to prevent duplicate navigation
@@ -58,12 +60,16 @@ export function routeIncomingCall(router: any, data: IncomingCallData) {
     processedCalls.set(callKey, now);
     console.log(`✅ [CallRouter] Processing new call: ${callKey}`);
 
+    const doctorName = (data as any).doctor_name || (data as any).doctorName || (data as any).caller_name || (data as any).callerName || '';
+    const doctorAvatar = (data as any).doctor_profile_picture || (data as any).doctorProfilePicture || '';
+
     const routeParams = {
       sessionId: String(appointmentId),
       callType,
       isIncomingCall: 'true',
-      doctorName: (data as any).doctor_name || (data as any).doctorName || '',
-      doctorProfilePicture: (data as any).doctor_profile_picture || (data as any).doctorProfilePicture || ''
+      doctorName,
+      doctorProfilePicture: doctorAvatar,
+      source: 'native_service'
     };
 
     console.log('📞 [CallRouter] Navigating to call screen with params:', routeParams);

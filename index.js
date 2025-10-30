@@ -60,14 +60,46 @@ messaging().setBackgroundMessageHandler(async (remoteMessage) => {
     // For incoming calls, launch native activity directly + show notification
     if (type === 'incoming_call') {
       console.log('📱 [Background] Incoming call - launching native activity');
-      
+
       // Start native foreground service to force-launch IncomingCallActivity (Android 10+ reliable path)
       try {
-        if (IncomingCallModule?.launchIncomingCallActivity) {
+        if (IncomingCallModule?.launchIncomingCall) {
+          const callerName = (data.doctor_name || data.doctorName || data.caller_name || data.callerName || 'Unknown').toString();
+          const callType = (data.call_type || data.callType || 'audio').toString();
+          const appointmentIdRaw = data.appointment_id || data.appointmentId;
+          const appointmentId = appointmentIdRaw ? appointmentIdRaw.toString() : undefined;
+          const notificationIdRaw = data.notification_id || data.notificationId || data.id;
+          const notificationId = notificationIdRaw ? notificationIdRaw.toString() : `call_${Date.now()}`;
+
+          const doctorDisplayName = (data.doctor_name || data.doctorName || callerName)?.toString();
+          const doctorAvatar = (data.doctor_profile_picture || data.doctorProfilePicture || '')?.toString();
+
+          const callPayload = {
+            type: 'incoming_call',
+            call_type: callType,
+            callType,
+            caller_name: callerName,
+            callerName,
+            doctor_name: doctorDisplayName,
+            doctorName: doctorDisplayName,
+            notification_id: notificationId,
+            notificationId,
+            doctor_profile_picture: doctorAvatar,
+            doctorProfilePicture: doctorAvatar,
+          };
+
+          if (appointmentId) {
+            callPayload.appointment_id = appointmentId;
+            callPayload.appointmentId = appointmentId;
+          }
+
+          console.log('🚀 [Background] Starting IncomingCallService with payload', callPayload);
+          IncomingCallModule.launchIncomingCall(callPayload);
+        } else if (IncomingCallModule?.launchIncomingCallActivity) {
           const callerName = data.doctor_name || data.doctorName || 'Unknown';
           const callType = (data.call_type || 'audio').toString();
           IncomingCallModule.launchIncomingCallActivity(callerName, callType);
-          console.log('🚀 [Background] Started IncomingCallService via native module', { callerName, callType });
+          console.log('🚀 [Background] Started IncomingCallService via fallback native method', { callerName, callType });
         } else {
           console.warn('⚠️ [Background] IncomingCallModule not available, proceeding with notification only');
         }

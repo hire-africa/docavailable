@@ -40,11 +40,12 @@
         }
       },
       "production": {
+        "resourceClass": "medium",
         "ios": {
-          "resourceClass": "m-medium"
+          "resourceClass": "medium"
         },
         "android": {
-          "buildType": "app-bundle"
+          "buildType": "apk"
         },
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "https://docavailable-3vbdv.ondigitalocean.app",
@@ -60,8 +61,5 @@
           "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling"
         }
       }
-    },
-    "submit": {
-      "production": {}
     }
   }

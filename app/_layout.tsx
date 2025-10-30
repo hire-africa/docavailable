@@ -3,7 +3,7 @@ import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform, NativeEventEmitter, NativeModules } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -45,6 +45,64 @@ export default function RootLayout() {
       }
     }
   };
+
+  useEffect(() => {
+    const incomingCallModule: any = NativeModules?.IncomingCallModule;
+
+    if (!incomingCallModule) {
+      console.log('⚠️ IncomingCallModule not available on NativeModules');
+      return;
+    }
+
+    const emitter = new NativeEventEmitter(incomingCallModule);
+
+    const handleIncomingCall = (payload: any) => {
+      if (!payload) {
+        console.log('⚠️ [IncomingCallBridge] Empty payload received, ignoring');
+        return;
+      }
+
+      const callTypeRaw = payload.call_type || payload.callType || 'audio';
+      const appointmentIdRaw = payload.appointment_id || payload.appointmentId;
+      const doctorNameRaw = payload.doctor_name || payload.doctorName || payload.caller_name || payload.callerName || '';
+      const doctorAvatar = payload.doctor_profile_picture || payload.doctorProfilePicture || '';
+
+      const normalizedPayload = {
+        type: 'incoming_call',
+        call_type: callTypeRaw,
+        callType: callTypeRaw,
+        appointment_id: appointmentIdRaw,
+        appointmentId: appointmentIdRaw,
+        doctor_name: doctorNameRaw,
+        doctorName: doctorNameRaw,
+        doctor_profile_picture: doctorAvatar,
+        doctorProfilePicture: doctorAvatar,
+      };
+
+      console.log('📞 [IncomingCallBridge] Routing incoming call from native event', normalizedPayload);
+      routeIncomingCall(router, normalizedPayload as any);
+    };
+
+    const subscription = emitter.addListener('incomingCallShow', handleIncomingCall);
+
+    (async () => {
+      if (typeof incomingCallModule.getPendingIncomingCall === 'function') {
+        try {
+          const pending = await incomingCallModule.getPendingIncomingCall();
+          if (pending) {
+            console.log('📞 [IncomingCallBridge] Processing pending incoming call payload', pending);
+            handleIncomingCall(pending);
+          }
+        } catch (error) {
+          console.warn('⚠️ [IncomingCallBridge] Failed to fetch pending incoming call', error);
+        }
+      }
+    })();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     // Request phone permissions first

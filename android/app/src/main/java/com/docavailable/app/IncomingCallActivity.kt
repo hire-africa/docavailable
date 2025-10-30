@@ -1,6 +1,7 @@
 package com.docavailable.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -50,11 +51,15 @@ class IncomingCallActivity : ReactActivity() {
         }
         
         android.util.Log.d("IncomingCallActivity", "onCreate: Screen wake flags set")
+
+        emitIncomingCallIntent(intent)
     }
 
     override fun onResume() {
         super.onResume()
-        
+
+        emitIncomingCallIntent(intent)
+
         // Acquire wake lock to physically wake the screen
         // This is critical for devices that ignore window flags (Samsung, Xiaomi, Android 12+)
         try {
@@ -73,6 +78,35 @@ class IncomingCallActivity : ReactActivity() {
         } catch (e: Exception) {
             android.util.Log.e("IncomingCallActivity", "Failed to acquire wake lock", e)
         }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        emitIncomingCallIntent(intent)
+    }
+
+    private fun emitIncomingCallIntent(sourceIntent: Intent?) {
+        val extras = sourceIntent?.extras ?: return
+        if (extras.isEmpty) {
+            return
+        }
+
+        val payload = Bundle(extras)
+        val callerName = payload.getString("caller_name")
+            ?: payload.getString("callerName")
+            ?: "Unknown"
+        val callType = payload.getString("call_type")
+            ?: payload.getString("callType")
+            ?: "audio"
+
+        payload.putString("caller_name", callerName)
+        payload.putString("callerName", callerName)
+        payload.putString("call_type", callType)
+        payload.putString("callType", callType)
+
+        android.util.Log.d("IncomingCallActivity", "Emitting incomingCallShow with payload keys: ${payload.keySet()}")
+        IncomingCallModule.sendIncomingCallEvent(payload)
     }
 
     override fun onPause() {
