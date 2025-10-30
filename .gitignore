@@ -175,7 +175,6 @@ out/
 # Android build artifacts
 android/app/build/
 android/build/
-android/gradle/
 android/local.properties
 android/.gradle/
 ios/build/
@@ -186,7 +185,6 @@ ios/Podfile.lock
 assets/
 android/app/build/
 android/build/
-android/gradle/
 android/local.properties
 android/.gradle/
 ios/build/
@@ -202,7 +200,6 @@ ios/Podfile.lock
 # Mobile specific
 android/app/build/
 android/build/
-android/gradle/
 android/local.properties
 android/.gradle/
 ios/build/
