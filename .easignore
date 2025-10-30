@@ -92,11 +92,10 @@ firestore-debug.log
 
 # Large binary files
 *.dll
-*.phar
 
 # Backend files (not needed for mobile build)
 backend/
 
 # Native project folders (to fix Expo Doctor warnings)
-/android
-/ios
+!/android
+!/ios
