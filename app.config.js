@@ -4,6 +4,7 @@ module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "Doc_available",
+    workflow: "bare",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
