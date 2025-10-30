@@ -10,8 +10,7 @@
           "resourceClass": "m-medium"
         },
         "android": {
-          "buildType": "apk",
-          "withoutPrebuild": true
+          "buildType": "apk"
         },
         "env": {
           "EXPO_PUBLIC_API_BASE_URL": "http://172.20.10.11:8000",
