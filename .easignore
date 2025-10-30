@@ -1,0 +1,102 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native
+*.orig
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# Testing
+coverage/
+
+# Backup files
+backup/
+*.backup
+
+# Development files
+scripts/development/
+test-*.js
+test-*.php
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Android specific
+android/app/debug.keystore
+android/.gradle/
+android/build/
+android/app/build/
+
+# iOS specific
+ios/build/
+ios/Pods/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Database
+*.db
+*.sqlite
+
+# Large media files (if any)
+*.mp4
+*.mov
+*.avi
+
+# Large APK files
+*.apk
+*.zip
+
+# Large binary files
+*.dll
+*.phar
+
+# Backend files (not needed for mobile build)
+backend/
+
+# Native project folders (to fix Expo Doctor warnings)
+/android
+/ios
