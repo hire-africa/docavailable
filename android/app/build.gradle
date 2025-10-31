@@ -85,11 +85,12 @@ android {
         // prod {/* prod configs */}
         reactNativeCameraPreviewApi23 {
             dimension "react-native-camera"
-            minSdkVersion 23
+            minSdkVersion rootProject.ext.minSdkVersion
             missingDimensionStrategy "react-native-camera", "general"
         }
         reactNativeCameraPreviewGeneral {
             dimension "react-native-camera"
+            minSdkVersion rootProject.ext.minSdkVersion
             missingDimensionStrategy "react-native-camera", "general"
         }
     }
