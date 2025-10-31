@@ -8,6 +8,8 @@ yarn-error.log*
 .expo/
 dist/
 web-build/
+.next/
+out/
 
 # Native
 *.orig
@@ -67,6 +69,10 @@ android/app/debug.keystore
 android/.gradle/
 android/build/
 android/app/build/
+android/*/build/
+android/**/build/
+**/build/
+**/.gradle/
 
 # iOS specific
 ios/build/
@@ -96,6 +102,24 @@ firestore-debug.log
 # Backend files (not needed for mobile build)
 backend/
 
-# Native project folders (to fix Expo Doctor warnings)
-!/android
-!/ios
+# Admin panel (Next.js - not needed for mobile)
+Admin/
+
+# Archive and example files
+archive/
+examples/
+check_this/
+fixes/
+
+# Documentation files
+BARE_WORKFLOW_FIXES_COMPLETE.md
+EAS_BUILD_VERIFICATION.md
+EAS_CRITICAL_FIXES_SUMMARY.md
+*.md
+!README.md
+
+# Development scripts not needed in build
+scripts/development/
+
+# Vendor folder
+vendor/
