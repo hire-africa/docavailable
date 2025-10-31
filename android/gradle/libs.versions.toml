@@ -1,0 +1,25 @@
+[versions]
+agp = "8.1.0"
+compileSdk = "35"
+minSdk = "24"
+targetSdk = "35"
+ndkVersion = "26.1.10909125"
+kotlin = "2.0.21"
+fresco = "3.1.3"
+googleServices = "4.4.1"
+firebaseBom = "33.2.0"
+material = "1.12.0"
+
+[libraries]
+fresco-animated-gif = { group = "com.facebook.fresco", name = "animated-gif", version.ref = "fresco" }
+fresco-webp-support = { group = "com.facebook.fresco", name = "webpsupport", version.ref = "fresco" }
+fresco-animated-webp = { group = "com.facebook.fresco", name = "animated-webp", version.ref = "fresco" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

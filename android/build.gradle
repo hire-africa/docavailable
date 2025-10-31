@@ -3,6 +3,17 @@ buildscript {
     ext {
         kotlinVersion = '2.0.21'
         gradleVersion = '8.1.0'
+        buildToolsVersion = "35.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 35
+        targetSdkVersion = 35
+        ndkVersion = "26.1.10909125"
+        
+        // Expo related
+        expoModulesCoreVersion = '3.0.0'
+        
+        // React Native
+        reactNativeVersion = '+'
     }
 
     repositories {
@@ -13,7 +24,6 @@ buildscript {
     dependencies {
         classpath "com.android.tools.build:gradle:$gradleVersion"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
-        classpath 'com.facebook.react:react-native-gradle-plugin'
         classpath 'com.google.gms:google-services:4.4.1'
     }
 }

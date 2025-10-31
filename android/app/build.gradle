@@ -4,6 +4,10 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 import com.android.build.OutputFile
 
+react {
+    /* Autolinking */
+}
+
 def enableProguardInReleaseBuilds = findProperty('android.enableProguardInReleaseBuilds')?.toBoolean() ?: false
 def jscFlavor = 'org.webkit:android-jsc:+'
 
@@ -144,11 +148,20 @@ dependencies {
         implementation jscFlavor
     }
 
+    // Firebase dependencies
     implementation(platform("com.google.firebase:firebase-bom:33.2.0"))
     implementation("com.google.firebase:firebase-messaging")
+    
+    // Material Design
     implementation("com.google.android.material:material:1.12.0")
+    
+    // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
+    
+    // AndroidX Core
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }
 
-// Required for FCM / Google Services
+// Apply Google Services plugin (must be at the bottom)
 apply plugin: 'com.google.gms.google-services'

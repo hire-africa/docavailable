@@ -1,5 +1,10 @@
 package com.docavailable.app
 
+// This Kotlin file is deprecated. 
+// MainApplication.java is now used for bare workflow compatibility.
+// This file is kept for reference only and should not be compiled.
+
+/*
 import android.app.Application
 import android.content.res.Configuration
 import com.facebook.react.PackageList
@@ -13,7 +18,7 @@ import com.facebook.soloader.SoLoader
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
-class MainApplication : Application(), ReactApplication {
+class MainApplication_DEPRECATED : Application(), ReactApplication {
 
     override val reactNativeHost: ReactNativeHost = ReactNativeHostWrapper(
         this,
@@ -48,3 +53,4 @@ class MainApplication : Application(), ReactApplication {
         ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
     }
 }
+*/

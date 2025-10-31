@@ -37,7 +37,8 @@
           "EXPO_PUBLIC_USE_BACKEND_APPOINTMENTS": "true",
           "EXPO_PUBLIC_BACKEND_ENABLED": "true",
           "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable.org/call-signaling",
-          "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling"
+          "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling",
+          "EXPO_NO_PREBUILD": "1"
         }
       },
       "production": {
@@ -59,7 +60,8 @@
           "EXPO_PUBLIC_USE_BACKEND_APPOINTMENTS": "true",
           "EXPO_PUBLIC_BACKEND_ENABLED": "true",
           "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable.org/call-signaling",
-          "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling"
+          "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling",
+          "EXPO_NO_PREBUILD": "1"
         }
       }
     }

@@ -11,4 +11,20 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
+# Expo modules
+-keep class expo.modules.** { *; }
+
+# Custom native modules
+-keep class com.docavailable.app.IncomingCall** { *; }
+
+# Firebase
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+
+# Notifee
+-keep class app.notifee.** { *; }
+
+# WebRTC
+-keep class org.webrtc.** { *; }
+
 # Add any project specific keep options here:
