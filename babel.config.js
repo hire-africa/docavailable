@@ -11,6 +11,13 @@ module.exports = function (api) {
         regenerator: true,
         useESModules: false,
       }],
+      ['module-resolver', {
+        root: ['./'],
+        alias: {
+          '@': './'
+        },
+        extensions: ['.ts', '.tsx', '.js', '.jsx', '.json']
+      }],
     ],
   };
 }; 

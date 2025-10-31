@@ -4,6 +4,9 @@ apply plugin: 'org.jetbrains.kotlin.android'
 
 import com.android.build.OutputFile
 
+def enableProguardInReleaseBuilds = findProperty('android.enableProguardInReleaseBuilds')?.toBoolean() ?: false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
 android {
     namespace 'com.docavailable.app'
     ndkVersion rootProject.ext.ndkVersion
