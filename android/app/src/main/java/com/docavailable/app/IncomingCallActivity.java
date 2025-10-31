@@ -23,7 +23,7 @@ public class IncomingCallActivity extends ReactActivity {
     private PowerManager.WakeLock wakeLock;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -76,7 +76,7 @@ public class IncomingCallActivity extends ReactActivity {
     }
 
     @Override
-    protected void onNewIntent(@Nullable Intent intent) {
+    public void onNewIntent(@Nullable Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
         emitIncomingCallIntent(intent);

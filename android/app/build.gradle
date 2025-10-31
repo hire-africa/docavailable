@@ -1,17 +1,21 @@
 apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'com.facebook.react'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+import com.android.build.OutputFile
 
 android {
     namespace 'com.docavailable.app'
-    compileSdk 34
+    ndkVersion rootProject.ext.ndkVersion
+
+    compileSdkVersion rootProject.ext.compileSdkVersion
 
     defaultConfig {
         applicationId 'com.docavailable.app'
-        minSdk 24
-        targetSdk 34
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
-        versionName "1.0.0"
+        versionName "1.0"
     }
 
     signingConfigs {
@@ -22,32 +26,122 @@ android {
             keyPassword 'android'
         }
     }
-
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            minifyEnabled false
-            shrinkResources false
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig signingConfigs.debug
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+    applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            def versionCodes = [
+                    'armeabi-v7a': 1,
+                    'x86'       : 2,
+                    'arm64-v8a' : 3,
+                    'x86_64'    : 4,
+            ]
+            def abi = output.getFilter(OutputFile.ABI)
+            if (abi != null) {
+                output.versionCodeOverride =
+                        defaultConfig.versionCode * 1048576 + versionCodes.get(abi)
+            }
+        }
     }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging (findProperty('expo.useLegacyPackaging')?.toBoolean() ?: false)
+        }
+    }
+    androidResources {
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+    if (findProperty('react.experimental_useNewApkCreator')?.toBoolean()) {
+        project.logger.warn("react.experimental_useNewApkCreator is deprecated, use android.packagingOptions.useLegacyPackaging=false")
+        android.applicationVariants.all { variant ->
+            variant.packageApplicationProvider.configure {
+                doNotStrip "**/*.so"
+                jniLibsKeepDebugSymbols += ["**/*.so"]
+            }
+        }
+    }
+    flavorDimensions "react-native-camera" // Needed because gradle expects that all flavors fall under the same dimension.
 
-    kotlinOptions {
-        jvmTarget = '17'
+    productFlavors {
+        // Configure product flavors here.
+        // For example, this defaultConfig will work for all flavors below.
+        // dev {/* dev configs */}
+        // staging {/* staging configs */}
+        // prod {/* prod configs */}
+        reactNativeCameraPreviewApi23 {
+            dimension "react-native-camera"
+            minSdkVersion 23
+            missingDimensionStrategy "react-native-camera", "general"
+        }
+        reactNativeCameraPreviewGeneral {
+            dimension "react-native-camera"
+            missingDimensionStrategy "react-native-camera", "general"
+        }
+    }
+}
+
+// Apply static values from `gradle.properties` to the `android.packagingOptions`
+// Accepts values in comma delimited lists, example:
+// android.packagingOptions.pickFirsts=/LICENSE,**/picasa.ini
+["pickFirsts", "excludes", "merges", "doNotStrip"].each { prop ->
+    // Split option: 'foo,bar' -> ['foo', 'bar']
+    def options = (findProperty("android.packagingOptions.$prop") ?: "").split(",")
+    // Trim all elements in place.
+    for (i in 0..<options.size()) options[i] = options[i].trim()
+    // `[] - ""` is essentially `[""]`.filter(Boolean)` removing all empty strings.
+    options -= ""
+
+    if (options.length > 0) {
+        println "android.packagingOptions.$prop += $options ($options.length)"
+        // Ex: android.packagingOptions.pickFirsts += '**/SCCS/**'
+        options.each {
+            android.packagingOptions[prop] += it
+        }
     }
 }
 
 dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-    implementation("androidx.core:core-splashscreen:1.0.1")
+
+    def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true"
+    def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true"
+    def isWebpAnimatedEnabled = (findProperty('expo.webp.animated') ?: "") == "true"
+
+    if (isGifEnabled) {
+        // For animated gif support
+        implementation("com.facebook.fresco:animated-gif:${expoLibs.versions.fresco.get()}")
+    }
+
+    if (isWebpEnabled) {
+        // For webp support
+        implementation("com.facebook.fresco:webpsupport:${expoLibs.versions.fresco.get()}")
+        if (isWebpAnimatedEnabled) {
+            // Animated webp support
+            implementation("com.facebook.fresco:animated-webp:${expoLibs.versions.fresco.get()}")
+        }
+    }
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+
+    implementation(platform("com.google.firebase:firebase-bom:33.2.0"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.android.material:material:1.12.0")
     implementation("org.jetbrains.kotlin:kotlin-stdlib:2.0.21")
 }
