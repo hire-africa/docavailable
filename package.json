@@ -3,6 +3,7 @@
   "main": "index.js",
   "version": "1.0.0",
   "scripts": {
+    "postinstall": "node scripts/fix-gradle-props.js || true",
     "start": "expo start --lan",
     "start:tunnel": "expo start --tunnel",
     "start:localhost": "expo start --localhost",
@@ -75,7 +76,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.6",
-    "react-native-callkeep": "^4.3.16",
+    "react-native-callkeep": "^4.3.12",
     "react-native-device-info": "^14.0.4",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-get-random-values": "^1.11.0",
@@ -101,6 +102,7 @@
     "babel-plugin-module-resolver": "^5.0.2",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~9.2.0",
+    "expo-build-properties": "^1.0.9",
     "typescript": "~5.8.3"
   },
   "private": true
