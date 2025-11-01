@@ -34,52 +34,27 @@ class IncomingCallNotification extends Notification
         $callerName = $this->getCallerDisplayName();
         $callType = $this->callSession->call_type === 'video' ? 'video' : 'audio';
 
+        // ⚠️ CRITICAL: DATA-ONLY MESSAGE (no 'notification' block)
+        // This ensures background handler ALWAYS runs, even when app is killed
+        // CallKeep will display native UI instead of notification
         return [
-            'notification' => [
-                'title' => $callerName . ' - ' . ($callType === 'video' ? 'Video Call' : 'Voice Call'),
-                'body' => 'Incoming call...',
-                'sound' => 'default',
-                'priority' => 'high',
-                'visibility' => 'public',
-                'tag' => 'incoming_call_' . ($this->callSession->appointment_id ?? $this->callSession->id),
-            ],
+            // NO 'notification' BLOCK - Let CallKeep handle UI
             'data' => [
                 'type' => 'incoming_call',
+                'isIncomingCall' => 'true',
                 'appointment_id' => (string)($this->callSession->appointment_id ?? $this->callSession->id),
                 'call_type' => $callType,
                 'doctor_name' => $callerName,
-                'doctorName' => $callerName, // Frontend expects this field name
+                'doctorName' => $callerName,
                 'caller_id' => (string)($this->caller->id ?? ''),
                 'doctor_id' => (string)($this->callSession->doctor_id ?? ''),
                 'doctor_profile_picture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '',
-                'doctorProfilePicture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '', // Frontend expects this field name
-                'isIncomingCall' => 'true',
-                'click_action' => 'OPEN_CALL',
-                'categoryId' => 'incoming_call',
-                'priority' => 'high',
-                'fullScreenAction' => 'true',
-                'channelId' => 'calls',
+                'doctorProfilePicture' => $this->caller->profile_picture_url ?? $this->caller->profile_picture ?? '',
+                'call_session_id' => (string)$this->callSession->id,
+                'started_at' => $this->callSession->started_at?->toIso8601String() ?? now()->toIso8601String(),
             ],
             'android' => [
-                'priority' => 'high',
-                'notification' => [
-                    'channel_id' => 'calls',
-                    'priority' => 'high',
-                    'visibility' => 'public',
-                    'sound' => 'default',
-                    'vibrate_timings' => [0, 250, 250, 250],
-                    'light_settings' => [
-                        'color' => [
-                            'red' => 0.0,
-                            'green' => 0.0,
-                            'blue' => 1.0,
-                            'alpha' => 1.0,
-                        ],
-                        'light_on_duration' => '0.1s',
-                        'light_off_duration' => '0.1s',
-                    ],
-                    'tag' => 'incoming_call_' . ($this->callSession->appointment_id ?? $this->callSession->id),
-                ],
+                'priority' => 'high', // Ensures immediate delivery
             ],
             'apns' => [
                 'payload' => [

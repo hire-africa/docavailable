@@ -62,7 +62,7 @@ module.exports = {
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      
+      "./plugins/withCallKeep",
       [
         "@react-native-google-signin/google-signin",
         {

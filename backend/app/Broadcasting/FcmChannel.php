@@ -95,16 +95,10 @@ class FcmChannel
 
         $message = $notification->toFcm($notifiable);
         
-        Log::info("📤 FCM V1 Channel: Preparing FCM payload", [
-            'user_id' => $notifiable->id,
-            'title' => $message['notification']['title'] ?? 'no title',
-            'body' => $message['notification']['body'] ?? 'no body',
-            'project_id' => $this->projectId
-        ]);
-
-        // Determine channel based on notification type
+        // Determine channel and type based on notification data
         $data = $message['data'] ?? [];
         $type = $data['type'] ?? '';
+        $isIncomingCall = ($type === 'incoming_call' || ($data['isIncomingCall'] ?? '') === 'true');
         $channelId = 'calls'; // default
         
         if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
@@ -112,35 +106,46 @@ class FcmChannel
         } elseif (str_contains($type, 'appointment')) {
             $channelId = 'appointments';
         }
+        
+        Log::info("📤 FCM V1 Channel: Preparing FCM payload", [
+            'user_id' => $notifiable->id,
+            'type' => $type,
+            'is_incoming_call' => $isIncomingCall,
+            'has_notification_block' => isset($message['notification']),
+            'project_id' => $this->projectId
+        ]);
 
-        // FCM V1 API payload structure
+        // ⚠️ CRITICAL: For incoming calls, send DATA-ONLY message
+        // This ensures background handler runs even when app is killed
         $payload = [
             'message' => [
                 'token' => $notifiable->push_token,
-                'notification' => [
-                    'title' => $message['notification']['title'] ?? '',
-                    'body' => $message['notification']['body'] ?? '',
-                ],
                 'data' => $data,
                 'android' => [
-                    'priority' => 'high',
-                    'notification' => [
-                        'sound' => 'default',
-                        'channel_id' => $channelId,
-                        'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
-                        'visibility' => 'PUBLIC'
-                    ],
-                ],
-                'apns' => [
-                    'payload' => [
-                        'aps' => [
-                            'sound' => 'default',
-                            'badge' => 1,
-                        ],
-                    ],
+                    'priority' => 'high', // High priority for immediate delivery
                 ],
             ]
         ];
+        
+        // Only add notification block for NON-CALL messages
+        // Incoming calls use CallKeep native UI, not notifications
+        if (!$isIncomingCall && isset($message['notification'])) {
+            $payload['message']['notification'] = [
+                'title' => $message['notification']['title'] ?? '',
+                'body' => $message['notification']['body'] ?? '',
+            ];
+            $payload['message']['android']['notification'] = [
+                'sound' => 'default',
+                'channel_id' => $channelId,
+                'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+                'visibility' => 'PUBLIC'
+            ];
+        }
+        
+        // Add iOS config from notification if present
+        if (isset($message['apns'])) {
+            $payload['message']['apns'] = $message['apns'];
+        }
 
         try {
             $accessToken = $this->getAccessToken();

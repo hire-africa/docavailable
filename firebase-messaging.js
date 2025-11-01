@@ -1,36 +1,42 @@
 import messaging from '@react-native-firebase/messaging';
-import notifee, { AndroidImportance, AndroidCategory, AndroidVisibility } from '@notifee/react-native';
+import callkeepService from './services/callkeepService';
 
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   try {
     const data = remoteMessage?.data || {};
     console.log('BG FCM handler received:', JSON.stringify(data));
 
-    await notifee.createChannel({
-      id: 'calls_v2',
-      name: 'Incoming Calls',
-      importance: AndroidImportance.HIGH,
-    });
+    // Check if this is an incoming call
+    if (data.type === 'incoming_call' || data.isIncomingCall === 'true') {
+      const callId = callkeepService.generateCallId();
+      const callerName = data.doctor_name || data.doctorName || data.caller || 'Unknown Caller';
+      const appointmentId = data.appointment_id || data.appointmentId || '';
+      const callType = data.call_type || data.callType || 'audio';
 
-    await notifee.displayNotification({
-      title: 'Incoming Call',
-      body: data?.caller || data?.doctor_name || 'Unknown caller',
-      data,
-      android: {
-        channelId: 'calls_v2',
-        importance: AndroidImportance.HIGH,
-        category: AndroidCategory.CALL,
-        visibility: AndroidVisibility.PUBLIC,
-        ongoing: true,
-        autoCancel: false,
-        fullScreenAction: { id: 'default', launchActivity: 'default' },
-        pressAction: { id: 'accept', launchActivity: 'default' },
-        actions: [
-          { title: 'Accept', pressAction: { id: 'accept', launchActivity: 'default' } },
-          { title: 'Reject', pressAction: { id: 'reject', launchActivity: 'default' } },
-        ],
-      },
-    });
+      // Store call data for retrieval when answered
+      global.incomingCallData = {
+        callId,
+        appointmentId,
+        callType,
+        callerName,
+        ...data,
+      };
+
+      // Display native incoming call screen via CallKeep
+      await callkeepService.displayIncomingCall(
+        callId,
+        callerName,
+        appointmentId,
+        callType
+      );
+
+      console.log('CallKeep incoming call displayed:', {
+        callId,
+        callerName,
+        appointmentId,
+        callType,
+      });
+    }
   } catch (e) {
     console.log('Background FCM handler error:', e);
   }

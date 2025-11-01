@@ -25,80 +25,47 @@ if (firebase.apps.length === 0) {
   console.log(' Firebase app initialized:', firebase.apps[0].name);
 }
 
-// Import Notifee for runtime channel/permission setup and action events
-import notifee, { AndroidImportance, EventType } from '@notifee/react-native';
+// Import CallKeep for call management
+import RNCallKeep from 'react-native-callkeep';
+import callkeepService from './services/callkeepService';
 
-// Create notification channel and request permission on app start
-async function setupNotifications() {
+// Setup CallKeep on app start
+async function setupCallKeep() {
   try {
-    await notifee.requestPermission();
-    await notifee.createChannel({
-      id: 'calls_v2',
-      name: 'Incoming Calls',
-      importance: AndroidImportance.HIGH,
-      sound: 'default',
-      vibration: true,
-      bypassDnd: true,
-    });
+    await callkeepService.setup();
+    console.log('CallKeep setup complete');
   } catch (e) {
-    console.log('Notification setup error:', e);
+    console.log('CallKeep setup error:', e);
   }
 }
 
-setupNotifications();
+setupCallKeep();
 
 // Background message handling is now registered via './firebase-messaging'
 
-function navigateToCallFromData(data, actionId) {
+// Handle CallKeep answer event - navigate to call screen
+RNCallKeep.addEventListener('answerCall', ({ callUUID }) => {
+  console.log('CallKeep answerCall event:', callUUID);
+  
   try {
-    const appt = data?.appointment_id || data?.appointmentId;
-    if (appt) {
-      const callType = data?.call_type || data?.callType || '';
-      const actionParam = actionId ? `action=${encodeURIComponent(actionId)}` : '';
-      const typeParam = callType ? `callType=${encodeURIComponent(callType)}` : '';
-      const query = [actionParam, typeParam].filter(Boolean).join('&');
-      const path = query ? `/chat/${String(appt)}?${query}` : `/chat/${String(appt)}`;
-      setTimeout(() => router.push(path), 0);
+    const callData = global.incomingCallData;
+    if (callData) {
+      const { appointmentId, callType } = callData;
+      const path = `/chat/${String(appointmentId)}?action=accept&callType=${callType}`;
+      setTimeout(() => {
+        router.push(path);
+      }, 300);
     }
-  } catch {}
-}
-
-async function handleInitialNotification() {
-  try {
-    const initial = await notifee.getInitialNotification();
-    if (initial) {
-      const actionId = initial.pressAction?.id;
-      if (actionId === 'accept' || actionId === 'default') {
-        navigateToCallFromData(initial.notification?.data, actionId);
-      }
-    }
-  } catch {}
-}
-
-handleInitialNotification();
-
-// Handle foreground notification actions (Accept/Reject)
-notifee.onForegroundEvent(async ({ type, detail }) => {
-  if (type === EventType.ACTION_PRESS) {
-    const actionId = detail.pressAction?.id;
-    if (actionId === 'accept') {
-      navigateToCallFromData(detail.notification?.data, actionId);
-    } else if (actionId === 'reject') {
-      // no-op
-    }
+  } catch (error) {
+    console.error('Error navigating on answer:', error);
   }
 });
 
-// Handle background action presses
-notifee.onBackgroundEvent(async ({ type, detail }) => {
-  if (type === EventType.ACTION_PRESS) {
-    const actionId = detail.pressAction?.id;
-    if (actionId === 'accept') {
-      navigateToCallFromData(detail.notification?.data, actionId);
-    } else if (actionId === 'reject') {
-      // no-op
-    }
-  }
+// Handle CallKeep end call event
+RNCallKeep.addEventListener('endCall', ({ callUUID }) => {
+  console.log('CallKeep endCall event:', callUUID);
+  callkeepService.endCall(callUUID);
+  global.incomingCallData = null;
 });
 
 // Keep expo-router entry after handlers are set
