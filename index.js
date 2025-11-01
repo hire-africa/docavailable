@@ -34,9 +34,9 @@ import callkeepService from './services/callkeepService';
 async function setupCallKeep() {
   try {
     await callkeepService.setup();
-    console.log('CallKeep setup complete');
+    console.log('CALLKEEP: setup complete');
   } catch (e) {
-    console.log('CallKeep setup error:', e);
+    console.log('CALLKEEP: setup error', e);
   }
 }
 
@@ -51,6 +51,7 @@ const ensureCallData = async (callUUID) => {
     callData = await getStoredCallData();
     if (callData) {
       global.incomingCallData = callData;
+      console.log('CALLKEEP: rehydrated call data from storage', callData);
     }
   }
 
@@ -63,6 +64,7 @@ const ensureCallData = async (callUUID) => {
 
 const navigateToActiveCall = (callData) => {
   if (!callData?.appointmentId) {
+    console.warn('CALLKEEP: navigateToActiveCall missing appointmentId', callData);
     return;
   }
 
@@ -71,44 +73,64 @@ const navigateToActiveCall = (callData) => {
   setTimeout(() => {
     try {
       router.push(path);
+      console.log('CALLKEEP: navigated to', path);
     } catch (error) {
-      console.error('Navigation error on call accept:', error);
+      console.error('CALLKEEP: navigation error on call accept', error);
     }
   }, 300);
 };
 
 const handleAnswerCall = async ({ callUUID }) => {
-  console.log('CallKeep answerCall event:', callUUID);
+  console.log('CALLKEEP: answerCall event', callUUID);
 
   try {
     await callkeepService.answerCall(callUUID);
   } catch (error) {
-    console.error('CallKeep answerCall invoke error:', error);
+    console.error('CALLKEEP: answerCall invoke error', error);
   }
 
   const callData = await ensureCallData(callUUID);
+  console.log('CALLKEEP: answerCall using payload', callData);
   navigateToActiveCall(callData);
 };
 
 const clearCallData = async () => {
   global.incomingCallData = null;
   await clearStoredCallData();
+  console.log('CALLKEEP: cleared stored call data');
 };
 
 const handleEndCall = async ({ callUUID, reason }) => {
-  console.log('CallKeep endCall event:', callUUID, 'reason:', reason);
+  console.log('CALLKEEP: endCall event', callUUID, 'reason:', reason);
 
   try {
     await callkeepService.endCall(callUUID);
   } catch (error) {
-    console.error('CallKeep endCall invoke error:', error);
+    console.error('CALLKEEP: endCall invoke error', error);
   } finally {
     await clearCallData();
   }
 };
 
+const handleDidDisplayIncomingCall = ({ callUUID }) => {
+  console.log('CALLKEEP: didDisplayIncomingCall', callUUID);
+};
+
+const bootstrapPendingCallCheck = async () => {
+  const pending = await getStoredCallData();
+  if (pending) {
+    console.log('CALLKEEP: pending call found on boot', pending);
+  } else {
+    console.log('CALLKEEP: no pending call on boot');
+  }
+};
+
+console.log('CALLKEEP: registering listeners');
 RNCallKeep.addEventListener('answerCall', handleAnswerCall);
 RNCallKeep.addEventListener('endCall', handleEndCall);
+RNCallKeep.addEventListener('didDisplayIncomingCall', handleDidDisplayIncomingCall);
+
+bootstrapPendingCallCheck();
 
 // Keep expo-router entry after handlers are set
 export * from 'expo-router/entry';
