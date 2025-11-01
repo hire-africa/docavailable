@@ -208,6 +208,32 @@ export default function ChatPage() {
   const incomingCallShownRef = useRef(false);
   // Track processed offer messages to prevent duplicates
   const processedOffersRef = useRef<Set<string>>(new Set());
+
+  // Handle navigation from notification actions
+  const handledNotificationActionRef = useRef(false);
+  useEffect(() => {
+    if (handledNotificationActionRef.current) return;
+    const action = (params as any)?.action as string | undefined;
+    const callTypeParam = ((params as any)?.callType as string | undefined)?.toLowerCase();
+    if (!action) return;
+    handledNotificationActionRef.current = true;
+    if (action === 'accept') {
+      if (callTypeParam === 'video') {
+        setShowIncomingVideoCall(false);
+        setIsAnsweringVideoCall(true);
+        setShowVideoCallModal(true);
+        setShowVideoCall(true);
+      } else {
+        setShowIncomingCall(false);
+        setIsAnsweringCall(true);
+        setShowAudioCallModal(true);
+        setShowAudioCall(true);
+      }
+    } else if (action === 'reject') {
+      setShowIncomingCall(false);
+      setShowIncomingVideoCall(false);
+    }
+  }, [params]);
   
   // WebRTC session management state
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);

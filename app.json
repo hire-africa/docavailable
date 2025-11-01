@@ -2,7 +2,7 @@
   "expo": {
     "name": "DocAvailable",
     "slug": "Doc_available",
-    "workflow": "bare",
+    "workflow": "managed",
     "platforms": ["ios", "android"],
     "version": "1.0.0",
     "orientation": "portrait",
@@ -39,7 +39,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "googleServicesFile": "./android/app/google-services.json",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.WAKE_LOCK",
@@ -82,8 +82,7 @@
     "plugins": [
       "expo-router",
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging",
-      "@notifee/react-native"
+      "@react-native-firebase/messaging"
     ],
     "extra": {
       "firebaseApiKey": "AIzaSyAfRKBWJ8otf8VEo5nVZv5cG7qDX-t4ksc"

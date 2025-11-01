@@ -1,8 +1,8 @@
-export default {
+module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "Doc_available",
-    workflow: "bare",
+    workflow: "managed",
     platforms: ["ios", "android"],
     version: "1.0.0",
     orientation: "portrait",

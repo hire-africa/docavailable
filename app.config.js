@@ -4,7 +4,7 @@ module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "Doc_available",
-    workflow: "bare",
+    workflow: "managed",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
@@ -62,7 +62,7 @@ module.exports = {
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      "./app.plugin.js",
+      
       [
         "@react-native-google-signin/google-signin",
         {
