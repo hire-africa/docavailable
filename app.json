@@ -41,6 +41,7 @@
       },
       "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
+      "newArchEnabled": false,
       "permissions": [
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
@@ -84,7 +85,18 @@
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
-      "./plugins/withCallKeep"
+      "./plugins/withCallKeep",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "newArchEnabled": false,
+            "enableBridgelessArchitecture": false
+          }
+        }
+      ],
+      "./plugins/withDisableNewArch",
+      "./plugins/withForceDisableNewArch"
     ],
     "extra": {
       "firebaseApiKey": "AIzaSyAfRKBWJ8otf8VEo5nVZv5cG7qDX-t4ksc"

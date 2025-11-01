@@ -1,5 +1,6 @@
 import messaging from '@react-native-firebase/messaging';
 import callkeepService from './services/callkeepService';
+import { storeCallData } from './services/callkeepStorage';
 
 messaging().setBackgroundMessageHandler(async remoteMessage => {
   try {
@@ -14,13 +15,16 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       const callType = data.call_type || data.callType || 'audio';
 
       // Store call data for retrieval when answered
-      global.incomingCallData = {
+      const callData = {
         callId,
         appointmentId,
         callType,
         callerName,
         ...data,
       };
+
+      global.incomingCallData = callData;
+      await storeCallData(callData);
 
       // Display native incoming call screen via CallKeep
       await callkeepService.displayIncomingCall(

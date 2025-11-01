@@ -6,6 +6,7 @@ import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible
 import './firebase-messaging';
 import { router } from 'expo-router';
+import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
 if (typeof global !== 'undefined') {
@@ -43,30 +44,71 @@ setupCallKeep();
 
 // Background message handling is now registered via './firebase-messaging'
 
-// Handle CallKeep answer event - navigate to call screen
-RNCallKeep.addEventListener('answerCall', ({ callUUID }) => {
-  console.log('CallKeep answerCall event:', callUUID);
-  
-  try {
-    const callData = global.incomingCallData;
-    if (callData) {
-      const { appointmentId, callType } = callData;
-      const path = `/chat/${String(appointmentId)}?action=accept&callType=${callType}`;
-      setTimeout(() => {
-        router.push(path);
-      }, 300);
-    }
-  } catch (error) {
-    console.error('Error navigating on answer:', error);
-  }
-});
+const ensureCallData = async (callUUID) => {
+  let callData = global.incomingCallData;
 
-// Handle CallKeep end call event
-RNCallKeep.addEventListener('endCall', ({ callUUID }) => {
-  console.log('CallKeep endCall event:', callUUID);
-  callkeepService.endCall(callUUID);
+  if (!callData) {
+    callData = await getStoredCallData();
+    if (callData) {
+      global.incomingCallData = callData;
+    }
+  }
+
+  if (callData && !callData.callId) {
+    callData.callId = callUUID;
+  }
+
+  return callData || null;
+};
+
+const navigateToActiveCall = (callData) => {
+  if (!callData?.appointmentId) {
+    return;
+  }
+
+  const path = `/chat/${String(callData.appointmentId)}?action=accept&callType=${callData.callType ?? 'audio'}`;
+
+  setTimeout(() => {
+    try {
+      router.push(path);
+    } catch (error) {
+      console.error('Navigation error on call accept:', error);
+    }
+  }, 300);
+};
+
+const handleAnswerCall = async ({ callUUID }) => {
+  console.log('CallKeep answerCall event:', callUUID);
+
+  try {
+    await callkeepService.answerCall(callUUID);
+  } catch (error) {
+    console.error('CallKeep answerCall invoke error:', error);
+  }
+
+  const callData = await ensureCallData(callUUID);
+  navigateToActiveCall(callData);
+};
+
+const clearCallData = async () => {
   global.incomingCallData = null;
-});
+  await clearStoredCallData();
+};
+
+const handleEndCall = async ({ callUUID, reason }) => {
+  console.log('CallKeep endCall event:', callUUID, 'reason:', reason);
+
+  try {
+    await callkeepService.endCall(callUUID);
+  } catch (error) {
+    console.error('CallKeep endCall invoke error:', error);
+  } finally {
+    await clearCallData();
+  }
+};
+
+RNCallKeep.addEventListener('answerCall', handleAnswerCall);
+RNCallKeep.addEventListener('endCall', handleEndCall);
 
 // Keep expo-router entry after handlers are set
 export * from 'expo-router/entry';
