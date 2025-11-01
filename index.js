@@ -33,9 +33,12 @@ async function setupNotifications() {
   try {
     await notifee.requestPermission();
     await notifee.createChannel({
-      id: 'calls',
+      id: 'calls_v2',
       name: 'Incoming Calls',
       importance: AndroidImportance.HIGH,
+      sound: 'default',
+      vibration: true,
+      bypassDnd: true,
     });
   } catch (e) {
     console.log('Notification setup error:', e);
