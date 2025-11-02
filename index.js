@@ -98,8 +98,40 @@ const navigateToActiveCall = (callData) => {
   }, 800);
 };
 
+// Flag to track if we're dismissing UI (don't clear data)
+let isDismissingSystemUI = false;
+
+// Track answered sessions to prevent duplicates
+const answeredSessions = new Set();
+
 const handleAnswerCall = async ({ callUUID }) => {
   console.log('CALLKEEP: answerCall event', callUUID);
+
+  const callData = await ensureCallData(callUUID);
+  const sessionId = callData?.appointmentId || callData?.appointment_id;
+  
+  // ✅ Deduplicate: Skip if we've already answered this session
+  if (sessionId && answeredSessions.has(sessionId)) {
+    console.log('CALLKEEP: Already answered session', sessionId, '- ignoring duplicate');
+    // Still dismiss the duplicate UI
+    if (Platform.OS === 'android') {
+      isDismissingSystemUI = true;
+      RNCallKeep.endCall(callUUID);
+    }
+    return;
+  }
+
+  // Mark this session as answered
+  if (sessionId) {
+    answeredSessions.add(sessionId);
+    console.log('CALLKEEP: Marked session as answered:', sessionId);
+    
+    // Auto-clear after 30 seconds to allow re-answers if needed
+    setTimeout(() => {
+      answeredSessions.delete(sessionId);
+      console.log('CALLKEEP: Cleared answered session:', sessionId);
+    }, 30000);
+  }
 
   // ✅ FIX 1: Dismiss system UI immediately on Android to prevent loop
   if (Platform.OS === 'android') {
@@ -114,13 +146,9 @@ const handleAnswerCall = async ({ callUUID }) => {
     console.error('CALLKEEP: answerCall invoke error', error);
   }
 
-  const callData = await ensureCallData(callUUID);
   console.log('CALLKEEP: answerCall using payload', callData);
   navigateToActiveCall(callData);
 };
-
-// Flag to track if we're dismissing UI (don't clear data)
-let isDismissingSystemUI = false;
 
 const clearCallData = async () => {
   global.incomingCallData = null;
