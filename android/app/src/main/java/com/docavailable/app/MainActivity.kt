@@ -3,6 +3,7 @@ import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -20,7 +21,40 @@ class MainActivity : ReactActivity() {
     // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
     SplashScreenManager.registerOnActivity(this)
     // @generated end expo-splashscreen
+    
+    // Handle native incoming call intent
+    handleIncomingCallIntent(intent)
+    
     super.onCreate(null)
+  }
+  
+  override fun onNewIntent(intent: Intent?) {
+    super.onNewIntent(intent)
+    // Handle incoming call when app is already running
+    handleIncomingCallIntent(intent)
+  }
+  
+  private fun handleIncomingCallIntent(intent: Intent?) {
+    if (intent?.getBooleanExtra("isIncomingCall", false) == true) {
+      // Store call data in React Native global for easy access
+      // This avoids complex bridge communication
+      try {
+        val reactInstanceManager = reactNativeHost.reactInstanceManager
+        reactInstanceManager.currentReactContext?.let { reactContext ->
+          val jsModule = reactContext.getJSModule(com.facebook.react.bridge.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          jsModule.emit("nativeIncomingCall", com.facebook.react.bridge.Arguments.createMap().apply {
+            putString("sessionId", intent.getStringExtra("sessionId") ?: "")
+            putString("doctorId", intent.getStringExtra("doctorId") ?: "")
+            putString("doctorName", intent.getStringExtra("doctorName") ?: "")
+            putString("callType", intent.getStringExtra("callType") ?: "audio")
+            putBoolean("isIncomingCall", true)
+            putBoolean("answeredFromNative", true)
+          })
+        }
+      } catch (e: Exception) {
+        e.printStackTrace()
+      }
+    }
   }
 
   /**

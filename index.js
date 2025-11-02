@@ -6,7 +6,7 @@ import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible
 import './firebase-messaging';
 import { router } from 'expo-router';
-import { Platform, AppState } from 'react-native';
+import { Platform, AppState, DeviceEventEmitter } from 'react-native';
 import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
@@ -139,12 +139,54 @@ let isDismissingSystemUI = false;
 // Track answered sessions to prevent duplicates
 const answeredSessions = new Set();
 
+// Handle native incoming call intents
+const handleNativeIncomingCall = () => {
+  try {
+    // Check for native call data in global (set by MainActivity)
+    if (global.nativeCallData) {
+      const callData = global.nativeCallData;
+      console.log('CALLKEEP: Processing native incoming call:', callData);
+      
+      // Navigate to call screen with native data
+      navigateToActiveCall({
+        appointmentId: callData.sessionId,
+        doctorId: callData.doctorId,
+        doctorName: callData.doctorName,
+        callType: callData.callType,
+        isIncomingCall: true,
+        answeredFromNative: true,
+      });
+      
+      // Clear the native data
+      global.nativeCallData = null;
+    }
+  } catch (error) {
+    console.error('CALLKEEP: Error handling native incoming call:', error);
+  }
+};
+
+// Listen for native incoming call events from MainActivity
+DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
+  console.log('CALLKEEP: Received native incoming call event:', callData);
+  
+  // Navigate to call screen with native data
+  navigateToActiveCall({
+    appointmentId: callData.sessionId,
+    doctorId: callData.doctorId,
+    doctorName: callData.doctorName,
+    callType: callData.callType,
+    isIncomingCall: true,
+    answeredFromNative: true,
+  });
+});
+
 const handleAnswerCall = async ({ callUUID }) => {
   console.log('CALLKEEP: answerCall event', callUUID);
 
   const callData = await ensureCallData(callUUID);
   const sessionId = callData?.appointmentId || callData?.appointment_id;
   
+  // Deduplicate: Skip if we've already answered this session
   // ✅ Deduplicate: Skip if we've already answered this session
   if (sessionId && answeredSessions.has(sessionId)) {
     console.log('CALLKEEP: Already answered session', sessionId, '- ignoring duplicate');

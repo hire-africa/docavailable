@@ -1,6 +1,7 @@
 import messaging from '@react-native-firebase/messaging';
 import callkeepService from './services/callkeepService';
 import { storeCallData } from './services/callkeepStorage';
+import { NativeModules } from 'react-native';
 
 // ✅ Track displayed calls to prevent duplicates
 const displayedCalls = new Set();
@@ -48,7 +49,29 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       global.incomingCallData = callData;
       await storeCallData(callData);
 
-      // Display native incoming call screen via CallKeep
+      // Try native IncomingCallActivity first (better for lock screen)
+      try {
+        if (NativeModules.IncomingCallModule) {
+          console.log('Using native IncomingCallActivity for lock screen');
+          await NativeModules.IncomingCallModule.showIncomingCall({
+            sessionId: appointmentId,
+            doctorId: data.doctor_id || data.doctorId || '',
+            callerName,
+            callType,
+          });
+          
+          console.log('Native incoming call displayed:', {
+            sessionId: appointmentId,
+            callerName,
+            callType,
+          });
+          return; // Success - don't fall back to CallKeep
+        }
+      } catch (nativeError) {
+        console.warn('Native call activity failed, falling back to CallKeep:', nativeError);
+      }
+
+      // Fallback to CallKeep if native fails
       await callkeepService.displayIncomingCall(
         callId,
         callerName,
