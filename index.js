@@ -177,12 +177,18 @@ const handleAnswerCall = async ({ callUUID }) => {
       console.warn('CALLKEEP: backToForeground failed', err);
     }
     
-    // ✅ 2️⃣ Wait for JS runtime to be fully active (critical for wake from sleep)
-    await waitForAppForeground();
-    
-    // ✅ 3️⃣ Small delay for React hydration
-    await new Promise(r => setTimeout(r, 200));
-    console.log('CALLKEEP: app ready, JS hydrated');
+    // ✅ 2️⃣ Small delay for app to come to foreground and React to hydrate
+    // Note: We don't wait for AppState='active' because backToForeground doesn't always trigger it
+    // The app is already opened (isOpened=true), so we just need a small delay
+    await new Promise(r => setTimeout(r, 500));
+    console.log('CALLKEEP: app ready after foreground transition');
+  }
+
+  // ✅ 3️⃣ Dismiss system UI to prevent loop (AFTER foreground, BEFORE navigation)
+  if (Platform.OS === 'android') {
+    isDismissingSystemUI = true;
+    RNCallKeep.endCall(callUUID);
+    console.log('CALLKEEP: dismissed system UI after foreground ready');
   }
 
   try {
@@ -196,14 +202,7 @@ const handleAnswerCall = async ({ callUUID }) => {
   // ✅ 4️⃣ Navigate to call screen
   const success = await navigateToActiveCall(callData);
   
-  // ✅ 5️⃣ ONLY dismiss system UI after successful navigation
-  if (Platform.OS === 'android' && success) {
-    isDismissingSystemUI = true;
-    RNCallKeep.endCall(callUUID);
-    console.log('CALLKEEP: dismissed system UI after navigation success');
-  }
-  
-  // ✅ 6️⃣ Clear stale data after successful answer
+  // ✅ 5️⃣ Clear stale data after successful answer
   if (success) {
     console.log('CALLKEEP: clearing stored call data after successful navigation');
     await clearStoredCallData();
