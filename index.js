@@ -87,15 +87,13 @@ const navigateToActiveCall = (callData) => {
   
   const path = `/call?${params.toString()}`;
 
-  // ✅ Increased delay to ensure Root Layout is mounted
-  setTimeout(() => {
-    try {
-      router.push(path);
-      console.log('CALLKEEP: navigated directly to call screen:', path);
-    } catch (error) {
-      console.error('CALLKEEP: navigation error on call accept', error);
-    }
-  }, 800);
+  // ✅ Navigate immediately (delay already handled in handleAnswerCall for foreground transition)
+  try {
+    router.push(path);
+    console.log('CALLKEEP: navigated directly to call screen:', path);
+  } catch (error) {
+    console.error('CALLKEEP: navigation error on call accept', error);
+  }
 };
 
 // Flag to track if we're dismissing UI (don't clear data)
@@ -133,11 +131,19 @@ const handleAnswerCall = async ({ callUUID }) => {
     }, 30000);
   }
 
-  // ✅ FIX 1: Dismiss system UI immediately on Android to prevent loop
+  // ✅ 1️⃣ Dismiss system UI immediately on Android to prevent loop
   if (Platform.OS === 'android') {
     isDismissingSystemUI = true; // Set flag BEFORE calling endCall
     RNCallKeep.endCall(callUUID);
     console.log('CALLKEEP: dismissed system UI for', callUUID);
+
+    // ✅ 2️⃣ Bring app to foreground before navigating (critical for lock screen)
+    try {
+      await RNCallKeep.backToForeground();
+      console.log('CALLKEEP: brought app to foreground');
+    } catch (err) {
+      console.warn('CALLKEEP: backToForeground failed', err);
+    }
   }
 
   try {
@@ -147,7 +153,11 @@ const handleAnswerCall = async ({ callUUID }) => {
   }
 
   console.log('CALLKEEP: answerCall using payload', callData);
-  navigateToActiveCall(callData);
+  
+  // ✅ 3️⃣ Small delay to let foreground transition finish before navigation
+  setTimeout(() => {
+    navigateToActiveCall(callData);
+  }, 500);
 };
 
 const clearCallData = async () => {
