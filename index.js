@@ -168,18 +168,11 @@ const handleAnswerCall = async ({ callUUID }) => {
     }, 30000);
   }
 
-  // ✅ 1️⃣ CRITICAL: Bring app to foreground FIRST (before dismissing UI)
+  // ✅ 1️⃣ Dismiss system UI immediately on Android to prevent loop
   if (Platform.OS === 'android') {
-    try {
-      await RNCallKeep.backToForeground();
-      console.log('CALLKEEP: brought app to foreground');
-    } catch (err) {
-      console.warn('CALLKEEP: backToForeground failed', err);
-    }
-    
-    // ✅ 2️⃣ Small delay for window transition (app is already opened, just needs to come to front)
-    await new Promise(r => setTimeout(r, 300));
-    console.log('CALLKEEP: foreground transition complete');
+    isDismissingSystemUI = true;
+    RNCallKeep.endCall(callUUID);
+    console.log('CALLKEEP: dismissed system UI for', callUUID);
   }
 
   try {
@@ -190,22 +183,10 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   console.log('CALLKEEP: answerCall using payload', callData);
   
-  // ✅ 3️⃣ Navigate to call screen (system UI still visible during navigation)
-  const success = await navigateToActiveCall(callData);
-  
-  // ✅ 4️⃣ ONLY dismiss system UI after successful navigation
-  if (Platform.OS === 'android' && success) {
-    isDismissingSystemUI = true;
-    RNCallKeep.endCall(callUUID);
-    console.log('CALLKEEP: dismissed system UI after navigation success');
-  }
-  
-  // ✅ 5️⃣ Clear stale data after successful answer
-  if (success) {
-    console.log('CALLKEEP: clearing stored call data after successful navigation');
-    await clearStoredCallData();
-    global.incomingCallData = null;
-  }
+  // ✅ 2️⃣ Navigate to call screen with delay
+  setTimeout(() => {
+    navigateToActiveCall(callData);
+  }, 800);
 };
 
 const clearCallData = async () => {
