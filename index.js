@@ -6,6 +6,7 @@ import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible
 import './firebase-messaging';
 import { router } from 'expo-router';
+import { Platform } from 'react-native';
 import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
@@ -68,7 +69,8 @@ const navigateToActiveCall = (callData) => {
     return;
   }
 
-  const path = `/chat/${String(callData.appointmentId)}?action=accept&callType=${callData.callType ?? 'audio'}`;
+  // ✅ Add answeredFromCallKeep flag to auto-answer the call
+  const path = `/chat/${String(callData.appointmentId)}?action=accept&callType=${callData.callType ?? 'audio'}&answeredFromCallKeep=true`;
 
   setTimeout(() => {
     try {
@@ -82,6 +84,12 @@ const navigateToActiveCall = (callData) => {
 
 const handleAnswerCall = async ({ callUUID }) => {
   console.log('CALLKEEP: answerCall event', callUUID);
+
+  // ✅ FIX 1: Dismiss system UI immediately on Android to prevent loop
+  if (Platform.OS === 'android') {
+    RNCallKeep.endCall(callUUID);
+    console.log('CALLKEEP: dismissed system UI for', callUUID);
+  }
 
   try {
     await callkeepService.answerCall(callUUID);

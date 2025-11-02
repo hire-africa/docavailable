@@ -215,19 +215,32 @@ export default function ChatPage() {
     if (handledNotificationActionRef.current) return;
     const action = (params as any)?.action as string | undefined;
     const callTypeParam = ((params as any)?.callType as string | undefined)?.toLowerCase();
+    const answeredFromCallKeep = (params as any)?.answeredFromCallKeep === 'true'; // ✅ FIX 3
+    
     if (!action) return;
     handledNotificationActionRef.current = true;
+    
     if (action === 'accept') {
       if (callTypeParam === 'video') {
         setShowIncomingVideoCall(false);
         setIsAnsweringVideoCall(true);
         setShowVideoCallModal(true);
         setShowVideoCall(true);
+        
+        // ✅ Already answered from CallKeep system UI
+        if (answeredFromCallKeep) {
+          console.log('✅ [CallKeep] Video call already answered from system UI');
+        }
       } else {
         setShowIncomingCall(false);
         setIsAnsweringCall(true);
         setShowAudioCallModal(true);
         setShowAudioCall(true);
+        
+        // ✅ Already answered from CallKeep system UI
+        if (answeredFromCallKeep) {
+          console.log('✅ [CallKeep] Audio call already answered from system UI');
+        }
       }
     } else if (action === 'reject') {
       setShowIncomingCall(false);
