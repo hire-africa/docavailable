@@ -70,17 +70,24 @@ const navigateToActiveCall = (callData) => {
   }
 
   // ✅ Navigate directly to /call screen with all required params
+  // Extract doctorId from multiple possible field names
+  const doctorId = callData.doctor_id || callData.doctorId || callData.caller_id || '';
+  const doctorName = callData.callerName || callData.doctor_name || callData.doctorName || 'Doctor';
+  const doctorProfilePic = callData.doctor_profile_picture || callData.doctorProfilePicture || '';
+  
   const params = new URLSearchParams({
     sessionId: String(callData.appointmentId),
-    doctorId: String(callData.doctorId || ''),
-    doctorName: String(callData.callerName || callData.doctorName || 'Doctor'),
-    callType: String(callData.callType || 'audio'),
+    doctorId: String(doctorId),
+    doctorName: String(doctorName),
+    doctorProfilePicture: String(doctorProfilePic),
+    callType: String(callData.callType || callData.call_type || 'audio'),
     isIncomingCall: 'true',
     answeredFromCallKeep: 'true'
   });
   
   const path = `/call?${params.toString()}`;
 
+  // ✅ Increased delay to ensure Root Layout is mounted
   setTimeout(() => {
     try {
       router.push(path);
@@ -88,7 +95,7 @@ const navigateToActiveCall = (callData) => {
     } catch (error) {
       console.error('CALLKEEP: navigation error on call accept', error);
     }
-  }, 300);
+  }, 800);
 };
 
 const handleAnswerCall = async ({ callUUID }) => {
@@ -96,6 +103,7 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   // ✅ FIX 1: Dismiss system UI immediately on Android to prevent loop
   if (Platform.OS === 'android') {
+    isDismissingSystemUI = true; // Set flag BEFORE calling endCall
     RNCallKeep.endCall(callUUID);
     console.log('CALLKEEP: dismissed system UI for', callUUID);
   }
@@ -111,6 +119,9 @@ const handleAnswerCall = async ({ callUUID }) => {
   navigateToActiveCall(callData);
 };
 
+// Flag to track if we're dismissing UI (don't clear data)
+let isDismissingSystemUI = false;
+
 const clearCallData = async () => {
   global.incomingCallData = null;
   await clearStoredCallData();
@@ -119,6 +130,13 @@ const clearCallData = async () => {
 
 const handleEndCall = async ({ callUUID, reason }) => {
   console.log('CALLKEEP: endCall event', callUUID, 'reason:', reason);
+
+  // ✅ Don't clear data if we're just dismissing system UI
+  if (isDismissingSystemUI) {
+    console.log('CALLKEEP: endCall ignored (dismissing system UI, keeping call data)');
+    isDismissingSystemUI = false;
+    return;
+  }
 
   try {
     await callkeepService.endCall(callUUID);
