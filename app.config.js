@@ -63,6 +63,7 @@ module.exports = {
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
       "./plugins/withCallKeep",
+      "./plugins/withMainActivityFlags", // ✅ Lock screen flags (showWhenLocked, turnScreenOn)
       [
         "@react-native-google-signin/google-signin",
         {
