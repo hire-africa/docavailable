@@ -69,13 +69,22 @@ const navigateToActiveCall = (callData) => {
     return;
   }
 
-  // ✅ Add answeredFromCallKeep flag to auto-answer the call
-  const path = `/chat/${String(callData.appointmentId)}?action=accept&callType=${callData.callType ?? 'audio'}&answeredFromCallKeep=true`;
+  // ✅ Navigate directly to /call screen with all required params
+  const params = new URLSearchParams({
+    sessionId: String(callData.appointmentId),
+    doctorId: String(callData.doctorId || ''),
+    doctorName: String(callData.callerName || callData.doctorName || 'Doctor'),
+    callType: String(callData.callType || 'audio'),
+    isIncomingCall: 'true',
+    answeredFromCallKeep: 'true'
+  });
+  
+  const path = `/call?${params.toString()}`;
 
   setTimeout(() => {
     try {
       router.push(path);
-      console.log('CALLKEEP: navigated to', path);
+      console.log('CALLKEEP: navigated directly to call screen:', path);
     } catch (error) {
       console.error('CALLKEEP: navigation error on call accept', error);
     }

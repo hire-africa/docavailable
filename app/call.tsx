@@ -20,7 +20,8 @@ export default function CallScreen() {
     doctorSpecialization,
     doctorProfilePicture,
     callType,
-    isDirectSession
+    isDirectSession,
+    answeredFromCallKeep
   } = params;
 
   // Normalize callType to 'audio' | 'video' (treat 'voice' as 'audio')
@@ -33,6 +34,7 @@ export default function CallScreen() {
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const incomingParam = String(params.isIncomingCall || '').toLowerCase() === 'true';
+  const isFromCallKeep = String(answeredFromCallKeep || '').toLowerCase() === 'true';
 
   // Call services
   const audioCallService = useRef<AudioCallService | null>(null);
@@ -45,6 +47,11 @@ export default function CallScreen() {
     // Derive incoming flag from params on mount
     setIsIncomingCall(incomingParam);
     
+    // Log CallKeep auto-answer
+    if (isFromCallKeep) {
+      console.log('✅ [CallScreen] Call answered from CallKeep system UI - auto-starting');
+    }
+    
     // Prevent duplicate initialization for the same session
     const currentSession = String(sessionId);
     if (initializedSessionRef.current === currentSession) {
@@ -53,7 +60,11 @@ export default function CallScreen() {
     }
     
     initializedSessionRef.current = currentSession;
-    console.log('✅ [CallScreen] Initializing call for new session:', currentSession);
+    console.log('✅ [CallScreen] Initializing call for new session:', currentSession, {
+      isIncoming: incomingParam,
+      isFromCallKeep,
+      callType: normalizedCallType
+    });
     initializeCall();
   }, []);
 
