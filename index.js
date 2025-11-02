@@ -6,7 +6,7 @@ import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible
 import './firebase-messaging';
 import { router } from 'expo-router';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
@@ -45,6 +45,32 @@ setupCallKeep();
 
 // Background message handling is now registered via './firebase-messaging'
 
+// ✅ Wait for app to fully resume to active state (critical for locked screen)
+const waitForAppForeground = async () => {
+  if (AppState.currentState === 'active') {
+    console.log('CALLKEEP: app already active');
+    return;
+  }
+  
+  console.log('CALLKEEP: waiting for app to resume from', AppState.currentState);
+  return new Promise(resolve => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        sub.remove();
+        console.log('CALLKEEP: app resumed to active state');
+        resolve();
+      }
+    });
+    
+    // Timeout after 3 seconds to prevent hanging
+    setTimeout(() => {
+      sub.remove();
+      console.warn('CALLKEEP: app state timeout, proceeding anyway');
+      resolve();
+    }, 3000);
+  });
+};
+
 const ensureCallData = async (callUUID) => {
   let callData = global.incomingCallData;
 
@@ -63,7 +89,23 @@ const ensureCallData = async (callUUID) => {
   return callData || null;
 };
 
-const navigateToActiveCall = (callData) => {
+// ✅ Safe navigate with retry logic for router mounting edge cases
+const safeNavigate = async (path, retries = 5) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      router.push(path);
+      console.log('CALLKEEP: navigated directly to call screen:', path);
+      return true;
+    } catch (error) {
+      console.warn(`CALLKEEP: router not ready, retrying (${i + 1}/${retries})...`, error.message);
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+  console.error('CALLKEEP: navigation failed after', retries, 'attempts');
+  return false;
+};
+
+const navigateToActiveCall = async (callData) => {
   if (!callData?.appointmentId) {
     console.warn('CALLKEEP: navigateToActiveCall missing appointmentId', callData);
     return;
@@ -87,13 +129,8 @@ const navigateToActiveCall = (callData) => {
   
   const path = `/call?${params.toString()}`;
 
-  // ✅ Navigate immediately (delay already handled in handleAnswerCall for foreground transition)
-  try {
-    router.push(path);
-    console.log('CALLKEEP: navigated directly to call screen:', path);
-  } catch (error) {
-    console.error('CALLKEEP: navigation error on call accept', error);
-  }
+  // ✅ Use safe navigation with retries
+  await safeNavigate(path);
 };
 
 // Flag to track if we're dismissing UI (don't clear data)
@@ -144,6 +181,9 @@ const handleAnswerCall = async ({ callUUID }) => {
     } catch (err) {
       console.warn('CALLKEEP: backToForeground failed', err);
     }
+    
+    // ✅ 3️⃣ Wait for JS runtime to be fully active (critical for wake from sleep)
+    await waitForAppForeground();
   }
 
   try {
@@ -154,10 +194,10 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   console.log('CALLKEEP: answerCall using payload', callData);
   
-  // ✅ 3️⃣ Small delay to let foreground transition finish before navigation
+  // ✅ 4️⃣ Small delay before navigation (reduced since AppState wait is more reliable)
   setTimeout(() => {
     navigateToActiveCall(callData);
-  }, 500);
+  }, 300);
 };
 
 const clearCallData = async () => {
