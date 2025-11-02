@@ -108,7 +108,7 @@ const safeNavigate = async (path, retries = 5) => {
 const navigateToActiveCall = async (callData) => {
   if (!callData?.appointmentId) {
     console.warn('CALLKEEP: navigateToActiveCall missing appointmentId', callData);
-    return;
+    return false;
   }
 
   // ✅ Navigate directly to /call screen with all required params
@@ -129,8 +129,8 @@ const navigateToActiveCall = async (callData) => {
   
   const path = `/call?${params.toString()}`;
 
-  // ✅ Use safe navigation with retries
-  await safeNavigate(path);
+  // ✅ Use safe navigation with retries and return success status
+  return await safeNavigate(path);
 };
 
 // Flag to track if we're dismissing UI (don't clear data)
@@ -177,18 +177,9 @@ const handleAnswerCall = async ({ callUUID }) => {
       console.warn('CALLKEEP: backToForeground failed', err);
     }
     
-    // ✅ 2️⃣ Small delay for app to come to foreground and React to hydrate
-    // Note: We don't wait for AppState='active' because backToForeground doesn't always trigger it
-    // The app is already opened (isOpened=true), so we just need a small delay
-    await new Promise(r => setTimeout(r, 500));
-    console.log('CALLKEEP: app ready after foreground transition');
-  }
-
-  // ✅ 3️⃣ Dismiss system UI to prevent loop (AFTER foreground, BEFORE navigation)
-  if (Platform.OS === 'android') {
-    isDismissingSystemUI = true;
-    RNCallKeep.endCall(callUUID);
-    console.log('CALLKEEP: dismissed system UI after foreground ready');
+    // ✅ 2️⃣ Small delay for window transition (app is already opened, just needs to come to front)
+    await new Promise(r => setTimeout(r, 300));
+    console.log('CALLKEEP: foreground transition complete');
   }
 
   try {
@@ -199,8 +190,15 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   console.log('CALLKEEP: answerCall using payload', callData);
   
-  // ✅ 4️⃣ Navigate to call screen
+  // ✅ 3️⃣ Navigate to call screen (system UI still visible during navigation)
   const success = await navigateToActiveCall(callData);
+  
+  // ✅ 4️⃣ ONLY dismiss system UI after successful navigation
+  if (Platform.OS === 'android' && success) {
+    isDismissingSystemUI = true;
+    RNCallKeep.endCall(callUUID);
+    console.log('CALLKEEP: dismissed system UI after navigation success');
+  }
   
   // ✅ 5️⃣ Clear stale data after successful answer
   if (success) {
