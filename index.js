@@ -62,12 +62,12 @@ const waitForAppForeground = async () => {
       }
     });
     
-    // Timeout after 3 seconds to prevent hanging
+    // Timeout after 4 seconds to prevent hanging
     setTimeout(() => {
       sub.remove();
       console.warn('CALLKEEP: app state timeout, proceeding anyway');
       resolve();
-    }, 3000);
+    }, 4000);
   });
 };
 
@@ -168,13 +168,8 @@ const handleAnswerCall = async ({ callUUID }) => {
     }, 30000);
   }
 
-  // ✅ 1️⃣ Dismiss system UI immediately on Android to prevent loop
+  // ✅ 1️⃣ CRITICAL: Bring app to foreground FIRST (before dismissing UI)
   if (Platform.OS === 'android') {
-    isDismissingSystemUI = true; // Set flag BEFORE calling endCall
-    RNCallKeep.endCall(callUUID);
-    console.log('CALLKEEP: dismissed system UI for', callUUID);
-
-    // ✅ 2️⃣ Bring app to foreground before navigating (critical for lock screen)
     try {
       await RNCallKeep.backToForeground();
       console.log('CALLKEEP: brought app to foreground');
@@ -182,8 +177,12 @@ const handleAnswerCall = async ({ callUUID }) => {
       console.warn('CALLKEEP: backToForeground failed', err);
     }
     
-    // ✅ 3️⃣ Wait for JS runtime to be fully active (critical for wake from sleep)
+    // ✅ 2️⃣ Wait for JS runtime to be fully active (critical for wake from sleep)
     await waitForAppForeground();
+    
+    // ✅ 3️⃣ Small delay for React hydration
+    await new Promise(r => setTimeout(r, 200));
+    console.log('CALLKEEP: app ready, JS hydrated');
   }
 
   try {
@@ -194,10 +193,22 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   console.log('CALLKEEP: answerCall using payload', callData);
   
-  // ✅ 4️⃣ Small delay before navigation (reduced since AppState wait is more reliable)
-  setTimeout(() => {
-    navigateToActiveCall(callData);
-  }, 300);
+  // ✅ 4️⃣ Navigate to call screen
+  const success = await navigateToActiveCall(callData);
+  
+  // ✅ 5️⃣ ONLY dismiss system UI after successful navigation
+  if (Platform.OS === 'android' && success) {
+    isDismissingSystemUI = true;
+    RNCallKeep.endCall(callUUID);
+    console.log('CALLKEEP: dismissed system UI after navigation success');
+  }
+  
+  // ✅ 6️⃣ Clear stale data after successful answer
+  if (success) {
+    console.log('CALLKEEP: clearing stored call data after successful navigation');
+    await clearStoredCallData();
+    global.incomingCallData = null;
+  }
 };
 
 const clearCallData = async () => {
