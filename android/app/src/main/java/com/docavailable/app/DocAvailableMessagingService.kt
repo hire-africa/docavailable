@@ -3,9 +3,9 @@ package com.docavailable.app
 import android.content.Intent
 import android.util.Log
 import com.google.firebase.messaging.RemoteMessage
-import io.invertase.firebase.messaging.ReactNativeFirebaseMessagingService
+import com.google.firebase.messaging.FirebaseMessagingService
 
-class DocAvailableMessagingService : ReactNativeFirebaseMessagingService() {
+class DocAvailableMessagingService : FirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
     super.onMessageReceived(remoteMessage)
 
@@ -28,8 +28,12 @@ class DocAvailableMessagingService : ReactNativeFirebaseMessagingService() {
 
     Log.d(TAG, "Incoming call FCM received: session=$sessionId, doctor=$doctorName")
 
-    val intent = Intent(applicationContext, IncomingCallActivity::class.java).apply {
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    val intent = Intent(applicationContext, MainActivity::class.java).apply {
+      addFlags(
+        Intent.FLAG_ACTIVITY_NEW_TASK or
+          Intent.FLAG_ACTIVITY_CLEAR_TOP or
+          Intent.FLAG_ACTIVITY_SINGLE_TOP
+      )
       putExtra("sessionId", sessionId)
       putExtra("doctorId", doctorId)
       putExtra("callerName", doctorName)
@@ -40,7 +44,7 @@ class DocAvailableMessagingService : ReactNativeFirebaseMessagingService() {
 
     try {
       startActivity(intent)
-      Log.d(TAG, "Launched IncomingCallActivity from FCM service")
+      Log.d(TAG, "Launched MainActivity for incoming call")
     } catch (error: Exception) {
       Log.e(TAG, "Failed to launch IncomingCallActivity", error)
     }

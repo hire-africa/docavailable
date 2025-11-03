@@ -49,13 +49,14 @@ class MainActivity : ReactActivity() {
   
   private fun handleIncomingCallIntent(intent: Intent?) {
     if (intent?.getBooleanExtra("isIncomingCall", false) == true) {
+      val answeredFromNative = intent.getBooleanExtra("answeredFromNative", false)
       val data = Arguments.createMap().apply {
         putString("sessionId", intent.getStringExtra("sessionId") ?: "")
         putString("doctorId", intent.getStringExtra("doctorId") ?: "")
         putString("doctorName", intent.getStringExtra("doctorName") ?: "")
         putString("callType", intent.getStringExtra("callType") ?: "audio")
         putBoolean("isIncomingCall", true)
-        putBoolean("answeredFromNative", true)
+        putBoolean("answeredFromNative", answeredFromNative)
       }
 
       emitNativeIncomingCall(data)
