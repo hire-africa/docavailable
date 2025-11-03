@@ -73,7 +73,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "852cddc5-e7b0-4afc-9b7f-8e4dd75e10f6"
+        projectId: "6878ac38-f00b-4338-8b07-b12718ee7698",
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

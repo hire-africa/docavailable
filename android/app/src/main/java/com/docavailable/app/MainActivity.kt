@@ -7,6 +7,12 @@ import android.content.Intent
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.ReactInstanceEventListener
+import com.facebook.react.ReactInstanceManager
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
@@ -22,13 +28,20 @@ class MainActivity : ReactActivity() {
     SplashScreenManager.registerOnActivity(this)
     // @generated end expo-splashscreen
     
+    super.onCreate(null)
+
     // Handle native incoming call intent
     handleIncomingCallIntent(intent)
-    
-    super.onCreate(null)
+
+    // Deliver any pending native call once the React context is ready
+    reactNativeHost.reactInstanceManager.addReactInstanceEventListener(object : ReactInstanceEventListener {
+      override fun onReactContextInitialized(context: ReactContext) {
+        deliverPendingNativeCall()
+      }
+    })
   }
   
-  override fun onNewIntent(intent: Intent?) {
+  override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     // Handle incoming call when app is already running
     handleIncomingCallIntent(intent)
@@ -36,24 +49,42 @@ class MainActivity : ReactActivity() {
   
   private fun handleIncomingCallIntent(intent: Intent?) {
     if (intent?.getBooleanExtra("isIncomingCall", false) == true) {
-      // Store call data in React Native global for easy access
-      // This avoids complex bridge communication
+      val data = Arguments.createMap().apply {
+        putString("sessionId", intent.getStringExtra("sessionId") ?: "")
+        putString("doctorId", intent.getStringExtra("doctorId") ?: "")
+        putString("doctorName", intent.getStringExtra("doctorName") ?: "")
+        putString("callType", intent.getStringExtra("callType") ?: "audio")
+        putBoolean("isIncomingCall", true)
+        putBoolean("answeredFromNative", true)
+      }
+
+      emitNativeIncomingCall(data)
+    }
+  }
+
+  private fun emitNativeIncomingCall(data: WritableMap) {
+    val reactInstanceManager: ReactInstanceManager = reactNativeHost.reactInstanceManager
+    val reactContext = reactInstanceManager.currentReactContext
+
+    if (reactContext != null) {
       try {
-        val reactInstanceManager = reactNativeHost.reactInstanceManager
-        reactInstanceManager.currentReactContext?.let { reactContext ->
-          val jsModule = reactContext.getJSModule(com.facebook.react.bridge.DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          jsModule.emit("nativeIncomingCall", com.facebook.react.bridge.Arguments.createMap().apply {
-            putString("sessionId", intent.getStringExtra("sessionId") ?: "")
-            putString("doctorId", intent.getStringExtra("doctorId") ?: "")
-            putString("doctorName", intent.getStringExtra("doctorName") ?: "")
-            putString("callType", intent.getStringExtra("callType") ?: "audio")
-            putBoolean("isIncomingCall", true)
-            putBoolean("answeredFromNative", true)
-          })
-        }
+        val jsModule = reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        jsModule.emit("nativeIncomingCall", data)
       } catch (e: Exception) {
         e.printStackTrace()
+        pendingNativeCallData = data
       }
+    } else {
+      pendingNativeCallData = data
+    }
+  }
+
+  private fun deliverPendingNativeCall() {
+    val data = pendingNativeCallData ?: return
+    // Attempt to emit. If still not ready, keep it queued.
+    emitNativeIncomingCall(data)
+    if (pendingNativeCallData === data) {
+      pendingNativeCallData = null
     }
   }
 
@@ -95,5 +126,10 @@ class MainActivity : ReactActivity() {
       // Use the default back button implementation on Android S
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
+  }
+
+  companion object {
+    @JvmStatic
+    private var pendingNativeCallData: WritableMap? = null
   }
 }
