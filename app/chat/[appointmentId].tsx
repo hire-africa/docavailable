@@ -2872,8 +2872,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -2900,8 +2899,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   const handleCameraPicker = async () => {
     try {
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -3111,8 +3109,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       // Take photo
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -3168,8 +3165,7 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       // Pick image from gallery
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsEditing: false,
         quality: 0.8,
       });
 
