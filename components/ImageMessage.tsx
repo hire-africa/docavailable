@@ -182,7 +182,7 @@ export default function ImageMessage({
                 style={styles.image}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
-                resizeMode="cover"
+                resizeMode="contain"
               />
               
               {/* Upload status overlay */}
@@ -293,13 +293,13 @@ const styles = StyleSheet.create({
   },
   image: {
     width: 200,
-    height: 150,
+    height: 200,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.1)',
   },
   loadingContainer: {
     width: 200,
-    height: 150,
+    height: 200,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     width: 200,
-    height: 150,
+    height: 200,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
