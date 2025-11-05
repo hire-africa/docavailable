@@ -105,26 +105,11 @@ class ProcessFileUpload implements ShouldQueue
      */
     protected function processChatImage(): void
     {
-        $originalPath = $this->filePath;
-        $directory = dirname($originalPath);
-        $filename = basename($originalPath);
-        $nameWithoutExt = pathinfo($filename, PATHINFO_FILENAME);
-        $extension = pathinfo($filename, PATHINFO_EXTENSION);
-
-        // Create optimized versions for chat
-        $sizes = [
-            'thumb' => [100, 100],
-            'preview' => [400, 400],
-        ];
-
-        foreach ($sizes as $size => $dimensions) {
-            $newPath = "{$directory}/{$nameWithoutExt}_{$size}.{$extension}";
-            
-            $this->resizeImage($originalPath, $newPath, $dimensions[0], $dimensions[1], 85);
-        }
-
-        // Clean up original file
-        Storage::disk('public')->delete($originalPath);
+        // Chat images are stored in Spaces, no processing needed
+        // Just log that the image was uploaded successfully
+        Log::info("Chat image uploaded to Spaces: {$this->filePath}");
+        
+        // No cleanup needed - file is already in Spaces
     }
 
     /**
@@ -165,11 +150,11 @@ class ProcessFileUpload implements ShouldQueue
     /**
      * Resize and optimize image
      */
-    protected function resizeImage(string $originalPath, string $newPath, int $width, int $height, int $quality = 90): void
+    protected function resizeImage(string $originalPath, string $newPath, int $width, int $height, int $quality = 90, string $disk = 'public'): void
     {
         try {
-            $fullOriginalPath = Storage::disk('public')->path($originalPath);
-            $fullNewPath = Storage::disk('public')->path($newPath);
+            $fullOriginalPath = Storage::disk($disk)->path($originalPath);
+            $fullNewPath = Storage::disk($disk)->path($newPath);
 
             // Ensure directory exists
             $directory = dirname($fullNewPath);
