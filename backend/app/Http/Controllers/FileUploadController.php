@@ -396,10 +396,12 @@ class FileUploadController extends Controller
             // Create folder structure: chat_images/appointment_{id}/
             $folder = 'chat_images/appointment_' . $appointmentId;
             $filename = time() . '_' . Str::random(10) . '.' . $extension;
-            $path = $file->storeAs($folder, $filename, 'public');
             
-            // Get the CORRECT URL - use storage path that actually works
-            $url = url("/storage/{$path}");
+            // Store in DigitalOcean Spaces (persistent storage)
+            $path = $file->storeAs($folder, $filename, 'spaces');
+            
+            // Get the public URL from Spaces
+            $url = Storage::disk('spaces')->url($path);
             
             // Dispatch job to process image asynchronously
             \App\Jobs\ProcessFileUpload::dispatch($path, 'chat_image', $user->id, ['appointment_id' => $appointmentId]);
