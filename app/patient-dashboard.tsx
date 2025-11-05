@@ -4,7 +4,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -37,6 +37,7 @@ import CacheManagementModal from '../components/CacheManagementModal';
 import ChatbotModal from '../components/ChatbotModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
+import DoctorCard from '../components/DoctorCard';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
@@ -54,6 +55,7 @@ import { useThemeColor } from '@/hooks/useThemeColor';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
+import FilterModal from '../components/FilterModal';
 import IncompleteProfileBlock from '../components/IncompleteProfileBlock';
 import OnboardingOverlay from '../components/OnboardingOverlay';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
@@ -199,6 +201,7 @@ export default function PatientDashboard() {
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   // Function to refresh subscription data
   const refreshSubscriptionData = useCallback(async () => {
@@ -1281,7 +1284,8 @@ export default function PatientDashboard() {
     return LocationService.formatCurrency(amount, currency);
   };
 
-  const getFilteredAndSortedDoctors = () => {
+  // Memoize filtered and sorted doctors to prevent unnecessary recalculations
+  const filteredAndSortedDoctors = useMemo(() => {
     let filteredDoctors = doctors;
 
     // Filter by online status if toggle is enabled
@@ -1344,7 +1348,7 @@ export default function PatientDashboard() {
       default:
         return filteredDoctors;
     }
-  };
+  }, [doctors, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
 
   const getSortOptionLabel = (value: string) => {
     switch (value) {
@@ -1357,9 +1361,10 @@ export default function PatientDashboard() {
     }
   };
 
-  const handleViewDoctorDetails = (doctor: any) => {
+  // Memoize event handler to prevent unnecessary re-renders
+  const handleViewDoctorDetails = useCallback((doctor: any) => {
     router.push({ pathname: '/(tabs)/doctor-details/[uid]', params: { uid: doctor.id } });
-  };
+  }, [router]);
 
   const handleBookAppointment = (doctor: any) => {
     setDoctorToBook(doctor);
@@ -2461,7 +2466,7 @@ export default function PatientDashboard() {
       
       {/* Search and Filter Container */}
       <View style={styles.searchFilterContainer}>
-        {/* Search Bar */}
+        {/* Search Bar with Filter Button */}
         <View style={styles.searchBarContainer}>
           <View style={styles.searchBar}>
             <Icon name="search" size={20} color="#4CAF50" />
@@ -2477,111 +2482,82 @@ export default function PatientDashboard() {
                 <Icon name="times" size={18} color="#666" />
               </TouchableOpacity>
             )}
+            <TouchableOpacity 
+              style={styles.filterButton}
+              onPress={() => setShowFilterModal(true)}
+            >
+              <FontAwesome name="sliders" size={18} color="#4CAF50" />
+              {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
+                <View style={styles.filterBadge}>
+                  <Text style={styles.filterBadgeText}>
+                    {[showOnlyOnline, selectedSpecialization, sortBy !== 'name'].filter(Boolean).length}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Filter and Sort Row */}
-        <View style={styles.filterSortRow}>
-          {/* Online Filter Toggle */}
-          <TouchableOpacity 
-            style={[styles.onlineFilter, showOnlyOnline && styles.onlineFilterActive]}
-            onPress={() => setShowOnlyOnline(!showOnlyOnline)}
-          >
-            <Icon 
-              name={showOnlyOnline ? "check" : "circle-o"} 
-              size={16} 
-              color={showOnlyOnline ? "#FFFFFF" : "#4CAF50"} 
-            />
-            <Text style={[styles.onlineFilterText, showOnlyOnline && styles.onlineFilterTextActive]}>
-              Online Only
-            </Text>
-          </TouchableOpacity>
-
-          {/* Sort Dropdown */}
-          <TouchableOpacity 
-            style={styles.sortDropdown}
-            onPress={() => setShowSortOptions(!showSortOptions)}
-          >
-            <Text style={styles.sortDropdownText}>
-              Sort: {getSortOptionLabel(sortBy)}
-            </Text>
-            <Icon 
-              name={showSortOptions ? "chevron-up" : "chevron-down"} 
-              size={16} 
-              color="#4CAF50" 
-            />
-          </TouchableOpacity>
-
-          {/* Specialization Filter */}
-          <TouchableOpacity 
-            style={[styles.specializationFilter, selectedSpecialization && styles.specializationFilterActive]}
-            onPress={() => setShowSpecializationModal(true)}
-          >
-            <Icon name="sort" size={16} color={selectedSpecialization ? "#FFFFFF" : "#4CAF50"} />
-            <Text style={[styles.specializationFilterText, selectedSpecialization && styles.specializationFilterTextActive]}>
-              {selectedSpecialization ? 'Specialty' : 'All'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Sort Options Dropdown */}
-        {showSortOptions && (
-          <View style={styles.sortOptionsContainer}>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortBy === 'name' && styles.sortOptionActive]}
-              onPress={() => {
-                setSortBy('name');
-                setShowSortOptions(false);
-              }}
+        {/* Active Filters Chips */}
+        {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
+          <View style={styles.activeFiltersContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.activeFiltersContent}
             >
-              <Text style={[styles.sortOptionText, sortBy === 'name' && styles.sortOptionTextActive]}>
-                Name (A-Z)
-              </Text>
-              {sortBy === 'name' && <Icon name="check" size={16} color="#4CAF50" />}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortBy === 'rating' && styles.sortOptionActive]}
-              onPress={() => {
-                setSortBy('rating');
-                setShowSortOptions(false);
-              }}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'rating' && styles.sortOptionTextActive]}>
-                Rating (High to Low)
-              </Text>
-              {sortBy === 'rating' && <Icon name="check" size={16} color="#4CAF50" />}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortBy === 'experience' && styles.sortOptionActive]}
-              onPress={() => {
-                setSortBy('experience');
-                setShowSortOptions(false);
-              }}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'experience' && styles.sortOptionTextActive]}>
-                Experience (High to Low)
-              </Text>
-              {sortBy === 'experience' && <Icon name="check" size={16} color="#4CAF50" />}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.sortOption, sortBy === 'specialization' && styles.sortOptionActive]}
-              onPress={() => {
-                setSortBy('specialization');
-                setShowSortOptions(false);
-              }}
-            >
-              <Text style={[styles.sortOptionText, sortBy === 'specialization' && styles.sortOptionTextActive]}>
-                Specialization (A-Z)
-              </Text>
-              {sortBy === 'specialization' && <Icon name="check" size={16} color="#4CAF50" />}
-            </TouchableOpacity>
+              {showOnlyOnline && (
+                <View style={styles.activeFilterChip}>
+                  <Icon name="online" size={10} color="#4CAF50" style={{ marginRight: 6 }} />
+                  <Text style={styles.activeFilterChipText}>Online Only</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowOnlyOnline(false)}
+                    style={styles.removeFilterButton}
+                  >
+                    <Icon name="times" size={12} color="#4CAF50" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {selectedSpecialization && (
+                <View style={styles.activeFilterChip}>
+                  <Text style={styles.activeFilterChipText}>{selectedSpecialization}</Text>
+                  <TouchableOpacity 
+                    onPress={() => setSelectedSpecialization('')}
+                    style={styles.removeFilterButton}
+                  >
+                    <Icon name="times" size={12} color="#4CAF50" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {sortBy !== 'name' && (
+                <View style={styles.activeFilterChip}>
+                  <Text style={styles.activeFilterChipText}>Sort: {getSortOptionLabel(sortBy)}</Text>
+                  <TouchableOpacity 
+                    onPress={() => setSortBy('name')}
+                    style={styles.removeFilterButton}
+                  >
+                    <Icon name="times" size={12} color="#4CAF50" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              <TouchableOpacity 
+                style={styles.clearAllFiltersButton}
+                onPress={() => {
+                  setShowOnlyOnline(false);
+                  setSelectedSpecialization('');
+                  setSortBy('name');
+                }}
+              >
+                <Text style={styles.clearAllFiltersText}>Clear All</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         )}
       </View>
 
       {/* Doctors List */}
       <View style={styles.doctorsListNew}>
-        {loadingDoctors ? (
+        {loadingDoctors && doctors.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.light.tint} />
             <Text style={styles.loadingText}>Loading doctors...</Text>
@@ -2640,7 +2616,7 @@ export default function PatientDashboard() {
               <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
           </View>
-        ) : getFilteredAndSortedDoctors().length === 0 ? (
+        ) : filteredAndSortedDoctors.length === 0 ? (
           <View style={styles.noResultsContainer}>
             <Text style={styles.noResultsText}>No doctors found</Text>
             <Text style={styles.noResultsSubtext}>
@@ -2648,128 +2624,12 @@ export default function PatientDashboard() {
             </Text>
           </View>
         ) : (
-          getFilteredAndSortedDoctors().map((doctor) => (
-            <View key={doctor.id} style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 16,
-              padding: 16,
-              marginBottom: 12,
-              flexDirection: 'row',
-              alignItems: 'flex-start',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 3,
-              borderWidth: 1,
-              borderColor: '#F0F0F0',
-              alignSelf: 'stretch',
-            }}>
-              <View style={{ flex: 1, marginRight: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                  <Text style={{
-                    fontSize: 11,
-                    fontWeight: '600',
-                    color: '#4CAF50',
-                    backgroundColor: '#E8F5E8',
-                    paddingHorizontal: 6,
-                    paddingVertical: 3,
-                    borderRadius: 10,
-                  }}>{doctor.country || 'Location not set'}</Text>
-                </View>
-                <Text style={{
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  color: '#222',
-                  marginBottom: 4,
-                }}>
-                  {`Dr. ${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown'}
-                </Text>
-                <Text style={{
-                  fontSize: 13,
-                  color: '#666',
-                  marginBottom: 6,
-                  lineHeight: 18,
-                }}>
-                  {(() => {
-                    let specializationText = '';
-                    if (doctor.specializations && Array.isArray(doctor.specializations) && doctor.specializations.length > 0) {
-                      specializationText = doctor.specializations.join(', ');
-                    } else {
-                      specializationText = doctor.specialization || 'General Medicine';
-                    }
-                    return `${specializationText} • ${doctor.years_of_experience || 0}+ years`;
-                  })()}
-                </Text>
-                
-                {doctor.languages_spoken && doctor.languages_spoken.length > 0 && (
-                  <Text style={{
-                    fontSize: 11,
-                    color: '#888',
-                    marginBottom: 8,
-                    fontStyle: 'italic',
-                  }}>
-                    Languages: {doctor.languages_spoken.join(', ')}
-                  </Text>
-                )}
-                <TouchableOpacity 
-                  style={{
-                    backgroundColor: '#4CAF50',
-                    paddingHorizontal: 20,
-                    paddingVertical: 12,
-                    borderRadius: 12,
-                    alignSelf: 'flex-start',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 4,
-                    elevation: 3,
-                  }}
-                  onPress={() => handleViewDoctorDetails(doctor)}
-                >
-                  <Text style={{
-                    color: '#FFFFFF',
-                    fontSize: 15,
-                    fontWeight: 'bold',
-                  }}>View Profile</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ position: 'relative' }}>
-                <DoctorProfilePicture
-                  profilePictureUrl={doctor.profile_picture_url}
-                  profilePicture={doctor.profile_picture}
-                  size={90}
-                  style={{
-                    borderRadius: 45,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.15,
-                    shadowRadius: 8,
-                    elevation: 4,
-                  }}
-                  name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
-                />
-                {/* Green dot for online doctors */}
-                {doctor.is_online && (
-                  <View style={{
-                    position: 'absolute',
-                    bottom: 4,
-                    right: 4,
-                    width: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    backgroundColor: '#4CAF50',
-                    borderWidth: 2,
-                    borderColor: '#FFFFFF',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 4,
-                    elevation: 3,
-                  }} />
-                )}
-              </View>
-            </View>
+          filteredAndSortedDoctors.map((doctor) => (
+            <DoctorCard
+              key={doctor.id}
+              doctor={doctor}
+              onPress={handleViewDoctorDetails}
+            />
           ))
         )}
       </View>
@@ -4206,6 +4066,23 @@ export default function PatientDashboard() {
         onSpecializationChange={setSelectedSpecialization}
         availableSpecializations={availableSpecializations}
       />
+
+      {/* New Filter Modal */}
+      <FilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        filters={{
+          showOnlyOnline,
+          selectedSpecialization,
+          sortBy
+        }}
+        onApplyFilters={(filters) => {
+          setShowOnlyOnline(filters.showOnlyOnline);
+          setSelectedSpecialization(filters.selectedSpecialization);
+          setSortBy(filters.sortBy);
+        }}
+        availableSpecializations={availableSpecializations}
+      />
       
       {/* Onboarding Overlay */}
       <OnboardingOverlay
@@ -5155,18 +5032,28 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   filterButton: {
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    position: 'relative',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginLeft: 8,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  filterBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   filterButtonActive: {
     backgroundColor: '#4CAF50',
@@ -5186,7 +5073,7 @@ const styles = StyleSheet.create({
   // New Search and Filter Styles
   searchFilterContainer: {
     marginHorizontal: 20,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   searchBarContainer: {
     marginBottom: 16,
@@ -5332,6 +5219,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: 2,
     marginBottom: 40,
+    marginTop: -18,
     paddingHorizontal: 0,
   },
   doctorCardNew: {
@@ -5904,6 +5792,48 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  // Active Filter Chips Styles
+  activeFiltersContainer: {
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  activeFiltersContent: {
+    paddingRight: 20,
+    gap: 8,
+  },
+  activeFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    gap: 6,
+  },
+  activeFilterChipText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
+  },
+  removeFilterButton: {
+    marginLeft: 4,
+    padding: 2,
+  },
+  clearAllFiltersButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  clearAllFiltersText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
   },
 });
 

@@ -26,6 +26,7 @@ import { navigateToLogin } from '../utils/navigationUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 import SignUpErrorHandler from '../utils/errorHandler';
 import ValidationUtils from '../utils/validationUtils';
+import EnhancedValidation from '../utils/enhancedValidation';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -760,14 +761,13 @@ export default function DoctorSignUp() {
 
         setErrors(newErrors as any);
         
-        // Scroll to first error if validation fails
-        if (Object.keys(newErrors).length > 0) {
-            setTimeout(() => {
-                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
-            }, 100);
-        }
+        // Use enhanced validation for better scrolling
+        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+            showAlert: false,
+            scrollDelay: 100
+        });
         
-        return Object.keys(newErrors).length === 0;
+        return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const validateStep2 = () => {
@@ -814,14 +814,13 @@ export default function DoctorSignUp() {
 
         setErrors(newErrors as any);
         
-        // Scroll to first error if validation fails
-        if (Object.keys(newErrors).length > 0) {
-            setTimeout(() => {
-                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
-            }, 100);
-        }
+        // Use enhanced validation for better scrolling
+        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+            showAlert: false,
+            scrollDelay: 100
+        });
         
-        return Object.keys(newErrors).length === 0;
+        return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const validateStep3 = () => {
@@ -830,14 +829,13 @@ export default function DoctorSignUp() {
 
         setErrors(newErrors as any);
         
-        // Scroll to first error if validation fails
-        if (Object.keys(newErrors).length > 0) {
-            setTimeout(() => {
-                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
-            }, 100);
-        }
+        // Use enhanced validation for better scrolling
+        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+            showAlert: false,
+            scrollDelay: 100
+        });
         
-        return Object.keys(newErrors).length === 0;
+        return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const sendVerificationCode = async () => {
@@ -1065,10 +1063,12 @@ export default function DoctorSignUp() {
                     (validationErrors) => {
                         // Handle validation errors by setting them in state
                         setErrors(validationErrors);
-                        // Scroll to first error field
-                        setTimeout(() => {
-                            scrollToFirstError(scrollViewRef, validationErrors, fieldRefs);
-                        }, 100);
+                        // Use enhanced validation for better scrolling
+                        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+                            showAlert: false,
+                            scrollDelay: 100
+                        });
+                        EnhancedValidation.validateAndScroll(validationErrors, validationConfig);
                     },
                     () => handleSignUp(), // Retry function
                     () => router.replace('/login') // Login function

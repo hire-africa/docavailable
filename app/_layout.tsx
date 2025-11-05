@@ -2,8 +2,8 @@ import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportan
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { PermissionsAndroid, Platform, NativeEventEmitter, NativeModules } from 'react-native';
+import { useEffect, useState } from 'react';
+import { PermissionsAndroid, Platform, NativeEventEmitter, NativeModules, ActivityIndicator, View, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../contexts/AuthContext';
@@ -19,6 +19,7 @@ import fullScreenPermissionService from '../services/fullScreenPermissionService
 
 export default function RootLayout() {
   const router = useRouter();
+  const [isCallBooting, setIsCallBooting] = useState(true);
   
   // Request phone permissions for call handling
   const requestPhonePermissions = async () => {
@@ -48,10 +49,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     const incomingCallModule: any = NativeModules?.IncomingCallModule;
+    let isMounted = true;
 
     if (!incomingCallModule) {
       console.log('⚠️ IncomingCallModule not available on NativeModules');
-      return;
+      if (isMounted) {
+        setIsCallBooting(false);
+      }
+      return () => {
+        isMounted = false;
+      };
     }
 
     const emitter = new NativeEventEmitter(incomingCallModule);
@@ -81,6 +88,9 @@ export default function RootLayout() {
 
       console.log('📞 [IncomingCallBridge] Routing incoming call from native event', normalizedPayload);
       routeIncomingCall(router, normalizedPayload as any);
+      if (isMounted) {
+        setIsCallBooting(false);
+      }
     };
 
     const subscription = emitter.addListener('incomingCallShow', handleIncomingCall);
@@ -92,14 +102,20 @@ export default function RootLayout() {
           if (pending) {
             console.log('📞 [IncomingCallBridge] Processing pending incoming call payload', pending);
             handleIncomingCall(pending);
+            return;
           }
         } catch (error) {
           console.warn('⚠️ [IncomingCallBridge] Failed to fetch pending incoming call', error);
         }
       }
+
+      if (isMounted) {
+        setIsCallBooting(false);
+      }
     })();
 
     return () => {
+      isMounted = false;
       subscription.remove();
     };
   }, [router]);
@@ -436,51 +452,58 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <Stack>
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="doctor-signup" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="patient-signup" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="google-signup-questions" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="forgot-password" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="password-reset/[token]" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="verify-reset-code" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="reset-password-with-code" options={{ headerShown: false, gestureEnabled: true }} />
-          <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="pending-approval" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="doctor-profile" options={{ headerShown: false }} />
-          <Stack.Screen name="patient-profile" options={{ headerShown: false }} />
-          <Stack.Screen name="edit-doctor-profile" options={{ headerShown: false }} />
-          <Stack.Screen name="edit-patient-profile" options={{ headerShown: false }} />
-          <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
-          <Stack.Screen name="notifications-settings" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)/doctor-details/[uid]" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)/doctor-details/BookAppointmentFlow" options={{ headerShown: false }} />
-          <Stack.Screen name="doctor-approval/[uid]" options={{ headerShown: false }} />
-          <Stack.Screen name="appointment-details/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="my-appointments" options={{ headerShown: false }} />
-          
-          <Stack.Screen name="text-session-history" options={{ headerShown: false }} />
-          <Stack.Screen name="blog" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article-2" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article-3" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
-          <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
-          <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
-          <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
-          <Stack.Screen name="help-support" options={{ headerShown: false }} />
-          <Stack.Screen name="payments/checkout" options={{ 
-            headerShown: false,
-            gestureEnabled: true
-          }} />
-          <Stack.Screen name="test-webview" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-        </Stack>
+          {isCallBooting ? (
+            <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator size="large" color="#ffffff" />
+              <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
+            </View>
+          ) : (
+            <Stack>
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="doctor-signup" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="patient-signup" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="google-signup-questions" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="forgot-password" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="password-reset/[token]" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="verify-reset-code" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="reset-password-with-code" options={{ headerShown: false, gestureEnabled: true }} />
+              <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="pending-approval" options={{ headerShown: false, gestureEnabled: false }} />
+              <Stack.Screen name="doctor-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="patient-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="edit-doctor-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="edit-patient-profile" options={{ headerShown: false }} />
+              <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
+              <Stack.Screen name="notifications-settings" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)/doctor-details/[uid]" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)/doctor-details/BookAppointmentFlow" options={{ headerShown: false }} />
+              <Stack.Screen name="doctor-approval/[uid]" options={{ headerShown: false }} />
+              <Stack.Screen name="appointment-details/[id]" options={{ headerShown: false }} />
+              <Stack.Screen name="my-appointments" options={{ headerShown: false }} />
+
+              <Stack.Screen name="text-session-history" options={{ headerShown: false }} />
+              <Stack.Screen name="blog" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-2" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-3" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
+              <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
+              <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
+              <Stack.Screen name="help-support" options={{ headerShown: false }} />
+              <Stack.Screen name="payments/checkout" options={{
+                headerShown: false,
+                gestureEnabled: true
+              }} />
+              <Stack.Screen name="test-webview" options={{ headerShown: false }} />
+              <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+            </Stack>
+          )}
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

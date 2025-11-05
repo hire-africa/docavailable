@@ -7,6 +7,7 @@ import './services/cryptoPolyfill';
 import './firebase-messaging';
 import { router } from 'expo-router';
 import { Platform, AppState, DeviceEventEmitter } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
@@ -27,9 +28,26 @@ if (firebase.apps.length === 0) {
   console.log(' Firebase app initialized:', firebase.apps[0].name);
 }
 
+// Preload auth token before the React tree mounts so cold-start calls bypass auth splash
+if (typeof global !== 'undefined' && !global.preloadedAuthPromise) {
+  global.preloadedAuth = null;
+  global.preloadedAuthPromise = (async () => {
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      if (token) {
+        global.preloadedAuth = token;
+        console.log('🔐 Preloaded auth token before RN mount');
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to preload auth token', e);
+    }
+  })();
+}
+
 // Import CallKeep for call management
 import RNCallKeep from 'react-native-callkeep';
 import callkeepService from './services/callkeepService';
+import ringtoneService from './services/ringtoneService';
 
 // Setup CallKeep on app start
 async function setupCallKeep() {
@@ -168,6 +186,8 @@ const handleNativeIncomingCall = () => {
 // Listen for native incoming call events from MainActivity
 DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
   console.log('CALLKEEP: Received native incoming call event:', callData);
+  // Start custom ringtone
+  ringtoneService.start();
   
   // Navigate to call screen with native data
   navigateToActiveCall({
@@ -182,6 +202,9 @@ DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
 
 const handleAnswerCall = async ({ callUUID }) => {
   console.log('CALLKEEP: answerCall event', callUUID);
+
+  // Stop ringtone when answering
+  try { await ringtoneService.stop(); } catch {}
 
   const callData = await ensureCallData(callUUID);
   const sessionId = callData?.appointmentId || callData?.appointment_id;
@@ -240,6 +263,9 @@ const clearCallData = async () => {
 const handleEndCall = async ({ callUUID, reason }) => {
   console.log('CALLKEEP: endCall event', callUUID, 'reason:', reason);
 
+  // Ensure ringtone stops on end
+  try { await ringtoneService.stop(); } catch {}
+
   // ✅ Don't clear data if we're just dismissing system UI
   if (isDismissingSystemUI) {
     console.log('CALLKEEP: endCall ignored (dismissing system UI, keeping call data)');
@@ -258,6 +284,8 @@ const handleEndCall = async ({ callUUID, reason }) => {
 
 const handleDidDisplayIncomingCall = ({ callUUID }) => {
   console.log('CALLKEEP: didDisplayIncomingCall', callUUID);
+  // Start custom ringtone when system UI is displayed
+  ringtoneService.start();
 };
 
 const bootstrapPendingCallCheck = async () => {

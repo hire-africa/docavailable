@@ -146,8 +146,24 @@ class ApiService {
 
     // Response interceptor to handle token refresh
     this.api.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Detect HTML responses (backend errors)
+        if (response.data && typeof response.data === 'string' && (response.data.includes('<!DOCTYPE') || response.data.includes('<html'))) {
+          console.error('❌ [ApiService] Backend returned HTML instead of JSON - deployment issue detected');
+          console.error('Response preview:', response.data.substring(0, 200));
+          throw new Error('Backend deployment error: Received HTML instead of JSON');
+        }
+        return response;
+      },
       async (error) => {
+        // Check if error response is HTML
+        if (error.response?.data && typeof error.response.data === 'string') {
+          if (error.response.data.includes('<!DOCTYPE') || error.response.data.includes('<html')) {
+            console.error(' [ApiService] Backend error returned HTML page');
+            console.error('HTML preview:', error.response.data.substring(0, 300));
+            error.message = 'Backend error: Server returned HTML error page instead of JSON';
+          }
+        }
         const originalRequest = error.config;
 
         // Only attempt refresh for 401 errors (authentication issues), not 500 errors (server issues)

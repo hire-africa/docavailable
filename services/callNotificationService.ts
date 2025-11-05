@@ -1,5 +1,6 @@
 import { Notifications } from 'expo-notifications';
 import apiService from '../app/services/apiService';
+import ringtoneService from './ringtoneService';
 
 export class CallNotificationService {
   private static instance: CallNotificationService;
@@ -23,6 +24,8 @@ export class CallNotificationService {
     callerProfilePicture?: string;
   }): Promise<string> {
     try {
+      // Start custom ringtone
+      await ringtoneService.start();
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: `${callData.callerName} - ${callData.callType === 'video' ? 'Video Call' : 'Voice Call'}`,
@@ -38,7 +41,7 @@ export class CallNotificationService {
             fullScreenAction: true,
             channelId: 'calls',
           },
-          sound: 'default',
+          sound: null, // Disable default sound, use custom ringtone instead
           priority: Notifications.AndroidNotificationPriority.HIGH,
           vibrate: [0, 250, 250, 250],
           categoryId: 'incoming_call',
@@ -65,6 +68,9 @@ export class CallNotificationService {
    */
   async dismissCallNotification(notificationId?: string): Promise<void> {
     try {
+      // Stop custom ringtone
+      await ringtoneService.stop();
+      
       const id = notificationId || this.activeCallNotificationId;
       if (id) {
         await Notifications.dismissNotificationAsync(id);
@@ -86,7 +92,8 @@ export class CallNotificationService {
     sessionId?: string;
   }): Promise<void> {
     try {
-      // Dismiss the notification
+      // Stop ringtone and dismiss notification
+      await ringtoneService.stop();
       await this.dismissCallNotification();
 
       // Send decline signal to backend
@@ -113,7 +120,8 @@ export class CallNotificationService {
     sessionId?: string;
   }): Promise<void> {
     try {
-      // Dismiss the notification
+      // Stop ringtone and dismiss notification
+      await ringtoneService.stop();
       await this.dismissCallNotification();
 
       // Send answer signal to backend

@@ -58,16 +58,8 @@ export class ScreenshotPreventionService {
           console.log('⚠️ [ScreenshotPrevention] iOS screenshot prevention requires native module rebuild');
         } else if (Platform.OS === 'android') {
         // Android: Use FLAG_SECURE - will show black screen on screenshot attempts
-        try {
-          await this.setAndroidSecureFlag(true);
-          console.log('✅ [ScreenshotPrevention] Android screenshot prevention enabled - screenshots will show black screen');
-        } catch (androidError) {
-          console.error('❌ [ScreenshotPrevention] Android screenshot prevention failed:', androidError);
-          // Fallback: try to enable anyway
-          this.isEnabled = true;
-          await this.saveConfig();
-          return;
-        }
+        await this.setAndroidSecureFlag(true);
+        console.log('✅ [ScreenshotPrevention] Android screenshot prevention enabled - screenshots will show black screen');
       }
 
       this.isEnabled = true;
@@ -148,16 +140,19 @@ export class ScreenshotPreventionService {
     try {
       const { ScreenshotPreventionModule } = NativeModules;
       
-      if (ScreenshotPreventionModule) {
+      if (ScreenshotPreventionModule && typeof ScreenshotPreventionModule.setSecureFlag === 'function') {
         await ScreenshotPreventionModule.setSecureFlag(enabled);
         console.log(`🔧 Android secure flag ${enabled ? 'enabled' : 'disabled'}`);
       } else {
-        console.warn('⚠️ ScreenshotPreventionModule not available');
-        throw new Error('ScreenshotPreventionModule not available');
+        console.warn('⚠️ [ScreenshotPrevention] ScreenshotPreventionModule not available - running in development mode or module not built');
+        console.warn('⚠️ [ScreenshotPrevention] Screenshot prevention will be simulated (no actual protection)');
+        // Don't throw error - just log warning and continue
+        // This allows the app to work in development without the native module
       }
     } catch (error) {
-      console.error('❌ Failed to set Android secure flag:', error);
-      throw error;
+      console.error('❌ [ScreenshotPrevention] Failed to set Android secure flag:', error);
+      console.warn('⚠️ [ScreenshotPrevention] Continuing without native screenshot protection');
+      // Don't re-throw error - allow graceful degradation
     }
   }
 

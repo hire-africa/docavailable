@@ -26,6 +26,18 @@ Schedule::command('sessions:process-auto-deductions')
     ->withoutOverlapping()
     ->runInBackground();
 
+// NEW: Cleanup stale call connections every minute
+Schedule::command('calls:cleanup-stale-connections')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// Enhanced: Expire appointments every 30 minutes
+Schedule::command('appointments:expire')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Note: Auto-ending for text sessions is handled by the existing ProcessExpiredTextSessions command
 // This provides reliable session ending without queue complexity
 

@@ -42,6 +42,12 @@ import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
+
+// Extended ChatMessage type with upload tracking
+interface ExtendedChatMessage extends ChatMessage {
+  _isUploaded?: boolean;
+  server_media_url?: string; // Store server URL separately from display URL
+}
 import {
   getUserTimezone,
   isAppointmentTimeReached
@@ -85,35 +91,69 @@ interface TextSessionInfo {
 }
 
 // Safe merge helper to always return a new, deduped, sorted array
-function safeMergeMessages(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMessage[]): ExtendedChatMessage[] {
   try {
-    const map = new Map<string, ChatMessage>();
+    const map = new Map<string, ExtendedChatMessage>();
     
-    // Add existing messages to map
-    for (const m of prev) {
-      const key = String(m.id);
-      map.set(key, m);
+    // Add all existing messages to map
+    for (const msg of prev) {
+      const key = String(msg.id);
+      map.set(key, msg);
     }
     
-    // Add new messages, only if they don't already exist
+    // Add incoming messages, avoiding duplicates and handling immediate image messages
     for (const msg of incoming) {
       const key = String(msg.id);
+      
+      // Check if this is a duplicate of an immediate image message
+      if (msg.message_type === 'image' && msg.media_url) {
+        // Extract filename from URL for comparison
+        const incomingFilename = msg.media_url.split('/').pop()?.split('?')[0];
+        
+        // Look for existing message with matching characteristics
+        const isDuplicate = prev.some(existingMsg => {
+          if (existingMsg.message_type !== 'image') return false;
+          
+          // Check 1: Same server URL
+          if (existingMsg.server_media_url === msg.media_url) return true;
+          
+          // Check 2: Same filename in server_media_url
+          const existingFilename = existingMsg.server_media_url?.split('/').pop()?.split('?')[0];
+          if (existingFilename && incomingFilename && existingFilename === incomingFilename) {
+            return true;
+          }
+          
+          // Check 3: Message uploaded recently (within 10 seconds) with same filename pattern
+          const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
+          if (existingMsg._isUploaded && timeDiff < 10000 && existingFilename === incomingFilename) {
+            return true;
+          }
+          
+          return false;
+        });
+        
+        if (isDuplicate) {
+          console.log('🔄 Skipping duplicate image:', incomingFilename);
+          continue;
+        }
+      }
+      
       if (!map.has(key)) {
         map.set(key, msg);
-        console.log('🔄 [safeMergeMessages] Adding new message:', { id: msg.id, message: msg.message });
+        console.log(' [safeMergeMessages] Adding new message:', { id: msg.id, message: msg.message });
       } else {
-        console.log('🔄 [safeMergeMessages] Message already exists, skipping:', { id: msg.id, message: msg.message });
+        console.log(' [safeMergeMessages] Message already exists, skipping:', { id: msg.id, message: msg.message });
       }
     }
     
-    const arr = Array.from(map.values());
-    arr.sort((a, b) => {
-      const ta = new Date(a.created_at || 0).getTime();
-      const tb = new Date(b.created_at || 0).getTime();
+    // Convert to sorted array
+    const arr = Array.from(map.values()).sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
       return ta - tb;
     });
     
-    console.log('🔄 [safeMergeMessages] Result:', { 
+    console.log(' [safeMergeMessages] Result:', { 
       prevCount: prev.length, 
       incomingCount: incoming.length, 
       resultCount: arr.length 
@@ -151,7 +191,7 @@ export default function ChatPage() {
     enableScreenshotProtection();
   }, [enableScreenshotPrevention]);
   
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -2989,10 +3029,84 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  // Function to add immediate image message with local URI
+  const addImmediateImageMessage = (localImageUri: string): string => {
+    const tempId = `temp_image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const immediateMessage: ExtendedChatMessage = {
+      id: tempId,
+      temp_id: tempId,
+      appointment_id: isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : Number(appointmentId),
+      sender_id: user?.id || 0,
+      sender_name: user?.display_name || 'You',
+      message: '🖼️ Image',
+      message_type: 'image',
+      media_url: localImageUri, // Use local URI initially
+      created_at: new Date().toISOString(),
+      delivery_status: 'sending',
+      is_own_message: true,
+      _isUploaded: false // Mark as not uploaded yet
+    };
+
+    console.log('📤 [Chat] Adding immediate image message:', tempId);
+    setMessages(prev => [...prev, immediateMessage]);
+    scrollToBottom();
+    
+    return tempId;
+  };
+
+  // Function to update image message when upload completes
+  const updateImageMessage = (tempId: string, serverImageUrl: string, messageId?: string | number) => {
+    console.log('✅ [Chat] Image uploaded successfully:', serverImageUrl);
+    
+    setMessages(prev => prev.map(msg => {
+      if (msg.temp_id === tempId || msg.id === tempId) {
+        return {
+          ...msg,
+          id: messageId || msg.id,
+          // Use server URL (backend fixed!)
+          media_url: serverImageUrl,
+          delivery_status: 'sent' as const,
+          // Store server URL for deduplication
+          server_media_url: serverImageUrl,
+          // Mark as uploaded to prevent duplicates
+          _isUploaded: true
+        };
+      }
+      return msg;
+    }));
+  };
+
+  // Function to mark image message as failed
+  const markImageMessageFailed = (tempId: string) => {
+    console.log('❌ [Chat] Marking image message as failed:', tempId);
+    
+    setMessages(prev => prev.map(msg => {
+      if (msg.temp_id === tempId || msg.id === tempId) {
+        return {
+          ...msg,
+          delivery_status: 'failed' as const
+        };
+      }
+      return msg;
+    }));
+  };
+
   // Image handling functions
   const handleTakePhoto = async () => {
     try {
       setSendingCameraImage(true);
+      
+      // Request camera permissions first
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Camera Permission Required',
+          'Please allow camera access to take photos.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       
       // Take photo
       const result = await ImagePicker.launchCameraAsync({
@@ -3004,20 +3118,33 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        console.log('📤 [Camera] Photo taken, sending via WebRTC');
+        console.log('📤 [Camera] Photo taken, adding to chat immediately');
         
-        if (webrtcChatService) {
-          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
-          if (message) {
-            console.log('✅ Camera image sent via WebRTC:', message.id);
+        // Add image to chat immediately with local URI
+        const tempId = addImmediateImageMessage(imageUri);
+        
+        try {
+          if (webrtcChatService) {
+            const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+            if (message && message.media_url) {
+              console.log('✅ Camera image sent via WebRTC:', message.id);
+              updateImageMessage(tempId, message.media_url, message.id);
+            } else {
+              throw new Error('WebRTC image send returned null or no media_url');
+            }
+          } else {
+            console.log('📤 [Camera] WebRTC not available, using backend API fallback');
+            await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
           }
-        } else {
-          console.log('📤 [Camera] WebRTC not available, using backend API fallback');
-          await sendImageMessageViaBackendAPI(imageUri);
+        } catch (sendError) {
+          console.error('❌ [Camera] Failed to send image via WebRTC, trying backend fallback:', sendError);
+          await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
         }
       }
     } catch (error) {
       console.error('❌ Error taking photo:', error);
+      // Show user-friendly error message
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
     } finally {
       setSendingCameraImage(false);
     }
@@ -3026,6 +3153,17 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
   const handlePickImage = async () => {
     try {
       setSendingGalleryImage(true);
+      
+      // Request media library permissions first
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Photo Library Permission Required',
+          'Please allow photo library access to select images.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
       
       // Pick image from gallery
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -3037,20 +3175,33 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        console.log('📤 [Gallery] Image selected, sending via WebRTC');
+        console.log('📤 [Gallery] Image selected, adding to chat immediately');
         
-        if (webrtcChatService) {
-          const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
-          if (message) {
-            console.log('✅ Gallery image sent via WebRTC:', message.id);
+        // Add image to chat immediately with local URI
+        const tempId = addImmediateImageMessage(imageUri);
+        
+        try {
+          if (webrtcChatService) {
+            const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
+            if (message && message.media_url) {
+              console.log('✅ Gallery image sent via WebRTC:', message.id);
+              updateImageMessage(tempId, message.media_url, message.id);
+            } else {
+              throw new Error('WebRTC image send returned null or no media_url');
+            }
+          } else {
+            console.log('📤 [Gallery] WebRTC not available, using backend API fallback');
+            await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
           }
-        } else {
-          console.log('📤 [Gallery] WebRTC not available, using backend API fallback');
-          await sendImageMessageViaBackendAPI(imageUri);
+        } catch (sendError) {
+          console.error('❌ [Gallery] Failed to send image via WebRTC, trying backend fallback:', sendError);
+          await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
         }
       }
     } catch (error) {
       console.error('❌ Error picking image:', error);
+      // Show user-friendly error message
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
     } finally {
       setSendingGalleryImage(false);
     }
@@ -3110,6 +3261,53 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
       }
     } catch (error) {
       console.error('❌ Error sending image message via backend API:', error);
+    }
+  };
+
+  const sendImageMessageViaBackendAPIWithUpdate = async (imageUri: string, tempId: string) => {
+    try {
+      console.log('📤 [Backend] Starting image upload for tempId:', tempId);
+      const { imageService } = await import('../../services/imageService');
+      // Handle text sessions - extract numeric ID
+      let numericAppointmentId: number;
+      if (isTextSession) {
+        numericAppointmentId = parseInt(appointmentId.replace('text_session_', ''), 10);
+      } else {
+        numericAppointmentId = Number(appointmentId);
+      }
+
+      console.log('📤 [Backend] Uploading image to server...');
+      const result = await imageService.uploadImage(numericAppointmentId, imageUri);
+      
+      if (result && result.success && result.imageUrl) {
+        console.log('✅ [Backend] Image uploaded successfully:', {
+          tempId,
+          imageUrl: result.imageUrl,
+          appointmentId: numericAppointmentId
+        });
+        updateImageMessage(tempId, result.imageUrl);
+        
+        // Send the message to the chat
+        console.log('📤 [Backend] Sending image message to chat...');
+        const messageSuccess = await imageService.sendImageMessage(
+          numericAppointmentId,
+          imageUri,
+          user?.id || 0,
+          user?.display_name || 'User'
+        );
+        
+        if (messageSuccess) {
+          console.log('✅ [Backend] Image message sent to chat successfully');
+        } else {
+          console.warn('⚠️ [Backend] Image uploaded but message send failed');
+        }
+      } else {
+        console.error('❌ [Backend] Image upload failed:', result);
+        throw new Error('Image upload failed');
+      }
+    } catch (error) {
+      console.error('❌ [Backend] Error in image upload process:', error);
+      markImageMessageFailed(tempId);
     }
   };
 
@@ -3584,7 +3782,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                 }
               });
             }
-            const uniqueKey = message.id ? `msg_${message.id}` : `temp_${message.temp_id || index}_${message.created_at}`;
+            // Create stable unique key - prefer temp_id for immediate messages, then id, then fallback
+            const uniqueKey = message.temp_id ? `temp_${message.temp_id}` : (message.id ? `msg_${message.id}` : `fallback_${index}_${message.created_at}`);
             
             return (
               <View
@@ -3611,6 +3810,8 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
                         imageUrl={message.media_url}
                         isOwnMessage={message.sender_id === currentUserId}
                         timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        deliveryStatus={message.delivery_status}
+                        appointmentId={appointmentId}
                         profilePictureUrl={
                           message.sender_id === currentUserId
                             ? (user?.profile_picture_url || user?.profile_picture || undefined)
@@ -3718,30 +3919,58 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
             </View>
           )}
 
-          {/* Image Button - DISABLED */}
+          {/* Image Button */}
           <TouchableOpacity
-            onPress={() => {}} // Disabled - no action
-            disabled={true}
+            onPress={handlePickImage}
+            disabled={
+              sendingGalleryImage ||
+              sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+            }
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: 0.3,
+              opacity: (sendingGalleryImage ||
+                sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="image" size={24} color="#999" />
+            <Ionicons name="image" size={24} color={sendingGalleryImage ? "#999" : "#007AFF"} />
           </TouchableOpacity>
           
-          {/* Camera Button - DISABLED */}
+          {/* Camera Button */}
           <TouchableOpacity
-            onPress={() => {}} // Disabled - no action
-            disabled={true}
+            onPress={handleTakePhoto}
+            disabled={
+              sendingCameraImage ||
+              sending || 
+              sessionEnded || 
+              !sessionValid ||
+              (isInstantSession && isSessionExpired) ||
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+            }
             style={{
               padding: 8,
               marginRight: 8,
-              opacity: 0.3,
+              opacity: (sendingCameraImage ||
+                sending || 
+                sessionEnded || 
+                !sessionValid ||
+                (isInstantSession && isSessionExpired) ||
+                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="camera" size={24} color="#999" />
+            <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#007AFF"} />
           </TouchableOpacity>
           
           {/* Voice Recording Button */}

@@ -206,49 +206,68 @@ class TextAppointmentController extends Controller
             $userType = $request->input('user_type');
             $userId = auth()->id();
 
-            // Get the session
-            $session = DB::table('text_appointment_sessions')
-                ->where('appointment_id', $appointmentId)
-                ->where('is_active', true)
-                ->first();
+            // FIX: Use atomic update to prevent race conditions
+            $updated = DB::transaction(function () use ($appointmentId, $userType, $userId) {
+                // Get and lock the session for update
+                $session = DB::table('text_appointment_sessions')
+                    ->where('appointment_id', $appointmentId)
+                    ->where('is_active', true)
+                    ->lockForUpdate()
+                    ->first();
 
-            if (!$session) {
+                if (!$session) {
+                    return null;
+                }
+
+                // Prepare atomic update data
+                $updateData = [
+                    'last_activity_time' => now(),
+                    'updated_at' => now(),
+                ];
+
+                if ($userType === 'patient') {
+                    $updateData['has_patient_activity'] = true;
+                } else {
+                    $updateData['has_doctor_activity'] = true;
+                }
+
+                // Atomic update with row lock
+                $affectedRows = DB::table('text_appointment_sessions')
+                    ->where('id', $session->id)
+                    ->where('is_active', true) // Double-check session is still active
+                    ->update($updateData);
+
+                if ($affectedRows > 0) {
+                    Log::info("Text appointment session activity updated atomically", [
+                        'session_id' => $session->id,
+                        'appointment_id' => $appointmentId,
+                        'user_type' => $userType,
+                        'user_id' => $userId,
+                        'last_activity_time' => $updateData['last_activity_time'],
+                    ]);
+
+                    return [
+                        'session_id' => $session->id,
+                        'last_activity_time' => $updateData['last_activity_time'],
+                        'has_patient_activity' => $userType === 'patient' ? true : $session->has_patient_activity,
+                        'has_doctor_activity' => $userType === 'doctor' ? true : $session->has_doctor_activity,
+                    ];
+                }
+
+                return null;
+            });
+
+            if (!$updated) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No active text appointment session found'
+                    'message' => 'No active text appointment session found or session was just ended'
                 ], 404);
             }
-
-            // Update activity
-            $updateData = [
-                'last_activity_time' => now(),
-                'updated_at' => now(),
-            ];
-
-            if ($userType === 'patient') {
-                $updateData['has_patient_activity'] = true;
-            } else {
-                $updateData['has_doctor_activity'] = true;
-            }
-
-            DB::table('text_appointment_sessions')
-                ->where('id', $session->id)
-                ->update($updateData);
-
-            Log::info("Text appointment session activity updated", [
-                'session_id' => $session->id,
-                'appointment_id' => $appointmentId,
-                'user_type' => $userType,
-                'user_id' => $userId,
-            ]);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Activity updated successfully',
-                'data' => [
-                    'session_id' => $session->id,
-                    'last_activity_time' => now(),
-                ]
+                'data' => $updated
             ]);
 
         } catch (\Exception $e) {
@@ -256,6 +275,7 @@ class TextAppointmentController extends Controller
                 'error' => $e->getMessage(),
                 'appointment_id' => $request->input('appointment_id'),
                 'user_id' => auth()->id(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([

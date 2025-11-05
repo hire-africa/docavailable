@@ -64,18 +64,27 @@ class TextSessionController extends Controller
                 ], 404);
             }
 
-            // Removed subscription check - allow all patients to start text sessions
+            // ENFORCE subscription requirement - patients must have active subscription
             $subscription = Subscription::where('user_id', $patientId)
                 ->where('status', 1) // 1 = active, 0 = inactive, 2 = expired
                 ->where('is_active', true)
                 ->first();
 
-            // If no subscription exists, create a temporary one or use default values
+            // Check if subscription exists and is active
             if (!$subscription) {
-                // For testing purposes, we'll allow the session without subscription
-                $sessionsRemaining = 10; // Default sessions
-            } else {
-                $sessionsRemaining = $subscription->text_sessions_remaining ?? 10;
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No active subscription found. Please subscribe to a plan to start a text session.'
+                ], 403);
+            }
+
+            // Check if patient has text sessions remaining
+            $sessionsRemaining = $subscription->text_sessions_remaining ?? 0;
+            if ($sessionsRemaining <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have no text sessions remaining in your subscription. Please upgrade your plan or wait for renewal.'
+                ], 403);
             }
 
             // Check if there's already an active session between this patient and doctor

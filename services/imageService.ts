@@ -1,10 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import environment from '../config/environment';
 import { Alert } from 'react-native';
 
 export interface ImageUploadResult {
   success: boolean;
   mediaUrl?: string;
+  imageUrl?: string; // Add imageUrl for backward compatibility
+  imageId?: string; // ID for fetching signed URLs from private storage
   error?: string;
 }
 
@@ -120,13 +123,28 @@ class ImageService {
   }
 
   /**
-   * Upload image to the server
+   * Upload image to the server (overloaded method)
    */
-  async uploadImage(appointmentId: number, imageUri: string): Promise<ImageUploadResult> {
+  async uploadImage(imageUri: string): Promise<ImageUploadResult>;
+  async uploadImage(appointmentId: number, imageUri: string): Promise<ImageUploadResult>;
+  async uploadImage(appointmentIdOrImageUri: number | string, imageUri?: string): Promise<ImageUploadResult> {
+    // Handle overloaded parameters
+    let actualAppointmentId: number;
+    let actualImageUri: string;
+    
+    if (typeof appointmentIdOrImageUri === 'string') {
+      // Called with just imageUri - use default appointment ID
+      actualImageUri = appointmentIdOrImageUri;
+      actualAppointmentId = 0; // Default value
+    } else {
+      // Called with appointmentId and imageUri
+      actualAppointmentId = appointmentIdOrImageUri;
+      actualImageUri = imageUri!;
+    }
     try {
       console.log('ImageService: Uploading image:', {
-        appointmentId,
-        uri: imageUri.substring(0, 50) + '...',
+        appointmentId: actualAppointmentId,
+        uri: actualImageUri.substring(0, 50) + '...',
       });
 
       const formData = new FormData();
@@ -134,13 +152,13 @@ class ImageService {
       const fileName = `image_${uniqueId}.jpg`;
 
       const fileObject = {
-        uri: imageUri,
+        uri: actualImageUri,
         type: 'image/jpeg',
         name: fileName,
       };
 
       formData.append('file', fileObject as any);
-      formData.append('appointment_id', appointmentId.toString());
+      formData.append('appointment_id', actualAppointmentId.toString());
 
       console.log('ImageService: FormData prepared:', {
         fileName,
@@ -151,42 +169,22 @@ class ImageService {
         })),
       });
 
-      // Try WebRTC server first, fallback to Laravel API
-      const token = await AsyncStorage.getItem('auth_token');
-      console.log('📤 [ImageService] Uploading image via WebRTC server...');
-      
-      try {
-        // First try WebRTC server image endpoint
-        const webrtcResponse = await fetch('https://docavailable.org:8089/api/upload/image', {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (webrtcResponse.ok) {
-          const webrtcData = await webrtcResponse.json();
-          if (webrtcData.success && webrtcData.data?.media_url) {
-            console.log('✅ [ImageService] WebRTC server upload successful');
-            return { success: true, mediaUrl: webrtcData.data.media_url };
-          }
-        }
-      } catch (webrtcError) {
-        console.warn('⚠️ [ImageService] WebRTC server upload failed, trying Laravel API:', webrtcError);
-      }
-
-      // Fallback to Laravel API
-      console.log('📤 [ImageService] Uploading image via Laravel API...');
+      // Upload to backend
+      console.log('📤 [ImageService] Uploading image to backend...');
       const { apiService } = await import('./apiService');
-      const response = await apiService.uploadFile('/upload/chat-image', formData);
+      const responseData = await apiService.uploadFile('/upload/chat-image', formData);
+      console.log('📤 [ImageService] Upload response:', responseData);
       
-      if (response?.data?.media_url) {
-        console.log('✅ [ImageService] Laravel API upload successful');
-        return { success: true, mediaUrl: response.data.media_url };
-      } else {
-        throw new Error('Both WebRTC server and Laravel API upload failed');
+      if (responseData?.success && responseData?.data?.media_url) {
+        console.log('✅ [ImageService] Image uploaded successfully:', responseData.data.media_url);
+        return { 
+          success: true, 
+          mediaUrl: responseData.data.media_url,
+          imageUrl: responseData.data.media_url
+        };
       }
+
+      throw new Error('Upload failed');
     } catch (error: any) {
       console.error('ImageService: Upload error:', error);
       

@@ -1,6 +1,8 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -26,6 +28,10 @@ import { navigateToLogin } from '../utils/navigationUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 import SignUpErrorHandler from '../utils/errorHandler';
 import ValidationUtils from '../utils/validationUtils';
+import SignupProgressUtils from '../utils/signupProgressUtils';
+import AuthErrorHandler from '../utils/authErrorHandler';
+import ProgressIndicator from '../components/ProgressIndicator';
+import EnhancedValidation from '../utils/enhancedValidation';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -59,6 +65,7 @@ interface Step1Props {
     setIdDocument: (uri: string | null) => void;
     errors: any;
     fieldRefs: any;
+    scrollViewRef: React.RefObject<ScrollView>;
 }
 
 interface Step3Props {
@@ -98,6 +105,7 @@ const Step1: React.FC<Step1Props> = ({
     setIdDocument,
     errors,
     fieldRefs,
+    scrollViewRef,
 }) => {
     const genderOptions = ['Male', 'Female', 'Other'];
     const [isUploading, setIsUploading] = useState(false);
@@ -105,7 +113,12 @@ const Step1: React.FC<Step1Props> = ({
     const handleIdUpload = async () => {
         console.log('handleIdUpload called, idType:', idType);
         if (!idType) {
-            Alert.alert('Select ID Type', 'Please select an ID type first.');
+            // Use enhanced validation to scroll to ID type field
+            const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+                showAlert: true,
+                alertTitle: 'Select ID Type'
+            });
+            EnhancedValidation.showValidationError('idType', 'Please select an ID type first.', validationConfig);
             return;
         }
 
@@ -139,7 +152,12 @@ const Step1: React.FC<Step1Props> = ({
     const handleTakePhoto = async () => {
         console.log('handleTakePhoto called, idType:', idType);
         if (!idType) {
-            Alert.alert('Select ID Type', 'Please select an ID type first.');
+            // Use enhanced validation to scroll to ID type field
+            const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+                showAlert: true,
+                alertTitle: 'Select ID Type'
+            });
+            EnhancedValidation.showValidationError('idType', 'Please select an ID type first.', validationConfig);
             return;
         }
 
@@ -177,7 +195,7 @@ const Step1: React.FC<Step1Props> = ({
                 <Text style={styles.stepSubtitle}>Tell us about yourself</Text>
             </View>
 
-            <View style={styles.formSection}>
+            <View ref={fieldRefs.profilePicture} style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Profile Picture</Text>
                 <ProfilePicturePicker
                     imageUri={profilePicture}
@@ -296,7 +314,7 @@ const Step1: React.FC<Step1Props> = ({
                         </Text>
                 
                 <Text style={styles.inputLabel}>Choose ID Type</Text>
-                <View style={styles.idOptionsContainer}>
+                <View ref={fieldRefs.idType} style={styles.idOptionsContainer}>
                     <TouchableOpacity 
                         style={[styles.idOption, idType === 'drivers' && styles.idOptionActive]}
                         onPress={() => {
@@ -561,38 +579,109 @@ export default function PatientSignUp() {
         }
     }, [googleData, source]);
 
-    // Check if user already exists
+    // Restore progress on component mount
+    useEffect(() => {
+        const restoreProgress = async () => {
+            try {
+                const result = await SignupProgressUtils.restoreProgress();
+                
+                if (result.hasProgress && result.progress && result.progress.userType === 'patient') {
+                    const { progress } = result;
+                    const summary = SignupProgressUtils.createProgressSummary(progress);
+                    
+                    Alert.alert(
+                        'Continue Previous Registration?',
+                        `You have an incomplete ${summary.title} (${summary.percentage}% complete). Would you like to continue where you left off?`,
+                        [
+                            {
+                                text: 'Start Fresh',
+                                style: 'destructive',
+                                onPress: async () => {
+                                    await SignupProgressUtils.clearProgress();
+                                }
+                            },
+                            {
+                                text: 'Continue',
+                                onPress: () => {
+                                    // Restore form data
+                                    const data = progress.data;
+                                    if (data.firstName) setFirstName(data.firstName);
+                                    if (data.surname) setSurname(data.surname);
+                                    if (data.email) setEmail(data.email);
+                                    if (data.password) setPassword(data.password);
+                                    if (data.dob) setDob(data.dob);
+                                    if (data.gender) setGender(data.gender);
+                                    if (data.country) setCountry(data.country);
+                                    if (data.city) setCity(data.city);
+                                    if (data.profilePicture) setProfilePicture(data.profilePicture);
+                                    if (data.acceptPolicies) setAcceptPolicies(data.acceptPolicies);
+                                    
+                                    // Restore step
+                                    setStep(progress.step);
+                                    
+                                    console.log('✅ Progress restored successfully');
+                                }
+                            }
+                        ]
+                    );
+                } else if (result.isExpired) {
+                    console.log('⏰ Previous signup progress expired');
+                }
+            } catch (error) {
+                console.error('❌ Failed to restore progress:', error);
+            }
+        };
+
+        // Only restore if not coming from Google OAuth
+        if (!googleData) {
+            restoreProgress();
+        }
+    }, []);
+
+    // Save progress whenever form data changes
+    useEffect(() => {
+        const saveProgress = async () => {
+            if (step > 1 && (firstName || email)) { // Only save if user has started filling the form
+                const formData = {
+                    firstName,
+                    surname,
+                    email,
+                    password,
+                    dob,
+                    gender,
+                    country,
+                    city,
+                    profilePicture,
+                    acceptPolicies
+                };
+                
+                await SignupProgressUtils.saveProgress(step, 'patient', formData);
+            }
+        };
+
+        const timeoutId = setTimeout(saveProgress, 1000); // Debounce saves
+        return () => clearTimeout(timeoutId);
+    }, [step, firstName, surname, email, password, dob, gender, country, city, profilePicture, acceptPolicies]);
+
+    // Check if user already exists using proper endpoint
     const checkIfUserExists = async (email: string) => {
         try {
             console.log('🔐 Patient Signup: Checking if user exists for email:', email);
             
-            // Try to login with dummy password to check if user exists
-            const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/login', {
+            // Use dedicated endpoint to check email existence
+            const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/check-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                 },
-                body: JSON.stringify({
-                    email: email,
-                    password: 'dummy_check_password'
-                })
+                body: JSON.stringify({ email })
             });
 
-            if (response.ok) {
-                // This shouldn't happen, but if it does, user exists
-                console.log('🔐 Patient Signup: Unexpected successful login');
-                return;
-            }
+            const data = await response.json();
+            console.log('🔐 Patient Signup: Email check response:', data);
 
-            const errorData = await response.json();
-            console.log('🔐 Patient Signup: Login check response:', errorData);
-
-            // If error mentions password/credentials, user exists
-            if (errorData.message && (
-                errorData.message.includes('password') || 
-                errorData.message.includes('credentials') ||
-                errorData.message.includes('invalid')
-            )) {
+            if (data.exists) {
                 console.log('🔐 Patient Signup: User already exists, showing login option');
                 
                 Alert.alert(
@@ -606,7 +695,6 @@ export default function PatientSignUp() {
                         {
                             text: 'Log In',
                             onPress: () => {
-                                // Navigate to login page
                                 router.replace('/login');
                             }
                         }
@@ -615,11 +703,12 @@ export default function PatientSignUp() {
             }
         } catch (error) {
             console.error('🔐 Patient Signup: Error checking user existence:', error);
+            // Don't block signup if check fails - let backend handle duplicates
         }
     };
     const fieldRefs = createFieldRefs([
         'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
-        'country', 'city', 'acceptPolicies', 'verificationCode'
+        'country', 'city', 'acceptPolicies', 'verificationCode', 'idType', 'profilePicture'
     ]);
     
     // ID verification state (formerly Step 2)
@@ -723,14 +812,13 @@ export default function PatientSignUp() {
 
         setErrors(newErrors as any);
         
-        // Scroll to first error if validation fails
-        if (Object.keys(newErrors).length > 0) {
-            setTimeout(() => {
-                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
-            }, 100);
-        }
+        // Use enhanced validation for better scrolling
+        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+            showAlert: false,
+            scrollDelay: 100
+        });
         
-        return Object.keys(newErrors).length === 0;
+        return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const validateStep3 = () => {
@@ -739,14 +827,13 @@ export default function PatientSignUp() {
 
         setErrors(newErrors as any);
         
-        // Scroll to first error if validation fails
-        if (Object.keys(newErrors).length > 0) {
-            setTimeout(() => {
-                scrollToFirstError(scrollViewRef, newErrors, fieldRefs);
-            }, 100);
-        }
+        // Use enhanced validation for better scrolling
+        const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
+            showAlert: false,
+            scrollDelay: 100
+        });
         
-        return Object.keys(newErrors).length === 0;
+        return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const sendVerificationCode = async () => {
@@ -762,6 +849,8 @@ export default function PatientSignUp() {
             }
         } catch (error) {
             console.error('Error sending verification code:', error);
+            // Scroll to top for general errors
+            EnhancedValidation.scrollToTop(scrollViewRef);
             Alert.alert('Error', 'Failed to send verification code. Please try again.');
             throw error; // Re-throw the error so handleContinue knows it failed
         } finally {
@@ -794,6 +883,8 @@ export default function PatientSignUp() {
             }
         } catch (error) {
             console.error('Error verifying email:', error);
+            // Scroll to verification code field for verification errors
+            EnhancedValidation.scrollToField('verificationCode', scrollViewRef, fieldRefs);
             Alert.alert('Error', error.message || 'Invalid verification code. Please try again.');
             return false;
         } finally {
@@ -958,6 +1049,7 @@ export default function PatientSignUp() {
                         setIdDocument={setIdDocument}
                         errors={errors}
                         fieldRefs={fieldRefs}
+                        scrollViewRef={scrollViewRef}
                     />
                 );
             case 2:
@@ -1001,6 +1093,7 @@ export default function PatientSignUp() {
                         setIdDocument={setIdDocument}
                         errors={errors}
                         fieldRefs={fieldRefs}
+                        scrollViewRef={scrollViewRef}
                     />
                 );
         }
@@ -1019,15 +1112,15 @@ export default function PatientSignUp() {
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>
-                    <TouchableOpacity 
+                        <TouchableOpacity 
                             style={styles.modernBackButton}
-                        onPress={() => navigateToLogin({ userType: 'patient' })}
-                    >
+                            onPress={() => navigateToLogin({ userType: 'patient' })}
+                        >
                             <View style={styles.backButtonIcon}>
                                 <FontAwesome name="arrow-left" size={16} color="#FFFFFF" />
                             </View>
                             <Text style={styles.modernBackText}>Back to Login</Text>
-                    </TouchableOpacity>
+                        </TouchableOpacity>
                         
                         <View style={styles.headerTitleContainer}>
                             <View style={styles.titleIconContainer}>
@@ -1039,7 +1132,6 @@ export default function PatientSignUp() {
                 </View>
                 
                 <View style={styles.container}>
-                    
                     <View style={styles.modernProgressContainer}>
                         <View style={styles.modernProgressWrapper}>
                             <Text style={styles.modernProgressTitle}>Your Progress</Text>
@@ -1047,7 +1139,7 @@ export default function PatientSignUp() {
                                 <View style={[styles.modernProgressStep, step >= 1 && styles.modernProgressStepActive]}>
                                     <View style={[styles.progressStepIcon, step >= 1 && styles.progressStepIconActive]}>
                                         <FontAwesome name={step >= 1 ? "check" : "user"} size={12} color={step >= 1 ? "#FFFFFF" : "#94A3B8"} />
-                    </View>
+                                    </View>
                                     <Text style={[styles.progressStepLabel, step >= 1 && styles.progressStepLabelActive]}>Personal Info</Text>
                                 </View>
                                 <View style={[styles.progressConnector, step >= 2 && styles.progressConnectorActive]} />
@@ -1059,53 +1151,64 @@ export default function PatientSignUp() {
                                 </View>
                             </View>
                         </View>
-                </View>
+                    </View>
+
+                    {/* Enhanced Progress Indicator */}
+                    <ProgressIndicator
+                        steps={[
+                            { id: 1, title: 'Personal Information', completed: step > 1, current: step === 1 },
+                            { id: 2, title: 'Email Verification', completed: step > 2, current: step === 2 }
+                        ]}
+                        currentStep={step}
+                        totalSteps={2}
+                        compact={true}
+                        style={{ marginVertical: 10 }}
+                    />
                 
-                {renderStep()}
-                
-                <View style={styles.buttonContainer}>
-                    {step > 1 && (
-                        <TouchableOpacity 
-                            style={styles.backButton} 
-                            onPress={() => setStep(step - 1)}
-                            disabled={loading}
-                        >
-                            <Text style={styles.backButtonText}>←</Text>
-                            <Text style={styles.backButtonText}>Back</Text>
-                        </TouchableOpacity>
-                    )}
-                    <TouchableOpacity 
-                        style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]} 
-                        onPress={handleContinue}
-                        disabled={loading || isSendingVerification}
-                    >
-                        {loading ? (
-                            <>
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
-                                    {step === 2 ? 'Creating Account...' : 'Processing...'}
-                                </Text>
-                            </>
-                        ) : isSendingVerification ? (
-                            <>
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
-                                    Sending verification code...
-                                </Text>
-                            </>
-                        ) : (
-                            <>
-                                <Text style={styles.continueButtonText}>
-                                    {step === 2 ? 'Create Account' : 'Continue'}
-                                </Text>
-                                <Text style={styles.continueButtonText}>→</Text>
-                            </>
+                    {renderStep()}
+                    
+                    <View style={styles.buttonContainer}>
+                        {step > 1 && (
+                            <TouchableOpacity 
+                                style={styles.backButton} 
+                                onPress={() => setStep(step - 1)}
+                                disabled={loading}
+                            >
+                                <Text style={styles.backButtonText}>←</Text>
+                                <Text style={styles.backButtonText}>Back</Text>
+                            </TouchableOpacity>
                         )}
-                    </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]} 
+                            onPress={handleContinue}
+                            disabled={loading || isSendingVerification}
+                        >
+                            {loading ? (
+                                <>
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                        {step === 2 ? 'Creating Account...' : 'Processing...'}
+                                    </Text>
+                                </>
+                            ) : isSendingVerification ? (
+                                <>
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                        Sending verification code...
+                                    </Text>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.continueButtonText}>
+                                        {step === 2 ? 'Create Account' : 'Continue'}
+                                    </Text>
+                                    <Text style={styles.continueButtonText}>→</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                    <View style={{ height: Math.max(12, insets.bottom) }} />
                 </View>
-                <View style={{ height: Math.max(12, insets.bottom) }} />
-                
-            </View>
             </ScrollView>
         </SafeAreaView>
     );

@@ -504,58 +504,73 @@ class DoctorPaymentService
             
             // Only process if there are new deductions to make
             if ($newDeductions > 0) {
-                $patient = $session->patient;
-                if ($patient && $patient->subscription) {
-                    $subscription = $patient->subscription;
-                    
-                    // SAFETY CHECK: Prevent negative sessions
-                    if ($subscription->text_sessions_remaining < $newDeductions) {
-                        \Log::warning('Insufficient sessions remaining for auto-deduction', [
-                            'session_id' => $session->id,
-                            'patient_id' => $patient->id,
-                            'sessions_remaining' => $subscription->text_sessions_remaining,
-                            'new_deductions' => $newDeductions,
-                            'elapsed_minutes' => $elapsedMinutes,
-                        ]);
-                        return false;
-                    }
-                    
-                    // Deduct only the new sessions
-                    $subscription->decrement('text_sessions_remaining', $newDeductions);
-                    
-                    // Award doctor earnings for new deductions only
-                    $doctor = $session->doctor;
-                    if ($doctor) {
-                        $wallet = DoctorWallet::getOrCreate($doctor->id);
-                        $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $newDeductions;
-                        $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id} ({$newDeductions} sessions)");
+                // FIX: Use database transaction with atomic updates to prevent race conditions
+                return \DB::transaction(function () use ($session, $newDeductions, $autoDeductions, $alreadyProcessed, $elapsedMinutes) {
+                    $patient = $session->patient;
+                    if ($patient && $patient->subscription) {
+                        // Lock subscription for update to prevent race conditions
+                        $subscription = $patient->subscription()->lockForUpdate()->first();
                         
-                        // Send notification to doctor about payment
-                        $notificationService = new NotificationService();
-                        $notificationService->sendWalletNotification(
-                            $wallet->transactions()->latest()->first(),
-                            'payment_received',
-                            "You received {$paymentAmount} for {$newDeductions} session(s) from auto-deduction"
-                        );
+                        if (!$subscription) {
+                            \Log::warning('Subscription not found during auto-deduction', [
+                                'session_id' => $session->id,
+                                'patient_id' => $patient->id,
+                            ]);
+                            return false;
+                        }
+                        
+                        // SAFETY CHECK: Prevent negative sessions with locked record
+                        if ($subscription->text_sessions_remaining < $newDeductions) {
+                            \Log::warning('Insufficient sessions remaining for auto-deduction', [
+                                'session_id' => $session->id,
+                                'patient_id' => $patient->id,
+                                'sessions_remaining' => $subscription->text_sessions_remaining,
+                                'new_deductions' => $newDeductions,
+                                'elapsed_minutes' => $elapsedMinutes,
+                            ]);
+                            return false;
+                        }
+                        
+                        // Atomic deduction from subscription
+                        $subscription->text_sessions_remaining = max(0, $subscription->text_sessions_remaining - $newDeductions);
+                        $subscription->save();
+                        
+                        // Award doctor earnings for new deductions only
+                        $doctor = $session->doctor;
+                        if ($doctor) {
+                            $wallet = DoctorWallet::getOrCreate($doctor->id);
+                            $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $newDeductions;
+                            $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id} ({$newDeductions} sessions)");
+                            
+                            // Send notification to doctor about payment
+                            $notificationService = new NotificationService();
+                            $notificationService->sendWalletNotification(
+                                $wallet->transactions()->latest()->first(),
+                                'payment_received',
+                                "You received {$paymentAmount} for {$newDeductions} session(s) from auto-deduction"
+                            );
+                        }
+                        
+                        // Update session to track processed deductions
+                        $session->update([
+                            'auto_deductions_processed' => $autoDeductions,
+                            'sessions_used' => $session->sessions_used + $newDeductions
+                        ]);
+                        
+                        \Log::info("Auto-deducted {$newDeductions} new sessions (total: {$autoDeductions})", [
+                            'session_id' => $session->id,
+                            'elapsed_minutes' => $elapsedMinutes,
+                            'auto_deductions' => $autoDeductions,
+                            'already_processed' => $alreadyProcessed,
+                            'new_deductions' => $newDeductions,
+                            'sessions_remaining_after' => $subscription->text_sessions_remaining,
+                        ]);
+                        
+                        return true;
                     }
                     
-                    // Update session to track processed deductions
-                    $session->update([
-                        'auto_deductions_processed' => $autoDeductions,
-                        'sessions_used' => $session->sessions_used + $newDeductions
-                    ]);
-                    
-                    \Log::info("Auto-deducted {$newDeductions} new sessions (total: {$autoDeductions})", [
-                        'session_id' => $session->id,
-                        'elapsed_minutes' => $elapsedMinutes,
-                        'auto_deductions' => $autoDeductions,
-                        'already_processed' => $alreadyProcessed,
-                        'new_deductions' => $newDeductions,
-                        'sessions_remaining_after' => $subscription->text_sessions_remaining,
-                    ]);
-                    
-                    return true;
-                }
+                    return false;
+                });
             }
             
             return true; // No new deductions needed
@@ -564,6 +579,7 @@ class DoctorPaymentService
             \Log::error('Failed to process auto-deduction: ' . $e->getMessage(), [
                 'session_id' => $session->id,
                 'patient_id' => $session->patient_id,
+                'trace' => $e->getTraceAsString()
             ]);
             return false;
         }

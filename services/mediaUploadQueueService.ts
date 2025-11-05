@@ -188,8 +188,8 @@ class MediaUploadQueueService {
       formData.append('appointment_id', upload.appointmentId.toString());
       
       console.log(`📤 [MediaQueue] Uploading image: ${fileName}`);
-      // Use docavailable.org for image uploads (same as calls)
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+      // Use correct image upload endpoint
+      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/image`;
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -230,31 +230,26 @@ class MediaUploadQueueService {
    */
   private async sendMediaMessage(upload: QueuedUpload, mediaUrl: string): Promise<void> {
     try {
-      // Import WebRTC service dynamically to avoid circular dependencies
-      const { webrtcChatService } = await import('./webrtcChatService');
-      
-      const messageData = {
-        type: 'chat-message',
-        content: upload.type === 'image' ? 'Image' : 'Voice message',
-        messageType: upload.type,
-        senderId: this.getCurrentUserId(),
-        senderName: this.getCurrentUserName(),
-        mediaUrl: mediaUrl,
-        tempId: upload.tempId,
-        createdAt: new Date().toISOString(),
-        deliveryStatus: 'sending'
-      };
-      
       console.log(`📤 [MediaQueue] Sending ${upload.type} message through WebRTC`);
       
-      // Send through WebSocket
-      if (webrtcChatService.isConnected && webrtcChatService.websocket) {
-        webrtcChatService.websocket.send(JSON.stringify(messageData));
-      } else {
-        console.warn('⚠️ [MediaQueue] WebRTC not connected, message will be sent when connection is restored');
+      // Create message data for backend API persistence
+      const messageData = {
+        message: upload.type === 'image' ? '🖼️ Image' : '🎤 Voice message',
+        message_type: upload.type,
+        media_url: mediaUrl,
+        temp_id: upload.tempId,
+      };
+      
+      // Send directly to backend API since WebRTC service might not be available in queue context
+      const response = await apiService.post(`/chat/${upload.appointmentId}/messages`, messageData);
+      
+      if (!response.success) {
+        throw new Error(`Failed to send ${upload.type} message: ${response.message}`);
       }
+      
+      console.log(`✅ [MediaQueue] ${upload.type} message sent successfully via API`);
     } catch (error) {
-      console.error('Error sending media message through WebRTC:', error);
+      console.error('Error sending media message:', error);
       throw error;
     }
   }
@@ -271,11 +266,16 @@ class MediaUploadQueueService {
       console.log('🔄 [MediaQueue] Token invalid, attempting refresh...');
       
       try {
-        // Try to refresh token
-        await apiService.refreshToken();
-        return true;
+        // Try to get a fresh token by checking auth status
+        const authToken = await AsyncStorage.getItem('auth_token');
+        if (authToken) {
+          console.log('🔄 [MediaQueue] Found existing auth token, proceeding');
+          return true;
+        }
+        console.error('❌ [MediaQueue] No auth token available');
+        return false;
       } catch (refreshError) {
-        console.error('❌ [MediaQueue] Token refresh failed:', refreshError);
+        console.error('❌ [MediaQueue] Auth check failed:', refreshError);
         return false;
       }
     }
@@ -363,16 +363,32 @@ class MediaUploadQueueService {
   }
 
   // Helper methods
-  private getCurrentUserId(): number {
-    // This should be integrated with your auth service
-    // For now, return a placeholder
-    return 1;
+  private async getCurrentUserId(): Promise<number> {
+    try {
+      const userDataStr = await AsyncStorage.getItem('user_data');
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        return userData.id || userData.user_id || 1;
+      }
+      return 1;
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+      return 1;
+    }
   }
 
-  private getCurrentUserName(): string {
-    // This should be integrated with your auth service
-    // For now, return a placeholder
-    return 'User';
+  private async getCurrentUserName(): Promise<string> {
+    try {
+      const userDataStr = await AsyncStorage.getItem('user_data');
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        return userData.display_name || userData.name || userData.username || 'User';
+      }
+      return 'User';
+    } catch (error) {
+      console.error('Error getting current user name:', error);
+      return 'User';
+    }
   }
 
   /**

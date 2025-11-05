@@ -214,6 +214,30 @@ class AppointmentController extends Controller
                 $userTimezone
             );
 
+            // FIX: Check for double booking before creating appointment
+            $existingAppointment = Appointment::where('doctor_id', $request->doctor_id)
+                ->where('appointment_datetime_utc', $utcDateTime)
+                ->whereIn('status', [
+                    Appointment::STATUS_PENDING,
+                    Appointment::STATUS_CONFIRMED,
+                    Appointment::STATUS_RESCHEDULE_PROPOSED
+                ])
+                ->first();
+
+            if ($existingAppointment) {
+                \Log::warning('❌ [AppointmentController] Double booking attempt prevented', [
+                    'doctor_id' => $request->doctor_id,
+                    'appointment_datetime_utc' => $utcDateTime,
+                    'existing_appointment_id' => $existingAppointment->id,
+                    'patient_id' => auth()->id()
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This time slot is already booked. Please select a different time.'
+                ], 409);
+            }
+
             $appointmentData = [
                 'patient_id' => auth()->user()->id,
                 'doctor_id' => $request->doctor_id,
@@ -228,7 +252,25 @@ class AppointmentController extends Controller
 
             \Log::info('📤 [AppointmentController] Creating appointment with data', $appointmentData);
 
-            $appointment = Appointment::create($appointmentData);
+            // Use database transaction to prevent race conditions
+            $appointment = \DB::transaction(function () use ($appointmentData, $request, $utcDateTime) {
+                // Double-check for race conditions within transaction
+                $doubleCheck = Appointment::where('doctor_id', $request->doctor_id)
+                    ->where('appointment_datetime_utc', $utcDateTime)
+                    ->whereIn('status', [
+                        Appointment::STATUS_PENDING,
+                        Appointment::STATUS_CONFIRMED,
+                        Appointment::STATUS_RESCHEDULE_PROPOSED
+                    ])
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($doubleCheck) {
+                    throw new \Exception('Time slot was just booked by another patient. Please select a different time.');
+                }
+
+                return Appointment::create($appointmentData);
+            });
 
             \Log::info('✅ [AppointmentController] Appointment created successfully', [
                 'appointment_id' => $appointment->id,

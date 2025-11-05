@@ -78,6 +78,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
+  // Hydrate initial token from global preloaded value before async init completes
+  useEffect(() => {
+    if (typeof global !== 'undefined') {
+      const preloaded = (global as any)?.preloadedAuth;
+      if (preloaded && !token) {
+        console.log('🔐 [AuthContext] Hydrating token from preloaded auth');
+        setToken(preloaded);
+      }
+    }
+  }, [token]);
+
   const fetchUserData = async (): Promise<UserData | null> => {
     try {
       // console.log('AuthContext: Fetching user data from Laravel backend...');
@@ -189,6 +200,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
         
         // Initialize authService first
+        if (typeof global !== 'undefined' && (global as any)?.preloadedAuthPromise) {
+          try {
+            await (global as any).preloadedAuthPromise;
+          } catch (e) {
+            console.warn('⚠️ [AuthContext] Preloaded auth promise failed', e);
+          }
+        }
+
         const authState = await authService.initialize();
         console.log('AuthContext: AuthService initialized:', authState);
         

@@ -25,6 +25,7 @@ class CallSession extends Model
         'is_connected',
         'call_duration',
         'auto_deductions_processed',
+        'failure_reason',
         'answered_at',
         'answered_by',
         'declined_at',
@@ -51,6 +52,7 @@ class CallSession extends Model
     const STATUS_PENDING = 'pending';
     const STATUS_ANSWERED = 'answered';
     const STATUS_DECLINED = 'declined';
+    const STATUS_FAILED = 'failed';
 
     // Call type constants
     const CALL_TYPE_VOICE = 'voice';

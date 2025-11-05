@@ -4,7 +4,7 @@ import authService from '@/services/authService';
 import { NotificationService } from '@/services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -1636,7 +1636,7 @@ export default function DoctorDashboard() {
       </View>
       {/* Booking Requests Tab */}
       {appointmentsTab === 'requests' && (
-        loadingRequests ? (
+        loadingRequests && bookingRequests.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4CAF50" />
           <Text style={styles.loadingText}>Loading booking requests...</Text>
@@ -1696,7 +1696,7 @@ export default function DoctorDashboard() {
       
       {/* Accepted Sessions Tab */}
       {appointmentsTab === 'accepted' && (
-        loadingConfirmed ? (
+        loadingConfirmed && confirmedAppointments.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#4CAF50" />
             <Text style={styles.loadingText}>Loading accepted requests...</Text>

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ActivityIndicator, Dimensions, Image, Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { environment } from '../config/environment';
+import { signedUrlService } from '../services/signedUrlService';
 import ReadReceipt from './ReadReceipt';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -10,11 +11,12 @@ interface ImageMessageProps {
   imageUrl: string;
   isOwnMessage?: boolean;
   timestamp?: string;
-  deliveryStatus?: 'sending' | 'sent' | 'delivered' | 'read';
+  deliveryStatus?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   profilePictureUrl?: string;
   readBy?: any[];
   otherParticipantId?: number;
   messageTime?: string;
+  appointmentId?: string;
 }
 
 export default function ImageMessage({ 
@@ -25,7 +27,8 @@ export default function ImageMessage({
   profilePictureUrl,
   readBy,
   otherParticipantId,
-  messageTime
+  messageTime,
+  appointmentId
 }: ImageMessageProps) {
   // Debug: Log the image URL we receive
   console.log('🖼️ ImageMessage received imageUrl:', imageUrl);
@@ -37,43 +40,37 @@ export default function ImageMessage({
     //   hasUrl: !!profilePictureUrl
     // });
 
-  const getImageUrl = (uri: string) => {
-    // If already a full URL or local file, return as-is
-    if (uri.startsWith('http') || uri.startsWith('file://')) {
-      console.log('🖼️ ImageMessage: Using full URL:', uri);
-      return uri;
-    }
-    
-    // If it's an absolute path on device
-    if (uri.startsWith('/')) {
-      const fileUrl = `file://${uri}`;
-      console.log('🖼️ ImageMessage: Using file URL:', fileUrl);
-      return fileUrl;
-    }
-    
-    // If it's a WebRTC server image path
-    if (uri.startsWith('/api/images/')) {
-      const webrtcUrl = `https://docavailable.org:8089${uri}`;
-      console.log('🖼️ ImageMessage: Using WebRTC server URL:', webrtcUrl);
-      return webrtcUrl;
-    }
-    
-    // If it's a Laravel API path
-    if (uri.startsWith('/api/')) {
-      const laravelApiUrl = `${environment.BASE_URL}${uri}`;
-      console.log('🖼️ ImageMessage: Using Laravel API URL:', laravelApiUrl);
-      return laravelApiUrl;
-    }
-    
-    // Otherwise, try WebRTC server first, then Laravel API
-    const webrtcUrl = `https://docavailable.org:8089/api/images/${uri}`;
-    console.log('🖼️ ImageMessage: Trying WebRTC server URL:', webrtcUrl);
-    return webrtcUrl;
-  };
-
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
+  const [fetchingSignedUrl, setFetchingSignedUrl] = useState(false);
+
+  // Set image URL
+  useEffect(() => {
+    // Local file - use as-is
+    if (imageUrl.startsWith('file://')) {
+      console.log('📁 [ImageMessage] Using local file');
+      setCurrentImageUrl(imageUrl);
+    }
+    // Absolute path - convert to file URL
+    else if (imageUrl.startsWith('/')) {
+      const fileUrl = `file://${imageUrl}`;
+      console.log('📁 [ImageMessage] Converting to file URL');
+      setCurrentImageUrl(fileUrl);
+    }
+    // Server URL - use it (backend fixed!)
+    else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      console.log('🌐 [ImageMessage] Using server URL');
+      setCurrentImageUrl(imageUrl);
+    }
+    // Unknown format
+    else {
+      console.log('⚠️ [ImageMessage] Unknown format:', imageUrl);
+      setCurrentImageUrl(imageUrl);
+    }
+  }, [imageUrl]);
 
   const handleImagePress = () => {
     if (!imageError) {
@@ -87,23 +84,56 @@ export default function ImageMessage({
 
   const handleImageError = (error: any) => {
     console.error('🖼️ ImageMessage: Image load error:', error);
-    console.error('🖼️ ImageMessage: Failed URL:', getImageUrl(imageUrl));
-    setImageLoading(false);
-    setImageError(true);
+    console.error('🖼️ ImageMessage: Failed URL:', currentImageUrl);
     
-    // For iOS, try alternative URL format if first attempt fails
-    if (Platform.OS === 'ios' && !imageError) {
-      console.log('🔄 Retrying image with alternative URL format...');
-      setImageError(false);
+    // Try fallback URLs if we haven't exceeded retry limit
+    if (retryCount < 3) {
+      console.log(`🔄 ImageMessage: Trying fallback URL (attempt ${retryCount + 1}/3)`);
+      
+      let fallbackUrl: string;
+      
+      if (retryCount === 0) {
+        // First retry: try HTTPS if HTTP failed
+        if (currentImageUrl.startsWith('http://')) {
+          fallbackUrl = currentImageUrl.replace('http://', 'https://');
+        } else {
+          // Try different path structure - remove /api/ prefix
+          fallbackUrl = currentImageUrl.replace('/api/images/', '/images/');
+        }
+      } else if (retryCount === 1) {
+        // Second retry: try storage URL pattern (common for Laravel apps)
+        if (imageUrl.includes('/api/images/chat_images/')) {
+          // Extract the path after chat_images/
+          const pathAfterChatImages = imageUrl.substring(imageUrl.indexOf('/chat_images/') + 13);
+          fallbackUrl = `${environment.LARAVEL_API_URL}/storage/chat_images/${pathAfterChatImages}`;
+        } else {
+          // Try direct file access without API prefix
+          const filename = imageUrl.split('/').pop() || imageUrl;
+          fallbackUrl = `${environment.LARAVEL_API_URL}/storage/images/${filename}`;
+        }
+      } else {
+        // Third retry: try public folder pattern (another common Laravel pattern)
+        if (imageUrl.includes('/api/images/chat_images/')) {
+          // Extract filename and try public folder
+          const filename = imageUrl.split('/').pop() || imageUrl;
+          fallbackUrl = `${environment.LARAVEL_API_URL}/chat_images/${filename}`;
+        } else {
+          // Try uploads folder pattern
+          const filename = imageUrl.split('/').pop() || imageUrl;
+          fallbackUrl = `${environment.LARAVEL_API_URL}/uploads/chat_images/${filename}`;
+        }
+      }
+      
+      console.log('🔄 ImageMessage: Fallback URL:', fallbackUrl);
+      setCurrentImageUrl(fallbackUrl);
+      setRetryCount(retryCount + 1);
       setImageLoading(true);
-      
-      // Try with URL encoding
-      const alternativeUrl = encodeURI(imageUrl);
-      
-      // Force re-render with alternative URL
-      setTimeout(() => {
-        setImageLoading(false);
-      }, 1000);
+      setImageError(false);
+    } else {
+      // All retries failed - show placeholder instead of error
+      console.error('❌ ImageMessage: All fallback URLs failed, showing placeholder');
+      setImageError(true);
+      setImageLoading(false);
     }
   };
 
@@ -148,12 +178,29 @@ export default function ImageMessage({
           ) : (
             <TouchableOpacity onPress={handleImagePress} activeOpacity={0.8}>
               <Image
-                source={{ uri: getImageUrl(imageUrl) }}
+                source={{ uri: currentImageUrl }}
                 style={styles.image}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
                 resizeMode="cover"
               />
+              
+              {/* Upload status overlay */}
+              {(deliveryStatus === 'sending' || fetchingSignedUrl) && (
+                <View style={styles.uploadingOverlay}>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={styles.uploadingText}>
+                    {fetchingSignedUrl ? 'Loading...' : 'Uploading...'}
+                  </Text>
+                </View>
+              )}
+              
+              {deliveryStatus === 'failed' && (
+                <View style={styles.failedOverlay}>
+                  <Ionicons name="warning" size={16} color="#fff" />
+                  <Text style={styles.failedText}>Failed</Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
 
@@ -166,7 +213,7 @@ export default function ImageMessage({
             )}
             <ReadReceipt
               isOwnMessage={isOwnMessage}
-              deliveryStatus={deliveryStatus}
+              deliveryStatus={deliveryStatus === 'failed' ? 'sent' : deliveryStatus}
               readBy={readBy}
               otherParticipantId={otherParticipantId}
               messageTime={messageTime}
@@ -198,7 +245,7 @@ export default function ImageMessage({
             activeOpacity={1}
           >
             <Image
-              source={{ uri: getImageUrl(imageUrl) }}
+              source={{ uri: currentImageUrl }}
               style={styles.modalImage}
               resizeMode="contain"
             />
@@ -307,5 +354,40 @@ const styles = StyleSheet.create({
   modalImage: {
     width: screenWidth,
     height: screenHeight * 0.7,
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  uploadingText: {
+    color: '#fff',
+    fontSize: 12,
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  failedOverlay: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,0,0,0.8)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  failedText: {
+    color: '#fff',
+    fontSize: 10,
+    marginLeft: 4,
+    fontWeight: '500',
   },
 }); 

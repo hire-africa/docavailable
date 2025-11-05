@@ -14,10 +14,14 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
     // Check if this is an incoming call
     if (data.type === 'incoming_call' || data.isIncomingCall === 'true') {
       const appointmentId = data.appointment_id || data.appointmentId || '';
-      
+      const sessionId = data.session_id || data.sessionId || '';
+      const callIdFromData = data.call_id || data.callId || '';
+      const messageId = remoteMessage?.messageId || '';
+      const dedupeKey = appointmentId || sessionId || callIdFromData || messageId;
+
       // ✅ Deduplicate: Skip if we've already displayed this call
-      if (appointmentId && displayedCalls.has(appointmentId)) {
-        console.log('FCM: Already displayed call for', appointmentId, '- ignoring duplicate FCM');
+      if (dedupeKey && displayedCalls.has(dedupeKey)) {
+        console.log('FCM: Already displayed call for', dedupeKey, '- ignoring duplicate FCM');
         return;
       }
       
@@ -26,14 +30,14 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       const callType = data.call_type || data.callType || 'audio';
 
       // Mark this call as displayed
-      if (appointmentId) {
-        displayedCalls.add(appointmentId);
-        console.log('FCM: Marked call as displayed:', appointmentId);
+      if (dedupeKey) {
+        displayedCalls.add(dedupeKey);
+        console.log('FCM: Marked call as displayed:', dedupeKey);
         
         // Auto-clear after 60 seconds to allow new calls
         setTimeout(() => {
-          displayedCalls.delete(appointmentId);
-          console.log('FCM: Cleared displayed call:', appointmentId);
+          displayedCalls.delete(dedupeKey);
+          console.log('FCM: Cleared displayed call:', dedupeKey);
         }, 60000);
       }
 

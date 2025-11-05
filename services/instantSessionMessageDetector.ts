@@ -193,13 +193,19 @@ export class InstantSessionMessageDetector {
    * Handle chat messages and detect patient/doctor messages
    */
   private handleChatMessage(data: any): void {
-    // Check if data.message exists and is valid
-    if (!data || !data.message) {
+    // Handle both nested message format and flattened format
+    let message = data?.message || data;
+    
+    // Check if we have valid message data
+    if (!data || (!data.message && !data.content && !data.senderId && !data.sender_id)) {
       console.error('❌ [InstantSessionDetector] Invalid chat message data - missing message object:', data);
       return;
     }
 
-    const message = data.message;
+    // If data is flattened (has content/senderId directly), use it as the message
+    if (!data.message && (data.content || data.senderId || data.sender_id)) {
+      message = data;
+    }
     
     // Validate message object has required properties
     if (!message || typeof message !== 'object') {
@@ -207,36 +213,41 @@ export class InstantSessionMessageDetector {
       return;
     }
 
+    // Normalize sender ID property (handle both senderId and sender_id)
+    const senderId = message.senderId || message.sender_id;
+    const messageId = message.id || message.tempId || message.temp_id;
+    const messageContent = message.content || message.message;
+    
     // Check if message has required properties
-    if (message.id === undefined || message.sender_id === undefined) {
+    if (messageId === undefined || senderId === undefined) {
       console.error('❌ [InstantSessionDetector] Message missing required properties:', {
-        hasId: message.id !== undefined,
-        hasSenderId: message.sender_id !== undefined,
+        hasId: messageId !== undefined,
+        hasSenderId: senderId !== undefined,
         message: message
       });
       return;
     }
 
     console.log('💬 [InstantSessionDetector] Processing chat message:', {
-      id: message.id,
-      senderId: message.sender_id,
-      message: message.message?.substring(0, 50) + '...',
+      id: messageId,
+      senderId: senderId,
+      content: messageContent?.substring(0, 50) + '...',
       doctorId: this.config.doctorId,
       patientId: this.config.patientId
     });
 
-    const senderId = Number(message.sender_id);
+    const normalizedSenderId = Number(senderId);
     
     // Check if this is a patient message
-    if (senderId === this.config.patientId) {
+    if (normalizedSenderId === this.config.patientId) {
       this.handlePatientMessage(message);
     }
     // Check if this is a doctor message
-    else if (senderId === this.config.doctorId) {
+    else if (normalizedSenderId === this.config.doctorId) {
       this.handleDoctorMessage(message);
     } else {
       console.log('❓ [InstantSessionDetector] Unknown sender message:', {
-        senderId: senderId,
+        senderId: normalizedSenderId,
         doctorId: this.config.doctorId,
         patientId: this.config.patientId
       });
