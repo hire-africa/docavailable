@@ -131,25 +131,20 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       
       // Check if this is a duplicate of an immediate image message
       if (msg.message_type === 'image' && msg.media_url) {
-        // Extract filename from URL for comparison
-        const incomingFilename = msg.media_url.split('/').pop()?.split('?')[0];
-        
         // Look for existing message with matching characteristics
         const isDuplicate = prev.some(existingMsg => {
           if (existingMsg.message_type !== 'image') return false;
           
-          // Check 1: Same server URL
+          // Only consider it a duplicate if:
+          // 1. Exact same server URL match
           if (existingMsg.server_media_url === msg.media_url) return true;
           
-          // Check 2: Same filename in server_media_url
-          const existingFilename = existingMsg.server_media_url?.split('/').pop()?.split('?')[0];
-          if (existingFilename && incomingFilename && existingFilename === incomingFilename) {
-            return true;
-          }
+          // 2. Has temp_id and media_url matches (immediate message being updated)
+          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) return true;
           
-          // Check 3: Message uploaded recently (within 10 seconds) with same filename pattern
+          // 3. Message uploaded recently (within 3 seconds) with EXACT same URL
           const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
-          if (existingMsg._isUploaded && timeDiff < 10000 && existingFilename === incomingFilename) {
+          if (existingMsg._isUploaded && timeDiff < 3000 && existingMsg.server_media_url === msg.media_url) {
             return true;
           }
           
@@ -157,7 +152,7 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
         });
         
         if (isDuplicate) {
-          console.log('🔄 Skipping duplicate image:', incomingFilename);
+          console.log('🔄 Skipping duplicate image with same URL');
           continue;
         }
       }
