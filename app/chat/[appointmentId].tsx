@@ -3933,6 +3933,7 @@ export default function ChatPage() {
               hasDoctorResponded={hasDoctorResponded}
               isSessionActivated={isSessionActivated}
               isSessionExpired={isSessionExpired}
+              isPatient={isPatient}
               onTimerExpired={() => {
                 console.log('⏰ [InstantSession] Timer expired');
                 // Handle timer expiration
