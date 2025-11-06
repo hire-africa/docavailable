@@ -149,35 +149,35 @@ export default function InstantSessionTimer({
 
   const getStatusColor = () => {
     if (isSessionActivated) {
-      return Colors.success;
+      return Colors.success || '#4CAF50';
     }
     
     if (hasDoctorResponded) {
-      return Colors.primary;
+      return Colors.primary || '#2196F3';
     }
     
     if (isSessionExpired) {
-      return Colors.error;
+      return '#F44336';
     }
     
     if (hasPatientSentMessage && isActive) {
-      return timeRemaining <= 10 ? Colors.error : Colors.warning;
+      return timeRemaining <= 10 ? '#F44336' : (Colors.warning || '#FF9800');
     }
     
     if (hasPatientSentMessage && !isActive) {
-      return Colors.error;
+      return '#F44336';
     }
     
-    return Colors.gray;
+    return Colors.gray || '#9E9E9E';
   };
 
   const getTimerColor = () => {
     if (timeRemaining <= 10) {
-      return Colors.error;
+      return '#F44336';
     } else if (timeRemaining <= 30) {
-      return Colors.warning;
+      return Colors.warning || '#FF9800';
     }
-    return Colors.primary;
+    return Colors.primary || '#2196F3';
   };
 
   const formatTime = (seconds: number) => {
@@ -189,75 +189,97 @@ export default function InstantSessionTimer({
   const progress = isActive ? (timeRemaining / 90) * 100 : 0;
 
   return (
-    <Animated.View style={[
-      styles.container,
-      {
-        opacity: containerOpacity,
-        transform: [{
-          scaleY: containerHeight.interpolate({
-            inputRange: [0, 1],
-            outputRange: [0, 1],
-          })
-        }]
-      }
-    ]}>
-      {hasPatientSentMessage && !isSessionExpired && (
+    <View style={styles.container}>
+      {!hasPatientSentMessage && (
         <View style={styles.compactContainer}>
-          <View style={styles.leftSection}>
-            <Animated.View
-              style={[
-                styles.timerCircle,
-                {
-                  transform: [{ scale: pulseAnim }],
-                  borderColor: getTimerColor(),
-                  backgroundColor: timeRemaining <= 10 ? 
-                    warningAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.3)']
-                    }) : 
-                    'rgba(76, 175, 80, 0.1)'
-                }
-              ]}
-            >
-              <Text style={[styles.timerText, { color: getTimerColor() }]}>
-                {formatTime(timeRemaining)}
-              </Text>
-            </Animated.View>
-          </View>
-          
-          <View style={styles.rightSection}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Instant Session</Text>
-              <Text style={[styles.status, { color: getStatusColor() }]}>
-                {getStatusText()}
-              </Text>
-            </View>
-            
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <Animated.View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${progress}%`,
-                      backgroundColor: getTimerColor()
-                    }
-                  ]}
-                />
-              </View>
-            </View>
-            
+          <View style={styles.infoOnlyContainer}>
+            <Text style={styles.title}>Instant Session</Text>
             <Text style={styles.infoText}>
-              {hasPatientSentMessage && !hasDoctorResponded && isActive && (
-                `Doctor has ${formatTime(timeRemaining)} to respond`
-              )}
-              {hasDoctorResponded && 'Doctor responded! Session active.'}
+              Send a message to start the 90-second timer
             </Text>
           </View>
         </View>
       )}
-
-    </Animated.View>
+      
+      {hasPatientSentMessage && !isSessionExpired && (
+        <Animated.View style={[
+          {
+            opacity: containerOpacity,
+            transform: [{
+              scaleY: containerHeight.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 1],
+              })
+            }]
+          }
+        ]}>
+          <View style={styles.compactContainer}>
+            <View style={styles.leftSection}>
+              <Animated.View
+                style={[
+                  styles.timerCircle,
+                  {
+                    transform: [{ scale: pulseAnim }],
+                    borderColor: getTimerColor(),
+                    backgroundColor: timeRemaining <= 10 ? 
+                      warningAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.3)']
+                      }) : 
+                      'rgba(76, 175, 80, 0.1)'
+                  }
+                ]}
+              >
+                <Text style={[styles.timerText, { color: getTimerColor() }]}>
+                  {formatTime(timeRemaining)}
+                </Text>
+              </Animated.View>
+            </View>
+            
+            <View style={styles.rightSection}>
+              <View style={styles.header}>
+                <Text style={styles.title}>Instant Session</Text>
+                <Text style={[styles.status, { color: getStatusColor() }]}>
+                  {getStatusText()}
+                </Text>
+              </View>
+              
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <Animated.View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${progress}%`,
+                        backgroundColor: getTimerColor()
+                      }
+                    ]}
+                  />
+                </View>
+              </View>
+              
+              <Text style={styles.infoText}>
+                {hasPatientSentMessage && !hasDoctorResponded && isActive && (
+                  `Doctor has ${formatTime(timeRemaining)} to respond`
+                )}
+                {hasDoctorResponded && 'Doctor responded! Session active.'}
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
+      
+      {isSessionExpired && (
+        <View style={styles.compactContainer}>
+          <View style={styles.infoOnlyContainer}>
+            <Text style={styles.title}>Instant Session</Text>
+            <Text style={[styles.infoText, { color: '#F44336' }]}>
+              Session expired - Doctor did not respond within 90 seconds
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -334,5 +356,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6B7280',
     lineHeight: 16,
+  },
+  infoOnlyContainer: {
+    flex: 1,
   },
 });
