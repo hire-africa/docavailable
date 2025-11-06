@@ -253,6 +253,10 @@ export default function ChatPage() {
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const buttonsWidth = useRef(new Animated.Value(140)).current; // Initial width for 3 buttons
   
+  // Countdown timer animation
+  const countdownHeight = useRef(new Animated.Value(0)).current;
+  const countdownOpacity = useRef(new Animated.Value(0)).current;
+  
   // Add state to track if session has ended (for doctors)
   const [sessionEnded, setSessionEnded] = useState(false);
   
@@ -1638,6 +1642,39 @@ export default function ChatPage() {
       keyboardDidHideListener.remove();
     };
   }, [buttonsWidth]);
+
+  // Animate countdown timer appearance/disappearance
+  useEffect(() => {
+    if (doctorResponseTimeRemaining) {
+      // Slide in
+      Animated.parallel([
+        Animated.timing(countdownHeight, {
+          toValue: 80,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+        Animated.timing(countdownOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    } else {
+      // Slide out
+      Animated.parallel([
+        Animated.timing(countdownHeight, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+        Animated.timing(countdownOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  }, [doctorResponseTimeRemaining, countdownHeight, countdownOpacity]);
 
   // Function to request session status from backend
   const requestSessionStatus = async () => {
@@ -3683,92 +3720,98 @@ export default function ChatPage() {
             </View>
           )}
           
-          {doctorResponseTimeRemaining && (
-            <View style={{
-              backgroundColor: '#F8F9FA',
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderRadius: 12,
+          {doctorResponseTimeRemaining !== null && (
+            <Animated.View style={{
+              height: countdownHeight,
+              opacity: countdownOpacity,
+              overflow: 'hidden',
               marginBottom: 8,
-              borderLeftWidth: 4,
-              borderLeftColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.05,
-              shadowRadius: 4,
-              elevation: 2,
             }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <View style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FFE5E5' : '#E8F5E9',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 12,
-                  }}>
-                    <Ionicons 
-                      name="timer-outline" 
-                      size={20} 
-                      color={doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50'} 
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{
-                      fontSize: 11,
-                      color: '#6B7280',
-                      fontWeight: '500',
-                      marginBottom: 2,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.5,
-                    }}>
-                      Doctor Response Time
-                    </Text>
-                    <Text style={{
-                      fontSize: 13,
-                      color: '#374151',
-                      fontWeight: '400',
-                    }}>
-                      Waiting for doctor to respond
-                    </Text>
-                  </View>
-                </View>
-                <View style={{
-                  backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                  minWidth: 60,
-                  alignItems: 'center',
-                }}>
-                  <Text style={{
-                    fontSize: 16,
-                    color: '#FFFFFF',
-                    fontWeight: '700',
-                    letterSpacing: 0.5,
-                  }}>
-                    {Math.floor(doctorResponseTimeRemaining / 60)}:{String(doctorResponseTimeRemaining % 60).padStart(2, '0')}
-                  </Text>
-                </View>
-              </View>
-              {/* Progress bar */}
               <View style={{
-                height: 4,
-                backgroundColor: '#E5E7EB',
-                borderRadius: 2,
-                marginTop: 10,
-                overflow: 'hidden',
+                backgroundColor: '#F8F9FA',
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+                borderRadius: 10,
+                borderLeftWidth: 3,
+                borderLeftColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 3,
+                elevation: 2,
               }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <View style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FFE5E5' : '#E8F5E9',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 10,
+                    }}>
+                      <Ionicons 
+                        name="timer-outline" 
+                        size={18} 
+                        color={doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50'} 
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{
+                        fontSize: 10,
+                        color: '#6B7280',
+                        fontWeight: '600',
+                        marginBottom: 1,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.3,
+                      }}>
+                        Doctor Response
+                      </Text>
+                      <Text style={{
+                        fontSize: 11,
+                        color: '#9CA3AF',
+                        fontWeight: '400',
+                      }}>
+                        Waiting for reply
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{
+                    backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 16,
+                    minWidth: 55,
+                    alignItems: 'center',
+                  }}>
+                    <Text style={{
+                      fontSize: 14,
+                      color: '#FFFFFF',
+                      fontWeight: '700',
+                      letterSpacing: 0.3,
+                    }}>
+                      {Math.floor(doctorResponseTimeRemaining / 60)}:{String(doctorResponseTimeRemaining % 60).padStart(2, '0')}
+                    </Text>
+                  </View>
+                </View>
+                {/* Progress bar */}
                 <View style={{
-                  height: '100%',
-                  backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
-                  width: `${(doctorResponseTimeRemaining / 90) * 100}%`,
-                  borderRadius: 2,
-                }} />
+                  height: 3,
+                  backgroundColor: '#E5E7EB',
+                  borderRadius: 1.5,
+                  marginTop: 8,
+                  overflow: 'hidden',
+                }}>
+                  <Animated.View style={{
+                    height: '100%',
+                    backgroundColor: doctorResponseTimeRemaining <= 30 ? '#FF6B6B' : '#4CAF50',
+                    width: `${(doctorResponseTimeRemaining / 90) * 100}%`,
+                    borderRadius: 1.5,
+                  }} />
+                </View>
               </View>
-            </View>
+            </Animated.View>
           )}
           
           {sessionDeductionInfo && (
