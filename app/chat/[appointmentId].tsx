@@ -4084,18 +4084,37 @@ export default function ChatPage() {
                 
                 try {
                   if (webrtcChatService) {
-                    const message = await webrtcChatService.sendImageMessage(selectedImage, appointmentId, caption);
+                    const message = await webrtcChatService.sendImageMessage(selectedImage, appointmentId);
                     if (message && message.media_url) {
                       updateImageMessage(tempId, message.media_url, message.id);
+                      
+                      // Send caption as separate text message if provided
+                      if (caption) {
+                        await webrtcChatService.sendMessage(caption);
+                      }
                     } else {
                       throw new Error('WebRTC image send returned null');
                     }
                   } else {
                     await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                    
+                    // Send caption as separate text message if provided
+                    if (caption) {
+                      await sendMessageViaBackendAPI(addImmediateTextMessage(caption), caption);
+                    }
                   }
                 } catch (error) {
                   console.error('❌ Failed to send image:', error);
                   await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                  
+                  // Still try to send caption if provided
+                  if (caption && webrtcChatService) {
+                    try {
+                      await webrtcChatService.sendMessage(caption);
+                    } catch (captionError) {
+                      console.error('❌ Failed to send caption:', captionError);
+                    }
+                  }
                 }
                 
                 // Clear image and caption
