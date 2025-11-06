@@ -3980,7 +3980,7 @@ export default function ChatPage() {
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#007AFF"} />
+            <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#4CAF50"} />
           </TouchableOpacity>
           
           {/* Camera Button */}
@@ -4007,7 +4007,7 @@ export default function ChatPage() {
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#007AFF"} />
+            <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#4CAF50"} />
           </TouchableOpacity>
           
           {/* Voice Recording Button */}
@@ -4090,7 +4090,11 @@ export default function ChatPage() {
                       
                       // Send caption as separate text message if provided
                       if (caption) {
-                        await webrtcChatService.sendMessage(caption);
+                        const captionTempId = addImmediateTextMessage(caption);
+                        const captionMessage = await webrtcChatService.sendMessage(caption);
+                        if (captionMessage) {
+                          updateTextMessage(captionTempId, captionMessage.id);
+                        }
                       }
                     } else {
                       throw new Error('WebRTC image send returned null');
@@ -4108,9 +4112,17 @@ export default function ChatPage() {
                   await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
                   
                   // Still try to send caption if provided
-                  if (caption && webrtcChatService) {
+                  if (caption) {
+                    const captionTempId = addImmediateTextMessage(caption);
                     try {
-                      await webrtcChatService.sendMessage(caption);
+                      if (webrtcChatService) {
+                        const captionMessage = await webrtcChatService.sendMessage(caption);
+                        if (captionMessage) {
+                          updateTextMessage(captionTempId, captionMessage.id);
+                        }
+                      } else {
+                        await sendMessageViaBackendAPI(captionTempId, caption);
+                      }
                     } catch (captionError) {
                       console.error('❌ Failed to send caption:', captionError);
                     }

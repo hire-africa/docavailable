@@ -46,6 +46,7 @@ export default function ImageMessage({
   const [currentImageUrl, setCurrentImageUrl] = useState<string>('');
   const [retryCount, setRetryCount] = useState(0);
   const [fetchingSignedUrl, setFetchingSignedUrl] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number }>({ width: 200, height: 200 });
 
   // Set image URL
   useEffect(() => {
@@ -71,6 +72,44 @@ export default function ImageMessage({
       setCurrentImageUrl(imageUrl);
     }
   }, [imageUrl]);
+
+  // Calculate image dimensions
+  useEffect(() => {
+    if (currentImageUrl) {
+      Image.getSize(
+        currentImageUrl,
+        (width, height) => {
+          // Max width for chat bubble (80% of screen or 300px)
+          const maxWidth = Math.min(screenWidth * 0.7, 300);
+          const maxHeight = 400;
+          
+          // Calculate aspect ratio
+          const aspectRatio = width / height;
+          
+          let finalWidth = width;
+          let finalHeight = height;
+          
+          // Scale down if too wide
+          if (width > maxWidth) {
+            finalWidth = maxWidth;
+            finalHeight = maxWidth / aspectRatio;
+          }
+          
+          // Scale down if too tall
+          if (finalHeight > maxHeight) {
+            finalHeight = maxHeight;
+            finalWidth = maxHeight * aspectRatio;
+          }
+          
+          setImageDimensions({ width: finalWidth, height: finalHeight });
+        },
+        (error) => {
+          console.log('Could not get image size:', error);
+          // Keep default dimensions
+        }
+      );
+    }
+  }, [currentImageUrl]);
 
   const handleImagePress = () => {
     if (!imageError) {
@@ -163,13 +202,13 @@ export default function ImageMessage({
         {/* Image Container */}
         <View style={styles.imageContainer}>
           {imageLoading && (
-            <View style={styles.loadingContainer}>
+            <View style={[styles.loadingContainer, { width: imageDimensions.width, height: imageDimensions.height }]}>
               <ActivityIndicator size="small" color={isOwnMessage ? "#fff" : "#4CAF50"} />
             </View>
           )}
           
           {imageError ? (
-            <View style={styles.errorContainer}>
+            <View style={[styles.errorContainer, { width: imageDimensions.width, height: imageDimensions.height }]}>
               <Ionicons name="image-outline" size={24} color={isOwnMessage ? "#fff" : "#666"} />
               <Text style={[styles.errorText, { color: isOwnMessage ? "#fff" : "#666" }]}>
                 Failed to load image
@@ -179,7 +218,7 @@ export default function ImageMessage({
             <TouchableOpacity onPress={handleImagePress} activeOpacity={0.8}>
               <Image
                 source={{ uri: currentImageUrl }}
-                style={styles.image}
+                style={[styles.image, { width: imageDimensions.width, height: imageDimensions.height }]}
                 onLoad={handleImageLoad}
                 onError={handleImageError}
                 resizeMode="contain"
