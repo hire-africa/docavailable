@@ -188,6 +188,16 @@ export default function InstantSessionTimer({
 
   const progress = isActive ? (timeRemaining / 90) * 100 : 0;
 
+  // Debug logging
+  console.log('🔍 [InstantSessionTimer] Props:', {
+    isActive,
+    timeRemaining,
+    hasPatientSentMessage,
+    hasDoctorResponded,
+    isSessionActivated,
+    isSessionExpired
+  });
+
   // Don't render anything if not an instant session scenario
   if (!hasPatientSentMessage && !isSessionExpired && !isActive) {
     return (
