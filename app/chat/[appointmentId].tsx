@@ -3838,34 +3838,36 @@ export default function ChatPage() {
                       />
                 ) : (
                   // Regular text messages with bubble
-                  <View>
-                    <View
+                  <View
+                    style={{
+                      backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderRadius: 20,
+                      borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                      borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                    }}
+                  >
+                    <Text
                       style={{
-                        backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        borderRadius: 20,
-                        borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
-                        borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                        color: message.sender_id === currentUserId ? '#fff' : '#333',
+                        fontSize: 16,
                       }}
                     >
-                      <Text
-                        style={{
-                          color: message.sender_id === currentUserId ? '#fff' : '#333',
-                          fontSize: 16,
-                        }}
-                      >
-                        {message.message}
-                      </Text>
-                    </View>
+                      {message.message}
+                    </Text>
                     {/* Add delivery status for text messages */}
-                    <ReadReceipt
-                      isOwnMessage={message.sender_id === currentUserId}
-                      deliveryStatus={message.delivery_status || 'sent'}
-                      readBy={message.read_by}
-                      otherParticipantId={message.sender_id === currentUserId ? (doctorId || patientId) : undefined}
-                      messageTime={message.created_at}
-                    />
+                    {message.sender_id === currentUserId && (
+                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
+                        <ReadReceipt
+                          isOwnMessage={true}
+                          deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
+                          readBy={message.read_by}
+                          otherParticipantId={doctorId || patientId}
+                          messageTime={message.created_at}
+                        />
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
