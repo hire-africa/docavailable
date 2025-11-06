@@ -251,7 +251,7 @@ export default function ChatPage() {
   
   // Keyboard animation state
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const buttonsWidth = useRef(new Animated.Value(120)).current; // Initial width for 3 buttons
+  const buttonsWidth = useRef(new Animated.Value(140)).current; // Initial width for 3 buttons
   
   // Add state to track if session has ended (for doctors)
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -1600,7 +1600,7 @@ export default function ChatPage() {
       () => {
         setIsKeyboardVisible(false);
         Animated.timing(buttonsWidth, {
-          toValue: 120,
+          toValue: 140,
           duration: 250,
           useNativeDriver: false,
         }).start();
@@ -1624,7 +1624,7 @@ export default function ChatPage() {
       () => {
         setIsKeyboardVisible(false);
         Animated.timing(buttonsWidth, {
-          toValue: 120,
+          toValue: 140,
           duration: 250,
           useNativeDriver: false,
         }).start();
