@@ -103,7 +103,7 @@ export default function InstantSessionTimer({
         Animated.timing(timerOpacity, {
           toValue: 1,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     } else {
@@ -117,7 +117,7 @@ export default function InstantSessionTimer({
         Animated.timing(timerOpacity, {
           toValue: 0,
           duration: 250,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     }
@@ -288,7 +288,7 @@ export default function InstantSessionTimer({
                 </View>
               </View>
               
-              <Text style={styles.infoText}>
+              <Text style={styles.infoText} numberOfLines={2}>
                 {hasPatientSentMessage && !hasDoctorResponded && isActive && (
                   `Doctor has ${formatTime(timeRemaining)} to respond`
                 )}
