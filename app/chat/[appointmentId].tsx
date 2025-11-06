@@ -240,6 +240,8 @@ export default function ChatPage() {
   // Image handling state
   const [sendingCameraImage, setSendingCameraImage] = useState(false);
   const [sendingGalleryImage, setSendingGalleryImage] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imageCaption, setImageCaption] = useState('');
   
   
   // Add state to track if session has ended (for doctors)
@@ -3137,28 +3139,11 @@ export default function ChatPage() {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        console.log('📤 [Camera] Photo taken, adding to chat immediately');
+        console.log('📷 [Camera] Photo taken, attaching to input');
         
-        // Add image to chat immediately with local URI
-        const tempId = addImmediateImageMessage(imageUri);
-        
-        try {
-          if (webrtcChatService) {
-            const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
-            if (message && message.media_url) {
-              console.log('✅ Camera image sent via WebRTC:', message.id);
-              updateImageMessage(tempId, message.media_url, message.id);
-            } else {
-              throw new Error('WebRTC image send returned null or no media_url');
-            }
-          } else {
-            console.log('📤 [Camera] WebRTC not available, using backend API fallback');
-            await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
-          }
-        } catch (sendError) {
-          console.error('❌ [Camera] Failed to send image via WebRTC, trying backend fallback:', sendError);
-          await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
-        }
+        // Attach image to input instead of sending immediately
+        setSelectedImage(imageUri);
+        setImageCaption(''); // Clear any existing caption
       }
     } catch (error) {
       console.error('❌ Error taking photo:', error);
@@ -3193,28 +3178,11 @@ export default function ChatPage() {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        console.log('📤 [Gallery] Image selected, adding to chat immediately');
+        console.log('🖼️ [Gallery] Image selected, attaching to input');
         
-        // Add image to chat immediately with local URI
-        const tempId = addImmediateImageMessage(imageUri);
-        
-        try {
-          if (webrtcChatService) {
-            const message = await webrtcChatService.sendImageMessage(imageUri, appointmentId);
-            if (message && message.media_url) {
-              console.log('✅ Gallery image sent via WebRTC:', message.id);
-              updateImageMessage(tempId, message.media_url, message.id);
-            } else {
-              throw new Error('WebRTC image send returned null or no media_url');
-            }
-          } else {
-            console.log('📤 [Gallery] WebRTC not available, using backend API fallback');
-            await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
-          }
-        } catch (sendError) {
-          console.error('❌ [Gallery] Failed to send image via WebRTC, trying backend fallback:', sendError);
-          await sendImageMessageViaBackendAPIWithUpdate(imageUri, tempId);
-        }
+        // Attach image to input instead of sending immediately
+        setSelectedImage(imageUri);
+        setImageCaption(''); // Clear any existing caption
       }
     } catch (error) {
       console.error('❌ Error picking image:', error);
@@ -3949,6 +3917,43 @@ export default function ChatPage() {
             </View>
           )}
 
+          {/* Image Preview */}
+          {selectedImage && (
+            <View style={{
+              position: 'absolute',
+              bottom: 60,
+              left: 16,
+              right: 16,
+              backgroundColor: '#fff',
+              borderRadius: 12,
+              padding: 8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: -2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 4,
+              elevation: 5,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Image 
+                  source={{ uri: selectedImage }} 
+                  style={{ width: 60, height: 60, borderRadius: 8, marginRight: 8 }}
+                />
+                <Text style={{ flex: 1, color: '#666', fontSize: 14 }}>
+                  {newMessage || 'Add a caption...'}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setSelectedImage(null);
+                    setNewMessage('');
+                  }}
+                  style={{ padding: 8 }}
+                >
+                  <Ionicons name="close-circle" size={24} color="#999" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Image Button */}
           <TouchableOpacity
             onPress={handlePickImage}
@@ -3957,6 +3962,7 @@ export default function ChatPage() {
               sending || 
               sessionEnded || 
               !sessionValid ||
+              selectedImage !== null ||
               (isInstantSession && isSessionExpired) ||
               (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
@@ -3968,12 +3974,13 @@ export default function ChatPage() {
                 sending || 
                 sessionEnded || 
                 !sessionValid ||
+                selectedImage !== null ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
             }}
           >
-            <Ionicons name="image" size={24} color={sendingGalleryImage ? "#999" : "#007AFF"} />
+            <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#007AFF"} />
           </TouchableOpacity>
           
           {/* Camera Button */}
@@ -4069,10 +4076,39 @@ export default function ChatPage() {
           />
           
           <TouchableOpacity
-            onPress={sendMessage} // FIX: Disabled voice recording - only allow text messages
+            onPress={async () => {
+              if (selectedImage) {
+                // Send image with optional caption
+                const tempId = addImmediateImageMessage(selectedImage);
+                const caption = newMessage.trim();
+                
+                try {
+                  if (webrtcChatService) {
+                    const message = await webrtcChatService.sendImageMessage(selectedImage, appointmentId, caption);
+                    if (message && message.media_url) {
+                      updateImageMessage(tempId, message.media_url, message.id);
+                    } else {
+                      throw new Error('WebRTC image send returned null');
+                    }
+                  } else {
+                    await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                  }
+                } catch (error) {
+                  console.error('❌ Failed to send image:', error);
+                  await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                }
+                
+                // Clear image and caption
+                setSelectedImage(null);
+                setNewMessage('');
+              } else {
+                // Send text message
+                sendMessage();
+              }
+            }}
             disabled={
               sending || 
-              !newMessage.trim() || // FIX: Only allow sending when there's text
+              (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
               sessionEnded || 
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
@@ -4080,7 +4116,7 @@ export default function ChatPage() {
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
-              backgroundColor: newMessage.trim() && !sending ? '#4CAF50' : '#E5E5E5',
+              backgroundColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : '#E5E5E5',
               borderRadius: 24,
               padding: 14,
               minWidth: 48,
@@ -4088,7 +4124,7 @@ export default function ChatPage() {
               alignItems: 'center',
               justifyContent: 'center',
               opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) ? 0.5 : 1,
-              shadowColor: newMessage.trim() && !sending ? '#4CAF50' : 'transparent',
+              shadowColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : 'transparent',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.2,
               shadowRadius: 4,
