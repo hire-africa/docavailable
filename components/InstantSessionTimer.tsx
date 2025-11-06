@@ -32,6 +32,8 @@ export default function InstantSessionTimer({
 }: InstantSessionTimerProps) {
   const [pulseAnim] = useState(new Animated.Value(1));
   const [warningAnim] = useState(new Animated.Value(0));
+  const [containerHeight] = useState(new Animated.Value(0));
+  const [containerOpacity] = useState(new Animated.Value(0));
 
   // Pulse animation for active timer
   useEffect(() => {
@@ -87,6 +89,39 @@ export default function InstantSessionTimer({
       onTimerExpired();
     }
   }, [isActive, timeRemaining, onTimerExpired]);
+
+  // Animate container appearance
+  useEffect(() => {
+    if (hasPatientSentMessage && !isSessionExpired) {
+      Animated.parallel([
+        Animated.timing(containerHeight, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(containerOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(containerHeight, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.in(Easing.ease),
+          useNativeDriver: false,
+        }),
+        Animated.timing(containerOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [hasPatientSentMessage, isSessionExpired]);
 
   const getStatusText = () => {
     if (isSessionActivated) {
@@ -154,153 +189,150 @@ export default function InstantSessionTimer({
   const progress = isActive ? (timeRemaining / 90) * 100 : 0;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Instant Session</Text>
-        <Text style={[styles.status, { color: getStatusColor() }]}>
-          {getStatusText()}
-        </Text>
-      </View>
-
+    <Animated.View style={[
+      styles.container,
+      {
+        opacity: containerOpacity,
+        transform: [{
+          scaleY: containerHeight.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, 1],
+          })
+        }]
+      }
+    ]}>
       {hasPatientSentMessage && !isSessionExpired && (
-        <View style={styles.timerContainer}>
-          <Animated.View
-            style={[
-              styles.timerCircle,
-              {
-                transform: [{ scale: pulseAnim }],
-                borderColor: getTimerColor(),
-                backgroundColor: timeRemaining <= 10 ? 
-                  warningAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.3)']
-                  }) : 
-                  'rgba(76, 175, 80, 0.1)'
-              }
-            ]}
-          >
-            <Text style={[styles.timerText, { color: getTimerColor() }]}>
-              {formatTime(timeRemaining)}
-            </Text>
-          </Animated.View>
+        <View style={styles.compactContainer}>
+          <View style={styles.leftSection}>
+            <Animated.View
+              style={[
+                styles.timerCircle,
+                {
+                  transform: [{ scale: pulseAnim }],
+                  borderColor: getTimerColor(),
+                  backgroundColor: timeRemaining <= 10 ? 
+                    warningAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.3)']
+                    }) : 
+                    'rgba(76, 175, 80, 0.1)'
+                }
+              ]}
+            >
+              <Text style={[styles.timerText, { color: getTimerColor() }]}>
+                {formatTime(timeRemaining)}
+              </Text>
+            </Animated.View>
+          </View>
           
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${progress}%`,
-                    backgroundColor: getTimerColor()
-                  }
-                ]}
-              />
+          <View style={styles.rightSection}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Instant Session</Text>
+              <Text style={[styles.status, { color: getStatusColor() }]}>
+                {getStatusText()}
+              </Text>
             </View>
+            
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <Animated.View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${progress}%`,
+                      backgroundColor: getTimerColor()
+                    }
+                  ]}
+                />
+              </View>
+            </View>
+            
+            <Text style={styles.infoText}>
+              {hasPatientSentMessage && !hasDoctorResponded && isActive && (
+                `Doctor has ${formatTime(timeRemaining)} to respond`
+              )}
+              {hasDoctorResponded && 'Doctor responded! Session active.'}
+            </Text>
           </View>
         </View>
       )}
 
-      <View style={styles.infoContainer}>
-        {!hasPatientSentMessage && (
-          <Text style={styles.infoText}>
-            Send a message to start the 90-second timer
-          </Text>
-        )}
-        
-        {hasPatientSentMessage && !hasDoctorResponded && isActive && (
-          <Text style={styles.infoText}>
-            Doctor has {formatTime(timeRemaining)} to respond
-          </Text>
-        )}
-        
-        {hasDoctorResponded && (
-          <Text style={styles.infoText}>
-            Doctor has responded! Session is now active.
-          </Text>
-        )}
-        
-        {isSessionExpired && (
-          <Text style={[styles.infoText, { color: Colors.error }]}>
-            Session expired - Doctor did not respond within 90 seconds
-          </Text>
-        )}
-        
-        {hasPatientSentMessage && !isActive && !hasDoctorResponded && !isSessionExpired && (
-          <Text style={[styles.infoText, { color: Colors.error }]}>
-            Doctor did not respond within 90 seconds
-          </Text>
-        )}
-      </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'white',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
-    padding: 16,
-    margin: 16,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
+  },
+  compactContainer: {
+    flexDirection: 'row',
+    padding: 12,
+    alignItems: 'center',
+  },
+  leftSection: {
+    marginRight: 12,
+  },
+  rightSection: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.text,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   status: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '600',
   },
-  timerContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
   timerCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 3,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
   },
   timerText: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   progressContainer: {
     width: '100%',
-    alignItems: 'center',
+    marginBottom: 6,
   },
   progressBar: {
-    width: '80%',
-    height: 8,
-    backgroundColor: Colors.lightGray,
-    borderRadius: 4,
+    width: '100%',
+    height: 4,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 4,
-  },
-  infoContainer: {
-    alignItems: 'center',
+    borderRadius: 2,
   },
   infoText: {
-    fontSize: 14,
-    color: Colors.text,
-    textAlign: 'center',
-    lineHeight: 20,
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 16,
   },
 });
