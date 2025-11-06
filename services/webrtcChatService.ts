@@ -677,10 +677,11 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
+              id: messageId, // Send messageId as id so backend uses it
               message: '🖼️ Image',
               message_type: 'image',
               media_url: uploadResult.mediaUrl,
-              temp_id: messageId,
+              temp_id: messageId, // Also send as temp_id for backwards compatibility
             }),
           });
           if (!resp.ok) {
