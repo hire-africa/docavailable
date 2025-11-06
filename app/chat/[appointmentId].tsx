@@ -2067,27 +2067,10 @@ export default function ChatPage() {
       return;
     }
     
-    // Add message immediately to chat with "sending" status
+    // Add message immediately to chat
     const messageText = newMessage.trim();
-    const tempId = `temp_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const immediateMessage: ExtendedChatMessage = {
-      id: tempId,
-      temp_id: tempId,
-      appointment_id: isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : Number(appointmentId),
-      sender_id: user?.id || 0,
-      sender_name: user?.display_name || 'You',
-      message: messageText,
-      message_type: 'text',
-      created_at: new Date().toISOString(),
-      delivery_status: 'sending',
-      is_own_message: true,
-    };
-
-    console.log('📤 [Chat] Adding immediate text message:', tempId);
-    setMessages(prev => [...prev, immediateMessage]);
+    const tempId = addImmediateTextMessage(messageText);
     setNewMessage(''); // Clear input immediately
-    scrollToBottom();
     
     try {
       setSending(true);
@@ -2126,7 +2109,7 @@ export default function ChatPage() {
       
       if (webrtcChatService) {
         // Use WebRTC chat service if available
-        console.log('📤 [ChatComponent] Sending message via WebRTC:', newMessage.trim());
+        console.log('📤 [ChatComponent] Sending message via WebRTC:', messageText);
         console.log('🔍 [ChatComponent] WebRTC connection status:', {
           hasService: !!webrtcChatService,
           connectionStatus: webrtcChatService.getConnectionStatus(),
@@ -2139,20 +2122,8 @@ export default function ChatPage() {
         try {
           const message = await webrtcChatService.sendMessage(messageText);
           if (message) {
+            updateTextMessage(tempId, message.id);
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
-            
-            // Update the immediate message with server response
-            setMessages(prev => prev.map(msg => {
-              if (msg.temp_id === tempId || msg.id === tempId) {
-                return {
-                  ...msg,
-                  id: message.id,
-                  delivery_status: 'sent' as const,
-                  created_at: message.created_at || msg.created_at
-                };
-              }
-              return msg;
-            }));
             
             // Debug instant session state after message sent
             if (isInstantSession) {
@@ -2174,111 +2145,57 @@ export default function ChatPage() {
             }
           } else {
             console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
-            // Mark as failed and try backend
-            setMessages(prev => prev.map(msg => 
-              (msg.temp_id === tempId || msg.id === tempId) 
-                ? { ...msg, delivery_status: 'failed' as const }
-                : msg
-            ));
+            // Fallback to backend API
+            console.log('🔄 [ChatComponent] WebRTC returned null, trying backend API fallback');
+            await sendMessageViaBackendAPI(tempId, messageText);
           }
         } catch (webrtcError) {
           console.error('❌ [ChatComponent] WebRTC failed:', webrtcError);
-          // Mark as failed
-          setMessages(prev => prev.map(msg => 
-            (msg.temp_id === tempId || msg.id === tempId) 
-              ? { ...msg, delivery_status: 'failed' as const }
-              : msg
-          ));
+          console.error('❌ [ChatComponent] WebRTC error details:', {
+            message: webrtcError.message,
+            name: webrtcError.name,
+            stack: webrtcError.stack
+          });
+          // Fallback to backend API
+          console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
+          await sendMessageViaBackendAPI(tempId, messageText);
         }
         
       } else {
-        // WebRTC not available - mark as failed
-        console.log('📤 [ChatComponent] WebRTC not available');
-        setMessages(prev => prev.map(msg => 
-          (msg.temp_id === tempId || msg.id === tempId) 
-            ? { ...msg, delivery_status: 'failed' as const }
-            : msg
-        ));
+        // Fallback to backend API
+        console.log('📤 [ChatComponent] WebRTC not available, using backend API fallback');
+        console.log('📤 [ChatComponent] WebRTC service state when not available:', {
+          webrtcChatService: webrtcChatService,
+          isWebRTCServiceActive: isWebRTCServiceActive
+        });
+        await sendMessageViaBackendAPI(tempId, messageText);
       }
     } catch (error) {
       console.error('❌ [ChatComponent] Unexpected error sending message:', error);
-      // Mark as failed
-      setMessages(prev => prev.map(msg => 
-        (msg.temp_id === tempId || msg.id === tempId) 
-          ? { ...msg, delivery_status: 'failed' as const }
-          : msg
-      ));
     } finally {
       setSending(false);
     }
   };
 
   // Fallback method to send message via backend API
-  const sendMessageViaBackendAPI = async () => {
+  const sendMessageViaBackendAPI = async (tempId: string, messageText: string) => {
     try {
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
-        message: newMessage.trim(),
+        message: messageText,
         message_type: 'text'
       });
       
       if (response.success) {
-        setNewMessage('');
         console.log('✅ [ChatComponent] Message sent successfully via backend API:', response.data.id);
         
-        // Add message to local state
-        const messageText = newMessage.trim();
-        const chatMessage: ChatMessage = {
-          id: response.data.id,
-          appointment_id: Number(parsedAppointmentId) || 0,
-          sender_id: currentUserId,
-          sender_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
-          message: messageText,
-          message_type: 'text',
-          timestamp: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-          delivery_status: 'sent'
-        };
+        // Update the temp message with real ID
+        updateTextMessage(tempId, response.data.id);
         
-        // Merge message with existing messages to prevent duplicates
-        setMessages(prev => {
-const mergedMessages = safeMergeMessages(prev, [chatMessage]);
-          console.log('✅ [ChatComponent] Message merged with existing messages:', mergedMessages.length);
-          console.log('✅ [ChatComponent] New message details:', {
-            id: chatMessage.id,
-            message: chatMessage.message,
-            sender_id: chatMessage.sender_id,
-            timestamp: chatMessage.timestamp
-          });
-          return mergedMessages;
+        console.log('✅ [ChatComponent] Message status updated:', {
+          tempId,
+          realId: response.data.id,
+          message: messageText
         });
-        scrollToBottom();
-        
-        // Manually trigger message detection for instant sessions
-        if (isInstantSession) {
-          console.log('🔍 [InstantSession] Message sent, checking detection:', {
-            senderId: chatMessage.sender_id,
-            currentUserId,
-            doctorId,
-            hasPatientSentMessage,
-            hasDoctorResponded,
-            isPatient: chatMessage.sender_id === currentUserId,
-            isDoctor: chatMessage.sender_id === doctorId
-          });
-          
-          if (!hasPatientSentMessage && chatMessage.sender_id === currentUserId) {
-          console.log('👤 [InstantSession] First patient message sent via backend API - manually triggering timer');
-          triggerPatientMessageDetection(chatMessage);
-          } else if (!hasDoctorResponded && chatMessage.sender_id === doctorId) {
-            console.log('👨‍⚕️ [InstantSession] Doctor message sent via backend API - manually triggering detection');
-            console.log('👨‍⚕️ [InstantSession] Doctor message details:', {
-              messageId: chatMessage.id,
-              senderId: chatMessage.sender_id,
-              doctorId: doctorId,
-              hasDoctorResponded: hasDoctorResponded
-            });
-            triggerDoctorMessageDetection(chatMessage);
-          }
-        }
       } else {
         console.error('❌ [ChatComponent] Backend API returned error:', response.message);
       }
@@ -3068,6 +2985,30 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
+  // Function to add immediate text message
+  const addImmediateTextMessage = (messageText: string): string => {
+    const tempId = `temp_text_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const immediateMessage: ExtendedChatMessage = {
+      id: tempId,
+      temp_id: tempId,
+      appointment_id: isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : Number(appointmentId),
+      sender_id: user?.id || 0,
+      sender_name: user?.display_name || 'You',
+      message: messageText,
+      message_type: 'text',
+      created_at: new Date().toISOString(),
+      delivery_status: 'sending',
+      is_own_message: true,
+    };
+
+    console.log('📤 [Chat] Adding immediate text message:', tempId);
+    setMessages(prev => [...prev, immediateMessage]);
+    scrollToBottom();
+    
+    return tempId;
+  };
+
   // Function to add immediate image message with local URI
   const addImmediateImageMessage = (localImageUri: string): string => {
     const tempId = `temp_image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -3092,6 +3033,22 @@ const mergedMessages = safeMergeMessages(prev, [chatMessage]);
     scrollToBottom();
     
     return tempId;
+  };
+
+  // Function to update text message when send completes
+  const updateTextMessage = (tempId: string, messageId: string | number, status: 'sent' | 'delivered' | 'read' = 'sent') => {
+    console.log('✅ [Chat] Text message sent successfully:', messageId);
+    
+    setMessages(prev => prev.map(msg => {
+      if (msg.temp_id === tempId || msg.id === tempId) {
+        return {
+          ...msg,
+          id: messageId,
+          delivery_status: status,
+        };
+      }
+      return msg;
+    }));
   };
 
   // Function to update image message when upload completes
