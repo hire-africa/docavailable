@@ -7,7 +7,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   ScrollView,
@@ -247,6 +249,9 @@ export default function ChatPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageCaption, setImageCaption] = useState('');
   
+  // Keyboard animation state
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const buttonsWidth = useRef(new Animated.Value(120)).current; // Initial width for 3 buttons
   
   // Add state to track if session has ended (for doctors)
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -1575,6 +1580,64 @@ export default function ChatPage() {
       }
     }
   }, [isInstantSession, isSessionActivated, sessionStartTime, hasDoctorResponded, chatInfo?.status, sessionId]);
+
+  // Keyboard animation effect
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      'keyboardWillShow',
+      () => {
+        setIsKeyboardVisible(true);
+        Animated.timing(buttonsWidth, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      'keyboardWillHide',
+      () => {
+        setIsKeyboardVisible(false);
+        Animated.timing(buttonsWidth, {
+          toValue: 120,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+        Animated.timing(buttonsWidth, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        Animated.timing(buttonsWidth, {
+          toValue: 120,
+          duration: 250,
+          useNativeDriver: false,
+        }).start();
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, [buttonsWidth]);
 
   // Function to request session status from backend
   const requestSessionStatus = async () => {
@@ -3964,8 +4027,14 @@ export default function ChatPage() {
             </View>
           )}
 
-          {/* Image Button */}
-          <TouchableOpacity
+          {/* Animated Buttons Container */}
+          <Animated.View style={{
+            flexDirection: 'row',
+            width: buttonsWidth,
+            overflow: 'hidden',
+          }}>
+            {/* Image Button */}
+            <TouchableOpacity
             onPress={handlePickImage}
             disabled={
               sendingGalleryImage ||
@@ -4053,6 +4122,7 @@ export default function ChatPage() {
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")} 
             />
           </TouchableOpacity>
+          </Animated.View>
           
           <TextInput
             value={newMessage}
