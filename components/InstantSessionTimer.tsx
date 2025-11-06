@@ -32,8 +32,8 @@ export default function InstantSessionTimer({
 }: InstantSessionTimerProps) {
   const [pulseAnim] = useState(new Animated.Value(1));
   const [warningAnim] = useState(new Animated.Value(0));
-  const [containerHeight] = useState(new Animated.Value(0));
-  const [containerOpacity] = useState(new Animated.Value(0));
+  const [timerHeight] = useState(new Animated.Value(0));
+  const [timerOpacity] = useState(new Animated.Value(0));
 
   // Pulse animation for active timer
   useEffect(() => {
@@ -90,17 +90,17 @@ export default function InstantSessionTimer({
     }
   }, [isActive, timeRemaining, onTimerExpired]);
 
-  // Animate container appearance
+  // Animate timer section appearance
   useEffect(() => {
     if (hasPatientSentMessage && !isSessionExpired) {
       Animated.parallel([
-        Animated.timing(containerHeight, {
+        Animated.timing(timerHeight, {
           toValue: 1,
           duration: 300,
           easing: Easing.out(Easing.ease),
           useNativeDriver: false,
         }),
-        Animated.timing(containerOpacity, {
+        Animated.timing(timerOpacity, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
@@ -108,20 +108,20 @@ export default function InstantSessionTimer({
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(containerHeight, {
+        Animated.timing(timerHeight, {
           toValue: 0,
           duration: 250,
           easing: Easing.in(Easing.ease),
           useNativeDriver: false,
         }),
-        Animated.timing(containerOpacity, {
+        Animated.timing(timerOpacity, {
           toValue: 0,
           duration: 250,
           useNativeDriver: true,
         }),
       ]).start();
     }
-  }, [hasPatientSentMessage, isSessionExpired]);
+  }, [hasPatientSentMessage, isSessionExpired, timerHeight, timerOpacity]);
 
   const getStatusText = () => {
     if (isSessionActivated) {
@@ -204,9 +204,9 @@ export default function InstantSessionTimer({
       {hasPatientSentMessage && !isSessionExpired && (
         <Animated.View style={[
           {
-            opacity: containerOpacity,
+            opacity: timerOpacity,
             transform: [{
-              scaleY: containerHeight.interpolate({
+              scaleY: timerHeight.interpolate({
                 inputRange: [0, 1],
                 outputRange: [0, 1],
               })
