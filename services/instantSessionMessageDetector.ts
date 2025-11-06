@@ -509,11 +509,14 @@ export class InstantSessionMessageDetector {
       console.log('⏰ [InstantSessionDetector] Local 90-second timer reached zero - verifying with server');
       // Verify with backend to avoid premature expiry due to drift or hydration delays
       const url = `${this.getApiBaseUrl()}/api/text-sessions/${this.config.sessionId}/check-response`;
+      console.log('🔍 [InstantSessionDetector] Calling check-response URL:', url);
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${this.config.authToken}` }
       });
+      console.log('🔍 [InstantSessionDetector] Response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('🔍 [InstantSessionDetector] Response data:', JSON.stringify(data, null, 2));
         if (data && data.status === 'expired') {
           console.log('❌ [InstantSessionDetector] Server confirms session expired');
           this.timerState.isActive = false;
@@ -527,13 +530,17 @@ export class InstantSessionMessageDetector {
           this.startTimer(Math.floor(data.timeRemaining));
           return;
         }
+        console.warn('⚠️ [InstantSessionDetector] Unexpected server response, treating as expired');
       } else {
         console.warn('⚠️ [InstantSessionDetector] check-response returned non-OK status:', response.status);
+        const errorText = await response.text();
+        console.warn('⚠️ [InstantSessionDetector] Error response:', errorText);
       }
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error verifying expiry with server:', error);
     }
     // Fallback: if no server info, do not hard-expire; keep inactive with 0 remaining until status arrives
+    console.log('⏰ [InstantSessionDetector] Falling back to local expiry');
     this.timerState.isActive = false;
     this.timerState.timeRemaining = 0;
     await this.saveSessionState();

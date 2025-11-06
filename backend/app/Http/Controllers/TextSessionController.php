@@ -286,6 +286,41 @@ class TextSessionController extends Controller
                         'ended_at' => now()
                     ]);
                     
+                    // Broadcast session-expired event via WebSocket
+                    try {
+                        $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable-3vbdv.ondigitalocean.app:8089');
+                        $broadcastUrl = "{$webrtcUrl}/broadcast-session-expired";
+                        
+                        $ch = curl_init($broadcastUrl);
+                        curl_setopt($ch, CURLOPT_POST, true);
+                        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                            'sessionId' => $sessionId,
+                            'patientId' => $session->patient_id,
+                            'doctorId' => $session->doctor_id,
+                            'reason' => 'Doctor did not respond within 90 seconds'
+                        ]));
+                        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_TIMEOUT, 2); // Short timeout
+                        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development
+                        
+                        $response = curl_exec($ch);
+                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        curl_close($ch);
+                        
+                        Log::info("Broadcast session-expired event", [
+                            'session_id' => $sessionId,
+                            'http_code' => $httpCode,
+                            'response' => $response
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::warning("Failed to broadcast session-expired event", [
+                            'session_id' => $sessionId,
+                            'error' => $e->getMessage()
+                        ]);
+                        // Don't fail the expiry if broadcast fails
+                    }
+                    
                     return response()->json([
                         'success' => true,
                         'status' => 'expired',
