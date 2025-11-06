@@ -98,14 +98,23 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
     
     // Add all existing messages to map using unique key
     for (const msg of prev) {
-      // Use temp_id if available, otherwise use regular id
-      const key = msg.temp_id || String(msg.id);
+      // For images, always use temp_id if available to keep them separate
+      // For text, use temp_id or id
+      const key = msg.message_type === 'image' && msg.temp_id 
+        ? msg.temp_id 
+        : (msg.temp_id || String(msg.id));
       map.set(key, msg);
+      console.log(`📥 [safeMerge] Added existing: ${key} (type: ${msg.message_type}, id: ${msg.id})`);
     }
     
     // Add incoming messages, avoiding duplicates and handling immediate messages
     for (const msg of incoming) {
-      const key = msg.temp_id || String(msg.id);
+      // For images, always use temp_id if available to keep them separate
+      const key = msg.message_type === 'image' && msg.temp_id 
+        ? msg.temp_id 
+        : (msg.temp_id || String(msg.id));
+      
+      console.log(`📨 [safeMerge] Processing incoming: ${key} (type: ${msg.message_type}, id: ${msg.id}, has temp_id: ${!!msg.temp_id})`);
       
       // Check if this is a server response for a temp TEXT message
       // Only apply this check to text messages, not images
@@ -134,38 +143,39 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       }
       
       // Check if this is a duplicate of an immediate image message
-      if (msg.message_type === 'image' && msg.media_url) {
-        // Look for existing message with matching characteristics
-        const isDuplicate = prev.some(existingMsg => {
-          if (existingMsg.message_type !== 'image') return false;
-          
-          // Only consider it a duplicate if:
-          // 1. Exact same server URL match
-          if (existingMsg.server_media_url === msg.media_url) return true;
-          
-          // 2. Has temp_id and media_url matches (immediate message being updated)
-          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) return true;
-          
-          // 3. Message uploaded recently (within 3 seconds) with EXACT same URL
-          const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
-          if (existingMsg._isUploaded && timeDiff < 3000 && existingMsg.server_media_url === msg.media_url) {
-            return true;
-          }
-          
-          return false;
-        });
-        
-        if (isDuplicate) {
-          console.log('🔄 Skipping duplicate image with same URL');
-          continue;
-        }
-      }
+      // DISABLED: Let images through and rely on map key uniqueness
+      // if (msg.message_type === 'image' && msg.media_url) {
+      //   // Look for existing message with matching characteristics
+      //   const isDuplicate = prev.some(existingMsg => {
+      //     if (existingMsg.message_type !== 'image') return false;
+      //     
+      //     // Only consider it a duplicate if:
+      //     // 1. Exact same server URL match
+      //     if (existingMsg.server_media_url === msg.media_url) return true;
+      //     
+      //     // 2. Has temp_id and media_url matches (immediate message being updated)
+      //     if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) return true;
+      //     
+      //     // 3. Message uploaded recently (within 3 seconds) with EXACT same URL
+      //     const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
+      //     if (existingMsg._isUploaded && timeDiff < 3000 && existingMsg.server_media_url === msg.media_url) {
+      //       return true;
+      //     }
+      //     
+      //     return false;
+      //   });
+      //   
+      //   if (isDuplicate) {
+      //     console.log('🔄 Skipping duplicate image with same URL');
+      //     continue;
+      //   }
+      // }
       
       if (!map.has(key)) {
         map.set(key, msg);
-        console.log(' [safeMergeMessages] Adding new message:', { id: msg.id, message: msg.message });
+        console.log(`✅ [safeMerge] Added new: ${key} (type: ${msg.message_type})`);
       } else {
-        console.log(' [safeMergeMessages] Message already exists, skipping:', { id: msg.id, message: msg.message });
+        console.log(`⚠️ [safeMerge] Already exists, skipping: ${key} (type: ${msg.message_type})`);
       }
     }
     
@@ -176,11 +186,8 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       return ta - tb;
     });
     
-    console.log(' [safeMergeMessages] Result:', { 
-      prevCount: prev.length, 
-      incomingCount: incoming.length, 
-      resultCount: arr.length 
-    });
+    console.log(`📊 [safeMerge] Result: prev=${prev.length}, incoming=${incoming.length}, final=${arr.length}`);
+    console.log(`📊 [safeMerge] Final messages:`, arr.map(m => `${m.temp_id || m.id} (${m.message_type})`).join(', '));
     
     return arr;
   } catch (e) {
