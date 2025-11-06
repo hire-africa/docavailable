@@ -96,15 +96,16 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
   try {
     const map = new Map<string, ExtendedChatMessage>();
     
-    // Add all existing messages to map
+    // Add all existing messages to map using unique key
     for (const msg of prev) {
-      const key = String(msg.id);
+      // Use temp_id if available, otherwise use regular id
+      const key = msg.temp_id || String(msg.id);
       map.set(key, msg);
     }
     
     // Add incoming messages, avoiding duplicates and handling immediate messages
     for (const msg of incoming) {
-      const key = String(msg.id);
+      const key = msg.temp_id || String(msg.id);
       
       // Check if this is a server response for a temp message (text or image)
       // Look for existing temp message with same content/timestamp

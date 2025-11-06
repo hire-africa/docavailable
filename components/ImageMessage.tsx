@@ -335,6 +335,8 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.1)',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
   },
   loadingContainer: {
     width: 200,
@@ -343,6 +345,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
   },
   errorContainer: {
     width: 200,
@@ -351,6 +355,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
   },
   errorText: {
     fontSize: 12,
