@@ -101,9 +101,32 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       map.set(key, msg);
     }
     
-    // Add incoming messages, avoiding duplicates and handling immediate image messages
+    // Add incoming messages, avoiding duplicates and handling immediate messages
     for (const msg of incoming) {
       const key = String(msg.id);
+      
+      // Check if this is a server response for a temp message (text or image)
+      // Look for existing temp message with same content/timestamp
+      const isTempMessageUpdate = prev.some(existingMsg => {
+        // Skip if existing message doesn't have temp_id
+        if (!existingMsg.temp_id) return false;
+        
+        // Check if this is the same message by comparing:
+        // 1. Message content (for text)
+        // 2. Timestamp proximity (within 5 seconds)
+        // 3. Sender ID
+        const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
+        const sameContent = existingMsg.message === msg.message;
+        const sameSender = existingMsg.sender_id === msg.sender_id;
+        const closeTime = timeDiff < 5000;
+        
+        return sameContent && sameSender && closeTime;
+      });
+      
+      if (isTempMessageUpdate) {
+        console.log('🔄 Skipping duplicate - server response for temp message:', msg.message?.substring(0, 30));
+        continue;
+      }
       
       // Check if this is a duplicate of an immediate image message
       if (msg.message_type === 'image' && msg.media_url) {
@@ -3814,24 +3837,34 @@ export default function ChatPage() {
                       />
                 ) : (
                   // Regular text messages with bubble
-                  <View
-                    style={{
-                      backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      borderRadius: 20,
-                      borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
-                      borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
-                    }}
-                  >
-                    <Text
+                  <View>
+                    <View
                       style={{
-                        color: message.sender_id === currentUserId ? '#fff' : '#333',
-                        fontSize: 16,
+                        backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        borderRadius: 20,
+                        borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                        borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
                       }}
                     >
-                      {message.message}
-                    </Text>
+                      <Text
+                        style={{
+                          color: message.sender_id === currentUserId ? '#fff' : '#333',
+                          fontSize: 16,
+                        }}
+                      >
+                        {message.message}
+                      </Text>
+                    </View>
+                    {/* Add delivery status for text messages */}
+                    <ReadReceipt
+                      isOwnMessage={message.sender_id === currentUserId}
+                      deliveryStatus={message.delivery_status || 'sent'}
+                      readBy={message.read_by}
+                      otherParticipantId={message.sender_id === currentUserId ? (doctorId || patientId) : undefined}
+                      messageTime={message.created_at}
+                    />
                   </View>
                 )}
               </View>
