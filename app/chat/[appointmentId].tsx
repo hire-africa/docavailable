@@ -143,33 +143,31 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       }
       
       // Check if this is a duplicate of an immediate image message
-      // DISABLED: Let images through and rely on map key uniqueness
-      // if (msg.message_type === 'image' && msg.media_url) {
-      //   // Look for existing message with matching characteristics
-      //   const isDuplicate = prev.some(existingMsg => {
-      //     if (existingMsg.message_type !== 'image') return false;
-      //     
-      //     // Only consider it a duplicate if:
-      //     // 1. Exact same server URL match
-      //     if (existingMsg.server_media_url === msg.media_url) return true;
-      //     
-      //     // 2. Has temp_id and media_url matches (immediate message being updated)
-      //     if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) return true;
-      //     
-      //     // 3. Message uploaded recently (within 3 seconds) with EXACT same URL
-      //     const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
-      //     if (existingMsg._isUploaded && timeDiff < 3000 && existingMsg.server_media_url === msg.media_url) {
-      //       return true;
-      //     }
-      //     
-      //     return false;
-      //   });
-      //   
-      //   if (isDuplicate) {
-      //     console.log('🔄 Skipping duplicate image with same URL');
-      //     continue;
-      //   }
-      // }
+      if (msg.message_type === 'image' && msg.media_url) {
+        // Look for existing temp message with same server URL
+        const isDuplicate = prev.some(existingMsg => {
+          if (existingMsg.message_type !== 'image') return false;
+          
+          // Check if there's a temp message that will be updated to this URL
+          // This happens when WebRTC sends the message before updateImageMessage runs
+          if (existingMsg.temp_id && existingMsg.server_media_url === msg.media_url) {
+            console.log(`🔄 [safeMerge] Skipping WebRTC duplicate - temp message exists: ${existingMsg.temp_id}`);
+            return true;
+          }
+          
+          // Also check if media_url matches (for immediate messages being updated)
+          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) {
+            console.log(`🔄 [safeMerge] Skipping duplicate - temp message with same media_url: ${existingMsg.temp_id}`);
+            return true;
+          }
+          
+          return false;
+        });
+        
+        if (isDuplicate) {
+          continue;
+        }
+      }
       
       if (!map.has(key)) {
         map.set(key, msg);
