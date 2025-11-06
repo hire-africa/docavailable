@@ -3085,24 +3085,30 @@ export default function ChatPage() {
 
   // Function to update image message when upload completes
   const updateImageMessage = (tempId: string, serverImageUrl: string, messageId?: string | number) => {
-    console.log('✅ [Chat] Image uploaded successfully:', serverImageUrl);
+    console.log('✅ [Chat] Updating image message:', { tempId, serverImageUrl, messageId });
     
-    setMessages(prev => prev.map(msg => {
-      if (msg.temp_id === tempId || msg.id === tempId) {
-        return {
-          ...msg,
-          id: messageId || msg.id,
-          // Use server URL (backend fixed!)
-          media_url: serverImageUrl,
-          delivery_status: 'sent' as const,
-          // Store server URL for deduplication
-          server_media_url: serverImageUrl,
-          // Mark as uploaded to prevent duplicates
-          _isUploaded: true
-        };
-      }
-      return msg;
-    }));
+    setMessages(prev => {
+      const updated = prev.map(msg => {
+        if (msg.temp_id === tempId || msg.id === tempId) {
+          console.log('🔄 [Chat] Found matching message to update:', msg.id);
+          return {
+            ...msg,
+            id: messageId || msg.id,
+            // Use server URL (backend fixed!)
+            media_url: serverImageUrl,
+            delivery_status: 'sent' as const,
+            // Store server URL for deduplication
+            server_media_url: serverImageUrl,
+            // Mark as uploaded to prevent duplicates
+            _isUploaded: true
+          };
+        }
+        return msg;
+      });
+      
+      console.log('📊 [Chat] Messages after update:', updated.length);
+      return updated;
+    });
   };
 
   // Function to mark image message as failed
