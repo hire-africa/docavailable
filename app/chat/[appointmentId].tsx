@@ -4088,15 +4088,15 @@ export default function ChatPage() {
           <TouchableOpacity
             onPress={async () => {
               if (selectedImage) {
-                // Send image with optional caption
-                const tempId = addImmediateImageMessage(selectedImage);
                 const caption = newMessage.trim();
                 
                 try {
                   if (webrtcChatService) {
+                    // WebRTC handles immediate display itself, don't add temp message
+                    console.log('📤 [Send] Sending image via WebRTC');
                     const message = await webrtcChatService.sendImageMessage(selectedImage, appointmentId);
                     if (message && message.media_url) {
-                      updateImageMessage(tempId, message.media_url, message.id);
+                      console.log('✅ [Send] Image sent via WebRTC:', message.id);
                       
                       // Send caption as separate text message if provided
                       if (caption) {
@@ -4110,6 +4110,9 @@ export default function ChatPage() {
                       throw new Error('WebRTC image send returned null');
                     }
                   } else {
+                    // Backend API - use immediate display with temp message
+                    console.log('📤 [Send] Sending image via Backend API');
+                    const tempId = addImmediateImageMessage(selectedImage);
                     await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
                     
                     // Send caption as separate text message if provided
@@ -4118,7 +4121,9 @@ export default function ChatPage() {
                     }
                   }
                 } catch (error) {
-                  console.error('❌ Failed to send image:', error);
+                  console.error('❌ [Send] Failed to send image via WebRTC, falling back to backend:', error);
+                  // Fallback to backend with immediate display
+                  const tempId = addImmediateImageMessage(selectedImage);
                   await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
                   
                   // Still try to send caption if provided
