@@ -2067,6 +2067,28 @@ export default function ChatPage() {
       return;
     }
     
+    // Add message immediately to chat with "sending" status
+    const messageText = newMessage.trim();
+    const tempId = `temp_msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    const immediateMessage: ExtendedChatMessage = {
+      id: tempId,
+      temp_id: tempId,
+      appointment_id: isTextSession ? parseInt(appointmentId.replace('text_session_', ''), 10) : Number(appointmentId),
+      sender_id: user?.id || 0,
+      sender_name: user?.display_name || 'You',
+      message: messageText,
+      message_type: 'text',
+      created_at: new Date().toISOString(),
+      delivery_status: 'sending',
+      is_own_message: true,
+    };
+
+    console.log('📤 [Chat] Adding immediate text message:', tempId);
+    setMessages(prev => [...prev, immediateMessage]);
+    setNewMessage(''); // Clear input immediately
+    scrollToBottom();
+    
     try {
       setSending(true);
       
@@ -2115,10 +2137,22 @@ export default function ChatPage() {
           hasSendMessage: typeof webrtcChatService.sendMessage === 'function'
         });
         try {
-          const message = await webrtcChatService.sendMessage(newMessage.trim());
+          const message = await webrtcChatService.sendMessage(messageText);
           if (message) {
-            setNewMessage('');
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
+            
+            // Update the immediate message with server response
+            setMessages(prev => prev.map(msg => {
+              if (msg.temp_id === tempId || msg.id === tempId) {
+                return {
+                  ...msg,
+                  id: message.id,
+                  delivery_status: 'sent' as const,
+                  created_at: message.created_at || msg.created_at
+                };
+              }
+              return msg;
+            }));
             
             // Debug instant session state after message sent
             if (isInstantSession) {
@@ -2140,33 +2174,40 @@ export default function ChatPage() {
             }
           } else {
             console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
-            // Fallback to backend API
-            console.log('🔄 [ChatComponent] WebRTC returned null, trying backend API fallback');
-            await sendMessageViaBackendAPI();
+            // Mark as failed and try backend
+            setMessages(prev => prev.map(msg => 
+              (msg.temp_id === tempId || msg.id === tempId) 
+                ? { ...msg, delivery_status: 'failed' as const }
+                : msg
+            ));
           }
         } catch (webrtcError) {
           console.error('❌ [ChatComponent] WebRTC failed:', webrtcError);
-          console.error('❌ [ChatComponent] WebRTC error details:', {
-            message: webrtcError.message,
-            name: webrtcError.name,
-            stack: webrtcError.stack
-          });
-          // Fallback to backend API
-          console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
-          await sendMessageViaBackendAPI();
+          // Mark as failed
+          setMessages(prev => prev.map(msg => 
+            (msg.temp_id === tempId || msg.id === tempId) 
+              ? { ...msg, delivery_status: 'failed' as const }
+              : msg
+          ));
         }
         
       } else {
-        // Fallback to backend API
-        console.log('📤 [ChatComponent] WebRTC not available, using backend API fallback');
-        console.log('📤 [ChatComponent] WebRTC service state when not available:', {
-          webrtcChatService: webrtcChatService,
-          isWebRTCServiceActive: isWebRTCServiceActive
-        });
-        await sendMessageViaBackendAPI();
+        // WebRTC not available - mark as failed
+        console.log('📤 [ChatComponent] WebRTC not available');
+        setMessages(prev => prev.map(msg => 
+          (msg.temp_id === tempId || msg.id === tempId) 
+            ? { ...msg, delivery_status: 'failed' as const }
+            : msg
+        ));
       }
     } catch (error) {
       console.error('❌ [ChatComponent] Unexpected error sending message:', error);
+      // Mark as failed
+      setMessages(prev => prev.map(msg => 
+        (msg.temp_id === tempId || msg.id === tempId) 
+          ? { ...msg, delivery_status: 'failed' as const }
+          : msg
+      ));
     } finally {
       setSending(false);
     }
