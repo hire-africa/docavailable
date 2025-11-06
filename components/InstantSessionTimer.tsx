@@ -188,9 +188,10 @@ export default function InstantSessionTimer({
 
   const progress = isActive ? (timeRemaining / 90) * 100 : 0;
 
-  return (
-    <View style={styles.container}>
-      {!hasPatientSentMessage && (
+  // Don't render anything if not an instant session scenario
+  if (!hasPatientSentMessage && !isSessionExpired && !isActive) {
+    return (
+      <View style={styles.container}>
         <View style={styles.compactContainer}>
           <View style={styles.infoOnlyContainer}>
             <Text style={styles.title}>Instant Session</Text>
@@ -199,8 +200,27 @@ export default function InstantSessionTimer({
             </Text>
           </View>
         </View>
-      )}
-      
+      </View>
+    );
+  }
+
+  if (isSessionExpired) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.compactContainer}>
+          <View style={styles.infoOnlyContainer}>
+            <Text style={styles.title}>Instant Session</Text>
+            <Text style={[styles.infoText, { color: '#F44336' }]}>
+              Session expired - Doctor did not respond within 90 seconds
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
       {hasPatientSentMessage && !isSessionExpired && (
         <Animated.View style={[
           {
@@ -267,17 +287,6 @@ export default function InstantSessionTimer({
             </View>
           </View>
         </Animated.View>
-      )}
-      
-      {isSessionExpired && (
-        <View style={styles.compactContainer}>
-          <View style={styles.infoOnlyContainer}>
-            <Text style={styles.title}>Instant Session</Text>
-            <Text style={[styles.infoText, { color: '#F44336' }]}>
-              Session expired - Doctor did not respond within 90 seconds
-            </Text>
-          </View>
-        </View>
       )}
     </View>
   );
