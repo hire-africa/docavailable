@@ -45,13 +45,13 @@ class MessageStorageService
                 }
                 
                 // Check by content and sender within last 30 seconds (prevent rapid duplicates)
-                // For voice messages, also check media_url since they all have the same message text
+                // For voice and image messages, also check media_url since they all have the same message text
                 if ($existingMsg['sender_id'] === $messageData['sender_id'] && 
                     $existingMsg['message'] === $messageData['message'] &&
                     $existingMsg['message_type'] === ($messageData['message_type'] ?? 'text')) {
                     
-                    // For voice messages, also check if media_url is the same
-                    if (($messageData['message_type'] ?? 'text') === 'voice') {
+                    // For voice and image messages, also check if media_url is the same
+                    if (($messageData['message_type'] ?? 'text') === 'voice' || ($messageData['message_type'] ?? 'text') === 'image') {
                         $existingMediaUrl = $existingMsg['media_url'] ?? '';
                         $newMediaUrl = $messageData['media_url'] ?? '';
                         
@@ -60,7 +60,7 @@ class MessageStorageService
                             continue; // Skip this check, not a duplicate
                         }
                         
-                        // Additional check: if temp_id contains voice-specific identifiers, check those too
+                        // Additional check: if temp_id contains identifiers, check those too
                         if (!empty($messageData['temp_id']) && !empty($existingMsg['temp_id'])) {
                             $newTempId = $messageData['temp_id'];
                             $existingTempId = $existingMsg['temp_id'];
