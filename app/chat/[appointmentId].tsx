@@ -24,6 +24,7 @@ import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import InstantSessionTimer from '../../components/InstantSessionTimer';
 import RatingModal from '../../components/RatingModal';
+import ReadReceipt from '../../components/ReadReceipt';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
