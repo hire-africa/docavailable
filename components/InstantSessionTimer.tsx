@@ -32,8 +32,8 @@ export default function InstantSessionTimer({
 }: InstantSessionTimerProps) {
   const [pulseAnim] = useState(new Animated.Value(1));
   const [warningAnim] = useState(new Animated.Value(0));
-  const [timerHeight] = useState(new Animated.Value(0));
-  const [timerOpacity] = useState(new Animated.Value(0));
+  const [timerHeight] = useState(new Animated.Value(hasPatientSentMessage && !isSessionExpired ? 1 : 0));
+  const [timerOpacity] = useState(new Animated.Value(hasPatientSentMessage && !isSessionExpired ? 1 : 0));
 
   // Pulse animation for active timer
   useEffect(() => {
