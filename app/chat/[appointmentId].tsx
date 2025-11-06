@@ -107,13 +107,16 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
     for (const msg of incoming) {
       const key = msg.temp_id || String(msg.id);
       
-      // Check if this is a server response for a temp message (text or image)
-      // Look for existing temp message with same content/timestamp
-      const isTempMessageUpdate = prev.some(existingMsg => {
+      // Check if this is a server response for a temp TEXT message
+      // Only apply this check to text messages, not images
+      const isTempMessageUpdate = msg.message_type !== 'image' && prev.some(existingMsg => {
         // Skip if existing message doesn't have temp_id
         if (!existingMsg.temp_id) return false;
         
-        // Check if this is the same message by comparing:
+        // Skip if it's an image message (images have their own dedup logic below)
+        if (existingMsg.message_type === 'image') return false;
+        
+        // Check if this is the same TEXT message by comparing:
         // 1. Message content (for text)
         // 2. Timestamp proximity (within 5 seconds)
         // 3. Sender ID
@@ -126,7 +129,7 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
       });
       
       if (isTempMessageUpdate) {
-        console.log('🔄 Skipping duplicate - server response for temp message:', msg.message?.substring(0, 30));
+        console.log('🔄 Skipping duplicate - server response for temp TEXT message:', msg.message?.substring(0, 30));
         continue;
       }
       
