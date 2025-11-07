@@ -138,15 +138,12 @@ export default function InstantSessionTimer({
       return 'Session Expired';
     }
     
-    if (hasPatientSentMessage && isActive) {
-      return 'Waiting for Doctor';
-    }
-    
     if (hasPatientSentMessage && !isActive) {
       return 'Session Expired';
     }
     
-    return 'Ready to Send Message';
+    // Don't show status text while waiting - just show timer
+    return '';
   };
 
   const getStatusColor = () => {

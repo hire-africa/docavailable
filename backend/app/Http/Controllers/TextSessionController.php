@@ -277,13 +277,25 @@ class TextSessionController extends Controller
                         'session_id' => $sessionId,
                         'time_remaining' => $timeRemaining,
                         'deadline' => $deadline,
-                        'current_time' => $currentTime
+                        'current_time' => $currentTime,
+                        'current_status' => $session->status
                     ]);
                     
                     // Auto-expire the session
-                    $session->update([
+                    $updateResult = $session->update([
                         'status' => TextSession::STATUS_EXPIRED,
                         'ended_at' => now()
+                    ]);
+                    
+                    // Refresh to verify update
+                    $session->refresh();
+                    
+                    Log::info("Session update result", [
+                        'session_id' => $sessionId,
+                        'update_successful' => $updateResult,
+                        'new_status' => $session->status,
+                        'ended_at' => $session->ended_at,
+                        'is_expired' => $session->status === TextSession::STATUS_EXPIRED
                     ]);
                     
                     // Broadcast session-expired event via WebSocket
