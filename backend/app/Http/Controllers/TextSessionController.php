@@ -282,21 +282,30 @@ class TextSessionController extends Controller
                     ]);
                     
                     // Auto-expire the session
-                    $updateResult = $session->update([
-                        'status' => TextSession::STATUS_EXPIRED,
-                        'ended_at' => now()
-                    ]);
-                    
-                    // Refresh to verify update
-                    $session->refresh();
-                    
-                    Log::info("Session update result", [
-                        'session_id' => $sessionId,
-                        'update_successful' => $updateResult,
-                        'new_status' => $session->status,
-                        'ended_at' => $session->ended_at,
-                        'is_expired' => $session->status === TextSession::STATUS_EXPIRED
-                    ]);
+                    try {
+                        $updateResult = $session->update([
+                            'status' => TextSession::STATUS_EXPIRED,
+                            'ended_at' => now()
+                        ]);
+                        
+                        // Refresh to verify update
+                        $session->refresh();
+                        
+                        Log::info("Session update result", [
+                            'session_id' => $sessionId,
+                            'update_successful' => $updateResult,
+                            'new_status' => $session->status,
+                            'ended_at' => $session->ended_at,
+                            'is_expired' => $session->status === TextSession::STATUS_EXPIRED
+                        ]);
+                    } catch (\Exception $updateError) {
+                        Log::error("CRITICAL: Failed to update session to expired", [
+                            'session_id' => $sessionId,
+                            'error' => $updateError->getMessage(),
+                            'trace' => $updateError->getTraceAsString()
+                        ]);
+                        // Still try to return expired status even if DB update fails
+                    }
                     
                     // Broadcast session-expired event via WebSocket
                     try {

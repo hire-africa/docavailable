@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Easing,
-    StyleSheet,
-    Text,
-    View
+  Animated,
+  Dimensions,
+  Easing,
+  StyleSheet,
+  Text,
+  View
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 
@@ -270,7 +270,11 @@ export default function InstantSessionTimer({
             
             <View style={styles.rightSection}>
               <View style={styles.header}>
-                <Text style={styles.title}>Instant Session</Text>
+                <Text style={styles.title}>
+                  {hasPatientSentMessage && isActive && !hasDoctorResponded 
+                    ? 'Waiting for Doctor' 
+                    : 'Instant Session'}
+                </Text>
                 <Text style={[styles.status, { color: getStatusColor() }]}>
                   {getStatusText()}
                 </Text>
