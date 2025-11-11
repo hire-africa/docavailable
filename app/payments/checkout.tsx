@@ -430,38 +430,55 @@ export default function PayChanguCheckout() {
           
           try {
             const message = JSON.parse(event.nativeEvent.data);
-            if (message.type === 'payment_complete') {
-              console.log('✅ Payment completion message received:', message);
+            
+            // Handle payment status notification (sent immediately when page loads)
+            if (message.type === 'payment_status') {
+              console.log('📊 Payment status notification received:', message);
               
               if (message.status === 'completed' && !hasDetectedPayment) {
                 setHasDetectedPayment(true);
                 
-                // Refresh user data to get updated subscription
+                // Refresh user data in background
                 handlePaymentSuccess().then(() => {
-                  console.log('✅ User data refreshed after payment completion message');
+                  console.log('✅ User data refreshed after payment status notification');
                 }).catch((error) => {
-                  console.error('❌ Error refreshing user data after payment completion message:', error);
+                  console.error('❌ Error refreshing user data:', error);
                 });
-                
-                Alert.alert(
-                  'Payment Successful!',
-                  'Your payment has been completed successfully.',
-                  [
-                    { text: 'OK', onPress: () => router.back() }
-                  ]
-                );
-              } else if (message.status !== 'completed') {
-                Alert.alert(
-                  'Payment Failed',
-                  'Your payment was not successful. Please try again.',
-                  [
-                    { text: 'OK', onPress: () => router.back() }
-                  ]
-                );
               }
-            } else if (message.type === 'close_window') {
-              console.log('🔄 Close window message received, going back to app');
-              router.back();
+            }
+            // Handle close window message (sent after countdown completes)
+            else if (message.type === 'close_window') {
+              console.log('🔄 Close window message received, redirecting back to app');
+              
+              // Ensure user data is refreshed before going back
+              if (message.status === 'completed') {
+                handlePaymentSuccess().then(() => {
+                  console.log('✅ User data refreshed, navigating back');
+                  router.back();
+                }).catch((error) => {
+                  console.error('❌ Error refreshing user data, navigating back anyway:', error);
+                  router.back();
+                });
+              } else {
+                // Failed payment, just go back
+                router.back();
+              }
+            }
+            // Legacy: Handle old payment_complete messages for backward compatibility
+            else if (message.type === 'payment_complete') {
+              console.log('✅ Legacy payment completion message received:', message);
+              
+              if (message.status === 'completed') {
+                handlePaymentSuccess().then(() => {
+                  console.log('✅ User data refreshed after legacy payment message');
+                  router.back();
+                }).catch((error) => {
+                  console.error('❌ Error refreshing user data:', error);
+                  router.back();
+                });
+              } else {
+                router.back();
+              }
             }
           } catch (error) {
             console.log('📨 Non-JSON WebView message:', event.nativeEvent.data);

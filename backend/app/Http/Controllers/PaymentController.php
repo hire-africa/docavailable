@@ -552,39 +552,48 @@ class PaymentController extends Controller
         // Countdown and redirect
         let count = 5;
         const countdownEl = document.getElementById("countdown");
+        let redirected = false;
+        
+        // Function to handle redirect
+        function performRedirect() {
+            if (redirected) return;
+            redirected = true;
+            
+            countdownEl.textContent = "Redirecting now...";
+            
+            // Send close window message to WebView
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: "close_window",
+                    status: "' . $transaction->status . '",
+                    tx_ref: "' . $txRef . '"
+                }));
+            }
+            
+            // Fallback: try to go back in history after a short delay
+            setTimeout(() => {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.close();
+                }
+            }, 500);
+        }
         
         const countdown = setInterval(() => {
             count--;
             if (count > 0) {
                 countdownEl.textContent = "Redirecting in " + count + " seconds...";
             } else {
-                countdownEl.textContent = "Redirecting now...";
                 clearInterval(countdown);
-                
-                // Notify the app that payment is complete
-                if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: "payment_complete",
-                        status: "' . $transaction->status . '",
-                        tx_ref: "' . $txRef . '"
-                    }));
-                }
-                
-                // Try to close the window or go back
-                setTimeout(() => {
-                    if (window.ReactNativeWebView) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: "close_window"
-                        }));
-                    }
-                }, 1000);
+                performRedirect();
             }
         }, 1000);
         
-        // Also send immediate notification
+        // Send immediate notification that payment is complete (without triggering redirect)
         if (window.ReactNativeWebView) {
             window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: "payment_complete",
+                type: "payment_status",
                 status: "' . $transaction->status . '",
                 tx_ref: "' . $txRef . '"
             }));
