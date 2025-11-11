@@ -15,7 +15,7 @@ export class WebRTCChatService {
   private messages: ChatMessage[] = [];
   private storageKey: string;
   private processedMessageHashes: Set<string> = new Set();
-  private onTypingIndicator?: (isTyping: boolean) => void;
+  private onTypingIndicator?: (isTyping: boolean, senderId?: number) => void;
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
   private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private lastPingTime = 0;
@@ -187,7 +187,8 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
                 message_type: raw.message_type ?? raw.messageType ?? 'text',
                 media_url: raw.media_url ?? raw.mediaUrl,
                 created_at: raw.created_at ?? raw.createdAt ?? raw.timestamp ?? new Date().toISOString(),
-                delivery_status: raw.delivery_status ?? 'delivered'
+                delivery_status: raw.delivery_status ?? 'delivered',
+                ...(raw.replyTo && { replyTo: raw.replyTo }) // Include replyTo if present
               };
 
               const messageHash = this.createMessageHash({
@@ -218,15 +219,17 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               console.log('🔍 [WebRTCChat] Debug - senderIdNum:', senderIdNum, 'userIdNum:', userIdNum);
               console.log('🔍 [WebRTCChat] Debug - comparison result:', senderIdNum === userIdNum);
               
-              // Check if this is our own message - if so, ignore it to prevent duplication
+              // Mark message as processed (by hash)
+              this.processedMessageHashes.add(messageHash);
+              
+              // Check if this is our own message
               if (senderIdNum === userIdNum) {
-                console.log('⚠️ [WebRTCChat] Received own message via WebSocket - ignoring to prevent duplication');
-                return; // Don't process our own message from WebSocket
+                console.log('🔄 [WebRTCChat] Received own message echo - triggering onMessage to update delivery status');
+                // Trigger onMessage for own messages to update delivery status
+                // The chat component's deduplication will prevent duplicates while updating status
+                this.events.onMessage(normalized);
               } else {
                 console.log('✅ [WebRTCChat] Received message from other participant');
-                
-                // Mark message as processed (by hash)
-                this.processedMessageHashes.add(messageHash);
                 
                 // Store the message and trigger event for other participants' messages
                 await this.addMessage(normalized);
@@ -235,7 +238,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               }
             } else if (data.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
-              this.onTypingIndicator?.(data.isTyping);
+              this.onTypingIndicator?.(data.isTyping, data.senderId);
             } else if (data.type === 'ping') {
               // Handle ping messages from server (don't log them as they're frequent)
               this.lastPingTime = Date.now();
@@ -326,8 +329,8 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     });
   }
 
-  async sendMessage(message: string): Promise<ChatMessage | null> {
-    console.log('📤 [WebRTCChat] sendMessage called with:', message);
+  async sendMessage(message: string, replyTo?: { messageId: string; message: string; senderName: string }): Promise<ChatMessage | null> {
+    console.log('📤 [WebRTCChat] sendMessage called with:', message, 'replyTo:', replyTo);
     console.log('📤 [WebRTCChat] Connection status:', {
       isConnected: this.isConnected,
       hasWebSocket: !!this.websocket,
@@ -351,7 +354,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     // Get auth token for API calls
     const authToken = await this.getAuthToken();
     
-    const messageData = {
+    const messageData: any = {
       type: 'chat-message',
       content: message,
       messageType: 'text',
@@ -361,6 +364,11 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       createdAt: new Date().toISOString(),
       deliveryStatus: 'sending'
     };
+    
+    // Include replyTo if provided
+    if (replyTo) {
+      messageData.replyTo = replyTo;
+    }
 
     try {
       console.log('📤 [WebRTCChat] Sending message:', messageId, 'to WebSocket with auth token');
@@ -621,36 +629,52 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         numericAppointmentId = Number(appointmentId);
       }
 
-      // Upload the image first
+      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Show image IMMEDIATELY with local URI and 'sending' status
+      const immediateMessage: ChatMessage = {
+        id: messageId,
+        sender_id: Number(this.config.userId),
+        sender_name: this.config.userName,
+        message: '🖼️ Image',
+        message_type: 'image',
+        media_url: imageUri, // Local file URI for immediate display
+        created_at: new Date().toISOString(),
+        delivery_status: 'sending' // Show uploading status
+      };
+      
+      console.log('📤 [WebRTCChat] Showing image immediately:', messageId);
+      this.events.onMessage(immediateMessage);
+
+      // Upload the image in background
       const uploadResult = await imageService.uploadImage(numericAppointmentId, imageUri);
       
       if (!uploadResult.success || !uploadResult.mediaUrl) {
         throw new Error(uploadResult.error || 'Failed to upload image');
       }
 
-      const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const authToken = await this.getAuthToken();
       
       const messageData = {
         type: 'chat-message',
-        content: '🖼️ Image', // Better placeholder text
+        content: '🖼️ Image',
         messageType: 'image',
         senderId: this.config.userId,
         senderName: this.config.userName,
         mediaUrl: uploadResult.mediaUrl,
         tempId: messageId,
         createdAt: new Date().toISOString(),
-        deliveryStatus: 'sending'
+        deliveryStatus: 'sent'
       };
 
-      console.log('📤 [WebRTCChat] Sending image message:', messageId, 'URL:', uploadResult.mediaUrl);
+      console.log('📤 [WebRTCChat] Sending image message after upload:', messageId, 'URL:', uploadResult.mediaUrl);
       this.websocket.send(JSON.stringify(messageData));
       
       const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
       
-      // Convert to ChatMessage format for storage
-      const chatMessage: ChatMessage = {
+      // Update message with server URL and 'sent' status
+      const uploadedMessage: ChatMessage = {
         id: messageId,
         sender_id: Number(this.config.userId),
         sender_name: this.config.userName,
@@ -658,11 +682,13 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         message_type: 'image',
         media_url: uploadResult.mediaUrl,
         created_at: new Date().toISOString(),
-        delivery_status: 'sending'
+        delivery_status: 'sent'
       };
       
-      await this.addMessage(chatMessage);
-      this.events.onMessage(chatMessage);
+      await this.addMessage(uploadedMessage);
+      // Trigger onMessage again to update the existing message
+      console.log('✅ [WebRTCChat] Image uploaded, updating message:', messageId);
+      this.events.onMessage(uploadedMessage);
 
       // Also persist to backend API as fallback
       try {
@@ -689,21 +715,20 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           } else {
             const json = await resp.json().catch(() => null);
             console.log('✅ [WebRTCChat] Backend persisted image message:', json?.success);
-            chatMessage.delivery_status = 'delivered';
+            uploadedMessage.delivery_status = 'delivered';
           }
         } else {
           console.warn('⚠️ [WebRTCChat] No auth token available to persist image message to backend');
         }
       } catch (persistErr) {
         console.warn('⚠️ [WebRTCChat] Failed to persist image message to backend:', persistErr);
-        chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
+        uploadedMessage.delivery_status = 'sent'; // Still sent via WebSocket
       }
       
-      // Update the message in storage with final status
-      await this.addMessage(chatMessage);
+      // Message already added and updated above
       
       console.log('📤 [WebRTCChat] Image message sent successfully:', messageId);
-      return chatMessage;
+      return uploadedMessage;
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send image message:', error);
       throw error;
@@ -1085,8 +1110,30 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     }
   }
 
+  // Send typing indicator
+  sendTypingIndicator(isTyping: boolean, senderId?: number): void {
+    if (!this.websocket || !this.isConnected) {
+      console.log('⌨️ [WebRTCChat] Cannot send typing indicator - WebSocket not connected');
+      return;
+    }
+
+    try {
+      const message = {
+        type: 'typing-indicator',
+        appointmentId: this.config.appointmentId,
+        isTyping: isTyping,
+        senderId: senderId || this.config.userId
+      };
+
+      console.log('⌨️ [WebRTCChat] Sending typing indicator:', message);
+      this.websocket.send(JSON.stringify(message));
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Failed to send typing indicator:', error);
+    }
+  }
+
   // Set typing indicator callback
-  setOnTypingIndicator(callback: (isTyping: boolean) => void): void {
+  setOnTypingIndicator(callback: (isTyping: boolean, senderId?: number) => void): void {
     this.onTypingIndicator = callback;
   }
 

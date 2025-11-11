@@ -74,22 +74,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await query(`
-      INSERT INTO plans (name, description, price, currency, duration, text_sessions, voice_calls, video_calls, features, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
-    `, [
-      name,
-      description || null,
-      price,
-      currency || 'USD',
-      duration || 30,
-      text_sessions || 0,
-      voice_calls || 0,
-      video_calls || 0,
-      features || [],
-      status || 1,
-    ]);
+    const priceNum = typeof price === 'string' ? parseFloat(price) : price;
+    if (typeof priceNum !== 'number' || isNaN(priceNum)) {
+      return NextResponse.json(
+        { message: 'Price must be a valid number' },
+        { status: 400 }
+      );
+    }
+
+    const allowedCurrencies = ['USD', 'MWK'];
+    const normalizedCurrency = (currency || 'USD').toUpperCase();
+    if (!allowedCurrencies.includes(normalizedCurrency)) {
+      return NextResponse.json(
+        { message: 'Currency must be USD or MWK' },
+        { status: 400 }
+      );
+    }
+
+    let result;
+    try {
+      result = await query(`
+        INSERT INTO plans (name, description, price, currency, duration, text_sessions, voice_calls, video_calls, features, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *
+      `, [
+        name,
+        description || null,
+        priceNum,
+        normalizedCurrency,
+        duration || 30,
+        text_sessions || 0,
+        voice_calls || 0,
+        video_calls || 0,
+        features || [],
+        status || 1,
+      ]);
+    } catch (e: any) {
+      if (e && e.code === '42703') {
+        // description column does not exist, retry without it
+        result = await query(`
+          INSERT INTO plans (name, price, currency, duration, text_sessions, voice_calls, video_calls, features, status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING *
+        `, [
+          name,
+          priceNum,
+          normalizedCurrency,
+          duration || 30,
+          text_sessions || 0,
+          voice_calls || 0,
+          video_calls || 0,
+          features || [],
+          status || 1,
+        ]);
+      } else {
+        throw e;
+      }
+    }
 
     return NextResponse.json({
       message: 'Plan created successfully',

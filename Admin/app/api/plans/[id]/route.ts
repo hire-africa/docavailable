@@ -14,6 +14,13 @@ export async function PUT(
     }
 
     const { id } = params;
+    const planId = parseInt(id, 10);
+    if (isNaN(planId)) {
+      return NextResponse.json(
+        { message: 'Invalid plan ID' },
+        { status: 400 }
+      );
+    }
     const {
       name,
       description,
@@ -34,25 +41,69 @@ export async function PUT(
       );
     }
 
-    const result = await query(`
-      UPDATE plans 
-      SET name = $1, description = $2, price = $3, currency = $4, duration = $5, 
-          text_sessions = $6, voice_calls = $7, video_calls = $8, features = $9, status = $10
-      WHERE id = $11
-      RETURNING *
-    `, [
-      name,
-      description || null,
-      price,
-      currency || 'USD',
-      duration || 30,
-      text_sessions || 0,
-      voice_calls || 0,
-      video_calls || 0,
-      features || [],
-      status || 1,
-      id,
-    ]);
+    const priceNum = typeof price === 'string' ? parseFloat(price) : price;
+    if (typeof priceNum !== 'number' || isNaN(priceNum)) {
+      return NextResponse.json(
+        { message: 'Price must be a valid number' },
+        { status: 400 }
+      );
+    }
+
+    const allowedCurrencies = ['USD', 'MWK'];
+    const normalizedCurrency = (currency || 'USD').toUpperCase();
+    if (!allowedCurrencies.includes(normalizedCurrency)) {
+      return NextResponse.json(
+        { message: 'Currency must be USD or MWK' },
+        { status: 400 }
+      );
+    }
+
+    let result;
+    try {
+      result = await query(`
+        UPDATE plans 
+        SET name = $1, description = $2, price = $3, currency = $4, duration = $5, 
+            text_sessions = $6, voice_calls = $7, video_calls = $8, features = $9, status = $10
+        WHERE id = $11
+        RETURNING *
+      `, [
+        name,
+        description || null,
+        priceNum,
+        normalizedCurrency,
+        duration || 30,
+        text_sessions || 0,
+        voice_calls || 0,
+        video_calls || 0,
+        features || [],
+        status || 1,
+        planId,
+      ]);
+    } catch (e: any) {
+      if (e && e.code === '42703') {
+        // description column does not exist, retry without it
+        result = await query(`
+          UPDATE plans 
+          SET name = $1, price = $2, currency = $3, duration = $4, 
+              text_sessions = $5, voice_calls = $6, video_calls = $7, features = $8, status = $9
+          WHERE id = $10
+          RETURNING *
+        `, [
+          name,
+          priceNum,
+          normalizedCurrency,
+          duration || 30,
+          text_sessions || 0,
+          voice_calls || 0,
+          video_calls || 0,
+          features || [],
+          status || 1,
+          planId,
+        ]);
+      } else {
+        throw e;
+      }
+    }
 
     if (result.rows.length === 0) {
       return NextResponse.json(
@@ -86,11 +137,18 @@ export async function DELETE(
     }
 
     const { id } = params;
+    const planId = parseInt(id, 10);
+    if (isNaN(planId)) {
+      return NextResponse.json(
+        { message: 'Invalid plan ID' },
+        { status: 400 }
+      );
+    }
 
     // Check if plan has active subscriptions
     const subscriptionsResult = await query(
       'SELECT COUNT(*) as count FROM subscriptions WHERE plan_id = $1 AND is_active = true',
-      [id]
+      [planId]
     );
 
     const activeSubscriptions = parseInt(subscriptionsResult.rows[0].count);
@@ -101,7 +159,7 @@ export async function DELETE(
       );
     }
 
-    const result = await query('DELETE FROM plans WHERE id = $1 RETURNING id', [id]);
+    const result = await query('DELETE FROM plans WHERE id = $1 RETURNING id', [planId]);
 
     if (result.rows.length === 0) {
       return NextResponse.json(

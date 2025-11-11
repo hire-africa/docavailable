@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import { VideoCallEvents, VideoCallService, VideoCallState } from '../services/videoCallService';
+import ringtoneService from '../services/ringtoneService';
 interface VideoCallModalProps {
   appointmentId: string;
   userId: string;
@@ -597,6 +598,13 @@ export default function VideoCallModal({
       Vibration.vibrate(50);
       console.log('📞 Accept button pressed - answering video call');
       
+      // Stop ringtone immediately when accepting call
+      try {
+        await ringtoneService.stop();
+      } catch (e) {
+        console.error('❌ Failed to stop ringtone:', e);
+      }
+      
       // Immediately update UI state
       setIsRinging(false);
       setIsProcessingAnswer(true);
@@ -626,8 +634,16 @@ export default function VideoCallModal({
     }
   };
 
-  const handleRejectCall = () => {
+  const handleRejectCall = async () => {
     Vibration.vibrate(50);
+    
+    // Stop ringtone when rejecting call
+    try {
+      await ringtoneService.stop();
+    } catch (e) {
+      console.error('❌ Failed to stop ringtone:', e);
+    }
+    
     if (videoCallService.current) {
       // For incoming, send a rejection signal so the caller stops
       videoCallService.current.rejectIncomingCall?.('declined');
@@ -683,6 +699,14 @@ export default function VideoCallModal({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
+    
+    // Stop ringtone if still playing
+    try {
+      await ringtoneService.stop();
+    } catch (e) {
+      console.error('❌ Failed to stop ringtone:', e);
+    }
+    
     await performEndCallWithAnimation();
   };
 

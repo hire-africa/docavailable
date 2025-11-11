@@ -37,6 +37,9 @@ interface PrivacySettings {
         loginNotifications: boolean;
         sessionTimeout: number;
     };
+    privacy: {
+        anonymousConsultation: boolean;
+    };
 }
 
 export default function PrivacySettings() {
@@ -59,6 +62,9 @@ export default function PrivacySettings() {
         security: {
             loginNotifications: true,
             sessionTimeout: 30,
+        },
+        privacy: {
+            anonymousConsultation: false,
         },
     });
 
@@ -162,6 +168,9 @@ export default function PrivacySettings() {
                             security: {
                                 loginNotifications: true,
                                 sessionTimeout: 30,
+                            },
+                            privacy: {
+                                anonymousConsultation: false,
                             },
                         };
                         setSettings(defaultSettings);
@@ -366,6 +375,23 @@ export default function PrivacySettings() {
                             </View>
                         </View>,
                         'Manage your account security settings'
+                    )}
+
+                    {/* Anonymous Consultation - Only for Patients */}
+                    {userData?.user_type === 'patient' && renderSection(
+                        'Anonymous Consultation',
+                        'shield',
+                        <View style={styles.sectionContent}>
+                            {renderToggleItem(
+                                'Anonymous Mode',
+                                'Enable dark theme and enhanced privacy during consultations',
+                                settings.privacy.anonymousConsultation,
+                                (value) => handleToggle('privacy', 'anonymousConsultation', value),
+                                'privacy',
+                                'anonymousConsultation'
+                            )}
+                        </View>,
+                        'Protect your identity during sensitive consultations'
                     )}
 
                     {/* Privacy Policy Link */}

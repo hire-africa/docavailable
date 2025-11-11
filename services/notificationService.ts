@@ -124,14 +124,11 @@ export class NotificationService {
     userId?: string
   ): Promise<Notification[]> {
     try {
-      // Only get real-time notifications from local storage (no old mock data)
+      // Get all notifications from local storage
       const localNotifications = await this.getNotifications();
       
-      // Filter to only show notifications from the last 24 hours (real-time events)
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const recentNotifications = localNotifications.filter(notification => 
-        notification.timestamp > oneDayAgo
-      );
+      // Don't filter by time - show all notifications
+      const recentNotifications = localNotifications;
       
       // Try to get admin notifications from API
       let adminNotifications: Notification[] = [];
@@ -225,14 +222,14 @@ export class NotificationService {
 
   static async clearOldNotifications(): Promise<void> {
     try {
-      // Clear all notifications older than 24 hours
+      // Clear all notifications older than 30 days (keep notification history)
       const notifications = await this.getNotifications();
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const recentNotifications = notifications.filter(notification => 
-        notification.timestamp > oneDayAgo
+        notification.timestamp > thirtyDaysAgo
       );
       await this.saveNotifications(recentNotifications);
-      console.log('🧹 Cleared old notifications, kept:', recentNotifications.length);
+      console.log('🧹 Cleared old notifications (>30 days), kept:', recentNotifications.length);
     } catch (error) {
       console.error('Error clearing old notifications:', error);
     }

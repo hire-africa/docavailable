@@ -61,7 +61,7 @@ export const SkeletonBox: React.FC<SkeletonBoxProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#E1E9EE',
+    backgroundColor: '#E8E8E8',
     overflow: 'hidden',
   },
   shimmer: {
@@ -70,6 +70,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#F8F8F8',
   },
 });

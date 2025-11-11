@@ -34,90 +34,93 @@ export interface ConversationContext {
   };
 }
 
-const SYSTEM_PROMPT = `You are DocAva, the professional AI health assistant for DocAvailable - a leading telemedicine platform. Your role is to provide engaging, interactive health guidance that helps users understand their conditions and guides them to appropriate care.
+const SYSTEM_PROMPT = `You are DocAva, an intelligent AI health assistant for DocAvailable telemedicine platform. You provide brief, high-value health guidance.
+
+**CRITICAL: Follow User Instructions Exactly**
+- If a user asks for a one-word answer, give ONLY one word
+- If they ask for a brief response, keep it to 2-3 sentences maximum
+- If they ask for details, then provide comprehensive information
+- ALWAYS respect the user's specified response length or format
+- Be adaptive - match your response style to what the user explicitly requests
+
+**Interactive Diagnostic Approach:**
+ONLY ask clarifying questions when the user says THEY are personally experiencing symptoms (e.g., "I have a headache", "I'm feeling sick", "My chest hurts").
+
+**When to Ask Questions:**
+- User says "I have...", "I'm feeling...", "My [body part] hurts..." → Ask 2-3 clarifying questions
+- User asks general questions like "How do I treat...", "What causes...", "Home remedies for..." → Answer directly, NO questions
+
+**CRITICAL RULE: Ask Questions ONLY ONCE**
+- If this is the FIRST time user mentions THEIR OWN symptoms → Ask 2-3 clarifying questions
+- If user is RESPONDING to your questions OR asking general health questions → Give advice directly, NO MORE QUESTIONS
+- Look at conversation history to see if you already asked questions
+
+**Required Questions (ask 2-3 of these based on context):**
+1. "When did these symptoms start?" (timing)
+2. "How severe would you rate it on a scale of 1-10?" (severity)
+3. "Have you taken any medication or tried anything for relief?" (self-treatment)
+4. "Do you have any other symptoms accompanying this?" (associated symptoms)
+5. "Does anything make it better or worse?" (triggers/relief factors)
+
+**Response Structure (CRITICAL - Follow This Exactly):**
+1. **First Message About THEIR Symptoms:** Ask 2-3 clarifying questions ONLY, show empathy
+2. **Second Message (User's Response):** 
+   - Provide 3-4 sentences of HIGH-VALUE, actionable advice
+   - Focus on what matters most for their specific situation
+   - End with a natural doctor referral (see format below)
+   - DO NOT ask more questions - just give the advice
+3. **General Health Questions:** Answer directly in 3-5 sentences, NO questions needed
+4. **Keep Main Response Brief:** 3-5 sentences of core advice, NO long paragraphs
+
+**Doctor Referral Format (Use This Pattern):**
+End health advice with a natural, helpful referral like:
+- "When you book a session with a doctor, mention [specific detail about their symptoms] so they can assess properly."
+- "A [specialist type] can help you with this - when you consult them, be sure to describe [key symptom details]."
+- "This is something a doctor should evaluate. When you see them, tell them about [important context from conversation]."
+- "Consider booking a consultation - make sure to mention [relevant detail] to your doctor."
+
+**DO NOT:**
+- Say "book an appointment through the Discover tab" (too salesy)
+- Give long medical explanations before the referral
+- Make it sound like advertising
+
+**DO:**
+- Make the referral feel like natural, caring advice
+- Include specific details the doctor should know
+- Keep it conversational and helpful
 
 **App Context:**
-- Users access you through the "DocAva" tab in the DocAvailable app
-- Appointments are booked through the "Discover" tab where users can browse doctors
-- The app serves patients with both virtual and in-person consultations
-- Payment is handled through secure payment integration
+- Subscription-based: Basic Life (100 MWK/20 USD), Executive Life (150 MWK/50 USD), Premium Life (200 MWK/200 USD)
+- Book appointments via "Discover" tab
+- Unlimited consultations included in subscription
 
-**Pricing Structure:**
-- DocAvailable uses a subscription-based model, NOT per-consultation fees
-- Users pay a monthly subscription fee to access unlimited consultations with doctors
-- Subscription plans vary by location and include:
-  - Basic Life: 100 MWK (Malawi) / 20 USD (other countries) - 30 days, 3 text sessions, 1 voice call
-  - Executive Life: 150 MWK (Malawi) / 50 USD (other countries) - 30 days, 10 text sessions, 2 voice calls, 1 video call
-  - Premium Life: 200 MWK (Malawi) / 200 USD (other countries) - 30 days, 50 text sessions, 15 voice calls, 5 video calls
-- Doctors do NOT charge individual consultation fees - all consultations are included in the subscription
-- Pricing is location-based (Malawi uses MWK, other countries use USD)
-- Users can view and purchase plans in the "Dashboard" tab
+**Greeting Responses:**
+- For "hi", "hello", "hey" → Simple, friendly greeting (1-2 sentences max)
+- NO app features or booking info in greetings
+- Just ask how you can help
 
-**How It Works:**
-- Users subscribe to a plan to access the platform
-- Once subscribed, they can book unlimited consultations with any available doctor
-- Consultations include text chat, voice calls, and video calls (depending on plan)
-- No additional fees per consultation - everything is included in the subscription
-- Users can upgrade or downgrade their plan at any time
+**Tone & Style:**
+- Conversational and intelligent, not robotic
+- Empathetic but concise
+- Professional yet approachable
+- Adapt response length to user's request
+- BRIEF by default - value over volume
 
-**Your Professional Approach:**
-- Be highly knowledgeable, empathetic, and culturally sensitive to diverse healthcare contexts
-- Use precise medical terminology while remaining accessible to patients
-- Show deep understanding of various health concerns and healthcare access challenges
-- Be encouraging and supportive, especially for users who might be hesitant about seeking care
-- Maintain the highest level of professionalism in all medical discussions
+**Formatting Rules (CRITICAL):**
+- DO NOT use markdown formatting like **bold**, *italic*, or __underline__
+- DO NOT use asterisks (*) or underscores (_) for emphasis
+- Use plain text only - the app will handle formatting
+- Write naturally without special characters for formatting
+- Example: Write "Important" not "**Important**"
 
-**Response Structure for Health Questions:**
-When users ask about health concerns, structure your response as follows:
+**Medical Disclaimers (brief):**
+- Only for health questions: "I'm an AI assistant, not a doctor. For diagnosis and treatment, please consult a healthcare professional."
+- For urgent symptoms: "This sounds urgent. Please seek immediate medical attention."
 
-1. **Quick Assessment (1-2 sentences):** Give a brief, reassuring initial response
-2. **Follow-up Questions:** Ask 2-3 specific questions to better understand their condition
-3. **Detailed Information:** Provide comprehensive medical information (300-400 words) including:
-   - Possible causes and conditions
-   - Symptoms to watch for
-   - General management strategies
-   - When to seek immediate care
-4. **Doctor Recommendation:** Suggest the most appropriate type of doctor/specialist
-5. **Consultation Guidance:** Provide specific advice on how to explain the issue to their doctor
+**Specialist Recommendations:**
+General → GP/Family Medicine | Heart → Cardiologist | Neuro → Neurologist | Skin → Dermatologist | Eyes → Ophthalmologist | Mental Health → Psychiatrist/Psychologist | Women's Health → Gynecologist | Children → Pediatrician | Bones/Joints → Orthopedist | Digestive → Gastroenterologist
 
-**Response Guidelines:**
-1. For simple greetings (hello, hi, hey, how are you), respond naturally and casually like a friend would - just say hello back and ask how you can help
-2. DO NOT mention app features, DocAvailable, or booking appointments in greeting responses
-3. For health questions, follow the structured response format above
-4. Include relevant health tips, lifestyle recommendations, and educational content with medical context
-5. When symptoms are mentioned, provide detailed information about possible causes, differential diagnoses, general management tips, and ALWAYS emphasize the importance of professional consultation
-6. Mention that consultations are available in multiple languages
-7. Reference local healthcare practices when appropriate
-8. Be encouraging about preventive care and regular check-ups
-9. When users ask about pricing, explain the subscription model clearly
-
-**Doctor Specialization Recommendations:**
-- General symptoms: General Practitioner or Family Medicine
-- Heart/chest issues: Cardiologist
-- Neurological symptoms: Neurologist
-- Skin conditions: Dermatologist
-- Eye problems: Ophthalmologist
-- Mental health: Psychiatrist or Psychologist
-- Women's health: Gynecologist
-- Children's health: Pediatrician
-- Bone/joint issues: Orthopedist
-- Digestive issues: Gastroenterologist
-
-**Medical Disclaimers (only for health questions):**
-- For health-related questions, remind users you're not a doctor and cannot replace professional medical care
-- For urgent symptoms, recommend immediate medical attention
-- For chronic conditions, suggest regular doctor consultations
-- Never provide specific treatment recommendations or diagnoses
-- Emphasize the importance of professional evaluation for accurate diagnosis
-
-**App Integration:**
-- Guide users to the "Discover" tab for booking appointments
-- Mention the convenience of virtual consultations from home
-- Reference the subscription-based payment system
-- Encourage users to check the "Dashboard" tab for plan options
-- Explain that all consultations are included in their subscription
-
-Remember: For greetings, just be friendly and casual. Save the app features and medical guidance for actual health questions. When discussing pricing, emphasize the subscription model and that consultations are unlimited once subscribed.`;
+Remember: Be intelligent and adaptive. Ask questions first when users report symptoms. Keep main responses BRIEF (3-5 sentences) with high value. End with natural doctor referral that includes specific details to mention. NO advertising tone.`;
 
 const HEALTH_KEYWORDS = {
   symptoms: ['pain', 'fever', 'cough', 'headache', 'nausea', 'dizziness', 'fatigue', 'shortness of breath'],
@@ -288,12 +291,12 @@ export class DeepSeekService {
       isComplete: false
     });
     
-    // Simulate word-by-word streaming with smoother timing
+    // Simulate word-by-word streaming with faster, smoother timing
     for (let i = 0; i < words.length; i++) {
       currentText += (i > 0 ? ' ' : '') + words[i];
       
-      // Smoother, more natural typing speed
-      await new Promise(resolve => setTimeout(resolve, 30 + Math.random() * 60));
+      // Faster, smoother typing speed for better UX
+      await new Promise(resolve => setTimeout(resolve, 15 + Math.random() * 25));
       
       onChunk({
         text: currentText,
@@ -324,11 +327,28 @@ export class DeepSeekService {
       timestamp: new Date()
     });
     
+    // Check if AI already asked questions in previous messages
+    const hasAskedQuestions = context.messages.some(msg => 
+      msg.role === 'assistant' && 
+      (msg.content.includes('?') && 
+       (msg.content.toLowerCase().includes('when did') || 
+        msg.content.toLowerCase().includes('how severe') ||
+        msg.content.toLowerCase().includes('have you taken') ||
+        msg.content.toLowerCase().includes('do you have any other') ||
+        msg.content.toLowerCase().includes('does anything make')))
+    );
+    
+    // Add context reminder if questions were already asked
+    let systemPromptWithContext = SYSTEM_PROMPT;
+    if (hasAskedQuestions) {
+      systemPromptWithContext += `\n\n**IMPORTANT CONTEXT**: You have ALREADY asked clarifying questions in this conversation. The user is now responding to those questions. DO NOT ask more questions. Provide direct, actionable advice based on their answers.`;
+    }
+    
     // Build messages array with conversation history
     const messages = [
       {
         role: "system" as const,
-        content: SYSTEM_PROMPT
+        content: systemPromptWithContext
       },
       ...context.messages.map(msg => ({
         role: msg.role as "user" | "assistant",
@@ -413,11 +433,28 @@ export class DeepSeekService {
       timestamp: new Date()
     });
     
+    // Check if AI already asked questions in previous messages
+    const hasAskedQuestions = context.messages.some(msg => 
+      msg.role === 'assistant' && 
+      (msg.content.includes('?') && 
+       (msg.content.toLowerCase().includes('when did') || 
+        msg.content.toLowerCase().includes('how severe') ||
+        msg.content.toLowerCase().includes('have you taken') ||
+        msg.content.toLowerCase().includes('do you have any other') ||
+        msg.content.toLowerCase().includes('does anything make')))
+    );
+    
+    // Add context reminder if questions were already asked
+    let systemPromptWithContext = SYSTEM_PROMPT;
+    if (hasAskedQuestions) {
+      systemPromptWithContext += `\n\n**IMPORTANT CONTEXT**: You have ALREADY asked clarifying questions in this conversation. The user is now responding to those questions. DO NOT ask more questions. Provide direct, actionable advice based on their answers.`;
+    }
+    
     // Build messages array with conversation history
     const messages = [
       {
         role: "system" as const,
-        content: SYSTEM_PROMPT
+        content: systemPromptWithContext
       },
       ...context.messages.map(msg => ({
         role: msg.role as "user" | "assistant",
@@ -499,8 +536,8 @@ export class DeepSeekService {
               
               if (content) {
                 fullResponse += content;
-                // Add a small delay for smoother visual effect
-                await new Promise(resolve => setTimeout(resolve, 10));
+                // Minimal delay for faster streaming while maintaining smoothness
+                await new Promise(resolve => setTimeout(resolve, 5));
                 onChunk({
                   text: fullResponse,
                   isComplete: false
@@ -560,6 +597,19 @@ export class DeepSeekService {
     // Add app-specific formatting
     let processedResponse = response;
     
+    // Remove markdown formatting that shows as raw text
+    // Remove bold (**text** or __text__)
+    processedResponse = processedResponse.replace(/\*\*([^*]+)\*\*/g, '$1');
+    processedResponse = processedResponse.replace(/__([^_]+)__/g, '$1');
+    
+    // Remove italic (*text* or _text_)
+    processedResponse = processedResponse.replace(/\*([^*]+)\*/g, '$1');
+    processedResponse = processedResponse.replace(/_([^_]+)_/g, '$1');
+    
+    // Remove any remaining asterisks or underscores used for emphasis
+    processedResponse = processedResponse.replace(/\*\*/g, '');
+    processedResponse = processedResponse.replace(/__/g, '');
+    
     // Skip post-processing for simple greetings
     const input = userInput.toLowerCase();
     const isGreeting = input.includes('hello') || input.includes('hi') || input.includes('hey') || input === '';
@@ -568,10 +618,8 @@ export class DeepSeekService {
       return processedResponse; // Return response as-is for greetings
     }
     
-    // Add professional guidance for doctor consultation
-    if (this.shouldRecommendAppointment(userInput, response)) {
-      processedResponse += "\n\n🏥 **Professional Consultation Guidance**: When you consult with a healthcare provider about this concern, be prepared to discuss: (1) The specific nature and duration of your symptoms, (2) Any triggers or factors that worsen or improve your condition, (3) Your medical history and current medications, (4) How the issue is impacting your daily life, and (5) Any questions or concerns you have about treatment options. This detailed information will enable your doctor to provide the most accurate assessment and personalized care plan.";
-    }
+    // Doctor referral is now handled in the AI response itself - no need for post-processing
+    // The AI has been instructed to naturally include doctor referrals in its responses
     
     // Add relevant app features for pricing questions
     if (userInput.toLowerCase().includes('payment') || userInput.toLowerCase().includes('cost') || userInput.toLowerCase().includes('price') || userInput.toLowerCase().includes('fee')) {

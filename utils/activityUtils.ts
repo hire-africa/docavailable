@@ -94,39 +94,7 @@ export function generateUserActivities(
       });
     }
 
-    // Add general user activities
-    if (userData?.created_at) {
-      activities.push({
-        id: `welcome_${userData.id}`,
-        type: 'welcome',
-        title: 'Welcome to DocAvailable!',
-        description: 'Your account has been created successfully',
-        timestamp: new Date(userData.created_at),
-        icon: 'heart',
-        color: '#E91E63'
-      });
-    }
-
-    // Add admin notifications as activities
-    activities.push({
-      id: 'admin_notification_1',
-      type: 'system',
-      title: 'System Update',
-      description: 'New features and improvements have been added to the app',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-      icon: 'infoCircle',
-      color: '#607D8B'
-    });
-
-    activities.push({
-      id: 'admin_notification_2',
-      type: 'system',
-      title: 'Health Tips',
-      description: 'Remember to stay hydrated and maintain regular exercise',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-      icon: 'heart',
-      color: '#E91E63'
-    });
+    // Don't add fake activities - only real user data should show
 
   } else if (userType === 'doctor') {
     // Doctor-specific activities
@@ -162,29 +130,7 @@ export function generateUserActivities(
       });
     }
 
-    // Add general doctor activities
-    if (userData?.created_at) {
-      activities.push({
-        id: `welcome_doctor_${userData.id}`,
-        type: 'welcome',
-        title: 'Welcome to DocAvailable!',
-        description: 'Your doctor account is ready',
-        timestamp: new Date(userData.created_at),
-        icon: 'userMd',
-        color: '#2196F3'
-      });
-    }
-
-    // Add admin notifications for doctors
-    activities.push({
-      id: 'admin_notification_doctor_1',
-      type: 'system',
-      title: 'Platform Update',
-      description: 'New consultation features and payment improvements available',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
-      icon: 'infoCircle',
-      color: '#607D8B'
-    });
+    // Don't add fake activities - only real user data should show
   }
 
   // Add message activities if any
@@ -202,27 +148,7 @@ export function generateUserActivities(
     });
   }
 
-  // Add payment activities
-  activities.push({
-    id: 'payment_activity_1',
-    type: 'payment',
-    title: 'Payment Processed',
-    description: 'Your recent transaction has been completed successfully',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    icon: 'dollar',
-    color: '#FF9800'
-  });
-
-  // Add reminder activities
-  activities.push({
-    id: 'reminder_activity_1',
-    type: 'reminder',
-    title: 'Appointment Reminder',
-    description: 'Your upcoming appointment is in 2 hours',
-    timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-    icon: 'clock',
-    color: '#9C27B0'
-  });
+  // Don't add fake payment/reminder activities - only real data should show
 
   // Sort activities by timestamp (newest first)
   return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());

@@ -1,9 +1,11 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   Dimensions,
+  Easing,
   Platform,
   ScrollView,
   StatusBar,
@@ -73,12 +75,46 @@ export default function DoctorProfilePage() {
   // Reviews
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  
+  // Progressive section loading
+  const [visibleSections, setVisibleSections] = useState(0);
+  const sectionAnimations = useRef<Animated.Value[]>([]).current;
+  const hasAnimated = useRef(false);
 
   useEffect(() => {
     if (uid) {
       fetchDoctorProfile();
+      hasAnimated.current = false; // Reset animation flag for new doctor
     }
   }, [uid]);
+
+  // Progressive section animation
+  useEffect(() => {
+    if (doctor && visibleSections < 6 && !hasAnimated.current) {
+      const delay = visibleSections === 0 ? 0 : 100; // First section immediate, others 100ms apart
+      
+      const timer = setTimeout(() => {
+        const nextSection = visibleSections;
+        
+        // Animate the section in
+        Animated.timing(sectionAnimations[nextSection], {
+          toValue: 1,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }).start();
+        
+        setVisibleSections(nextSection + 1);
+        
+        // Mark as animated when all sections are shown
+        if (nextSection + 1 >= 6) {
+          hasAnimated.current = true;
+        }
+      }, delay);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [doctor, visibleSections]);
 
   useEffect(() => {
     // Load user's current subscription
@@ -108,6 +144,20 @@ export default function DoctorProfilePage() {
         console.log('Doctor data received:', response.data);
         console.log('Languages spoken:', response.data.languages_spoken);
         setDoctor(response.data);
+        
+        // Initialize animations for 6 sections
+        if (sectionAnimations.length === 0) {
+          for (let i = 0; i < 6; i++) {
+            sectionAnimations.push(new Animated.Value(0));
+          }
+        }
+        
+        // Start progressive loading if not already animated
+        if (!hasAnimated.current) {
+          setVisibleSections(0);
+        } else {
+          setVisibleSections(6); // Show all if already animated
+        }
       } else {
         console.error('Failed to fetch doctor profile:', response.message);
       }
@@ -439,8 +489,24 @@ export default function DoctorProfilePage() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Header Card */}
-        <View style={styles.profileHeaderCard}>
+        {/* Profile Header Card - Section 0 */}
+        {visibleSections > 0 ? (
+          <Animated.View
+            style={[
+              styles.profileHeaderCard,
+              {
+                opacity: sectionAnimations[0],
+                transform: [
+                  {
+                    translateY: sectionAnimations[0].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <View style={styles.profileImageContainer}>
             {doctor.profile_picture_url || doctor.profile_picture ? (
               <DoctorProfilePicture
@@ -486,10 +552,31 @@ export default function DoctorProfilePage() {
               </Text>
             </View>
           </View>
-        </View>
+          </Animated.View>
+        ) : (
+          <View style={styles.profileHeaderCard}>
+            <DoctorProfileSkeleton />
+          </View>
+        )}
 
-        {/* Professional Information Card */}
-        <View style={styles.infoCard}>
+        {/* Professional Information Card - Section 1 */}
+        {visibleSections > 1 ? (
+          <Animated.View
+            style={[
+              styles.infoCard,
+              {
+                opacity: sectionAnimations[1],
+                transform: [
+                  {
+                    translateY: sectionAnimations[1].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <Text style={styles.sectionTitle}>Professional Information</Text>
           
           {/* Years of Experience */}
@@ -548,18 +635,58 @@ export default function DoctorProfilePage() {
               )}
             </View>
           </View>
-        </View>
+          </Animated.View>
+        ) : visibleSections > 0 ? (
+          <View style={styles.infoCard}>
+            <DoctorProfileSkeleton />
+          </View>
+        ) : null}
 
-        {/* Bio Card */}
-        {doctor.bio && (
-          <View style={styles.bioCard}>
+        {/* Bio Card - Section 2 */}
+        {doctor.bio && visibleSections > 2 ? (
+          <Animated.View
+            style={[
+              styles.bioCard,
+              {
+                opacity: sectionAnimations[2],
+                transform: [
+                  {
+                    translateY: sectionAnimations[2].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
             <Text style={styles.sectionTitle}>About Dr. {doctor.first_name}</Text>
             <Text style={styles.bioText}>{doctor.bio}</Text>
+          </Animated.View>
+        ) : doctor.bio && visibleSections > 1 ? (
+          <View style={styles.bioCard}>
+            <DoctorProfileSkeleton />
           </View>
-        )}
+        ) : null}
 
-        {/* Action Buttons */}
-        <View style={styles.actionButtonsContainer}>
+        {/* Action Buttons - Section 3 */}
+        {visibleSections > 3 ? (
+          <Animated.View
+            style={[
+              styles.actionButtonsContainer,
+              {
+                opacity: sectionAnimations[3],
+                transform: [
+                  {
+                    translateY: sectionAnimations[3].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <TouchableOpacity 
             style={[
               styles.directBookingButton,
@@ -582,10 +709,31 @@ export default function DoctorProfilePage() {
           >
             <Text style={styles.bookAppointmentButtonText}>Book Appointment</Text>
           </TouchableOpacity>
-        </View>
+          </Animated.View>
+        ) : visibleSections > 2 ? (
+          <View style={styles.actionButtonsContainer}>
+            <DoctorProfileSkeleton />
+          </View>
+        ) : null}
 
-        {/* Reviews Section */}
-        <View style={styles.reviewsCard}>
+        {/* Reviews & Ratings Card - Section 4 */}
+        {visibleSections > 4 ? (
+          <Animated.View
+            style={[
+              styles.reviewsCard,
+              {
+                opacity: sectionAnimations[4],
+                transform: [
+                  {
+                    translateY: sectionAnimations[4].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <View style={styles.reviewsHeader}>
             <Text style={styles.sectionTitle}>Reviews & Ratings</Text>
             <View style={styles.ratingSummary}>
@@ -623,10 +771,31 @@ export default function DoctorProfilePage() {
               ))
             )}
           </View>
-        </View>
+          </Animated.View>
+        ) : visibleSections > 3 ? (
+          <View style={styles.reviewsCard}>
+            <DoctorProfileSkeleton />
+          </View>
+        ) : null}
 
-        {/* Similar Doctors Section */}
-        <View style={styles.similarDoctorsCard}>
+        {/* Similar Doctors Section - Section 5 */}
+        {visibleSections > 5 ? (
+          <Animated.View
+            style={[
+              styles.similarDoctorsCard,
+              {
+                opacity: sectionAnimations[5],
+                transform: [
+                  {
+                    translateY: sectionAnimations[5].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
           <Text style={styles.sectionTitle}>Similar Doctors</Text>
           {loadingSimilar ? (
             <Text style={styles.similarDoctorsText}>Loading recommendations...</Text>
@@ -671,7 +840,12 @@ export default function DoctorProfilePage() {
               ))}
             </ScrollView>
           )}
-        </View>
+          </Animated.View>
+        ) : visibleSections > 4 ? (
+          <View style={styles.similarDoctorsCard}>
+            <DoctorProfileSkeleton />
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* Subscription Modal */}

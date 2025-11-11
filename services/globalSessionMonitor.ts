@@ -64,7 +64,10 @@ class GlobalSessionMonitor {
 
   private async checkActiveSessions() {
     try {
-      console.log('🌍 [GlobalSessionMonitor] Checking for active sessions');
+      // Only log if debug mode is enabled or if there are monitored sessions
+      if (this.monitoredSessions.size > 0) {
+        console.log('🌍 [GlobalSessionMonitor] Checking for active sessions (monitoring:', this.monitoredSessions.size, ')');
+      }
       
       // First, clean up any ended sessions from the background timer
       await backgroundSessionTimer.cleanupEndedSessions();

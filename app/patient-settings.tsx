@@ -81,6 +81,7 @@ function PatientSettingsContent() {
     const [loading, setLoading] = useState(false);
     const [showAnonymousWarning, setShowAnonymousWarning] = useState(false);
     const [pendingAnonymousMode, setPendingAnonymousMode] = useState(false);
+    
     const [settings, setSettings] = useState<Settings>({
         notifications: {
             appointments: true,
@@ -90,7 +91,7 @@ function PatientSettingsContent() {
         privacy: {
             profileVisibility: true,
             dataSharing: true,
-            anonymousMode: false,
+            anonymousMode: false, // Will be updated from userData
         },
         security: {
             loginNotifications: true,
@@ -102,6 +103,19 @@ function PatientSettingsContent() {
             timezone: 'UTC',
         },
     });
+    
+    // Initialize settings with userData from AuthContext when available
+    useEffect(() => {
+        if (userData?.privacy_preferences?.privacy?.anonymousMode !== undefined) {
+            setSettings(prev => ({
+                ...prev,
+                privacy: {
+                    ...prev.privacy,
+                    anonymousMode: userData.privacy_preferences?.privacy?.anonymousMode || false
+                }
+            }));
+        }
+    }, [userData]);
 
     useEffect(() => {
         if (!user) {
@@ -226,9 +240,12 @@ function PatientSettingsContent() {
     const updateSetting = (path: string, value: any) => {
         // Special handling for anonymous mode toggle
         if (path === 'privacy.anonymousMode' && value === true && !settings.privacy.anonymousMode) {
-            // Show warning modal before enabling anonymous mode
+            // Show warning modal immediately without delay
             setPendingAnonymousMode(true);
-            setShowAnonymousWarning(true);
+            // Use setTimeout with 0ms to ensure state update happens immediately
+            setTimeout(() => {
+                setShowAnonymousWarning(true);
+            }, 0);
             return;
         }
 
@@ -373,7 +390,7 @@ function PatientSettingsContent() {
                             <Icon name="user" size={20} color="#E91E63" />
                             <View style={styles.settingText}>
                                 <Text style={styles.settingLabel}>Anonymous Consultations</Text>
-                                <Text style={styles.settingDescription}>Hide your name and profile. Dark mode automatically enabled.</Text>
+                                <Text style={styles.settingDescription}>Hide your name and profile for chat consultations only. Dark mode automatically enabled.</Text>
                             </View>
                         </View>
                         <Switch
@@ -407,51 +424,37 @@ function PatientSettingsContent() {
             <Modal
                 visible={showAnonymousWarning}
                 transparent={true}
-                animationType="fade"
+                animationType="none"
                 onRequestClose={handleAnonymousModeCancel}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContainer}>
                         <View style={styles.modalHeader}>
                             <View style={styles.warningIconContainer}>
-                                <Icon name="warning" size={32} color="#FF6B35" />
+                                <Icon name="user" size={32} color="#4CAF50" />
                             </View>
                             <Text style={styles.modalTitle}>Enable Anonymous Consultations?</Text>
                         </View>
 
                         <View style={styles.modalContent}>
                             <Text style={styles.modalDescription}>
-                                By enabling anonymous consultations, your name and profile picture will be hidden from doctors during all consultations.
+                                By enabling anonymous consultations, your name and profile picture will be hidden from doctors during chat consultations only. This feature does not work for video or voice calls.
                             </Text>
                             
                             <View style={styles.warningSection}>
-                                <Text style={styles.warningTitle}>Important Considerations:</Text>
+                                <Text style={styles.warningTitle}>Important Note:</Text>
                                 
                                 <View style={styles.warningItem}>
-                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Icon name="info" size={16} color="#4CAF50" />
                                     <Text style={styles.warningText}>
-                                        Doctors won't be able to follow up on your condition or medical history
+                                        Doctors won't be able to follow your consultations or access your medical history during anonymous sessions
                                     </Text>
                                 </View>
                                 
                                 <View style={styles.warningItem}>
-                                    <Icon name="close" size={16} color="#FF6B35" />
+                                    <Icon name="info" size={16} color="#4CAF50" />
                                     <Text style={styles.warningText}>
-                                        Emergency services may not work properly as they won't be connected to your patient profile
-                                    </Text>
-                                </View>
-                                
-                                <View style={styles.warningItem}>
-                                    <Icon name="close" size={16} color="#FF6B35" />
-                                    <Text style={styles.warningText}>
-                                        Medical records and consultation history may be limited
-                                    </Text>
-                                </View>
-                                
-                                <View style={styles.warningItem}>
-                                    <Icon name="close" size={16} color="#FF6B35" />
-                                    <Text style={styles.warningText}>
-                                        You can disable this feature at any time in settings
+                                        This feature only works for chat consultations, not video or voice calls
                                     </Text>
                                 </View>
                             </View>
@@ -604,7 +607,7 @@ const styles = StyleSheet.create({
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: '#FFF5F5',
+        backgroundColor: '#E8F5E8',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 12,
@@ -626,16 +629,16 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     warningSection: {
-        backgroundColor: '#FFF8F5',
+        backgroundColor: '#F1F8E9',
         borderRadius: 12,
         padding: 16,
         borderLeftWidth: 4,
-        borderLeftColor: '#FF6B35',
+        borderLeftColor: '#4CAF50',
     },
     warningTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#FF6B35',
+        color: '#4CAF50',
         marginBottom: 12,
     },
     warningItem: {
@@ -668,7 +671,7 @@ const styles = StyleSheet.create({
         borderColor: '#E0E0E0',
     },
     confirmButton: {
-        backgroundColor: '#FF6B35',
+        backgroundColor: '#4CAF50',
     },
     cancelButtonText: {
         fontSize: 16,

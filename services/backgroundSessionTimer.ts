@@ -309,7 +309,10 @@ class BackgroundSessionTimer {
 
   // Clean up ended sessions by checking their status on the backend
   async cleanupEndedSessions() {
-    console.log('🧹 [BackgroundTimer] Cleaning up ended sessions...');
+    // Only log if there are sessions to clean up
+    if (this.states.size > 0) {
+      console.log('🧹 [BackgroundTimer] Cleaning up ended sessions... (active:', this.states.size, ')');
+    }
     
     for (const [sessionId, state] of this.states.entries()) {
       try {

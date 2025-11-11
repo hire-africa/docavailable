@@ -47,6 +47,7 @@ if (typeof global !== 'undefined' && !global.preloadedAuthPromise) {
 // Import CallKeep for call management
 import RNCallKeep from 'react-native-callkeep';
 import callkeepService from './services/callkeepService';
+import callDeduplicationService from './services/callDeduplicationService';
 import ringtoneService from './services/ringtoneService';
 
 // Setup CallKeep on app start
@@ -186,6 +187,16 @@ const handleNativeIncomingCall = () => {
 // Listen for native incoming call events from MainActivity
 DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
   console.log('CALLKEEP: Received native incoming call event:', callData);
+  
+  // Check deduplication service to prevent multiple call screens
+  const appointmentId = String(callData.sessionId || '');
+  const callType = (callData.callType === 'video' ? 'video' : 'audio');
+  
+  if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'native')) {
+    console.log('CALLKEEP: Duplicate call blocked by deduplication service');
+    return;
+  }
+  
   // Start custom ringtone
   ringtoneService.start();
   
@@ -271,6 +282,13 @@ const handleEndCall = async ({ callUUID, reason }) => {
     console.log('CALLKEEP: endCall ignored (dismissing system UI, keeping call data)');
     isDismissingSystemUI = false;
     return;
+  }
+
+  // Clear call from deduplication service
+  const callData = await ensureCallData(callUUID);
+  if (callData?.appointmentId && callData?.callType) {
+    const callType = callData.callType === 'video' ? 'video' : 'audio';
+    callDeduplicationService.clearCall(String(callData.appointmentId), callType);
   }
 
   try {

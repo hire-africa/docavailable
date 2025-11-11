@@ -19,6 +19,7 @@ import {
 import { BackendChatbotService, BackendStreamingResponse } from '../services/backendChatbotService';
 import { PromptLimitService, PromptLimitStatus } from '../services/promptLimitService';
 import AIDocHistory from './DocAvaHistory';
+import MarkdownText from './MarkdownText';
 
 const { width, height } = Dimensions.get('window');
 
@@ -820,14 +821,25 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
                   ]}
                 >
                   <View style={styles.messageContent}>
-                    <Text
-                      style={[
-                        styles.messageText,
-                        message.isUser ? styles.userText : styles.botText,
-                      ]}
-                    >
-                      {message.text}
-                    </Text>
+                    {message.isUser ? (
+                      <Text
+                        style={[
+                          styles.messageText,
+                          styles.userText,
+                        ]}
+                      >
+                        {message.text}
+                      </Text>
+                    ) : (
+                      <MarkdownText
+                        style={[
+                          styles.messageText,
+                          styles.botText,
+                        ]}
+                      >
+                        {message.text}
+                      </MarkdownText>
+                    )}
                     
                     {/* Show time and interaction buttons only after message is complete */}
                     {message.isComplete && (

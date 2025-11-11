@@ -45,6 +45,18 @@ export interface UserData {
     language?: string;
     timezone?: string;
   };
+  // Privacy preferences including anonymous mode
+  privacy_preferences?: {
+    profileVisibility?: boolean;
+    dataSharing?: boolean;
+    privacy?: {
+      anonymousMode?: boolean;
+    };
+    security?: {
+      loginNotifications?: boolean;
+      sessionTimeout?: number;
+    };
+  };
 }
 
 // Appointment interfaces

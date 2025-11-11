@@ -13,16 +13,21 @@ class RingtoneService {
       interruptionModeIOS: InterruptionModeIOS.DoNotMix,
       interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
       staysActiveInBackground: false,
-      playThroughEarpieceAndroid: false,
+      playThroughEarpieceAndroid: true, // Use call volume (earpiece/speaker)
     });
   }
 
   async start() {
-    if (this.playing) return;
+    if (this.playing) {
+      console.log('🔔 Ringtone already playing');
+      return;
+    }
     if (this.loadingPromise) {
       await this.loadingPromise;
       return;
     }
+    
+    console.log('🔔 Starting ringtone...');
     this.loadingPromise = (async () => {
       try {
         await this.ensureAudioMode();
@@ -32,7 +37,9 @@ class RingtoneService {
         );
         this.sound = sound;
         this.playing = true;
+        console.log('🔔 Ringtone started successfully');
       } catch (e) {
+        console.error('🔔 Failed to start ringtone:', e);
         this.sound = null;
         this.playing = false;
       } finally {
@@ -43,14 +50,21 @@ class RingtoneService {
   }
 
   async stop() {
+    console.log('🔕 Stopping ringtone...');
     try {
       if (this.sound) {
         await this.sound.stopAsync();
         await this.sound.unloadAsync();
+        console.log('🔕 Ringtone stopped successfully');
+      } else {
+        console.log('🔕 No ringtone sound to stop');
       }
-    } catch {}
+    } catch (e) {
+      console.error('🔕 Error stopping ringtone:', e);
+    }
     this.sound = null;
     this.playing = false;
+    this.loadingPromise = null;
   }
 }
 

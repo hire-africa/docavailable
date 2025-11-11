@@ -50,17 +50,23 @@ export async function GET(request: NextRequest) {
       patients: parseInt(row.patients),
     }));
 
-    // Get revenue data
+    // Get revenue data (join plans for price/currency; convert USD->MWK at 1800:1)
     const revenueResult = await query(`
       SELECT 
-        TO_CHAR(created_at, 'Mon YYYY') as month,
-        COALESCE(SUM(CAST(plan_price AS DECIMAL)), 0) as revenue,
+        TO_CHAR(s.created_at, 'Mon YYYY') as month,
+        COALESCE(SUM(
+          CASE 
+            WHEN p.currency = 'USD' THEN CAST(p.price AS DECIMAL) * 1800
+            ELSE CAST(p.price AS DECIMAL)
+          END
+        ), 0) as revenue,
         COUNT(*) as subscriptions
-      FROM subscriptions 
-      WHERE created_at >= CURRENT_DATE - INTERVAL '${monthsBack} months'
-      AND is_active = true
-      GROUP BY TO_CHAR(created_at, 'Mon YYYY')
-      ORDER BY MIN(created_at)
+      FROM subscriptions s
+      JOIN plans p ON s.plan_id = p.id
+      WHERE s.created_at >= CURRENT_DATE - INTERVAL '${monthsBack} months'
+      AND (s.is_active = true OR s.is_active = 1)
+      GROUP BY TO_CHAR(s.created_at, 'Mon YYYY')
+      ORDER BY MIN(s.created_at)
     `);
 
     const revenueData = revenueResult.rows.map(row => ({
@@ -103,15 +109,35 @@ export async function GET(request: NextRequest) {
       amount: parseFloat(row.amount),
     }));
 
-    // Get monthly stats
+    // Get monthly stats (join plans for price/currency; convert USD->MWK at 1800:1)
     const monthlyStatsResult = await query(`
       SELECT 
         (SELECT COUNT(*) FROM users) as total_users,
         (SELECT COUNT(*) FROM users WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)) as new_users,
-        (SELECT COALESCE(SUM(CAST(plan_price AS DECIMAL)), 0) FROM subscriptions WHERE is_active = true) as total_revenue,
-        (SELECT COALESCE(SUM(CAST(plan_price AS DECIMAL)), 0) FROM subscriptions WHERE is_active = true AND created_at >= DATE_TRUNC('month', CURRENT_DATE)) as monthly_revenue,
+        (
+          SELECT COALESCE(SUM(
+            CASE 
+              WHEN p.currency = 'USD' THEN CAST(p.price AS DECIMAL) * 1800
+              ELSE CAST(p.price AS DECIMAL)
+            END
+          ), 0) 
+          FROM subscriptions s
+          JOIN plans p ON s.plan_id = p.id
+          WHERE (s.is_active = true OR s.is_active = 1)
+        ) as total_revenue,
+        (
+          SELECT COALESCE(SUM(
+            CASE 
+              WHEN p.currency = 'USD' THEN CAST(p.price AS DECIMAL) * 1800
+              ELSE CAST(p.price AS DECIMAL)
+            END
+          ), 0) 
+          FROM subscriptions s
+          JOIN plans p ON s.plan_id = p.id
+          WHERE (s.is_active = true OR s.is_active = 1) AND s.created_at >= DATE_TRUNC('month', CURRENT_DATE)
+        ) as monthly_revenue,
         (SELECT COUNT(*) FROM appointments) as total_appointments,
-        (SELECT COUNT(*) FROM appointments WHERE status = 'completed') as completed_appointments
+        (SELECT COUNT(*) FROM appointments WHERE status = 'completed' OR status = 1) as completed_appointments
     `);
 
     const monthlyStats = {

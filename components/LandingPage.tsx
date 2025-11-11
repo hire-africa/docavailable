@@ -1,11 +1,11 @@
 import {
-    Dimensions,
-    Image,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Dimensions,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { navigateToLogin } from '../utils/navigationUtils';
 
@@ -58,7 +58,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Powered by DocAvailable</Text>
+        <Text style={styles.footerText}>Powered by Hire Africa</Text>
       </View>
     </View>
   );
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: 'absolute',
-    bottom: 32,
+    bottom: 70,
     left: 0,
     right: 0,
     alignItems: 'center',

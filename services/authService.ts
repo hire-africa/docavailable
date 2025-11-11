@@ -165,15 +165,46 @@ class AuthService {
       const token = await AsyncStorage.getItem('auth_token');
       const userData = await AsyncStorage.getItem('user_data');
       
-      const user = userData ? JSON.parse(userData) : null;
+      // Validate and clean corrupted data
+      if (userData) {
+        // Check if userData contains HTML error (corrupted)
+        if (userData.includes('<br />') || userData.includes('PostTooLargeException') || userData.includes('<b>Warning</b>')) {
+          console.warn('⚠️ AuthService: Detected corrupted user data (HTML error), clearing...');
+          await AsyncStorage.removeItem('user_data');
+          await AsyncStorage.removeItem('auth_token');
+          this.currentUser = null;
+          this.notifySubscribers({ user: null, token: null });
+          return { user: null, token: null };
+        }
+      }
+      
+      let user = null;
+      if (userData) {
+        try {
+          user = JSON.parse(userData);
+          
+          // Validate user object structure
+          if (typeof user === 'string' || !user.id) {
+            console.warn('⚠️ AuthService: Invalid user data structure, clearing...');
+            await AsyncStorage.removeItem('user_data');
+            await AsyncStorage.removeItem('auth_token');
+            user = null;
+          }
+        } catch (parseError) {
+          console.warn('⚠️ AuthService: Failed to parse user data, clearing...', parseError);
+          await AsyncStorage.removeItem('user_data');
+          await AsyncStorage.removeItem('auth_token');
+          user = null;
+        }
+      }
       
       // Update current user state
       this.currentUser = user;
       
       // Notify subscribers of initial state
-      this.notifySubscribers({ user, token });
+      this.notifySubscribers({ user, token: user ? token : null });
       
-      return { user, token };
+      return { user, token: user ? token : null };
     } catch (error) {
       console.error('AuthService initialization error:', error);
       this.currentUser = null;
@@ -223,22 +254,78 @@ class AuthService {
       const response = await this.api.post('/register', jsonData);
 
       console.log('AuthService: Registration response:', {
-        success: response.data.success,
-        message: response.data.message,
-        status: response.status
+        success: response.data?.success,
+        message: response.data?.message,
+        status: response.status,
+        dataType: typeof response.data
       });
 
-      const { user, token } = response.data.data;
-      await AsyncStorage.setItem('auth_token', token);
-      await AsyncStorage.setItem('user_data', JSON.stringify(user));
+      // Validate response is not HTML error
+      if (typeof response.data === 'string') {
+        console.error('AuthService: Received HTML/string response instead of JSON:', response.data.substring(0, 200));
+        
+        // Check if it's a Laravel error
+        if (response.data.includes('PostTooLargeException') || response.data.includes('<b>Warning</b>')) {
+          throw new Error('Registration failed: Upload size too large. Please use smaller images.');
+        }
+        
+        throw new Error('Registration failed: Invalid server response');
+      }
 
-      // Update current user state
-      this.currentUser = user;
+      // Handle different response structures
+      let user, token;
+      
+      // Check if response has nested data structure
+      if (response.data?.data) {
+        user = response.data.data.user;
+        token = response.data.data.token;
+      } else {
+        // Handle flat response structure
+        user = response.data?.user || response.data;
+        token = response.data?.token;
+      }
 
-      // Notify subscribers of new auth state
-      this.notifySubscribers({ user, token });
+      // Validate user object is actually a user (not an error string)
+      if (user && typeof user === 'string') {
+        console.error('AuthService: User data is a string (likely an error):', user.substring(0, 200));
+        throw new Error('Registration failed: Invalid user data received');
+      }
 
-      return response.data;
+      // Validate user has required properties
+      if (user && !user.id && !user.email) {
+        console.error('AuthService: User object missing required properties:', user);
+        throw new Error('Registration failed: Invalid user data structure');
+      }
+
+      console.log('AuthService: Extracted user and token:', {
+        hasUser: !!user,
+        hasToken: !!token,
+        userType: user?.user_type,
+        userId: user?.id
+      });
+
+      // Only store token and user data if they are valid
+      if (token && typeof token === 'string') {
+        await AsyncStorage.setItem('auth_token', token);
+      }
+      
+      if (user && typeof user === 'object' && user.id) {
+        await AsyncStorage.setItem('user_data', JSON.stringify(user));
+        // Update current user state
+        this.currentUser = user;
+        // Notify subscribers of new auth state
+        this.notifySubscribers({ user, token });
+      }
+
+      // Return a consistent response structure
+      return {
+        success: response.data?.success !== false, // Default to true if not specified
+        message: response.data?.message || 'Registration successful',
+        data: {
+          user: user,
+          token: token
+        }
+      };
     } catch (error: any) {
       console.error('AuthService: Registration error:', {
         message: error.message,
@@ -502,18 +589,34 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
+      // Try to notify server about logout, but don't fail if token is already invalid
       await this.api.post('/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch (error: any) {
+      // Log the error but don't throw it - logout should always succeed locally
+      if (error.response?.status === 401) {
+        console.log('Logout: Token already invalid, proceeding with local cleanup');
+      } else {
+        console.error('Logout error:', error);
+      }
     } finally {
-      await AsyncStorage.removeItem('auth_token');
-      await AsyncStorage.removeItem('user_data');
-      
-      // Clear current user state
-      this.currentUser = null;
-      
-      // Notify subscribers of logout
-      this.notifySubscribers({ user: null, token: null });
+      // Always clear local storage and state, regardless of API call result
+      try {
+        await AsyncStorage.removeItem('auth_token');
+        await AsyncStorage.removeItem('user_data');
+        
+        // Clear current user state
+        this.currentUser = null;
+        
+        // Notify subscribers of logout
+        this.notifySubscribers({ user: null, token: null });
+        
+        console.log('Logout: Local cleanup completed successfully');
+      } catch (storageError) {
+        console.error('Logout: Error clearing local storage:', storageError);
+        // Still notify subscribers even if storage cleanup fails
+        this.currentUser = null;
+        this.notifySubscribers({ user: null, token: null });
+      }
     }
   }
 

@@ -104,8 +104,10 @@ export class BackendChatbotService {
         throw new Error(data.message || 'Backend API returned error');
       }
 
-      // Simulate streaming by breaking the response into chunks
+      // Keep markdown intact for proper rendering
       const fullResponse = data.data;
+      
+      // Simulate streaming by breaking the response into chunks
       const words = fullResponse.text.split(' ');
       let currentText = '';
       

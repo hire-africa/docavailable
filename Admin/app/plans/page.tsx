@@ -28,14 +28,12 @@ export default function PlansPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
     price: '',
     currency: 'USD',
     duration: 30,
     text_sessions: 0,
     voice_calls: 0,
     video_calls: 0,
-    features: '',
     status: 1,
   });
 
@@ -81,7 +79,6 @@ export default function PlansPage() {
       const token = localStorage.getItem('admin_token');
       const planData = {
         ...formData,
-        features: formData.features.split(',').map(f => f.trim()).filter(f => f),
       };
 
       const url = editingPlan ? `/api/plans/${editingPlan.id}` : '/api/plans';
@@ -114,16 +111,18 @@ export default function PlansPage() {
 
   const handleEdit = (plan: Plan) => {
     setEditingPlan(plan);
+    const allowedCurrencies = ['USD', 'MWK'];
+    const normalizedCurrency = allowedCurrencies.includes(plan.currency?.toUpperCase?.() || '')
+      ? plan.currency.toUpperCase()
+      : 'USD';
     setFormData({
       name: plan.name,
-      description: plan.description || '',
       price: plan.price,
-      currency: plan.currency,
+      currency: normalizedCurrency,
       duration: plan.duration,
       text_sessions: plan.text_sessions,
       voice_calls: plan.voice_calls,
       video_calls: plan.video_calls,
-      features: Array.isArray(plan.features) ? plan.features.join(', ') : '',
       status: plan.status,
     });
     setShowModal(true);
@@ -156,14 +155,12 @@ export default function PlansPage() {
   const resetForm = () => {
     setFormData({
       name: '',
-      description: '',
       price: '',
       currency: 'USD',
       duration: 30,
       text_sessions: 0,
       voice_calls: 0,
       video_calls: 0,
-      features: '',
       status: 1,
     });
   };
@@ -180,7 +177,8 @@ export default function PlansPage() {
       if (isNaN(numericAmount)) {
         return `${currency || 'USD'} ${amount}`;
       }
-      return new Intl.NumberFormat('en-US', {
+      const locale = (currency || 'USD') === 'MWK' ? 'en-MW' : 'en-US';
+      return new Intl.NumberFormat(locale, {
         style: 'currency',
         currency: currency || 'USD',
       }).format(numericAmount);
@@ -212,7 +210,7 @@ export default function PlansPage() {
           </div>
           <button
             onClick={() => setShowModal(true)}
-            className="btn btn-primary"
+            className="btn btn-primary px-4 py-2"
           >
             <Plus className="h-4 w-4 mr-2" />
             Add Plan
@@ -228,15 +226,17 @@ export default function PlansPage() {
                 <div className="flex space-x-2">
                   <button
                     onClick={() => handleEdit(plan)}
-                    className="text-primary-600 hover:text-primary-900"
+                    className="btn btn-secondary p-2.5"
+                    aria-label="Edit plan"
                   >
                     <Edit className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(plan.id)}
-                    className="text-red-600 hover:text-red-900"
+                    className="btn btn-secondary p-2.5"
+                    aria-label="Delete plan"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 text-red-600" />
                   </button>
                 </div>
               </div>
@@ -248,9 +248,7 @@ export default function PlansPage() {
                 <div className="text-sm text-gray-500">per {plan.duration} days</div>
               </div>
 
-              {plan.description && (
-                <p className="text-sm text-gray-600 mb-4">{plan.description}</p>
-              )}
+
 
               <div className="space-y-2 mb-4">
                 <div className="flex items-center text-sm text-gray-600">
@@ -303,7 +301,7 @@ export default function PlansPage() {
         {showModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
             <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <div className="mt-3">
+              <div className="mt-1">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
                   {editingPlan ? 'Edit Plan' : 'Add New Plan'}
                 </h3>
@@ -321,17 +319,7 @@ export default function PlansPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="input w-full h-20"
-                      rows={3}
-                    />
-                  </div>
+
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -357,8 +345,7 @@ export default function PlansPage() {
                         className="input w-full"
                       >
                         <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GBP">GBP</option>
+                        <option value="MWK">MWK</option>
                       </select>
                     </div>
                   </div>
@@ -412,18 +399,7 @@ export default function PlansPage() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Features (comma-separated)
-                    </label>
-                    <textarea
-                      value={formData.features}
-                      onChange={(e) => setFormData({ ...formData, features: e.target.value })}
-                      className="input w-full h-20"
-                      placeholder="Feature 1, Feature 2, Feature 3"
-                      rows={3}
-                    />
-                  </div>
+                  
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -443,11 +419,11 @@ export default function PlansPage() {
                     <button
                       type="button"
                       onClick={handleModalClose}
-                      className="btn btn-secondary"
+                      className="btn btn-secondary px-4 py-2"
                     >
                       Cancel
                     </button>
-                    <button type="submit" className="btn btn-primary">
+                    <button type="submit" className="btn btn-primary px-4 py-2">
                       {editingPlan ? 'Update Plan' : 'Create Plan'}
                     </button>
                   </div>

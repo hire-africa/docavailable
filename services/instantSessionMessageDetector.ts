@@ -9,6 +9,28 @@ export interface InstantSessionConfig {
   authToken: string;
 }
 
+/**
+ * Destroy all existing InstantSessionMessageDetector instances stored in the global map.
+ * Safe to call multiple times.
+ */
+export async function destroyAllInstantSessionDetectors(): Promise<void> {
+  try {
+    const g = global as any;
+    const map: Map<string, InstantSessionMessageDetector> | undefined = g?.__instantDetectorMap;
+    if (!map || map.size === 0) return;
+    for (const [key, detector] of map.entries()) {
+      try {
+        await detector.destroy();
+      } catch {}
+      map.delete(key);
+    }
+    g.__instantDetectorMap = new Map<string, InstantSessionMessageDetector>();
+    console.log('🧹 [InstantSessionDetector] Destroyed all detectors');
+  } catch (e) {
+    console.warn('🧹 [InstantSessionDetector] Failed to destroy all detectors', e);
+  }
+}
+
 export interface MessageDetectionEvents {
   onPatientMessageDetected: (message: any) => void;
   onDoctorMessageDetected: (message: any) => void;
@@ -795,6 +817,31 @@ export class InstantSessionMessageDetector {
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Failed to resume timer with remaining:', error);
     }
+  }
+
+  /**
+   * Fully destroy this detector: stop timers/intervals and close connections
+   */
+  public async destroy(): Promise<void> {
+    try {
+      // Stop any active timers/intervals
+      this.stopTimer();
+    } catch {}
+    try {
+      // Close websocket connection
+      if (this.websocket) {
+        this.websocket.close(1000, 'Destroyed');
+        this.websocket = null;
+      }
+    } catch {}
+    // Reset flags
+    this.isConnected = false;
+    this.serverTimerActive = false;
+    this.awaitingServerStatus = false;
+    this.timerBootstrapActive = false;
+    // Reset timer state
+    this.timerState.isActive = false;
+    this.timerState.timeRemaining = 0;
   }
 
   /**

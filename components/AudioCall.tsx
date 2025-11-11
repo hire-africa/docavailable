@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
     Animated,
     Dimensions,
     Image,
@@ -13,6 +12,8 @@ import {
     View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
+import ringtoneService from '../services/ringtoneService';
+import { Alert } from '../utils/customAlert';
 const { width, height } = Dimensions.get('window');
 
 interface AudioCallProps {
@@ -173,7 +174,7 @@ export default function AudioCall({
               !error.includes('WebRTC') &&
               !error.includes('signaling') &&
               !error.includes('Failed to initialize call')) {
-            Alert.alert('Call Error', error);
+            Alert.error('Call Error', error);
           }
         },
         onCallAnswered: () => {
@@ -229,9 +230,7 @@ export default function AudioCall({
               !error.includes('WebRTC') &&
               !error.includes('signaling') &&
               !error.includes('Failed to initialize call')) {
-            Alert.alert('Call Error', error, [
-              { text: 'OK', onPress: onEndCall }
-            ]);
+            Alert.error('Call Error', error, onEndCall);
           }
         },
         onCallAnswered: () => {
@@ -254,9 +253,7 @@ export default function AudioCall({
       
     } catch (error) {
       console.error('Failed to initialize audio call:', error);
-      Alert.alert('Call Failed', 'Unable to start audio call. Please try again.', [
-        { text: 'OK', onPress: onEndCall }
-      ]);
+      Alert.error('Call Failed', 'Unable to start audio call. Please try again.', onEndCall);
     }
   };
 
@@ -349,6 +346,14 @@ export default function AudioCall({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
+    
+    // Stop ringtone if still playing
+    try {
+      await ringtoneService.stop();
+    } catch (e) {
+      console.error('❌ Failed to stop ringtone:', e);
+    }
+    
     await AudioCallService.getInstance().endCall();
     onEndCall();
   };
@@ -530,6 +535,13 @@ export default function AudioCall({
               if (isProcessingAnswer) return; // Prevent multiple taps
               Vibration.vibrate(50);
               console.log('📞 Accept button pressed - answering call');
+              
+              // Stop ringtone immediately when accepting call
+              try {
+                await ringtoneService.stop();
+              } catch (e) {
+                console.error('❌ Failed to stop ringtone:', e);
+              }
               
               // Immediately update UI state
               setIsRinging(false);

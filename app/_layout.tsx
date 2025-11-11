@@ -1,12 +1,15 @@
-import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportance, AndroidCategory, EventType } from '@notifee/react-native';
+import notifee, { AndroidVisibility, AndroidImportance as NotifeeAndroidImportance } from '@notifee/react-native';
 import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { PermissionsAndroid, Platform, NativeEventEmitter, NativeModules, ActivityIndicator, View, Text } from 'react-native';
+import { ActivityIndicator, NativeEventEmitter, NativeModules, PermissionsAndroid, Platform, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import CustomAlertProvider from '../components/CustomAlertProvider';
 import { AuthProvider } from '../contexts/AuthContext';
+import { ThemeProvider } from '../contexts/ThemeContext';
+import callDeduplicationService from '../services/callDeduplicationService';
 import pushNotificationService from '../services/pushNotificationService';
 import { routeIncomingCall } from '../utils/callRouter';
 import { routePushEvent } from '../utils/notificationRouter';
@@ -14,8 +17,8 @@ import { routePushEvent } from '../utils/notificationRouter';
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import appInitializer from '../services/appInitializer';
 import '../services/cryptoPolyfill';
-import apiService from './services/apiService';
 import fullScreenPermissionService from '../services/fullScreenPermissionService';
+import apiService from './services/apiService';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -163,23 +166,29 @@ export default function RootLayout() {
           }
         }
 
-        // Request floating notification permission (Android 5.0+)
+        // Request notification permissions
         if (Platform.OS === 'android') {
           try {
-            console.log('🔔 Requesting floating notification permission...');
-            const floatingPermission = await notifee.requestPermission({
+            console.log('🔔 Requesting Android notification permission...');
+            // For Android, notifee automatically handles permissions when creating channels
+            // No need to explicitly request permissions like iOS
+            console.log('🔔 Android notification permissions handled automatically');
+          } catch (error) {
+            console.log('🔔 Android notification setup error:', error);
+          }
+        } else if (Platform.OS === 'ios') {
+          try {
+            console.log('🔔 Requesting iOS notification permission...');
+            const iosPermission = await notifee.requestPermission({
               alert: true,
               badge: true,
               sound: true,
-              lockScreen: true,
-              notificationCenter: true,
-              carPlay: true,
               criticalAlert: false,
               announcement: true,
             });
-            console.log('🔔 Floating permission result:', floatingPermission);
+            console.log('🔔 iOS permission result:', iosPermission);
           } catch (error) {
-            console.log('🔔 Floating permission not available:', error);
+            console.log('🔔 iOS permission request failed:', error);
           }
         }
 
@@ -292,62 +301,27 @@ export default function RootLayout() {
           data
         });
 
-        // For incoming calls, display notification and route to call screen
+        // For incoming calls, route to call screen (skip notification popup in foreground)
         if (type === 'incoming_call') {
-          console.log('📱 [Foreground] Incoming call - displaying notification and routing');
+          console.log('📱 [Foreground] Incoming call - routing to call screen');
           console.log('📱 [Foreground] Call data:', data);
           
+          // Check deduplication service to prevent multiple call screens
+          const appointmentId = String(data.appointment_id || '');
+          const callType = (data.call_type === 'video' ? 'video' : 'audio') as 'audio' | 'video';
+          
+          if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'firebase')) {
+            console.log('📱 [Foreground] Duplicate call blocked by deduplication service');
+            return;
+          }
+          
+          // In foreground: Skip notification popup, just route to call screen
+          // WebSocket already shows the incoming call UI, so notification is redundant
           try {
-            // Display call notification with actions
-            await notifee.displayNotification({
-              title: notification.title || 'Incoming Call',
-              body: notification.body || `Incoming ${data.call_type === 'video' ? 'video' : 'voice'} call...`,
-              data: {
-                ...data,
-                notificationId: `call_${data.appointment_id || Date.now()}`,
-              },
-              android: {
-                channelId: 'calls',
-                importance: NotifeeAndroidImportance.HIGH,
-                category: AndroidCategory.CALL,
-                pressAction: {
-                  id: 'default',
-                  launchActivity: 'default',
-                },
-                sound: 'default',
-                vibrationPattern: [1000, 500, 1000, 500],
-                smallIcon: 'ic_launcher',
-                largeIcon: 'ic_launcher',
-                color: '#FF0000',
-                lights: ['#FF0000', 1000, 1000],
-                ongoing: true,
-                autoCancel: false,
-                timeoutAfter: 30000,
-                actions: [
-                  {
-                    title: 'Answer',
-                    pressAction: { id: 'answer' },
-                    icon: 'ic_launcher',
-                  },
-                  {
-                    title: 'Decline',
-                    pressAction: { id: 'decline' },
-                    icon: 'ic_launcher',
-                  },
-                ],
-                style: {
-                  type: 1,
-                  text: `Incoming ${data.call_type === 'video' ? 'Video' : 'Voice'} Call from ${data.doctor_name || 'Doctor'}`,
-                },
-              },
-            });
-            
-            // Automatically route to call screen since app is in foreground
             routeIncomingCall(router, data);
-            
-            console.log('✅ [Foreground] Call notification displayed and routed');
+            console.log('✅ [Foreground] Routed to call screen (no notification popup)');
           } catch (error) {
-            console.error('❌ [Foreground] Failed to display call notification:', error);
+            console.error('❌ [Foreground] Failed to route call:', error);
           }
           return;
         }
@@ -452,13 +426,15 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          {isCallBooting ? (
-            <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator size="large" color="#ffffff" />
-              <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
-            </View>
-          ) : (
-            <Stack>
+          <ThemeProvider>
+            <CustomAlertProvider>
+            {isCallBooting ? (
+              <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                <ActivityIndicator size="large" color="#ffffff" />
+                <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
+              </View>
+            ) : (
+              <Stack>
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
               <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
@@ -495,6 +471,7 @@ export default function RootLayout() {
               <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
               <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
               <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
+              <Stack.Screen name="call" options={{ headerShown: false }} />
               <Stack.Screen name="help-support" options={{ headerShown: false }} />
               <Stack.Screen name="payments/checkout" options={{
                 headerShown: false,
@@ -504,7 +481,9 @@ export default function RootLayout() {
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />
             </Stack>
           )}
-        </AuthProvider>
+            </CustomAlertProvider>
+        </ThemeProvider>
+      </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

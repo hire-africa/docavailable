@@ -8,19 +8,25 @@ interface AnonymousModeSettings {
 }
 
 export const useAnonymousMode = (): AnonymousModeSettings => {
-  const { userData } = useAuth();
+  const { userData, loading: authLoading } = useAuth();
   const [isAnonymousModeEnabled, setIsAnonymousModeEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadAnonymousMode = async () => {
+    // If auth is still loading, wait for it to complete
+    if (authLoading) {
+      return;
+    }
+
+    const loadAnonymousMode = () => {
       try {
         setIsLoading(true);
         setError(null);
 
         if (!userData) {
           setIsAnonymousModeEnabled(false);
+          setIsLoading(false);
           return;
         }
 
@@ -31,24 +37,19 @@ export const useAnonymousMode = (): AnonymousModeSettings => {
         
         // If not found, try the old structure (direct in userData)
         if (!anonymousMode) {
-          anonymousMode = userData.anonymousMode || false;
+          anonymousMode = (userData as any).anonymousMode || false;
         }
         
         // If still not found, try checking if it's in preferences
         if (!anonymousMode) {
-          anonymousMode = userData.preferences?.anonymousMode || false;
+          anonymousMode = (userData.preferences as any)?.anonymousMode || false;
         }
         
         // Debug logging
-        console.log('🔍 [useAnonymousMode] Debug:', {
-          userData: userData ? 'present' : 'null',
-          privacyPreferences,
+        console.log('🔍 [useAnonymousMode] Anonymous mode loaded from user data:', {
           anonymousMode,
-          userDataKeys: userData ? Object.keys(userData) : [],
           hasPrivacyPreferences: !!userData?.privacy_preferences,
-          hasPreferences: !!userData?.preferences,
-          hasAnonymousMode: !!userData?.anonymousMode,
-          fullUserData: userData
+          privacyPreferences: userData?.privacy_preferences
         });
         
         setIsAnonymousModeEnabled(anonymousMode);
@@ -61,8 +62,9 @@ export const useAnonymousMode = (): AnonymousModeSettings => {
       }
     };
 
+    // Load immediately since userData is already available from AuthContext
     loadAnonymousMode();
-  }, [userData]);
+  }, [userData, authLoading]);
 
   return {
     isAnonymousModeEnabled,

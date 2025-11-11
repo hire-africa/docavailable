@@ -603,9 +603,6 @@ export default function DoctorDashboard() {
 
   const loadActivities = async () => {
     try {
-      // Small delay to ensure data is loaded
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
       // Filter out cancelled appointments to prevent showing cancelled activities
       const activeBookingRequests = bookingRequests.filter(req => req.status !== 'cancelled' && req.status !== 2);
       const activeConfirmedAppointments = confirmedAppointments.filter(apt => apt.status !== 'cancelled' && apt.status !== 2);
@@ -622,70 +619,82 @@ export default function DoctorDashboard() {
         'doctor',
         userData,
         [...activeBookingRequests, ...activeConfirmedAppointments],
-        [], // messages - you can add this if you have message data
-        null // subscription - you can add this if you have subscription data
+        [], // messages - can be added later
+        null // subscription - doctors don't have subscriptions
       );
+      
+      // Get notifications and convert them to activities
+      const notifications = await NotificationService.getNotificationsForUser('doctor', userData?.id?.toString());
+      const notificationActivities: Activity[] = notifications.map(notification => ({
+        id: `notif_${notification.id}`,
+        type: notification.type,
+        title: notification.title,
+        description: notification.message,
+        timestamp: notification.timestamp,
+        icon: getIconForNotificationType(notification.type),
+        color: getColorForNotificationType(notification.type)
+      }));
       
       // Merge with existing activities, preserving real-time activities
       setActivities(prevActivities => {
-        // Keep real-time activities (those created in the last 5 minutes)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        // Keep real-time activities (those added via addRealtimeActivity)
         const realtimeActivities = prevActivities.filter(activity => 
-          activity.timestamp > fiveMinutesAgo
+          activity.id.startsWith('realtime_')
         );
         
-        // Combine real-time activities with generated activities
-        const combinedActivities = [...realtimeActivities, ...userActivities];
+        // Combine all activities
+        const allActivities = [...realtimeActivities, ...userActivities, ...notificationActivities];
         
-        // Remove duplicates and sort by timestamp
-        const uniqueActivities = combinedActivities.filter((activity, index, self) => 
+        // Remove duplicates based on ID
+        const uniqueActivities = allActivities.filter((activity, index, self) => 
           index === self.findIndex(a => a.id === activity.id)
         );
         
-        return uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        // Sort by timestamp (newest first)
+        const sortedActivities = uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        
+        console.log('📱 Activities loaded:', sortedActivities.length, 'items');
+        console.log('📱 Activity breakdown:', {
+          realtime: realtimeActivities.length,
+          appointments: userActivities.filter(a => a.type === 'appointment').length,
+          notifications: notificationActivities.length,
+          total: sortedActivities.length
+        });
+        
+        return sortedActivities;
       });
 
-      // Load unread notification count from service
-      try {
-        // Generate automated activities first
-        const generatedActivities = generateUserActivities(
-          'doctor',
-          userData,
-          [], // appointments - would be loaded from API
-          [], // messages - would be loaded from API
-          null // subscription - would be loaded from API
-        );
-
-        // Convert activities to notifications
-        const activityNotifications = generatedActivities.map((activity, index) => ({
-          id: `activity_${activity.id}`,
-          title: activity.title,
-          message: activity.description,
-          type: activity.type as any,
-          timestamp: activity.timestamp,
-          isRead: index > 2, // Mark older activities as read
-          actionUrl: getActionUrlForActivity(activity.type)
-        }));
-
-        // Get all notifications (including admin ones)
-        const allNotifications = await NotificationService.getNotificationsForUser('doctor', userData?.id?.toString());
-        
-        // Combine with automated notifications
-        const combinedNotifications = [...allNotifications];
-        activityNotifications.forEach(autoNotif => {
-          const exists = combinedNotifications.find(n => n.id === autoNotif.id);
-          if (!exists) {
-            combinedNotifications.push(autoNotif);
-          }
-        });
-
-        const unreadCount = combinedNotifications.filter(n => !n.isRead).length;
-        setUnreadNotificationCount(unreadCount);
-      } catch (error) {
-        console.error('Error loading unread count:', error);
-      }
+      // Update unread notification count
+      const unreadCount = notifications.filter(n => !n.isRead).length;
+      setUnreadNotificationCount(unreadCount);
     } catch (error) {
       console.error('Error loading activities:', error);
+    }
+  };
+
+  // Helper function to get icon for notification type
+  const getIconForNotificationType = (type: string): string => {
+    switch (type) {
+      case 'appointment': return 'calendar';
+      case 'message': return 'message';
+      case 'payment': return 'dollar';
+      case 'wallet': return 'dollar';
+      case 'system': return 'infoCircle';
+      case 'reminder': return 'clock';
+      default: return 'bell';
+    }
+  };
+
+  // Helper function to get color for notification type
+  const getColorForNotificationType = (type: string): string => {
+    switch (type) {
+      case 'appointment': return '#4CAF50';
+      case 'message': return '#2196F3';
+      case 'payment': return '#FF9800';
+      case 'wallet': return '#FF9800';
+      case 'system': return '#607D8B';
+      case 'reminder': return '#9C27B0';
+      default: return '#666';
     }
   };
 

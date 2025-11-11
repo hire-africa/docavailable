@@ -63,12 +63,17 @@ const ADMIN_ACCOUNTS = [
 ];
 
 export function validateAdminCredentials(email: string, password: string): { valid: boolean; admin?: any } {
-  const admin = ADMIN_ACCOUNTS.find(acc => acc.email === email && acc.password === password);
-  
+  const emailNormalized = (email || '').trim().toLowerCase();
+  const passwordNormalized = (password || '').trim();
+
+  const admin = ADMIN_ACCOUNTS.find(
+    acc => acc.email.toLowerCase() === emailNormalized && acc.password === passwordNormalized
+  );
+
   if (admin) {
     return { valid: true, admin };
   }
-  
+
   return { valid: false };
 }
 

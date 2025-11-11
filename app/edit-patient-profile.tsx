@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
     Dimensions,
     FlatList,
     Modal,
@@ -19,6 +18,7 @@ import { Icon } from '../components/Icon';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import DatePickerField from '../components/DatePickerField';
 import { useAuth } from '../contexts/AuthContext';
+import { Alert } from '../utils/customAlert';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -136,7 +136,7 @@ export default function EditPatientProfile() {
                 // Validate that we have the expected user data structure
                 if (!currentUser || typeof currentUser !== 'object') {
                     console.error('EditPatientProfile: Invalid user data structure:', currentUser);
-                    Alert.alert('Error', 'Invalid user data. Please try again.');
+                    Alert.error('Error', 'Invalid user data. Please try again.');
                     return;
                 }
                 
@@ -160,11 +160,11 @@ export default function EditPatientProfile() {
                 // });
             } else {
                 // console.log('EditPatientProfile: No user data available');
-                Alert.alert('Error', 'No user data available. Please log in again.');
+                Alert.error('Error', 'No user data available. Please log in again.');
             }
         } catch (error) {
             console.error('EditPatientProfile: Error loading user data:', error);
-            Alert.alert('Error', 'Failed to load user data. Please try again.');
+            Alert.error('Error', 'Failed to load user data. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -231,10 +231,10 @@ export default function EditPatientProfile() {
                     console.error('EditPatientProfile: Error refreshing user data after upload:', error);
                 }
                 
-                Alert.alert('Success', 'Profile picture updated successfully!');
+                Alert.success('Success', 'Profile picture updated successfully!');
             } else {
                 console.error('EditPatientProfile: Upload failed:', response.message || 'Unknown error');
-                Alert.alert('Error', response.message || 'Failed to upload profile picture');
+                Alert.error('Error', response.message || 'Failed to upload profile picture');
             }
         } catch (error: any) {
             console.error('EditPatientProfile: Error uploading profile picture:', error);
@@ -256,7 +256,7 @@ export default function EditPatientProfile() {
                 errorMessage = error.message;
             }
             
-            Alert.alert('Error', errorMessage);
+            Alert.error('Error', errorMessage);
         } finally {
             setUploadingImage(false);
         }
@@ -313,25 +313,18 @@ export default function EditPatientProfile() {
 
             const response = await apiService.patch('/profile', updateData);
 
-            // console.log('EditPatientProfile: Profile update response:', response);
-
             if (response.success) {
                 // Refresh user data to get the updated information
                 await refreshUserData();
                 
-                Alert.alert(
+                Alert.success(
                     'Success',
                     'Profile updated successfully!',
-                    [
-                        {
-                            text: 'OK',
-                            onPress: () => router.back()
-                        }
-                    ]
+                    () => router.back()
                 );
             } else {
                 console.error('EditPatientProfile: Profile update failed:', response.message);
-                Alert.alert('Error', response.message || 'Failed to update profile');
+                Alert.error('Error', response.message || 'Failed to update profile');
             }
         } catch (error: any) {
             console.error('EditPatientProfile: Error updating profile:', error);
@@ -359,7 +352,7 @@ export default function EditPatientProfile() {
                 errorMessage = error.message;
             }
             
-            Alert.alert('Error', errorMessage);
+            Alert.error('Error', errorMessage);
         } finally {
             setSaving(false);
         }

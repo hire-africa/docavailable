@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authService from '../services/authService';
 import { UserData } from '../services/laravelService';
+import { destroyAllInstantSessionDetectors } from '../services/instantSessionMessageDetector';
 
 interface AuthContextType {
   user: UserData | null;
@@ -69,6 +70,8 @@ const convertApiUserToUserData = (apiUser: any): UserData => {
     languages_spoken: apiUser.languages_spoken,
     // User preferences
     preferences: apiUser.preferences,
+    // Privacy preferences including anonymous mode
+    privacy_preferences: apiUser.privacy_preferences,
   };
 };
 
@@ -235,6 +238,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null);
           setUserData(null);
           setToken(null);
+          // Clean up instant session detectors on logged-out state
+          try { await destroyAllInstantSessionDetectors(); } catch {}
         }
       } catch (error) {
         console.error('AuthContext: Error initializing auth:', error);
@@ -279,6 +284,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
         setUserData(null);
         setToken(null);
+        // Clean up instant session detectors when user logs out
+        (async () => { try { await destroyAllInstantSessionDetectors(); } catch {} })();
       }
     };
 

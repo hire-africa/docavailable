@@ -1,7 +1,6 @@
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
     Dimensions,
     Platform,
     SafeAreaView,
@@ -20,6 +19,7 @@ import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import { useAuth } from '../contexts/AuthContext';
+import { Alert } from '../utils/customAlert';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -114,7 +114,7 @@ export default function EditDoctorProfile() {
                 // Validate that we have the expected user data structure
                 if (!currentUser || typeof currentUser !== 'object') {
                     console.error('EditDoctorProfile: Invalid user data structure:', currentUser);
-                    Alert.alert('Error', 'Invalid user data. Please try again.');
+                    Alert.error('Error', 'Invalid user data. Please try again.');
                     return;
                 }
                 

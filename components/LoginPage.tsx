@@ -252,28 +252,39 @@ export default function LoginPage() {
                     <View style={styles.inputContainer}>
                         <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
                         <TextInput
-                            style={styles.input}
+                            style={[
+                                styles.input,
+                                Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                            ]}
                             placeholder="Email"
-                            placeholderTextColor="#000"
+                            placeholderTextColor="#666"
                             value={email}
                             onChangeText={setEmail}
-                            keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
+                            cursorColor="#4CAF50"
+                            caretHidden={false}
+                            selectionColor="#4CAF50"
                         />
                     </View>
 
                     <View style={styles.inputContainer}>
                         <FontAwesome name="lock" size={20} color="#666" style={styles.inputIcon} />
                         <TextInput
-                            style={styles.input}
+                            style={[
+                                styles.input,
+                                Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                            ]}
                             placeholder="Password"
-                            placeholderTextColor="#000"
+                            placeholderTextColor="#666"
                             value={password}
                             onChangeText={setPassword}
                             secureTextEntry
                             autoCapitalize="none"
                             autoCorrect={false}
+                            cursorColor="#4CAF50"
+                            caretHidden={false}
+                            selectionColor="#4CAF50"
                         />
                     </View>
 
@@ -406,8 +417,14 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         paddingVertical: 16,
+        paddingLeft: 2,
         fontSize: 16,
         color: '#333',
+        ...Platform.select({
+            android: {
+                textAlignVertical: 'center',
+            },
+        }),
     },
     loginButton: {
         backgroundColor: '#4CAF50',

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
-import { Search, Filter, Calendar, Clock, User, Phone, Video, MessageSquare } from 'lucide-react';
+import { Search, Filter, Calendar, Clock, User, Phone, Video, MessageSquare, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Appointment {
@@ -44,11 +44,50 @@ export default function AppointmentsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // Create modal state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [createForm, setCreateForm] = useState({
+    doctor_id: '',
+    patient_id: '',
+    appointment_type: 'text',
+    appointment_date: '',
+    appointment_time: '',
+    duration_minutes: '',
+    reason: '',
+  });
+
   const itemsPerPage = 10;
 
   useEffect(() => {
     fetchAppointments();
   }, [currentPage, filterStatus, filterType, searchTerm]);
+
+  // Load doctor/patient options when opening modal
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const token = localStorage.getItem('admin_token');
+        const [doctorsRes, patientsRes] = await Promise.all([
+          fetch('/api/users?type=doctor&limit=100', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/users?type=patient&limit=100', { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        if (doctorsRes.ok) {
+          const data = await doctorsRes.json();
+          setDoctors(data.users || []);
+        }
+        if (patientsRes.ok) {
+          const data = await patientsRes.json();
+          setPatients(data.users || []);
+        }
+      } catch (e) {
+        // silent fail
+      }
+    };
+    if (showCreateModal) loadOptions();
+  }, [showCreateModal]);
 
   const fetchAppointments = async () => {
     try {
@@ -84,6 +123,43 @@ export default function AppointmentsPage() {
     e.preventDefault();
     setCurrentPage(1);
     fetchAppointments();
+  };
+
+  const handleCreateAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      const token = localStorage.getItem('admin_token');
+      const response = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(createForm),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        toast.success('Appointment created');
+        setShowCreateModal(false);
+        setCreateForm({
+          doctor_id: '',
+          patient_id: '',
+          appointment_type: 'text',
+          appointment_date: '',
+          appointment_time: '',
+          duration_minutes: '',
+          reason: '',
+        });
+        fetchAppointments();
+      } else {
+        toast.error(data.message || 'Failed to create appointment');
+      }
+    } catch (error) {
+      toast.error('Failed to create appointment');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleStatusChange = async (appointmentId: number, newStatus: string) => {
@@ -174,6 +250,13 @@ export default function AppointmentsPage() {
               Manage patient appointments and consultations
             </p>
           </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn btn-primary"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Appointment
+          </button>
         </div>
 
         {/* Filters */}
@@ -419,6 +502,122 @@ export default function AppointmentsPage() {
           </div>
         </div>
       </div>
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-1">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Add Appointment</h3>
+              <form onSubmit={handleCreateAppointment} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Doctor</label>
+                  <select
+                    required
+                    value={createForm.doctor_id}
+                    onChange={(e) => setCreateForm({ ...createForm, doctor_id: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">Select doctor</option>
+                    {doctors.map(d => (
+                      <option key={d.id} value={d.id}>
+                        Dr. {d.first_name} {d.last_name} ({d.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Patient</label>
+                  <select
+                    required
+                    value={createForm.patient_id}
+                    onChange={(e) => setCreateForm({ ...createForm, patient_id: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">Select patient</option>
+                    {patients.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.first_name} {p.last_name} ({p.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <select
+                    value={createForm.appointment_type}
+                    onChange={(e) => setCreateForm({ ...createForm, appointment_type: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="text">Text</option>
+                    <option value="voice">Voice</option>
+                    <option value="video">Video</option>
+                    <option value="call">Call</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={createForm.appointment_date}
+                      onChange={(e) => setCreateForm({ ...createForm, appointment_date: e.target.value })}
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time</label>
+                    <input
+                      type="time"
+                      value={createForm.appointment_time}
+                      onChange={(e) => setCreateForm({ ...createForm, appointment_time: e.target.value })}
+                      className="input w-full"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={createForm.duration_minutes}
+                    onChange={(e) => setCreateForm({ ...createForm, duration_minutes: e.target.value })}
+                    className="input w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason/Notes</label>
+                  <textarea
+                    value={createForm.reason}
+                    onChange={(e) => setCreateForm({ ...createForm, reason: e.target.value })}
+                    className="input w-full h-20"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="btn btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={creating} className="btn btn-primary">
+                    {creating ? 'Creating...' : 'Create Appointment'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
+
+

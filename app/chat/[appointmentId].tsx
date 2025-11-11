@@ -6,7 +6,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Image,
   Keyboard,
@@ -25,8 +24,10 @@ import AudioCallModal from '../../components/AudioCallModal';
 import { Icon } from '../../components/Icon';
 import ImageMessage from '../../components/ImageMessage';
 import InstantSessionTimer from '../../components/InstantSessionTimer';
+import { MessageReaction } from '../../components/MessageReaction';
 import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
+import { SwipeableMessage } from '../../components/SwipeableMessage';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,6 +37,7 @@ import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector
 import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
+import callDeduplicationService from '../../services/callDeduplicationService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import { sessionService } from '../../services/sessionService';
@@ -45,17 +47,24 @@ import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
-
-// Extended ChatMessage type with upload tracking
-interface ExtendedChatMessage extends ChatMessage {
-  _isUploaded?: boolean;
-  server_media_url?: string; // Store server URL separately from display URL
-}
 import {
   getUserTimezone,
   isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { apiService } from '../services/apiService';
+import { Alert } from '../../utils/customAlert';
+
+// Extended ChatMessage type with upload tracking, reactions, and replies
+interface ExtendedChatMessage extends ChatMessage {
+  _isUploaded?: boolean;
+  server_media_url?: string; // Store server URL separately from display URL
+  reactions?: { emoji: string; userId: number; userName: string }[];
+  replyTo?: {
+    messageId: string;
+    message: string;
+    senderName: string;
+  };
+}
 
 interface ChatInfo {
   appointment_id: number;
@@ -144,29 +153,69 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
         continue;
       }
       
-      // Check if this is a duplicate of an immediate image message
+      // Check if this is a duplicate/update of an existing image message
       if (msg.message_type === 'image' && msg.media_url) {
-        // Look for existing temp message with same server URL
-        const isDuplicate = prev.some(existingMsg => {
-          if (existingMsg.message_type !== 'image') return false;
-          
-          // Check if there's a temp message that will be updated to this URL
-          // This happens when WebRTC sends the message before updateImageMessage runs
-          if (existingMsg.temp_id && existingMsg.server_media_url === msg.media_url) {
-            console.log(`🔄 [safeMerge] Skipping WebRTC duplicate - temp message exists: ${existingMsg.temp_id}`);
-            return true;
-          }
-          
-          // Also check if media_url matches (for immediate messages being updated)
-          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) {
-            console.log(`🔄 [safeMerge] Skipping duplicate - temp message with same media_url: ${existingMsg.temp_id}`);
-            return true;
-          }
-          
-          return false;
-        });
+        // Look for existing message to update instead of blocking
+        let shouldSkip = false;
+        let shouldUpdate = false;
         
-        if (isDuplicate) {
+        for (let i = 0; i < prev.length; i++) {
+          const existingMsg = prev[i];
+          if (existingMsg.message_type !== 'image') continue;
+          
+          // CRITICAL: Check if message IDs match (WebRTC echo has same server ID)
+          if (existingMsg.id && msg.id && String(existingMsg.id) === String(msg.id)) {
+            console.log(`🔄 [safeMerge] Found matching message ID: ${msg.id} - updating delivery status`);
+            // Update the existing message with new delivery status from echo
+            map.set(String(existingMsg.id), {
+              ...existingMsg,
+              delivery_status: msg.delivery_status || 'sent',
+              server_media_url: msg.media_url,
+              _isUploaded: true
+            });
+            shouldSkip = true;
+            break;
+          }
+          
+          // Check if there's a temp message that matches this URL
+          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) {
+            console.log(`🔄 [safeMerge] Found matching media_url - updating message`);
+            const existingKey = existingMsg.temp_id;
+            map.set(existingKey, {
+              ...existingMsg,
+              id: msg.id || existingMsg.id,
+              delivery_status: msg.delivery_status || 'sent',
+              server_media_url: msg.media_url,
+              _isUploaded: true
+            });
+            shouldSkip = true;
+            break;
+          }
+          
+          // Check if this is a WebRTC echo by sender and timing
+          if (existingMsg.temp_id && existingMsg.is_own_message && msg.is_own_message) {
+            const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
+            const sameSender = existingMsg.sender_id === msg.sender_id;
+            const closeTime = timeDiff < 10000;
+            
+            if (sameSender && closeTime) {
+              console.log(`🔄 [safeMerge] WebRTC echo detected - updating existing message`);
+              const existingKey = existingMsg.temp_id;
+              map.set(existingKey, {
+                ...existingMsg,
+                id: msg.id || existingMsg.id,
+                delivery_status: msg.delivery_status || 'sent',
+                media_url: msg.media_url,
+                server_media_url: msg.media_url,
+                _isUploaded: true
+              });
+              shouldSkip = true;
+              break;
+            }
+          }
+        }
+        
+        if (shouldSkip) {
           continue;
         }
       }
@@ -248,6 +297,10 @@ export default function ChatPage() {
   const [sendingGalleryImage, setSendingGalleryImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageCaption, setImageCaption] = useState('');
+  
+  // Reply and reaction state
+  const [replyingTo, setReplyingTo] = useState<ExtendedChatMessage | null>(null);
+  const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   
   // Keyboard animation state
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -349,7 +402,9 @@ export default function ChatPage() {
   const webrtcServiceRef = useRef<WebRTCChatService | null>(null);
   
   // Appointment time checking state
-  const [isAppointmentTime, setIsAppointmentTime] = useState(false);
+  // Initialize to true to prevent buttons from being disabled on initial render
+  // checkAppointmentTime will update this correctly once chatInfo loads
+  const [isAppointmentTime, setIsAppointmentTime] = useState(true);
   const [timeUntilAppointment, setTimeUntilAppointment] = useState<string>('');
   
   // Subscription data for call availability
@@ -1384,7 +1439,7 @@ export default function ChatPage() {
             console.log('❌ Session end error via WebRTC:', error);
             setEndingSession(false);
             // Show error alert
-            Alert.alert('Error', `Failed to end session: ${error}`);
+            Alert.error('Error', `Failed to end session: ${error}`);
           },
           
           onSessionDeduction: (sessionId: string, deductionData: any, sessionType: 'instant' | 'appointment') => {
@@ -2250,7 +2305,14 @@ export default function ChatPage() {
           hasSendMessage: typeof webrtcChatService.sendMessage === 'function'
         });
         try {
-          const message = await webrtcChatService.sendMessage(messageText);
+          // Prepare replyTo data if replying
+          const replyData = replyingTo ? {
+            messageId: replyingTo.id || replyingTo.temp_id || '',
+            message: replyingTo.message || '',
+            senderName: replyingTo.sender_id === currentUserId ? 'You' : (chatInfo?.other_participant_name || 'User')
+          } : undefined;
+          
+          const message = await webrtcChatService.sendMessage(messageText, replyData);
           if (message) {
             updateTextMessage(tempId, message.id);
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
@@ -2392,6 +2454,61 @@ export default function ChatPage() {
     }
   };
 
+  // Handle message reaction
+  const handleReaction = (messageId: string, emoji: string) => {
+    setMessages(prevMessages =>
+      prevMessages.map(msg => {
+        if (msg.id === messageId || msg.temp_id === messageId) {
+          const reactions = msg.reactions || [];
+          const existingReaction = reactions.find(r => r.userId === currentUserId && r.emoji === emoji);
+          
+          if (existingReaction) {
+            // Remove reaction
+            return {
+              ...msg,
+              reactions: reactions.filter(r => !(r.userId === currentUserId && r.emoji === emoji))
+            };
+          } else {
+            // Add reaction
+            return {
+              ...msg,
+              reactions: [...reactions, {
+                emoji,
+                userId: currentUserId,
+                userName: user?.first_name || 'You'
+              }]
+            };
+          }
+        }
+        return msg;
+      })
+    );
+  };
+
+  const handleRemoveReaction = (messageId: string, emoji: string) => {
+    setMessages(prevMessages =>
+      prevMessages.map(msg => {
+        if (msg.id === messageId || msg.temp_id === messageId) {
+          const reactions = msg.reactions || [];
+          return {
+            ...msg,
+            reactions: reactions.filter(r => !(r.userId === currentUserId && r.emoji === emoji))
+          };
+        }
+        return msg;
+      })
+    );
+  };
+
+  // Handle swipe to reply
+  const handleSwipeReply = (message: ExtendedChatMessage) => {
+    setReplyingTo(message);
+  };
+
+  // Cancel reply
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
 
   // Initialize WebRTC audio calls
   const initializeWebRTCAudioCalls = async () => {
@@ -2583,15 +2700,11 @@ export default function ChatPage() {
           // Determine call type and show appropriate incoming call screen
           const callType = message.callType || 'audio';
           
-          // CRITICAL FIX: Use global flag to prevent duplicate modals across all connections
-          const globalKey = `incomingCall_${appointmentId}_${callType}`;
-          if ((global as any)[globalKey]) {
-            console.log(`📞 Incoming ${callType} call already shown globally, ignoring duplicate offer`);
+          // CRITICAL FIX: Use deduplication service to prevent multiple call screens
+          if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'websocket')) {
+            console.log(`📞 Duplicate ${callType} call blocked by deduplication service`);
             return;
           }
-          
-          // Set global flag immediately
-          (global as any)[globalKey] = true;
           
           if (callType === 'video') {
             console.log('📹 Showing incoming video call screen');
@@ -2634,13 +2747,9 @@ export default function ChatPage() {
       // FIX: Only show "cannot end" message if it's a confirmed appointment AND it's not appointment time AND it's not a text appointment
       if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
         // For confirmed appointments that haven't started, show a different message
-        Alert.alert(
+        Alert.info(
           'Scheduled Appointment',
-          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Go Back', onPress: () => router.back() }
-          ]
+          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.'
         );
         return;
       }
@@ -2703,10 +2812,9 @@ export default function ChatPage() {
       
       // FIX: Only prevent ending if it's a confirmed appointment AND it's not a text appointment AND it's not appointment time
       if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
-        Alert.alert(
+        Alert.warning(
           'Cannot End Session',
-          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.',
-          [{ text: 'OK' }]
+          'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.'
         );
         return;
       }
@@ -2792,7 +2900,7 @@ export default function ChatPage() {
         console.log('✅ [End Session] UI updated - showing rating modal');
       } else {
         console.error('❌ [End Session] Failed to end session:', result);
-        Alert.alert('Error', 'Failed to end session. Please try again.');
+        Alert.error('Error', 'Failed to end session. Please try again.');
       }
     } catch (error: any) {
       console.error('❌ [End Session] Error ending session:', error);
@@ -2805,10 +2913,10 @@ export default function ChatPage() {
         setShowRatingModal(true);
       } else if (error?.response?.status === 403) {
         console.error('Unauthorized: You are not authorized to end this session.');
-        Alert.alert('Error', 'You are not authorized to end this session.');
+        Alert.error('Error', 'You are not authorized to end this session.');
       } else {
         console.error('Failed to end session. Please try again.');
-        Alert.alert('Error', 'Failed to end session. Please try again.');
+        Alert.error('Error', 'Failed to end session. Please try again.');
       }
     }
   };
@@ -2896,18 +3004,13 @@ export default function ChatPage() {
       console.log('✅ [Rating] Rating submitted successfully:', result);
       
       // Show success message and navigate back
-      Alert.alert(
+      Alert.success(
         'Thank You!',
         'Your rating has been submitted successfully.',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              setShowRatingModal(false);
-              router.back();
-            }
-          }
-        ]
+        () => {
+          setShowRatingModal(false);
+          router.back();
+        }
       );
     } catch (error: any) {
       console.error('❌ [Rating] Error submitting rating:', error);
@@ -2925,24 +3028,9 @@ export default function ChatPage() {
         errorMessage = error.response.data.message;
       }
       
-      Alert.alert(
+      Alert.error(
         'Rating Submission Failed',
-        errorMessage,
-        [
-          {
-            text: 'Try Again',
-            onPress: () => {
-              // Keep the rating modal open for retry
-            }
-          },
-          {
-            text: 'Skip',
-            onPress: () => {
-              setShowRatingModal(false);
-              router.back();
-            }
-          }
-        ]
+        errorMessage
       );
     } finally {
       setSubmittingRating(false);
@@ -3130,11 +3218,21 @@ export default function ChatPage() {
       created_at: new Date().toISOString(),
       delivery_status: 'sending',
       is_own_message: true,
+      replyTo: replyingTo ? {
+        messageId: replyingTo.id || replyingTo.temp_id || '',
+        message: replyingTo.message || '',
+        senderName: replyingTo.sender_id === currentUserId ? 'You' : (chatInfo?.other_participant_name || 'User')
+      } : undefined,
     };
 
-    console.log('📤 [Chat] Adding immediate text message:', tempId);
+    console.log('📤 [Chat] Adding immediate text message:', tempId, replyingTo ? 'with reply' : '');
     setMessages(prev => [...prev, immediateMessage]);
     scrollToBottom();
+    
+    // Clear reply context after sending
+    if (replyingTo) {
+      setReplyingTo(null);
+    }
     
     return tempId;
   };
@@ -3232,10 +3330,9 @@ export default function ChatPage() {
       // Request camera permissions first
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        Alert.warning(
           'Camera Permission Required',
-          'Please allow camera access to take photos.',
-          [{ text: 'OK' }]
+          'Please allow camera access to take photos.'
         );
         return;
       }
@@ -3258,7 +3355,7 @@ export default function ChatPage() {
     } catch (error) {
       console.error('❌ Error taking photo:', error);
       // Show user-friendly error message
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      Alert.error('Error', 'Failed to take photo. Please try again.');
     } finally {
       setSendingCameraImage(false);
     }
@@ -3271,10 +3368,9 @@ export default function ChatPage() {
       // Request media library permissions first
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
+        Alert.warning(
           'Photo Library Permission Required',
-          'Please allow photo library access to select images.',
-          [{ text: 'OK' }]
+          'Please allow photo library access to select images.'
         );
         return;
       }
@@ -3297,7 +3393,7 @@ export default function ChatPage() {
     } catch (error) {
       console.error('❌ Error picking image:', error);
       // Show user-friendly error message
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      Alert.error('Error', 'Failed to pick image. Please try again.');
     } finally {
       setSendingGalleryImage(false);
     }
@@ -3428,9 +3524,14 @@ export default function ChatPage() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: 'transparent' }} edges={['top', 'bottom']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
       
+      <KeyboardAvoidingView 
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        behavior="padding"
+        keyboardVerticalOffset={0}
+      >
       {/* Background Wallpaper */}
       <Image
         source={require('./white_wallpaper.jpg')}
@@ -3449,12 +3550,6 @@ export default function ChatPage() {
         onLoad={() => console.log('✅ Wallpaper loaded successfully')}
         onError={(error) => console.log('❌ Wallpaper failed to load:', error)}
       />
-      
-      <KeyboardAvoidingView 
-        style={{ flex: 1, backgroundColor: 'transparent' }}
-        behavior="padding"
-        keyboardVerticalOffset={0}
-      >
         {/* Header */}
         <View style={{
           flexDirection: 'row',
@@ -3554,7 +3649,7 @@ export default function ChatPage() {
                 } else {
                   message = 'Video calls are only available during active sessions or when the doctor is online.';
                 }
-                Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
+                Alert.info('Call Not Available', message);
               }
             }}
           >
@@ -3608,7 +3703,7 @@ export default function ChatPage() {
                   } else {
                     message = 'Call Not Available: Call feature is not available at this time.';
                   }
-                  Alert.alert('Call Not Available', message, [{ text: 'OK' }]);
+                  Alert.info('Call Not Available', message);
                 }
               }}
               disabled={!isCallButtonEnabled('voice')}
@@ -3682,7 +3777,7 @@ export default function ChatPage() {
       )}
 
       {/* WebRTC Session Status */}
-      {isWebRTCConnected && (
+      {isWebRTCConnected && (sessionStatus || doctorResponseTimeRemaining !== null || sessionDeductionInfo) && (
         <View style={{
           backgroundColor: '#f8f9fa',
           paddingHorizontal: 16,
@@ -3841,7 +3936,8 @@ export default function ChatPage() {
             ref={scrollViewRef}
             style={{ flex: 1, backgroundColor: 'transparent' }}
             contentContainerStyle={{ 
-              padding: 16,
+              paddingHorizontal: 16,
+              paddingTop: 12,
               paddingBottom: 0, // No bottom padding to prevent extra space
             }}
             showsVerticalScrollIndicator={false}
@@ -3959,76 +4055,164 @@ export default function ChatPage() {
             const uniqueKey = message.temp_id ? `temp_${message.temp_id}` : (message.id ? `msg_${message.id}` : `fallback_${index}_${message.created_at}`);
             
             return (
-              <View
+              <SwipeableMessage
                 key={uniqueKey}
-                style={{
-                  alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
-                  marginBottom: 12,
-                  maxWidth: '80%',
-                }}
+                onSwipeLeft={() => handleSwipeReply(message)}
+                onLongPress={() => setShowReactionPicker(message.id || message.temp_id || '')}
+                isSentByCurrentUser={message.sender_id === currentUserId}
               >
-                {message.message_type === 'voice' && message.media_url ? (
-                      <VoiceMessagePlayer
-                        audioUri={message.media_url}
-                        isOwnMessage={message.sender_id === currentUserId}
-                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        profilePictureUrl={
-                          message.sender_id === currentUserId
-                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                        }
-                      />
-                ) : message.message_type === 'image' && message.media_url ? (
-                      <ImageMessage
-                        imageUrl={message.media_url}
-                        isOwnMessage={message.sender_id === currentUserId}
-                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        deliveryStatus={message.delivery_status}
-                        appointmentId={appointmentId}
-                        profilePictureUrl={
-                          message.sender_id === currentUserId
-                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                        }
-                      />
-                ) : (
-                  // Regular text messages with bubble
-                  <View
-                    style={{
-                      backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
-                      paddingHorizontal: 16,
-                      paddingVertical: 12,
-                      borderRadius: 20,
-                      borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
-                      borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
-                    }}
-                  >
-                    <Text
+                <View
+                  style={{
+                    alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
+                    marginBottom: 12,
+                    maxWidth: '80%',
+                  }}
+                >
+                  {/* Reply reference - WhatsApp style */}
+                  {message.replyTo && (
+                    <View style={{
+                      backgroundColor: message.sender_id === currentUserId ? '#3D9B5C' : '#E5E5E5',
+                      paddingHorizontal: 12,
+                      paddingTop: 8,
+                      paddingBottom: 4,
+                      borderTopLeftRadius: 8,
+                      borderTopRightRadius: 8,
+                      borderLeftWidth: 4,
+                      borderLeftColor: message.sender_id === currentUserId ? '#2E7D47' : '#4CAF50',
+                    }}>
+                      <Text style={{
+                        fontSize: 12,
+                        fontWeight: '600',
+                        color: message.sender_id === currentUserId ? '#FFFFFF' : '#4CAF50',
+                        marginBottom: 2,
+                      }}>
+                        {message.replyTo.senderName}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.9)' : '#666',
+                        }}
+                        numberOfLines={2}
+                      >
+                        {message.replyTo.message}
+                      </Text>
+                    </View>
+                  )}
+
+                  {message.message_type === 'voice' && message.media_url ? (
+                    <VoiceMessagePlayer
+                      audioUri={message.media_url}
+                      isOwnMessage={message.sender_id === currentUserId}
+                      timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      profilePictureUrl={
+                        message.sender_id === currentUserId
+                          ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                          : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                      }
+                    />
+                  ) : message.message_type === 'image' && message.media_url ? (
+                    <ImageMessage
+                      imageUrl={message.media_url}
+                      isOwnMessage={message.sender_id === currentUserId}
+                      timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      deliveryStatus={message.delivery_status}
+                      appointmentId={appointmentId}
+                      profilePictureUrl={
+                        message.sender_id === currentUserId
+                          ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                          : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                      }
+                    />
+                  ) : (
+                    // Text message bubble
+                    <View
                       style={{
-                        color: message.sender_id === currentUserId ? '#fff' : '#333',
-                        fontSize: 16,
+                        backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                        paddingHorizontal: 16,
+                        paddingVertical: 12,
+                        borderRadius: message.replyTo ? 0 : 20,
+                        borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                        borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                        borderTopLeftRadius: message.replyTo ? 0 : 20,
+                        borderTopRightRadius: message.replyTo ? 0 : 20,
                       }}
                     >
-                      {message.message}
-                    </Text>
-                    {/* Add delivery status for text messages */}
-                    {message.sender_id === currentUserId && (
-                      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
-                        <ReadReceipt
-                          isOwnMessage={true}
-                          deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
-                          readBy={message.read_by}
-                          otherParticipantId={doctorId || patientId}
-                          messageTime={message.created_at}
-                        />
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
+                      <Text
+                        style={{
+                          color: message.sender_id === currentUserId ? '#fff' : '#333',
+                          fontSize: 16,
+                        }}
+                      >
+                        {message.message}
+                      </Text>
+                      {/* Add delivery status for text messages */}
+                      {message.sender_id === currentUserId && (
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
+                          <ReadReceipt
+                            isOwnMessage={true}
+                            deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
+                            readBy={message.read_by}
+                            otherParticipantId={doctorId || patientId}
+                            messageTime={message.created_at}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Message Reactions */}
+                  <MessageReaction
+                    messageId={message.id || message.temp_id || ''}
+                    existingReactions={message.reactions}
+                    currentUserId={currentUserId}
+                    onReact={handleReaction}
+                    onRemoveReaction={handleRemoveReaction}
+                  />
+                </View>
+              </SwipeableMessage>
             );
           })}
         </ScrollView>
+
+        {/* Reply Context - Above input */}
+        {replyingTo && (
+          <View style={{
+            backgroundColor: '#F5F5F5',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderLeftWidth: 3,
+            borderLeftColor: '#4CAF50',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderTopWidth: 1,
+            borderTopColor: '#E5E5E5',
+          }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: '#4CAF50',
+                marginBottom: 4,
+              }}>
+                Replying to {replyingTo.sender_id === currentUserId ? 'yourself' : chatInfo?.other_participant_name || 'User'}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 14,
+                  color: '#666',
+                }}
+                numberOfLines={1}
+              >
+                {replyingTo.message || 'Media message'}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={cancelReply} style={{ padding: 8 }}>
+              <Ionicons name="close" size={20} color="#666" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Input - Fixed at bottom with proper keyboard handling and safe area */}
         <View style={{ 
@@ -4037,7 +4221,7 @@ export default function ChatPage() {
           paddingHorizontal: 16,
           paddingTop: 12,
           paddingBottom: 0,
-          borderTopWidth: 1,
+          borderTopWidth: replyingTo ? 0 : 1,
           borderTopColor: '#E5E5E5',
           backgroundColor: '#fff',
           position: 'relative',
@@ -4125,9 +4309,11 @@ export default function ChatPage() {
                   source={{ uri: selectedImage }} 
                   style={{ width: 60, height: 60, borderRadius: 8, marginRight: 8 }}
                 />
-                <Text style={{ flex: 1, color: '#666', fontSize: 14 }}>
-                  {newMessage || 'Add a caption...'}
-                </Text>
+                {newMessage && (
+                  <Text style={{ flex: 1, color: '#666', fontSize: 14 }}>
+                    {newMessage}
+                  </Text>
+                )}
                 <TouchableOpacity 
                   onPress={() => {
                     setSelectedImage(null);
@@ -4242,9 +4428,13 @@ export default function ChatPage() {
             value={newMessage}
             onChangeText={(text) => {
               setNewMessage(text);
-              // Send typing indicator via WebRTC
-              if (isWebRTCConnected && webrtcSessionService) {
-                webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
+              // Send typing indicator via WebRTC (try session service first, then chat service)
+              if (isWebRTCConnected) {
+                if (webrtcSessionService) {
+                  webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
+                } else if (chatService) {
+                  chatService.sendTypingIndicator(text.length > 0, currentUserId);
+                }
               }
             }}
             editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
@@ -4273,12 +4463,17 @@ export default function ChatPage() {
             onPress={async () => {
               if (selectedImage) {
                 const caption = newMessage.trim();
+                const imageToSend = selectedImage; // Store reference before clearing
+                
+                // Clear image and caption IMMEDIATELY to dismiss preview and prevent duplicate sends
+                setSelectedImage(null);
+                setNewMessage('');
                 
                 try {
                   if (webrtcChatService) {
-                    // WebRTC handles immediate display itself, don't add temp message
+                    // WebRTC service handles immediate display via onMessage callback
                     console.log('📤 [Send] Sending image via WebRTC');
-                    const message = await webrtcChatService.sendImageMessage(selectedImage, appointmentId);
+                    const message = await webrtcChatService.sendImageMessage(imageToSend, appointmentId);
                     if (message && message.media_url) {
                       console.log('✅ [Send] Image sent via WebRTC:', message.id);
                       
@@ -4296,8 +4491,8 @@ export default function ChatPage() {
                   } else {
                     // Backend API - use immediate display with temp message
                     console.log('📤 [Send] Sending image via Backend API');
-                    const tempId = addImmediateImageMessage(selectedImage);
-                    await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                    const tempId = addImmediateImageMessage(imageToSend);
+                    await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
                     
                     // Send caption as separate text message if provided
                     if (caption) {
@@ -4307,8 +4502,8 @@ export default function ChatPage() {
                 } catch (error) {
                   console.error('❌ [Send] Failed to send image via WebRTC, falling back to backend:', error);
                   // Fallback to backend with immediate display
-                  const tempId = addImmediateImageMessage(selectedImage);
-                  await sendImageMessageViaBackendAPIWithUpdate(selectedImage, tempId);
+                  const tempId = addImmediateImageMessage(imageToSend);
+                  await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
                   
                   // Still try to send caption if provided
                   if (caption) {
@@ -4327,10 +4522,6 @@ export default function ChatPage() {
                     }
                   }
                 }
-                
-                // Clear image and caption
-                setSelectedImage(null);
-                setNewMessage('');
               } else {
                 // Send text message
                 sendMessage();
@@ -4623,6 +4814,9 @@ export default function ChatPage() {
               console.log('📞 Incoming call declined');
               setShowIncomingCall(false);
               
+              // Clear call from deduplication service
+              callDeduplicationService.clearCall(appointmentId, 'audio');
+              
               // Clear pending offer
               (global as any).pendingOffer = null;
               
@@ -4643,6 +4837,9 @@ export default function ChatPage() {
             }}
             onCallAnswered={async () => {
               console.log('📞 Incoming call accepted - transitioning to connected state...');
+              
+              // Clear call from deduplication service
+              callDeduplicationService.clearCall(appointmentId, 'audio');
               
               // Send call-answered signal
               try {
@@ -4909,13 +5106,13 @@ export default function ChatPage() {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when call ends
-              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
+              callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
             }}
             onCallTimeout={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when call times out
-              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
+              callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
               // Only show "Doctor Unavailable" modal to patients (callers)
               if (isPatient) {
                 setShowDoctorUnavailableModal(true);
@@ -4925,13 +5122,15 @@ export default function ChatPage() {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when call is rejected
-              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
+              callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
               // Only show "Doctor Unavailable" modal to patients (callers)
               if (isPatient) {
                 setShowDoctorUnavailableModal(true);
               }
             }}
             onCallAnswered={() => {
+              // Clear from deduplication service
+              callDeduplicationService.clearCall(appointmentId, 'video');
               // Don't create a new modal, just transition the existing one
               console.log('📞 Video call answered - transitioning to connected state');
             }}
@@ -4944,7 +5143,7 @@ export default function ChatPage() {
               setShowIncomingVideoCall(false);
               setIsAnsweringVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when user rejects call
-              (global as any)[`incomingCall_${appointmentId}_video`] = false; // Reset global flag
+              callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
             }}
           />
         </Modal>

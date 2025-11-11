@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
     if (!token || !verifyToken(token)) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
-
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -20,8 +19,8 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // Build WHERE clause
-    let whereConditions = [];
-    let params = [];
+    let whereConditions = [] as string[];
+    let params: any[] = [];
     let paramCount = 0;
 
     if (search) {
@@ -186,3 +185,71 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const token = request.headers.get('authorization')?.replace('Bearer ', '');
+    
+    if (!token || !verifyToken(token)) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const {
+      doctor_id,
+      patient_id,
+      appointment_type,
+      status,
+      appointment_date,
+      appointment_time,
+      duration_minutes,
+      reason,
+    } = body || {};
+
+    if (!doctor_id || !patient_id || !appointment_type) {
+      return NextResponse.json(
+        { message: 'doctor_id, patient_id and appointment_type are required' },
+        { status: 400 }
+      );
+    }
+
+    const allowedTypes = ['text', 'voice', 'video', 'call'];
+    if (!allowedTypes.includes(String(appointment_type))) {
+      return NextResponse.json(
+        { message: 'Invalid appointment_type' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedStatus = status || 'pending';
+
+    const insert = await query(
+      `INSERT INTO appointments 
+        (doctor_id, patient_id, appointment_type, status, appointment_date, appointment_time, duration_minutes, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        parseInt(doctor_id, 10),
+        parseInt(patient_id, 10),
+        appointment_type,
+        normalizedStatus,
+        appointment_date || null,
+        appointment_time || null,
+        duration_minutes ? parseInt(duration_minutes, 10) : null,
+        reason || null,
+      ]
+    );
+
+    return NextResponse.json({
+      message: 'Appointment created successfully',
+      appointment_id: insert.rows[0].id,
+    });
+  } catch (error) {
+    console.error('Appointment creation error:', error);
+    return NextResponse.json(
+      { message: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+

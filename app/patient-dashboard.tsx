@@ -30,7 +30,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BottomNavigation from '../components/BottomNavigation';
 import Icon, { IconName } from '../components/Icon';
 import { RealTimeEventService } from '../services/realTimeEventService';
-import { Activity, addRealtimeActivity, formatTimestamp } from '../utils/activityUtils';
+import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 
 import AlertDialog from '../components/AlertDialog';
 import CacheManagementModal from '../components/CacheManagementModal';
@@ -39,6 +39,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
 import DoctorCard from '../components/DoctorCard';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
+import { DoctorCardSkeleton } from '../components/skeleton';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
 import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
@@ -52,6 +53,7 @@ import { useAlert } from '@/hooks/useAlert';
 import { useAnonymousMode } from '@/hooks/useAnonymousMode';
 import { useCustomTheme } from '@/hooks/useCustomTheme';
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { useThemedColors } from '@/hooks/useThemedColors';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
@@ -116,13 +118,16 @@ export default function PatientDashboard() {
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
   const { isAnonymousModeEnabled } = useAnonymousMode();
   
-  // Theme support - automatically use dark mode when anonymous mode is enabled
+  // Theme support
+  const colors = useThemedColors();
   const { theme, isDark } = useCustomTheme();
-  const backgroundColor = useThemeColor({}, 'background');
-  const textColor = useThemeColor({}, 'text');
   const isDarkMode = isAnonymousModeEnabled && isDark;
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const insets = useSafeAreaInsets();
+  
+  // Create theme-aware styles
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -202,6 +207,9 @@ export default function PatientDashboard() {
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [visibleDoctorCards, setVisibleDoctorCards] = useState<number>(0);
+  const doctorCardAnimations = useRef<{[key: string]: Animated.Value}>({}).current;
+  const hasAnimatedDoctors = useRef(false);
 
   // Function to refresh subscription data
   const refreshSubscriptionData = useCallback(async () => {
@@ -225,25 +233,83 @@ export default function PatientDashboard() {
 
   const loadActivities = async () => {
     try {
-      // Clear old activities and only load real-time activities
+      // Generate activities from real user data
+      const userActivities = generateUserActivities(
+        'patient',
+        userData,
+        appointments,
+        [], // messages - can be added later
+        currentSubscription
+      );
+      
+      // Get notifications and convert them to activities
+      const notifications = await NotificationService.getNotificationsForUser('patient', userData?.id?.toString());
+      const notificationActivities: Activity[] = notifications.map(notification => ({
+        id: `notif_${notification.id}`,
+        type: notification.type,
+        title: notification.title,
+        description: notification.message,
+        timestamp: notification.timestamp,
+        icon: getIconForNotificationType(notification.type),
+        color: getColorForNotificationType(notification.type)
+      }));
+      
+      // Merge user activities with notification activities
       setActivities(prevActivities => {
-        // Keep only real-time activities (those created in the last 24 hours)
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        // Keep real-time activities (those added via addRealtimeActivity)
         const realtimeActivities = prevActivities.filter(activity => 
-          activity.timestamp > oneDayAgo
+          activity.id.startsWith('realtime_')
+        );
+        
+        // Combine all activities
+        const allActivities = [...realtimeActivities, ...userActivities, ...notificationActivities];
+        
+        // Remove duplicates based on ID
+        const uniqueActivities = allActivities.filter((activity, index, self) => 
+          index === self.findIndex(a => a.id === activity.id)
         );
         
         // Sort by timestamp (newest first)
-        const sortedActivities = realtimeActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        const sortedActivities = uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         
-        // Log for debugging
-        console.log('📱 Real-time activities loaded:', sortedActivities.length, 'items');
-        console.log('📱 Activity types:', sortedActivities.map(a => a.type));
+        console.log('📱 Activities loaded:', sortedActivities.length, 'items');
+        console.log('📱 Activity breakdown:', {
+          realtime: realtimeActivities.length,
+          appointments: userActivities.filter(a => a.type === 'appointment').length,
+          notifications: notificationActivities.length,
+          total: sortedActivities.length
+        });
         
         return sortedActivities;
       });
     } catch (error) {
       console.error('Error loading activities:', error);
+    }
+  };
+
+  // Helper function to get icon for notification type
+  const getIconForNotificationType = (type: string): string => {
+    switch (type) {
+      case 'appointment': return 'calendar';
+      case 'message': return 'message';
+      case 'payment': return 'dollar';
+      case 'wallet': return 'dollar';
+      case 'system': return 'infoCircle';
+      case 'reminder': return 'clock';
+      default: return 'bell';
+    }
+  };
+
+  // Helper function to get color for notification type
+  const getColorForNotificationType = (type: string): string => {
+    switch (type) {
+      case 'appointment': return '#4CAF50';
+      case 'message': return '#2196F3';
+      case 'payment': return '#FF9800';
+      case 'wallet': return '#FF9800';
+      case 'system': return '#607D8B';
+      case 'reminder': return '#9C27B0';
+      default: return '#666';
     }
   };
 
@@ -740,7 +806,14 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     if (activeTab === 'discover') {
-      setLoadingDoctors(true);
+      // Only show loading spinner if we don't have any doctors yet
+      if (doctors.length === 0) {
+        setLoadingDoctors(true);
+      }
+      // Only reset animation if this is the first load
+      if (!hasAnimatedDoctors.current) {
+        setVisibleDoctorCards(0);
+      }
       // Fetch real doctors from Laravel API
       apiService.get('/doctors/active')
         .then((response: any) => {
@@ -788,6 +861,15 @@ export default function PatientDashboard() {
                   return mappedDoctor;
                 });
               setDoctors(approvedDoctors);
+              // Stop loading immediately when data arrives
+              setLoadingDoctors(false);
+              // If doctors were already cached (quick load), skip animation
+              if (hasAnimatedDoctors.current) {
+                setVisibleDoctorCards(approvedDoctors.length);
+              } else {
+                // Trigger animation start immediately
+                setVisibleDoctorCards(0);
+              }
               // Preload/cached profile pictures to avoid reloading on other pages
               try {
                 const urlsToPreload = approvedDoctors
@@ -799,22 +881,25 @@ export default function PatientDashboard() {
               } catch {}
             } else {
               setDoctors([]);
+              setLoadingDoctors(false);
             }
           } else {
             setDoctors([]);
+            setLoadingDoctors(false);
           }
         })
         .catch((error) => {
           console.error('Error fetching doctors:', error);
           setDoctorsError('Failed to load doctors. Please check your connection and try again.');
           setDoctors([]);
-        })
-        .finally(() => setLoadingDoctors(false));
+          setLoadingDoctors(false);
+        });
 
       // Fetch available specializations
       fetchSpecializations();
     }
   }, [activeTab]);
+
 
   // Load ended sessions when messages tab is active
   useEffect(() => {
@@ -1210,8 +1295,6 @@ export default function PatientDashboard() {
     };
   }, [user, activeTab]);
 
-  if (!user) return null;
-
   const handleLogout = async () => {
       setShowConfirm(true);
   };
@@ -1219,10 +1302,15 @@ export default function PatientDashboard() {
   const confirmLogout = async () => {
     setShowConfirm(false);
     try {
+      console.log('Starting logout process...');
       await authService.signOut();
+      console.log('Logout successful, navigating to home...');
       router.replace('/');
     } catch (error) {
-      showError('Error', 'Failed to logout. Please try again.');
+      console.error('Logout error in confirmLogout:', error);
+      // Even if logout fails, still navigate away since local cleanup should have happened
+      showError('Notice', 'Logged out successfully');
+      router.replace('/');
     }
   };
 
@@ -1349,6 +1437,51 @@ export default function PatientDashboard() {
         return filteredDoctors;
     }
   }, [doctors, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
+
+  // Reset animation when filters/search/sort changes (only if not already animated)
+  useEffect(() => {
+    if (!loadingDoctors && !hasAnimatedDoctors.current) {
+      setVisibleDoctorCards(0);
+    }
+  }, [searchQuery, showOnlyOnline, selectedSpecialization, sortBy]);
+
+  // Staggered animation effect for doctor cards (only on first load)
+  // Start immediately when doctors arrive, don't wait for loadingDoctors to be false
+  useEffect(() => {
+    if (filteredAndSortedDoctors.length > 0 && visibleDoctorCards < filteredAndSortedDoctors.length && !hasAnimatedDoctors.current) {
+      const nextIndex = visibleDoctorCards;
+      const doctorId = filteredAndSortedDoctors[nextIndex]?.id;
+      
+      // For the first card, show immediately with no delay
+      const delay = nextIndex === 0 ? 0 : 30;
+      
+      const timer = setTimeout(() => {
+        if (doctorId) {
+          // Initialize animation value if not exists
+          if (!doctorCardAnimations[doctorId]) {
+            doctorCardAnimations[doctorId] = new Animated.Value(0);
+          }
+          
+          // Animate the card in
+          Animated.timing(doctorCardAnimations[doctorId], {
+            toValue: 1,
+            duration: 150,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start();
+        }
+        
+        setVisibleDoctorCards(nextIndex + 1);
+        
+        // Mark as animated when all cards are shown
+        if (nextIndex + 1 >= filteredAndSortedDoctors.length) {
+          hasAnimatedDoctors.current = true;
+        }
+      }, delay);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [visibleDoctorCards, filteredAndSortedDoctors]);
 
   const getSortOptionLabel = (value: string) => {
     switch (value) {
@@ -2557,11 +2690,9 @@ export default function PatientDashboard() {
 
       {/* Doctors List */}
       <View style={styles.doctorsListNew}>
-        {loadingDoctors && doctors.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.light.tint} />
-            <Text style={styles.loadingText}>Loading doctors...</Text>
-          </View>
+        {loadingDoctors && doctors.length === 0 && filteredAndSortedDoctors.length === 0 ? (
+          // Initial load - show 6 skeleton cards
+          <DoctorCardSkeleton count={6} />
         ) : doctorsError ? (
           <View style={styles.errorContainer}>
             <Icon name="warning" size={20} color="#666" />
@@ -2624,13 +2755,62 @@ export default function PatientDashboard() {
             </Text>
           </View>
         ) : (
-          filteredAndSortedDoctors.map((doctor) => (
-            <DoctorCard
-              key={doctor.id}
-              doctor={doctor}
-              onPress={handleViewDoctorDetails}
-            />
-          ))
+          // Show hybrid of skeleton and real cards
+          (() => {
+            const totalToShow = loadingDoctors && !hasAnimatedDoctors.current 
+              ? Math.max(6, filteredAndSortedDoctors.length) 
+              : filteredAndSortedDoctors.length;
+            
+            return Array.from({ length: totalToShow }).map((_, index) => {
+              const doctor = filteredAndSortedDoctors[index];
+              const isVisible = index < visibleDoctorCards;
+              
+              // If already animated before, show all real cards immediately
+              if (hasAnimatedDoctors.current && doctor) {
+                return (
+                  <DoctorCard
+                    key={doctor.id}
+                    doctor={doctor}
+                    onPress={handleViewDoctorDetails}
+                  />
+                );
+              }
+              
+              // Show skeleton if card hasn't loaded yet or isn't visible
+              if (!doctor || !isVisible) {
+                return (
+                  <View key={`skeleton-${index}`}>
+                    <DoctorCardSkeleton count={1} />
+                  </View>
+                );
+              }
+              
+              // First time animation for loaded card
+              const animValue = doctorCardAnimations[doctor.id] || new Animated.Value(0);
+              
+              return (
+                <Animated.View
+                  key={doctor.id}
+                  style={{
+                    opacity: animValue,
+                    transform: [
+                      {
+                        translateY: animValue.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [20, 0],
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  <DoctorCard
+                    doctor={doctor}
+                    onPress={handleViewDoctorDetails}
+                  />
+                </Animated.View>
+              );
+            });
+          })()
         )}
       </View>
     </ScrollView>
@@ -3779,6 +3959,18 @@ export default function PatientDashboard() {
   // --- Profile Button for Sidebar ---
   // Place this at the top of your main render, above the main content
   // You can adjust the placement as needed for your layout
+  // Handle user not loaded yet or logged out
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={{ marginTop: 16, color: '#666' }}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar backgroundColor={isDarkMode ? '#151718' : '#fff'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
@@ -4102,10 +4294,11 @@ export default function PatientDashboard() {
   );
 }
 
-const styles = StyleSheet.create({
+// Create theme-aware styles function
+const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.backgroundSecondary,
   },
   mainContent: {
     flex: 1,
@@ -4129,22 +4322,22 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#111',
+    color: colors.text,
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   subscriptionBanner: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -4160,26 +4353,26 @@ const styles = StyleSheet.create({
   subscriptionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
   },
   subscriptionDetails: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginTop: 2,
   },
   sectionTitle: {
     fontSize: isLargeScreen ? 22 : 20,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 20,
   },
   // Reuse doctor card look
   requestCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -4196,7 +4389,7 @@ const styles = StyleSheet.create({
   },
   appointmentDateTime: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginTop: 2,
     marginBottom: 4,
   },
@@ -4209,11 +4402,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   actionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: isWeb ? 24 : 20,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -4228,7 +4421,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#F0F8FF',
+    backgroundColor: colors.backgroundTertiary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -4236,24 +4429,24 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: isLargeScreen ? 16 : 14,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
   },
   actionSubtitle: {
     fontSize: isLargeScreen ? 14 : 12,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   recentActivity: {
     marginBottom: 30,
   },
   activityCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow,
     shadowOffset: {
       width: 0,
       height: 2,
@@ -4270,21 +4463,21 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginLeft: 8,
     flex: 1,
   },
   activityTime: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textSecondary,
   },
   activityDescription: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   addButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -4294,7 +4487,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   addButtonText: {
-    color: '#FFFFFF',
+    color: colors.white,
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
