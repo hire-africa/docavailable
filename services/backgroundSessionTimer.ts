@@ -106,13 +106,22 @@ class BackgroundSessionTimer {
   }
 
   private async processTimerTick(sessionId: string) {
-    console.log('🕐 [BackgroundTimer] Processing timer tick for session:', sessionId);
+    const tickTime = new Date();
+    console.log('🕐 [BackgroundTimer] Processing timer tick for session:', sessionId, 'at:', tickTime.toISOString());
     
     const state = this.states.get(sessionId);
     if (!state || !state.isActive) {
       console.log('🕐 [BackgroundTimer] Timer tick skipped - session not active:', sessionId, 'state:', state);
       return;
     }
+
+    console.log('🕐 [BackgroundTimer] Session state:', {
+      sessionId,
+      startTime: state.startTime,
+      sessionsDeducted: state.sessionsDeducted,
+      isActive: state.isActive,
+      lastUpdateTime: state.lastUpdateTime
+    });
 
     // Verify session is still active on the backend before processing deductions
     try {
@@ -135,9 +144,9 @@ class BackgroundSessionTimer {
       return;
     }
 
-    const now = new Date();
+    const currentTime = new Date();
     const startTime = new Date(state.startTime);
-    const elapsedMinutes = Math.floor((now.getTime() - startTime.getTime()) / (1000 * 60));
+    const elapsedMinutes = Math.floor((currentTime.getTime() - startTime.getTime()) / (1000 * 60));
     
     // Calculate deductions and next deduction time
     const deductions = Math.floor(elapsedMinutes / 10);
@@ -158,7 +167,7 @@ class BackgroundSessionTimer {
       currentDeductions,
       shouldTrigger: shouldTriggerDeduction,
       startTime: startTime.toISOString(),
-      now: now.toISOString()
+      currentTime: currentTime.toISOString()
     });
     
     if (shouldTriggerDeduction) {
@@ -181,7 +190,7 @@ class BackgroundSessionTimer {
         
         // Update state
         state.sessionsDeducted = currentDeductions;
-        state.lastUpdateTime = now.toISOString();
+        state.lastUpdateTime = currentTime.toISOString();
         await this.persistStates();
         
         // Notify listeners
@@ -203,7 +212,7 @@ class BackgroundSessionTimer {
     }
     
     // Update last update time
-    state.lastUpdateTime = now.toISOString();
+    state.lastUpdateTime = currentTime.toISOString();
     await this.persistStates();
     
     // Notify listeners of timer update
@@ -228,34 +237,50 @@ class BackgroundSessionTimer {
         deductions_requested: deductions
       };
       
-      console.log('💰 [BackgroundTimer] Sending deduction request:', requestData);
+      console.log('💰 [BackgroundTimer] Sending deduction request to existing endpoint /text-sessions/${sessionId}/auto-deduction:', requestData);
       
       const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, requestData);
       
       console.log('💰 [BackgroundTimer] Auto-deduction API response:', {
         status: response.status,
-        data: response.data
+        statusText: response.statusText,
+        data: response.data,
+        headers: response.headers
       });
       
-      if ((response.data as any)?.success) {
+      if (response.status === 200 && (response.data as any)?.success) {
         const deductionData = (response.data as any).data;
         console.log('✅ [BackgroundTimer] Auto-deduction processed successfully:', deductionData);
         
         if (deductionData.deductions_processed > 0) {
           console.log(`🔔 [BackgroundTimer] ${deductionData.deductions_processed} session(s) deducted via backend`);
         } else {
-          console.warn('⚠️ [BackgroundTimer] No deductions were processed by backend');
+          console.warn('⚠️ [BackgroundTimer] No deductions were processed by backend - user may be out of sessions');
         }
       } else {
-        console.warn('⚠️ [BackgroundTimer] Auto-deduction response not successful:', response.data);
+        console.warn('⚠️ [BackgroundTimer] Auto-deduction response not successful:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: response.data
+        });
       }
     } catch (error) {
       console.error('❌ [BackgroundTimer] Failed to trigger auto-deduction:', {
         sessionId,
         deductions,
         error: error.message,
+        response: error.response ? {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          data: error.response.data
+        } : 'No response',
         stack: error.stack
       });
+      
+      // If it's a 404 or 405, the endpoint might not exist
+      if (error.response?.status === 404 || error.response?.status === 405) {
+        console.error('🚨 [BackgroundTimer] Auto-deduction endpoint not found - check backend implementation');
+      }
     }
   }
 

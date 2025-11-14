@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -18,6 +18,8 @@ export default function PayChanguCheckout() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [paymentCheckTimer, setPaymentCheckTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [hasDetectedPayment, setHasDetectedPayment] = useState(false);
+  const webViewRef = useRef<WebView>(null);
+  const [autoRedirectTimer, setAutoRedirectTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   console.log('🎯 PayChanguCheckout component rendered');
   console.log('🎯 Received params:', params);
@@ -146,9 +148,48 @@ export default function PayChanguCheckout() {
       loading: navState.loading
     });
 
+    // Check if we're hitting a 404 page
+    if (navState.url && (navState.url.includes('404') || navState.url.includes('not-found'))) {
+      console.log('🚨 404 page detected:', navState.url);
+      // Force redirect to home immediately
+      setTimeout(() => {
+        console.log('🔄 Forcing redirect from 404 to home');
+        router.replace('/');
+      }, 1000);
+      return;
+    }
+
+    // Detect if we're on the return URL (success page)
+    if (navState.url && navState.url.includes('/api/paychangu/return')) {
+      console.log('✅ Detected return URL - payment completed, setting up auto-redirect');
+      
+      if (!hasDetectedPayment) {
+        setHasDetectedPayment(true);
+        
+        // Refresh user data immediately
+        handlePaymentSuccess().then(() => {
+          console.log('✅ User data refreshed on return URL');
+        }).catch((error) => {
+          console.error('❌ Error refreshing user data:', error);
+        });
+        
+        // Set aggressive 4-second timer to redirect (1 second buffer after backend 3-second countdown)
+        const timer = setTimeout(() => {
+          console.log('⏰ Return URL auto-redirect triggered (fallback)');
+          router.replace('/');
+        }, 4000);
+        setAutoRedirectTimer(timer);
+        
+        // Additional safety: Force redirect after 8 seconds if still on page
+        setTimeout(() => {
+          console.log('🚨 Emergency redirect triggered - forcing navigation back');
+          router.replace('/');
+        }, 8000);
+      }
+    }
     // Only show success when PayChangu's official success page is reached
     // or when user navigates away from PayChangu domain
-    if (navState.url && !hasDetectedPayment) {
+    else if (navState.url && !hasDetectedPayment) {
       const url = navState.url.toLowerCase();
       
       // Check if we're leaving PayChangu domain (user completed payment)
@@ -164,20 +205,17 @@ export default function PayChanguCheckout() {
             // Refresh user data
             await handlePaymentSuccess();
             
-            Alert.alert(
-              'Payment Successful!',
-              'Your payment has been completed successfully.',
-              [
-                { text: 'OK', onPress: () => router.back() }
-              ]
-            );
+            // Auto-redirect after 2 seconds
+            setTimeout(() => {
+              router.back();
+            }, 2000);
           } else {
             console.log('⚠️ Payment not confirmed - user may have cancelled');
           }
         });
       }
     }
-  }, [hasDetectedPayment, handlePaymentSuccess, checkPaymentStatus]);
+  }, [hasDetectedPayment, handlePaymentSuccess, checkPaymentStatus, autoRedirectTimer]);
 
   useEffect(() => {
     console.log('🔍 Checkout Debug:', {
@@ -209,8 +247,11 @@ export default function PayChanguCheckout() {
       if (paymentCheckTimer) {
         clearInterval(paymentCheckTimer);
       }
+      if (autoRedirectTimer) {
+        clearTimeout(autoRedirectTimer);
+      }
     };
-  }, [loadingTimeout, paymentCheckTimer]);
+  }, [loadingTimeout, paymentCheckTimer, autoRedirectTimer]);
 
   // If no URL, show error
   if (!checkoutUrl) {
@@ -302,6 +343,7 @@ export default function PayChanguCheckout() {
 
       {/* WebView */}
       <WebView
+        ref={webViewRef}
         source={{ uri: checkoutUrl }}
         style={{ flex: 1 }}
         onLoadStart={handleWebViewLoadStart}
@@ -330,13 +372,13 @@ export default function PayChanguCheckout() {
           }
           
           // Handle callback URL - this should not be navigated to in WebView
-          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/callback')) {
+          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/paychangu/callback')) {
             console.log('🚫 Blocking callback URL navigation - this is for server-to-server communication');
             return false;
           }
           
           // Handle return URL - this is where PayChangu redirects after payment
-          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/return')) {
+          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/paychangu/return')) {
             console.log('✅ Payment return URL detected, checking payment status');
             // Check payment status and handle accordingly
             checkPaymentStatus().then(async (statusData) => {
@@ -444,23 +486,42 @@ export default function PayChanguCheckout() {
                 }).catch((error) => {
                   console.error('❌ Error refreshing user data:', error);
                 });
+                
+                // Set a fallback timer to auto-redirect after 6 seconds if messages fail
+                const timer = setTimeout(() => {
+                  console.log('⏰ Auto-redirect timer triggered - forcing navigation back');
+                  router.back();
+                }, 6000);
+                setAutoRedirectTimer(timer);
               }
             }
             // Handle close window message (sent after countdown completes)
             else if (message.type === 'close_window') {
               console.log('🔄 Close window message received, redirecting back to app');
               
+              // Clear auto-redirect timer since we got the message
+              if (autoRedirectTimer) {
+                clearTimeout(autoRedirectTimer);
+                setAutoRedirectTimer(null);
+              }
+              
               // Ensure user data is refreshed before going back
-              if (message.status === 'completed') {
+              if (message.status === 'completed' || message.status === 'success') {
                 handlePaymentSuccess().then(() => {
-                  console.log('✅ User data refreshed, navigating back');
-                  router.back();
+                  console.log('✅ User data refreshed, navigating back after delay');
+                  // Add small delay to ensure auth state is updated
+                  setTimeout(() => {
+                    router.replace('/');
+                  }, 500);
                 }).catch((error) => {
                   console.error('❌ Error refreshing user data, navigating back anyway:', error);
-                  router.back();
+                  setTimeout(() => {
+                    router.replace('/');
+                  }, 500);
                 });
               } else {
                 // Failed payment, just go back
+                console.log('⚠️ Payment failed, going back to previous screen');
                 router.back();
               }
             }
@@ -468,13 +529,23 @@ export default function PayChanguCheckout() {
             else if (message.type === 'payment_complete') {
               console.log('✅ Legacy payment completion message received:', message);
               
+              // Clear auto-redirect timer
+              if (autoRedirectTimer) {
+                clearTimeout(autoRedirectTimer);
+                setAutoRedirectTimer(null);
+              }
+              
               if (message.status === 'completed') {
                 handlePaymentSuccess().then(() => {
                   console.log('✅ User data refreshed after legacy payment message');
-                  router.back();
+                  setTimeout(() => {
+                    router.replace('/');
+                  }, 500);
                 }).catch((error) => {
                   console.error('❌ Error refreshing user data:', error);
-                  router.back();
+                  setTimeout(() => {
+                    router.replace('/');
+                  }, 500);
                 });
               } else {
                 router.back();

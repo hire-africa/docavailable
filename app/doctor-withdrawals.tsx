@@ -3,7 +3,6 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
   Dimensions,
   Image,
   Platform,
@@ -18,6 +17,7 @@ import {
   View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import customAlertService from '../services/customAlertService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -121,7 +121,7 @@ function DoctorWithdrawalsContent() {
       }
     } catch (error) {
       console.error('[DoctorWithdrawals] Error loading wallet data:', error);
-      Alert.alert('Error', 'Failed to load wallet data. Please try again.');
+      customAlertService.error('Error', 'Failed to load wallet data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -130,27 +130,27 @@ function DoctorWithdrawalsContent() {
   const handleWithdrawal = async () => {
     const amount = parseFloat(withdrawalAmount);
     if (amount > (wallet?.balance || 0)) {
-      Alert.alert('Error', 'Withdrawal amount cannot exceed available balance.');
+      customAlertService.error('Error', 'Withdrawal amount cannot exceed available balance.');
       return;
     }
     if (amount <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount.');
+      customAlertService.error('Error', 'Please enter a valid amount.');
       return;
     }
 
     // Validate required fields based on method
     if (withdrawalMethod === 'mobile') {
       if (!phoneNumber.trim()) {
-        Alert.alert('Error', 'Please enter your phone number.');
+        customAlertService.error('Error', 'Please enter your phone number.');
         return;
       }
     } else {
       if (!bankName.trim() || !accountNumber.trim()) {
-        Alert.alert('Error', 'Please fill in all required bank details.');
+        customAlertService.error('Error', 'Please fill in all required bank details.');
         return;
       }
       if (isMalawiUser && !bankBranch.trim()) {
-        Alert.alert('Error', 'Please enter bank branch name.');
+        customAlertService.error('Error', 'Please enter bank branch name.');
         return;
       }
     }
@@ -173,29 +173,24 @@ function DoctorWithdrawalsContent() {
       const response = await walletApiService.requestWithdrawal(withdrawalData);
       
       if (response.success) {
-        Alert.alert(
+        customAlertService.success(
           'Withdrawal Request Submitted',
           `Withdrawal request for ${formatCurrency(amount)} via ${withdrawalMethod === 'bank' ? 'Bank Transfer' : `${mobileMoneyProvider === 'airtel' ? 'Airtel Money' : 'TNM Mpamba'}`} has been submitted. You will receive payment within 3-5 business days.`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setWithdrawalAmount('');
-                setBankName('');
-                setAccountNumber('');
-                setBankBranch('');
-                setPhoneNumber('');
-                loadWalletData(); // Refresh data
-              }
-            }
-          ]
+          () => {
+            setWithdrawalAmount('');
+            setBankName('');
+            setAccountNumber('');
+            setBankBranch('');
+            setPhoneNumber('');
+            loadWalletData(); // Refresh data
+          }
         );
       } else {
-        Alert.alert('Error', response.message || 'Failed to submit withdrawal request');
+        customAlertService.error('Error', response.message || 'Failed to submit withdrawal request');
       }
     } catch (error) {
       console.error('Error submitting withdrawal:', error);
-      Alert.alert('Error', 'Failed to submit withdrawal request. Please try again.');
+      customAlertService.error('Error', 'Failed to submit withdrawal request. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -311,7 +306,7 @@ function DoctorWithdrawalsContent() {
           <View style={styles.modernEarningsCard}>
             <View style={styles.earningsCardHeader}>
               <View style={styles.earningsIconContainer}>
-                <FontAwesome name="wallet" size={20} color="#fff" />
+                <FontAwesome name="credit-card" size={20} color="#fff" />
               </View>
               <Text style={styles.earningsCardTitle}>Available Balance</Text>
           </View>
@@ -371,7 +366,7 @@ function DoctorWithdrawalsContent() {
             <View style={styles.inputGroup}>
               <Text style={styles.modernInputLabel}>Amount ({userCurrency})</Text>
               <View style={styles.amountInputContainer}>
-                <FontAwesome name="dollar-sign" size={16} color="#666" style={styles.inputIcon} />
+                <FontAwesome name="dollar" size={16} color="#666" style={styles.inputIcon} />
             <TextInput
                   style={styles.modernAmountInput}
               value={withdrawalAmount}
@@ -559,7 +554,7 @@ function DoctorWithdrawalsContent() {
 
             <TouchableOpacity 
               style={[styles.modernWithdrawButton, (!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko') && styles.modernWithdrawButtonDisabled]} 
-              onPress={withdrawalMethod === 'mzunguko' ? () => Alert.alert('Coming Soon', 'Mzunguko payment method is coming soon!') : handleWithdrawal}
+              onPress={withdrawalMethod === 'mzunguko' ? () => customAlertService.info('Coming Soon', 'Mzunguko payment method is coming soon!') : handleWithdrawal}
               disabled={!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko'}
             >
               <View style={styles.withdrawButtonContent}>

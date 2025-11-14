@@ -11,6 +11,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import callDeduplicationService from '../services/callDeduplicationService';
 import pushNotificationService from '../services/pushNotificationService';
+import { SessionNotificationHandler } from '../services/sessionNotificationHandler';
 import { routeIncomingCall } from '../utils/callRouter';
 import { routePushEvent } from '../utils/notificationRouter';
 
@@ -18,6 +19,8 @@ import { routePushEvent } from '../utils/notificationRouter';
 import appInitializer from '../services/appInitializer';
 import '../services/cryptoPolyfill';
 import fullScreenPermissionService from '../services/fullScreenPermissionService';
+import comprehensivePermissionManager from '../services/comprehensivePermissionManager';
+import safePermissionManager from '../services/safePermissionManager';
 import apiService from './services/apiService';
 
 export default function RootLayout() {
@@ -124,101 +127,142 @@ export default function RootLayout() {
   }, [router]);
 
   useEffect(() => {
-    // Request phone permissions first
-    requestPhonePermissions();
+    let isMounted = true;
     
-    // Warm the backend on app start to reduce initial timeouts due to cold starts
-    apiService.healthCheck().catch(() => {
-      // Ignore errors here; this is a best-effort warm-up
-    });
-
-    // Configure Android notification channels and default handler with notifee
-    (async () => {
+    // Initialize app with proper error handling and cleanup
+    const initializeApp = async () => {
       try {
-        // Request notification permissions first
-        console.log('🔔 Requesting notification permissions...');
-        const permission = await notifee.requestPermission({
-          alert: true,
-          badge: true,
-          sound: true,
-          lockScreen: true,
-          notificationCenter: true,
-          carPlay: true,
-          criticalAlert: false,
-          announcement: true,
+        console.log('🚀 Starting app initialization...');
+        
+        // Warm the backend (non-blocking)
+        apiService.healthCheck().catch(() => {
+          // Ignore errors here; this is a best-effort warm-up
         });
-        console.log('🔔 Permission request result:', permission);
 
-        // Request full-screen intent permissions for incoming calls (Android 12+)
-        if (Platform.OS === 'android') {
-          try {
-            console.log('📱 Requesting full-screen intent permissions...');
-            await fullScreenPermissionService.requestFullScreenPermission();
+        // Initialize comprehensive permission system with timeout
+        const permissionTimeout = setTimeout(() => {
+          console.warn('⚠️ Permission initialization timeout - continuing without full permissions');
+        }, 10000); // 10 second timeout
+        
+        try {
+          console.log('🚀 Initializing safe permission system...');
+          
+          // Use safer permission manager with timeout
+          const isFirstLaunch = await Promise.race([
+            safePermissionManager.isFirstLaunch(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+          ]);
+          
+          if (!isMounted) return;
+          
+          if (isFirstLaunch) {
+            console.log('🎉 First app launch - skipping automatic permission requests to prevent modals');
             
-            // Perform complete setup check
-            const setupResult = await fullScreenPermissionService.performCompleteSetup();
-            if (!setupResult.success) {
-              console.log('⚠️ Some permissions missing for full-screen calls:', setupResult.missingPermissions);
-              console.log('💡 User needs to enable: Settings → Apps → DocAvailable → Display over other apps');
+            // Mark first launch complete without requesting permissions
+            await safePermissionManager.markFirstLaunchComplete();
+            console.log('📊 Skipped permission requests - permissions will be requested when needed');
+          } else {
+            console.log('🔍 Checking critical permissions...');
+            const criticalCheck = await Promise.race([
+              safePermissionManager.checkCriticalPermissions(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Check timeout')), 2000))
+            ]);
+            
+            if (!isMounted) return;
+            
+            if ((criticalCheck as any).missingCritical?.length > 0) {
+              console.log('⚠️ Missing critical permissions:', (criticalCheck as any).missingCritical);
+              console.log('📞 Can receive calls:', (criticalCheck as any).canReceiveCalls);
+              console.log('📷 Can access camera:', (criticalCheck as any).canAccessCamera);
+              console.log('🎤 Can access microphone:', (criticalCheck as any).canAccessMicrophone);
+            } else {
+              console.log('✅ All critical permissions are granted');
+            }
+          }
+          
+          clearTimeout(permissionTimeout);
+        } catch (permissionError) {
+          clearTimeout(permissionTimeout);
+          console.warn('⚠️ Safe permission initialization failed, continuing with limited functionality:', permissionError);
+          // Don't crash the app - continue with limited functionality
+        }
+
+        // Legacy full-screen permission check (safer approach)
+        if (Platform.OS === 'android' && isMounted) {
+          try {
+            console.log('📱 Running legacy permission check...');
+            const setupResult = await Promise.race([
+              fullScreenPermissionService.performCompleteSetup(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Legacy timeout')), 3000))
+            ]);
+            
+            if (!(setupResult as any)?.success) {
+              console.log('⚠️ Legacy check - missing permissions:', (setupResult as any)?.missingPermissions);
             }
           } catch (error) {
-            console.log('⚠️ Could not check full-screen permissions:', error);
+            console.log('⚠️ Legacy permission check failed (non-critical):', error);
           }
         }
 
-        // Request notification permissions
-        if (Platform.OS === 'android') {
+        // Setup notifications (safer approach)
+        if (isMounted) {
           try {
-            console.log('🔔 Requesting Android notification permission...');
-            // For Android, notifee automatically handles permissions when creating channels
-            // No need to explicitly request permissions like iOS
-            console.log('🔔 Android notification permissions handled automatically');
-          } catch (error) {
-            console.log('🔔 Android notification setup error:', error);
-          }
-        } else if (Platform.OS === 'ios') {
-          try {
-            console.log('🔔 Requesting iOS notification permission...');
-            const iosPermission = await notifee.requestPermission({
-              alert: true,
-              badge: true,
-              sound: true,
-              criticalAlert: false,
-              announcement: true,
-            });
-            console.log('🔔 iOS permission result:', iosPermission);
-          } catch (error) {
-            console.log('🔔 iOS permission request failed:', error);
+            console.log('🔔 Setting up notifications...');
+            
+            // Skip automatic notification permission requests to prevent modals
+            console.log('🔔 Notification setup - skipping permission requests to prevent modals');
+            console.log('🔔 Notifications will be requested when user initiates calls or needs them');
+
+            // Create notification channels with error handling
+            const channels = [
+              {
+                id: 'calls',
+                name: 'Incoming Calls',
+                importance: NotifeeAndroidImportance.HIGH,
+                sound: 'default',
+                vibration: true,
+                vibrationPattern: [250, 250, 250, 250],
+                bypassDnd: true,
+                visibility: AndroidVisibility.PUBLIC,
+              },
+              {
+                id: 'messages',
+                name: 'Messages',
+                importance: NotifeeAndroidImportance.HIGH,
+                sound: 'default',
+                vibration: true,
+              },
+              {
+                id: 'appointments',
+                name: 'Appointments',
+                importance: NotifeeAndroidImportance.HIGH,
+                sound: 'default',
+                vibration: true,
+              },
+              {
+                id: 'sessions',
+                name: 'Sessions',
+                importance: NotifeeAndroidImportance.HIGH,
+                sound: 'default',
+                vibration: true,
+                description: 'Session start and end notifications',
+              }
+            ];
+
+            // Create channels one by one with error handling
+            for (const channel of channels) {
+              try {
+                await notifee.createChannel(channel);
+              } catch (channelError) {
+                console.warn(`⚠️ Failed to create channel ${channel.id}:`, channelError);
+              }
+            }
+            
+            console.log('✅ Notification setup completed');
+          } catch (notificationError) {
+            console.warn('⚠️ Notification setup failed (non-critical):', notificationError);
           }
         }
-
-        // Create channels with notifee for better popup control
-        await notifee.createChannel({
-          id: 'calls',
-          name: 'Incoming Calls',
-          importance: NotifeeAndroidImportance.HIGH,
-          sound: 'default',
-          vibration: true,
-          vibrationPattern: [250, 250, 250, 250],
-          bypassDnd: true,
-          visibility: AndroidVisibility.PUBLIC,
-        });
-
-        await notifee.createChannel({
-          id: 'messages',
-          name: 'Messages',
-          importance: NotifeeAndroidImportance.HIGH,
-          sound: 'default',
-          vibration: true,
-        });
-
-        await notifee.createChannel({
-          id: 'appointments',
-          name: 'Appointments',
-          importance: NotifeeAndroidImportance.HIGH,
-          sound: 'default',
-          vibration: true,
-        });
 
         // Set up notification categories for call actions
         await Notifications.setNotificationCategoryAsync('incoming_call', [
@@ -265,16 +309,46 @@ export default function RootLayout() {
             };
           }
         });
-      } catch (e) {
-        console.warn('Failed to configure notification channels', e);
-      }
-    })();
-    
-    // Initialize global services
-    appInitializer.initialize();
+        // Initialize global services (safer approach)
+        if (isMounted) {
+          try {
+            console.log('🚀 Initializing global services...');
+            await Promise.race([
+              appInitializer.initialize(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('App init timeout')), 5000))
+            ]);
+            console.log('✅ Global services initialized');
+          } catch (initError) {
+            console.warn('⚠️ Global services initialization failed (non-critical):', initError);
+          }
+        }
 
-    // Register for FCM (permission + token) and send to backend
-    pushNotificationService.registerForPushNotifications().catch(() => {});
+        // Initialize session notification handler
+        if (isMounted) {
+          try {
+            SessionNotificationHandler.initialize();
+            console.log('✅ Session notification handler initialized');
+          } catch (sessionError) {
+            console.warn('⚠️ Session handler initialization failed (non-critical):', sessionError);
+          }
+        }
+
+        // Register for FCM (non-blocking)
+        if (isMounted) {
+          pushNotificationService.registerForPushNotifications().catch((fcmError) => {
+            console.warn('⚠️ FCM registration failed (non-critical):', fcmError);
+          });
+        }
+        
+        console.log('✅ App initialization completed');
+      } catch (error) {
+        console.error('❌ Critical app initialization error:', error);
+        // Don't crash the app - log error and continue
+      }
+    };
+    
+    // Start initialization
+    initializeApp();
 
       // Initialize global WebRTC signaling service (temporarily disabled)
       // globalWebRTCService.connect().catch((error) => {
@@ -328,13 +402,15 @@ export default function RootLayout() {
 
         // For other notifications, determine channel and display
         const channelId = type.includes('message') ? 'messages' : 
-                         type.includes('appointment') ? 'appointments' : 'default';
+                         type.includes('appointment') ? 'appointments' :
+                         type.includes('session') ? 'sessions' : 'default';
 
         // Ensure channel exists before displaying notification
         await notifee.createChannel({
           id: channelId,
           name: channelId === 'messages' ? 'Messages' : 
-                channelId === 'appointments' ? 'Appointments' : 'Default',
+                channelId === 'appointments' ? 'Appointments' :
+                channelId === 'sessions' ? 'Sessions' : 'Default',
           importance: NotifeeAndroidImportance.HIGH,
           sound: 'default',
           vibration: true,
@@ -366,6 +442,8 @@ export default function RootLayout() {
           expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
         } else if (type.includes('appointment')) {
           expandedText = `Appointment Update: ${messageContent}`;
+        } else if (type.includes('session')) {
+          expandedText = `Session Update: ${messageContent}`;
         }
 
         // Use notifee for reliable popup display
@@ -384,7 +462,8 @@ export default function RootLayout() {
             smallIcon: 'ic_launcher',
             largeIcon: 'ic_launcher',
             color: type.includes('message') ? '#2196F3' : 
-                   type.includes('appointment') ? '#FF9800' : '#4CAF50',
+                   type.includes('appointment') ? '#FF9800' :
+                   type.includes('session') ? '#9C27B0' : '#4CAF50',
             // Add expanded text for better context
             style: {
               type: 1, // BigTextStyle
@@ -418,8 +497,13 @@ export default function RootLayout() {
     }).catch(() => {});
 
     return () => {
-      onMessageUnsub();
-      onOpenedUnsub();
+      isMounted = false;
+      try {
+        onMessageUnsub?.();
+        onOpenedUnsub?.();
+      } catch (cleanupError) {
+        console.warn('⚠️ Cleanup error:', cleanupError);
+      }
     };
   }, []);
   return (

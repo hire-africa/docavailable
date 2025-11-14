@@ -1,6 +1,8 @@
 // Import polyfills first
 import 'react-native-get-random-values';
 
+// Import web polyfills to fix "window addEventListener is not a function" errors
+import './services/webPolyfill';
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible

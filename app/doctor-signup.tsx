@@ -5,7 +5,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Modal,
     Platform,
@@ -17,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import customAlertService from '../services/customAlertService';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
@@ -311,7 +311,7 @@ const Step2: React.FC<Step2Props> = ({
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+                customAlertService.error('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
                 return;
             }
 
@@ -327,7 +327,7 @@ const Step2: React.FC<Step2Props> = ({
             }
         } catch (error) {
             console.error('Error uploading file:', error);
-            Alert.alert('Error', 'Failed to upload file. Please try again.');
+            customAlertService.error('Error', 'Failed to upload file. Please try again.');
         }
     };
 
@@ -335,7 +335,7 @@ const Step2: React.FC<Step2Props> = ({
         try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Sorry, we need camera permissions to take photos!');
+                customAlertService.error('Permission needed', 'Sorry, we need camera permissions to take photos!');
                 return;
             }
 
@@ -350,7 +350,7 @@ const Step2: React.FC<Step2Props> = ({
             }
         } catch (error) {
             console.error('Error taking photo:', error);
-            Alert.alert('Error', 'Failed to take photo. Please try again.');
+            customAlertService.error('Error', 'Failed to take photo. Please try again.');
         }
     };
 
@@ -851,7 +851,7 @@ export default function DoctorSignUp() {
             }
         } catch (error) {
             console.error('Error sending verification code:', error);
-            Alert.alert('Error', 'Failed to send verification code. Please try again.');
+            customAlertService.error('Error', 'Failed to send verification code. Please try again.');
             throw error; // Re-throw the error so handleContinue knows it failed
         } finally {
             setIsResending(false);
@@ -883,7 +883,7 @@ export default function DoctorSignUp() {
             }
         } catch (error) {
             console.error('Error verifying email:', error);
-            Alert.alert('Error', error.message || 'Invalid verification code. Please try again.');
+            customAlertService.error('Error', error.message || 'Invalid verification code. Please try again.');
             return false;
         } finally {
             setIsVerifying(false);

@@ -1,5 +1,6 @@
 import { apiService } from './apiService';
 import { RealTimeEventService } from './realTimeEventService';
+import { SessionNotificationService } from './sessionNotificationService';
 
 export interface SessionData {
   id: string;
@@ -36,6 +37,38 @@ export const sessionService = {
           'patient'
         );
         
+        // Send session started notifications
+        try {
+          // Get doctor info for notification (you may need to fetch this)
+          const doctorName = session.doctor_name || 'Doctor';
+          
+          // Notify patient
+          await SessionNotificationService.sendSessionStartedNotification(
+            {
+              sessionId: session.id,
+              sessionType: 'text',
+              doctorName: doctorName,
+              reason: reason
+            },
+            'patient',
+            session.patient_id
+          );
+          
+          // Notify doctor
+          await SessionNotificationService.sendSessionStartedNotification(
+            {
+              sessionId: session.id,
+              sessionType: 'text',
+              patientName: session.patient_name || 'Patient',
+              reason: reason
+            },
+            'doctor',
+            session.doctor_id
+          );
+        } catch (notificationError) {
+          console.warn('⚠️ Failed to send session started notifications:', notificationError);
+        }
+        
         return session;
       }
       throw new Error(response.message || 'Failed to start session');
@@ -59,6 +92,40 @@ export const sessionService = {
           { id: sessionId, ...response.data },
           'patient'
         );
+        
+        // Send session ended notifications
+        try {
+          const sessionData = response.data || {};
+          const doctorName = sessionData.doctor_name || 'Doctor';
+          const patientName = sessionData.patient_name || 'Patient';
+          const duration = sessionData.duration || undefined;
+          
+          // Notify patient
+          await SessionNotificationService.sendSessionEndedNotification(
+            {
+              sessionId: sessionId,
+              sessionType: 'text',
+              doctorName: doctorName
+            },
+            'patient',
+            sessionData.patient_id,
+            duration
+          );
+          
+          // Notify doctor
+          await SessionNotificationService.sendSessionEndedNotification(
+            {
+              sessionId: sessionId,
+              sessionType: 'text',
+              patientName: patientName
+            },
+            'doctor',
+            sessionData.doctor_id,
+            duration
+          );
+        } catch (notificationError) {
+          console.warn('⚠️ Failed to send session ended notifications:', notificationError);
+        }
       } else {
         throw new Error(response.message || 'Failed to end session');
       }
@@ -87,6 +154,37 @@ export const sessionService = {
           'patient'
         );
         
+        // Send appointment session started notifications
+        try {
+          const doctorName = session.doctor_name || 'Doctor';
+          
+          // Notify patient
+          await SessionNotificationService.sendSessionStartedNotification(
+            {
+              sessionId: session.id,
+              sessionType: 'text',
+              doctorName: doctorName,
+              appointmentId: appointmentId
+            },
+            'patient',
+            session.patient_id
+          );
+          
+          // Notify doctor
+          await SessionNotificationService.sendSessionStartedNotification(
+            {
+              sessionId: session.id,
+              sessionType: 'text',
+              patientName: session.patient_name || 'Patient',
+              appointmentId: appointmentId
+            },
+            'doctor',
+            session.doctor_id
+          );
+        } catch (notificationError) {
+          console.warn('⚠️ Failed to send appointment session started notifications:', notificationError);
+        }
+        
         return session;
       }
       throw new Error(response.message || 'Failed to start appointment session');
@@ -110,6 +208,43 @@ export const sessionService = {
           { id: sessionId, ...response.data, type: 'appointment' },
           'patient'
         );
+        
+        // Send appointment session ended notifications
+        try {
+          const sessionData = response.data || {};
+          const doctorName = sessionData.doctor_name || 'Doctor';
+          const patientName = sessionData.patient_name || 'Patient';
+          const duration = sessionData.duration || undefined;
+          const appointmentId = sessionData.appointment_id;
+          
+          // Notify patient
+          await SessionNotificationService.sendSessionEndedNotification(
+            {
+              sessionId: sessionId,
+              sessionType: 'text',
+              doctorName: doctorName,
+              appointmentId: appointmentId
+            },
+            'patient',
+            sessionData.patient_id,
+            duration
+          );
+          
+          // Notify doctor
+          await SessionNotificationService.sendSessionEndedNotification(
+            {
+              sessionId: sessionId,
+              sessionType: 'text',
+              patientName: patientName,
+              appointmentId: appointmentId
+            },
+            'doctor',
+            sessionData.doctor_id,
+            duration
+          );
+        } catch (notificationError) {
+          console.warn('⚠️ Failed to send appointment session ended notifications:', notificationError);
+        }
       } else {
         throw new Error(response.message || 'Failed to end appointment session');
       }

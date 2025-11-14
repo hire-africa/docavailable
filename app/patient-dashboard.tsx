@@ -39,6 +39,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DocBotChat from '../components/DocBotChat';
 import DoctorCard from '../components/DoctorCard';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
+import EmergencyModal from '../components/EmergencyModal';
 import { DoctorCardSkeleton } from '../components/skeleton';
 import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
 
@@ -207,6 +208,7 @@ export default function PatientDashboard() {
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [visibleDoctorCards, setVisibleDoctorCards] = useState<number>(0);
   const doctorCardAnimations = useRef<{[key: string]: Animated.Value}>({}).current;
   const hasAnimatedDoctors = useRef(false);
@@ -1549,25 +1551,9 @@ export default function PatientDashboard() {
     }
   };
 
-  // Emergency handler copied from help-support.tsx
+  // Emergency handler - shows custom styled modal
   const handleEmergencyContact = () => {
-    Alert.alert(
-      'Emergency Contact',
-      'For medical emergencies, please contact emergency services immediately:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Emergency Services',
-          onPress: () => Linking.openURL('tel:998'),
-          style: 'destructive',
-        },
-        {
-          text: 'Ambulance',
-          onPress: () => Linking.openURL('tel:997'),
-          style: 'destructive',
-        },
-      ]
-    );
+    setShowEmergencyModal(true);
   };
 
   // Load ended sessions for the messages tab
@@ -4025,7 +4011,7 @@ export default function PatientDashboard() {
             style={styles.notificationButton}
             onPress={() => router.push('/notifications')}
           >
-            <FontAwesome name="bell" size={20} color="#FF9800" />
+            <FontAwesome name="bell" size={20} color="#4CAF50" />
             {/* Unread notification badge */}
             {unreadNotificationCount > 0 && (
               <View style={styles.notificationBadge}>
@@ -4145,6 +4131,12 @@ export default function PatientDashboard() {
       <CacheManagementModal
         visible={showCacheManagement}
         onClose={() => setShowCacheManagement(false)}
+      />
+
+      {/* Emergency Modal */}
+      <EmergencyModal
+        visible={showEmergencyModal}
+        onClose={() => setShowEmergencyModal(false)}
       />
 
 

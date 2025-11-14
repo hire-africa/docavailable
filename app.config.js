@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
   expo: {
     name: "DocAvailable",
-    slug: "Doc_available",
+    slug: "docavailable",
     workflow: "managed",
     version: "1.0.0",
     orientation: "portrait",
@@ -73,7 +73,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "6878ac38-f00b-4338-8b07-b12718ee7698",
+        projectId: "ba4644ef-6ee9-4580-aa2a-594d16da0061"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

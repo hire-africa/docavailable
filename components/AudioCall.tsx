@@ -12,6 +12,7 @@ import {
     View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
+import backgroundBillingManager from '../services/backgroundBillingManager';
 import ringtoneService from '../services/ringtoneService';
 import { Alert } from '../utils/customAlert';
 const { width, height } = Dimensions.get('window');
@@ -108,6 +109,13 @@ export default function AudioCall({
         await initializeCall();
       } else {
         console.log('📞 AudioCall: Initializing for incoming call');
+        // Start system ringtone for incoming calls
+        try {
+          await ringtoneService.start();
+          console.log('🔔 System ringtone started for incoming call');
+        } catch (error) {
+          console.error('❌ Failed to start ringtone:', error);
+        }
         // For incoming calls, initialize the service and set up event listeners
         await initializeIncomingCall();
       }
@@ -117,16 +125,53 @@ export default function AudioCall({
     startPulseAnimation();
   }, [isIncomingCall, appointmentId, userId, isDoctor]);
   
+  // Session end event listener (for safety limits)
+  useEffect(() => {
+    const handleSessionEnd = (event: any) => {
+      const { sessionId } = event.detail || {};
+      if (sessionId === appointmentId) {
+        console.log('🛑 [AudioCall] Session end received (safety limit), ending call');
+        endCall();
+      }
+    };
+
+    // Listen for session end events
+    if (typeof window !== 'undefined') {
+      window.addEventListener('callSessionEnded', handleSessionEnd);
+    }
+
+    // Also check global variable periodically as fallback
+    const endChecker = setInterval(() => {
+      const g: any = global as any;
+      if (g.callSessionEnded && g.callSessionEnded.sessionId === appointmentId) {
+        console.log('🛑 [AudioCall] Global session end detected, ending call');
+        g.callSessionEnded = null; // Clear to prevent repeated triggers
+        endCall();
+      }
+    }, 1000);
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('callSessionEnded', handleSessionEnd);
+      }
+      clearInterval(endChecker);
+    };
+  }, [appointmentId]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       console.log('🧹 AudioCall cleanup - component unmounting');
+      
+      // Stop background billing
+      backgroundBillingManager.stopBilling(appointmentId);
+      
       initOnceRef.current = null;
       hasInitializedRef.current = false;
       // Don't end call immediately - let the call complete naturally
       // The call will be ended by user action or timeout
     };
-  }, []);
+  }, [appointmentId]);
 
   useEffect(() => {
     if (callState.connectionState === 'connected') {
@@ -184,6 +229,15 @@ export default function AudioCall({
           setIsRinging(false);
           setIsProcessingAnswer(false);
           setCallAccepted(true);
+          
+          // Start background billing when call is answered
+          console.log('💰 [AudioCall] Starting background billing for answered call');
+          backgroundBillingManager.startBilling(appointmentId, {
+            intervalMinutes: 10,      // Bill every 10 minutes
+            warningBeforeMinutes: 1,  // Warn 1 minute before billing
+            maxCycles: 6              // Safety limit (60 minutes)
+          });
+          
           onCallAnswered?.();
         },
         onCallRejected: () => {
@@ -235,6 +289,14 @@ export default function AudioCall({
         },
         onCallAnswered: () => {
           console.log('✅ Call answered - session will be activated');
+          
+          // Start background billing when outgoing call is answered
+          console.log('💰 [AudioCall] Starting background billing for outgoing call');
+          backgroundBillingManager.startBilling(appointmentId, {
+            intervalMinutes: 10,      // Bill every 10 minutes
+            warningBeforeMinutes: 1,  // Warn 1 minute before billing
+            maxCycles: 6              // Safety limit (60 minutes)
+          });
         },
         onCallRejected: () => {
           console.log('❌ Call rejected');
@@ -516,6 +578,13 @@ export default function AudioCall({
             style={[styles.controlButton, styles.declineButton]}
             onPress={async () => {
               Vibration.vibrate(50);
+              // Stop ringtone immediately when declining call
+              try {
+                await ringtoneService.stop();
+                console.log('🔕 Ringtone stopped on call decline');
+              } catch (e) {
+                console.error('❌ Failed to stop ringtone on decline:', e);
+              }
               try { await AudioCallService.getInstance().rejectIncomingCall?.('declined'); } catch {}
               onCallRejected?.();
             }}
@@ -547,6 +616,14 @@ export default function AudioCall({
               setIsRinging(false);
               setIsProcessingAnswer(true);
               setCallAccepted(true); // Mark call as accepted to show connected UI
+              
+              // Start background billing immediately when user accepts
+              console.log('💰 [AudioCall] Starting background billing on call accept');
+              backgroundBillingManager.startBilling(appointmentId, {
+                intervalMinutes: 10,      // Bill every 10 minutes
+                warningBeforeMinutes: 1,  // Warn 1 minute before billing
+                maxCycles: 6              // Safety limit (60 minutes)
+              });
               
               try {
                 // Process the stored pending offer and send answer

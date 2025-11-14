@@ -48,7 +48,6 @@ export default function DirectBookingModal({
   loading = false,
   subscription,
 }: DirectBookingModalProps) {
-  const [reason, setReason] = useState('');
 
   const canStartSession = (): boolean => {
     if (!subscription || !subscription.isActive) {
@@ -76,15 +75,10 @@ export default function DirectBookingModal({
       return;
     }
 
-    if (!reason.trim()) {
-      Alert.alert('Reason Required', 'Please provide a reason for your session.');
-      return;
-    }
-    onConfirm(reason.trim(), sessionType);
+    onConfirm('General consultation', sessionType);
   };
 
   const handleClose = () => {
-    setReason('');
     onClose();
   };
 
@@ -171,22 +165,6 @@ export default function DirectBookingModal({
               ))}
             </View>
 
-            <View style={styles.reasonSection}>
-              <Text style={styles.reasonLabel}>Reason for Session *</Text>
-              <TextInput
-                style={styles.reasonInput}
-                placeholder="Describe your symptoms or reason for consultation..."
-                value={reason}
-                onChangeText={setReason}
-                multiline
-                numberOfLines={4}
-                maxLength={500}
-                textAlignVertical="top"
-              />
-              <Text style={styles.characterCount}>
-                {reason.length}/500 characters
-              </Text>
-            </View>
 
             <View style={styles.warningSection}>
               <FontAwesome name="exclamation-triangle" size={16} color="#FF9500" />
@@ -309,32 +287,6 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
-  reasonSection: {
-    marginBottom: 20,
-  },
-  reasonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  reasonInput: {
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 14,
-    color: '#333',
-    backgroundColor: '#FAFAFA',
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  characterCount: {
-    fontSize: 12,
-    color: '#999',
-    textAlign: 'right',
-    marginTop: 4,
-  },
   warningSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -370,11 +322,13 @@ const styles = StyleSheet.create({
     borderColor: '#DDD',
     backgroundColor: 'white',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButtonText: {
     fontSize: 16,
     color: '#666',
     fontWeight: '500',
+    textAlign: 'center',
   },
   confirmButton: {
     flex: 1,

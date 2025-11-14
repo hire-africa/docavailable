@@ -1446,8 +1446,8 @@ Route::post('/payments/test-webhook', [PaymentController::class, 'testWebhook'])
 Route::middleware(['auth:api'])->group(function () {
     Route::post('/payments/paychangu/initiate', [PaymentController::class, 'initiate']);
 });
-Route::get('/payments/paychangu/callback', [PaymentController::class, 'callback'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
-Route::get('/payments/paychangu/return', [PaymentController::class, 'returnHandler'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
+Route::get('/paychangu/callback', [PaymentController::class, 'callback'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
+Route::get('/paychangu/return', [PaymentController::class, 'returnHandler'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
 // OAuth Callback Route (moved to api.php for proper routing)
 Route::get('/oauth/callback', function (Request $request) {

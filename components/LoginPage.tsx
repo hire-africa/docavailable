@@ -4,7 +4,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Platform,
     StyleSheet,
@@ -14,6 +13,7 @@ import {
     View
 } from 'react-native';
 import authService from '../services/authService';
+import customAlertService from '../services/customAlertService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 import NativeGoogleSignIn from './NativeGoogleSignIn';
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
 
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please fill in all fields');
+            customAlertService.error('Error', 'Please fill in all fields');
             return;
         }
 
@@ -47,12 +47,12 @@ export default function LoginPage() {
                     navigateToDashboard('admin', true);
                 } else if (authState.data.user.user_type === 'doctor') {
                     if (authState.data.user.status === 'pending') {
-                        Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                        customAlertService.warning('Account Pending', 'Your account is awaiting admin approval.');
                         await authService.signOut();
                         return;
                     }
                     if (authState.data.user.status === 'suspended') {
-                        Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                        customAlertService.error('Account Suspended', 'Your account has been suspended. Please contact support.');
                         await authService.signOut();
                         return;
                     }
@@ -64,7 +64,7 @@ export default function LoginPage() {
                 }
             } else {
                 console.error('LoginPage: No user data in response:', authState);
-                Alert.alert('Login Failed', 'User data not found.');
+                customAlertService.error('Login Failed', 'User data not found.');
                 await authService.signOut();
             }
         } catch (error: any) {
@@ -154,9 +154,9 @@ export default function LoginPage() {
             
             // Show error with suggestion if available
             if (errorSuggestion) {
-                Alert.alert(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
+                customAlertService.error(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
             } else {
-                Alert.alert(errorTitle, errorMessage);
+                customAlertService.error(errorTitle, errorMessage);
             }
         } finally {
             setLoading(false);
@@ -186,12 +186,12 @@ export default function LoginPage() {
                 navigateToDashboard('admin', true);
             } else if (user.user_type === 'doctor') {
                 if (user.status === 'pending') {
-                    Alert.alert('Account Pending', 'Your account is awaiting admin approval.');
+                    customAlertService.warning('Account Pending', 'Your account is awaiting admin approval.');
                     await authService.signOut();
                     return;
                 }
                 if (user.status === 'suspended') {
-                    Alert.alert('Account Suspended', 'Your account has been suspended. Please contact support.');
+                    customAlertService.error('Account Suspended', 'Your account has been suspended. Please contact support.');
                     await authService.signOut();
                     return;
                 }
@@ -203,7 +203,7 @@ export default function LoginPage() {
             }
         } catch (error) {
             console.error('🔐 Error after Google Auth success:', error);
-            Alert.alert('Error', 'Failed to complete login process. Please try again.');
+            customAlertService.error('Error', 'Failed to complete login process. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -221,7 +221,7 @@ export default function LoginPage() {
             return;
         }
         
-        Alert.alert('Google Sign-In Error', error);
+        customAlertService.error('Google Sign-In Error', error);
     };
 
     const handleGoogleAuthClose = () => {

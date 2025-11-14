@@ -8,9 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
-    Image,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -20,6 +18,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import customAlertService from '../services/customAlertService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
@@ -125,7 +124,7 @@ const Step1: React.FC<Step1Props> = ({
         try {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Camera roll permissions are needed to upload ID documents.');
+                customAlertService.error('Permission Required', 'Camera roll permissions are needed to upload ID documents.');
                 return;
             }
 
@@ -139,11 +138,11 @@ const Step1: React.FC<Step1Props> = ({
 
             if (!result.canceled && result.assets[0]) {
                 setIdDocument(result.assets[0].uri);
-                Alert.alert('Success', 'ID document uploaded successfully!');
+                customAlertService.success('Success', 'ID document uploaded successfully!');
             }
         } catch (error) {
             console.error('Error uploading ID:', error);
-            Alert.alert('Upload Error', 'Failed to upload ID document. Please try again.');
+            customAlertService.error('Upload Error', 'Failed to upload ID document. Please try again.');
         } finally {
             setIsUploading(false);
         }
@@ -164,7 +163,7 @@ const Step1: React.FC<Step1Props> = ({
         try {
             const { status } = await ImagePicker.requestCameraPermissionsAsync();
             if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Camera permissions are needed to take photos.');
+                customAlertService.error('Permission Required', 'Camera permissions are needed to take photos.');
                 return;
             }
 
@@ -177,11 +176,11 @@ const Step1: React.FC<Step1Props> = ({
 
             if (!result.canceled && result.assets[0]) {
                 setIdDocument(result.assets[0].uri);
-                Alert.alert('Success', 'ID photo captured successfully!');
+                customAlertService.success('Success', 'ID photo captured successfully!');
             }
         } catch (error) {
             console.error('Error taking photo:', error);
-            Alert.alert('Camera Error', 'Failed to take photo. Please try again.');
+            customAlertService.error('Camera Error', 'Failed to take photo. Please try again.');
         } finally {
             setIsUploading(false);
         }
@@ -589,40 +588,23 @@ export default function PatientSignUp() {
                     const { progress } = result;
                     const summary = SignupProgressUtils.createProgressSummary(progress);
                     
-                    Alert.alert(
+                    customAlertService.confirm(
                         'Continue Previous Registration?',
                         `You have an incomplete ${summary.title} (${summary.percentage}% complete). Would you like to continue where you left off?`,
-                        [
-                            {
-                                text: 'Start Fresh',
-                                style: 'destructive',
-                                onPress: async () => {
-                                    await SignupProgressUtils.clearProgress();
-                                }
-                            },
-                            {
-                                text: 'Continue',
-                                onPress: () => {
-                                    // Restore form data
-                                    const data = progress.data;
-                                    if (data.firstName) setFirstName(data.firstName);
-                                    if (data.surname) setSurname(data.surname);
-                                    if (data.email) setEmail(data.email);
-                                    if (data.password) setPassword(data.password);
-                                    if (data.dob) setDob(data.dob);
-                                    if (data.gender) setGender(data.gender);
-                                    if (data.country) setCountry(data.country);
-                                    if (data.city) setCity(data.city);
-                                    if (data.profilePicture) setProfilePicture(data.profilePicture);
-                                    if (data.acceptPolicies) setAcceptPolicies(data.acceptPolicies);
-                                    
-                                    // Restore step
-                                    setStep(progress.step);
-                                    
-                                    console.log('✅ Progress restored successfully');
-                                }
-                            }
-                        ]
+                        () => {
+                            console.log('🔐 Patient Signup: User chose to continue previous registration');
+                            loadProgressData(result.progress);
+                            setStep(result.progress.currentStep);
+                            setLoading(false);
+                        },
+                        () => {
+                            console.log('🔐 Patient Signup: User chose to start fresh');
+                            SignupProgressUtils.clearProgress();
+                            setStep(1);
+                            setLoading(false);
+                        },
+                        'Continue',
+                        'Start Fresh'
                     );
                 } else if (result.isExpired) {
                     console.log('⏰ Previous signup progress expired');
@@ -684,21 +666,18 @@ export default function PatientSignUp() {
             if (data.exists) {
                 console.log('🔐 Patient Signup: User already exists, showing login option');
                 
-                Alert.alert(
+                customAlertService.confirm(
                     'Account Already Exists',
                     'An account with this email already exists. Would you like to log in instead?',
-                    [
-                        {
-                            text: 'Continue Signup',
-                            style: 'cancel'
-                        },
-                        {
-                            text: 'Log In',
-                            onPress: () => {
-                                router.replace('/login');
-                            }
-                        }
-                    ]
+                    () => {
+                        console.log('🔐 Patient Signup: User chose to go to login');
+                        router.push('/login');
+                    },
+                    () => {
+                        console.log('🔐 Patient Signup: User chose to stay on signup page');
+                    },
+                    'Login',
+                    'Cancel'
                 );
             }
         } catch (error) {
@@ -768,10 +747,9 @@ export default function PatientSignUp() {
                     }
                     
                     // Show a message to the user
-                    Alert.alert(
+                    customAlertService.info(
                         'Google Account Detected',
-                        'We found your Google account information. Some fields have been pre-filled for you.',
-                        [{ text: 'OK' }]
+                        'We found your Google account information. Some fields have been pre-filled for you.'
                     );
                 }
             } catch (error) {
@@ -851,7 +829,7 @@ export default function PatientSignUp() {
             console.error('Error sending verification code:', error);
             // Scroll to top for general errors
             EnhancedValidation.scrollToTop(scrollViewRef);
-            Alert.alert('Error', 'Failed to send verification code. Please try again.');
+            customAlertService.error('Error', 'Failed to send verification code. Please try again.');
             throw error; // Re-throw the error so handleContinue knows it failed
         } finally {
             setIsResending(false);
@@ -885,7 +863,7 @@ export default function PatientSignUp() {
             console.error('Error verifying email:', error);
             // Scroll to verification code field for verification errors
             EnhancedValidation.scrollToField('verificationCode', scrollViewRef, fieldRefs);
-            Alert.alert('Error', error.message || 'Invalid verification code. Please try again.');
+            customAlertService.error('Error', error.message || 'Invalid verification code. Please try again.');
             return false;
         } finally {
             setIsVerifying(false);

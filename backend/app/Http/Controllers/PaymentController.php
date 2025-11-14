@@ -545,59 +545,100 @@ class PaymentController extends Controller
         </h2>
         <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
         <p>Status: ' . htmlspecialchars($transaction->status) . '</p>
-        <div class="countdown" id="countdown">Redirecting in 5 seconds...</div>
+        <div class="countdown" id="countdown">Redirecting in 3 seconds...</div>
         <p>You can close this window and return to the app.</p>
     </div>
     <script>
+        console.log("Payment return page loaded", {
+            status: "' . $transaction->status . '",
+            tx_ref: "' . $txRef . '",
+            hasWebView: !!window.ReactNativeWebView
+        });
+        
         // Countdown and redirect
-        let count = 5;
+        let count = 3;
         const countdownEl = document.getElementById("countdown");
         let redirected = false;
         
         // Function to handle redirect
         function performRedirect() {
-            if (redirected) return;
+            if (redirected) {
+                console.log("Already redirected, skipping");
+                return;
+            }
             redirected = true;
             
+            console.log("Performing redirect...");
             countdownEl.textContent = "Redirecting now...";
             
             // Send close window message to WebView
             if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: "close_window",
-                    status: "' . $transaction->status . '",
-                    tx_ref: "' . $txRef . '"
-                }));
+                console.log("Sending close_window message to WebView");
+                try {
+                    window.ReactNativeWebView.postMessage(JSON.stringify({
+                        type: "close_window",
+                        status: "' . $transaction->status . '",
+                        tx_ref: "' . $txRef . '"
+                    }));
+                    console.log("Message sent successfully");
+                } catch (error) {
+                    console.error("Error sending message to WebView:", error);
+                }
+            } else {
+                console.log("ReactNativeWebView not available");
             }
             
             // Fallback: try to go back in history after a short delay
             setTimeout(() => {
+                console.log("Executing fallback redirect");
                 if (window.history.length > 1) {
+                    console.log("Going back in history");
                     window.history.back();
                 } else {
+                    console.log("Attempting to close window");
                     window.close();
                 }
             }, 500);
         }
         
+        // Countdown with proper display of 0
         const countdown = setInterval(() => {
             count--;
-            if (count > 0) {
-                countdownEl.textContent = "Redirecting in " + count + " seconds...";
-            } else {
+            console.log("Countdown:", count);
+            
+            if (count >= 0) {
+                countdownEl.textContent = "Redirecting in " + count + " second" + (count !== 1 ? "s" : "") + "...";
+            }
+            
+            if (count <= 0) {
                 clearInterval(countdown);
+                console.log("Countdown complete, redirecting");
                 performRedirect();
             }
         }, 1000);
         
-        // Send immediate notification that payment is complete (without triggering redirect)
+        // Send immediate notification that payment is complete
         if (window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: "payment_status",
-                status: "' . $transaction->status . '",
-                tx_ref: "' . $txRef . '"
-            }));
+            console.log("Sending payment_status message");
+            try {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: "payment_status",
+                    status: "' . $transaction->status . '",
+                    tx_ref: "' . $txRef . '"
+                }));
+                console.log("Payment status message sent");
+            } catch (error) {
+                console.error("Error sending payment_status:", error);
+            }
         }
+        
+        // Additional fallback: Force redirect after 5 seconds no matter what
+        setTimeout(() => {
+            if (!redirected) {
+                console.log("Emergency fallback redirect triggered");
+                performRedirect();
+            }
+        }, 5000);
     </script>
 </body>
 </html>';

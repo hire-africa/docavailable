@@ -53,6 +53,7 @@ import {
 } from '../../utils/appointmentTimeUtils';
 import { apiService } from '../services/apiService';
 import { Alert } from '../../utils/customAlert';
+import { withDoctorPrefix } from '../../utils/name';
 
 // Extended ChatMessage type with upload tracking, reactions, and replies
 interface ExtendedChatMessage extends ChatMessage {
@@ -2083,8 +2084,9 @@ export default function ChatPage() {
               const actualDoctorId = sessionData.doctor?.id || 0;
               const actualPatientId = sessionData.patient?.id || 0;
               
-              const doctorName = sessionData.doctor?.display_name || 
-                `${sessionData.doctor?.first_name} ${sessionData.doctor?.last_name}`;
+              const rawDoctorName = sessionData.doctor?.display_name || 
+                `${sessionData.doctor?.first_name || ''} ${sessionData.doctor?.last_name || ''}`.trim();
+              const doctorName = isPatient ? withDoctorPrefix(rawDoctorName) : rawDoctorName;
               const patientName = sessionData.patient?.display_name || 
                 `${sessionData.patient?.first_name} ${sessionData.patient?.last_name}`;
               
@@ -2131,11 +2133,15 @@ export default function ChatPage() {
                 // Try to get the name from other fields or use a fallback
                 if (isPatient) {
                   // If current user is patient, other participant is doctor
-                  chatInfoData.other_participant_name = 'Doctor';
+                  chatInfoData.other_participant_name = withDoctorPrefix(infoResponse.data?.doctor_name || 'Doctor');
                 } else {
                   // If current user is doctor, other participant is patient
                   chatInfoData.other_participant_name = 'Patient';
                 }
+              }
+
+              if (isPatient && chatInfoData.other_participant_name) {
+                chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
               }
               
               setChatInfo(chatInfoData);

@@ -14,6 +14,7 @@ import {
     View
 } from 'react-native';
 import { Icon } from '../components/Icon';
+import EmergencyModal from '../components/EmergencyModal';
 import { useAuth } from '../contexts/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -133,9 +134,10 @@ export default function HelpSupport() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
+    const [showEmergencyModal, setShowEmergencyModal] = useState(false);
 
     // Determine user type and select appropriate FAQ data
-    const isDoctor = userData?.userType === 'doctor';
+    const isDoctor = userData?.user_type === 'doctor';
     const faqData = isDoctor ? doctorFaqData : patientFaqData;
     
     const categories = isDoctor 
@@ -172,23 +174,7 @@ export default function HelpSupport() {
     };
 
     const handleEmergencyContact = () => {
-        Alert.alert(
-            'Emergency Contact',
-            'For medical emergencies, please contact emergency services immediately:',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { 
-                    text: 'Emergency Services', 
-                    onPress: () => Linking.openURL('tel:998'),
-                    style: 'destructive'
-                },
-                { 
-                    text: 'Ambulance', 
-                    onPress: () => Linking.openURL('tel:997'),
-                    style: 'destructive'
-                }
-            ]
-        );
+        setShowEmergencyModal(true);
     };
 
     const renderFAQItem = (faq: FAQItem, index: number) => (
@@ -199,7 +185,7 @@ export default function HelpSupport() {
         >
             <View style={styles.faqHeader}>
                 <Text style={styles.faqQuestion}>{faq.question}</Text>
-                                        <Text style={{ fontSize: 16, color: "#666" }}>▼</Text>
+                <Text style={{ fontSize: 16, color: "#666" }}>▼</Text>
             </View>
             {expandedFAQ === index && (
                 <Text style={styles.faqAnswer}>{faq.answer}</Text>
@@ -357,6 +343,12 @@ export default function HelpSupport() {
                     </View>
                 </ScrollView>
             </View>
+
+            {/* Emergency Modal */}
+            <EmergencyModal
+                visible={showEmergencyModal}
+                onClose={() => setShowEmergencyModal(false)}
+            />
         </SafeAreaView>
     );
 }
@@ -592,4 +584,4 @@ const styles = StyleSheet.create({
         marginLeft: 12,
         fontWeight: '500',
     },
-}); 
+});

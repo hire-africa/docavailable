@@ -7,7 +7,6 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Animated,
     BackHandler,
     Dimensions,
@@ -23,6 +22,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import customAlertService from '../services/customAlertService';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
@@ -840,89 +840,61 @@ export default function DoctorDashboard() {
   };
 
   const handleDeleteExpiredAppointment = async (request: BookingRequest) => {
-    // // console.log('🗑️ [DoctorDashboard] Delete button clicked for appointment:', {
-    //   id: request.id,
-    //   patientName: request.patientName,
-    //   date: request.date,
-    //   time: request.time,
-    //   status: request.status,
-    //   isExpired: isAppointmentExpired(request.date, request.time)
-    // });
-    
-    // Show confirmation dialog
-    Alert.alert(
+    customAlertService.confirm(
       'Delete Expired Appointment',
       `Are you sure you want to delete this expired appointment with ${request.patient_name}? This action cannot be undone.`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // // console.log('🗑️ [DoctorDashboard] Confirmed deletion for appointment:', request.id);
-              
-              const response = await apiService.delete(`/doctor/appointments/${request.id}`);
-              // // console.log('🗑️ [DoctorDashboard] Delete API response:', response);
-
-              if (response.success) {
-                showSuccess('Success', 'Expired appointment deleted successfully.');
-                // Refresh all appointment data
-                await Promise.all([
-                  fetchBookingRequests(),
-                  fetchConfirmedAppointments()
-                ]);
-                // // console.log('🗑️ [DoctorDashboard] List refreshed after deletion');
-              } else {
-                // console.error('❌ [DoctorDashboard] Delete failed - API returned success: false', {
-                //   response: response
-                // });
-                showError('Error', response.message || 'Failed to delete expired appointment. Please try again.');
-              }
-            } catch (error: any) {
-              console.error('❌ [DoctorDashboard] Error deleting expired appointment:', error);
-              console.error('❌ [DoctorDashboard] Error details:', {
-                message: error?.message,
-                status: error?.response?.status,
-                data: error?.response?.data,
-                statusText: error?.response?.statusText
-              });
-              
-              // Provide more specific error messages
-              let errorMessage = 'Failed to delete expired appointment. Please try again.';
-              if (error?.response?.status === 422) {
-                const backendMessage = error?.response?.data?.message;
-                if (backendMessage) {
-                  errorMessage = backendMessage;
-                } else {
-                  errorMessage = 'Cannot delete this appointment. It may not be expired or in a deletable state (only pending or cancelled appointments can be deleted).';
-                }
-              } else if (error?.response?.status === 404) {
-                // Appointment not found - treat as success since it's already gone
-                showSuccess('Success', 'Appointment has been removed.');
-                await fetchBookingRequests();
-                return;
-              } else if (error?.response?.status === 500) {
-                const backendMessage = error?.response?.data?.message;
-                if (backendMessage && backendMessage.includes('No query results for model')) {
-                  // Appointment doesn't exist - treat as success since it's already gone
-                  showSuccess('Success', 'Appointment has been removed.');
-                  await fetchBookingRequests();
-                  return;
-                }
-              } else if (error?.response?.status === 403) {
-                errorMessage = 'You do not have permission to delete this appointment.';
-              }
-              
-              showError('Error', errorMessage);
-            }
-          },
-        },
-      ]
+      () => deleteExpiredAppointment(request.id.toString()),
+      undefined,
+      'Delete',
+      'Cancel'
     );
+  };
+
+  const deleteExpiredAppointment = async (appointmentId: string) => {
+    try {
+      const response = await apiService.delete(`/appointments/${appointmentId}`);
+      
+      if (response.success) {
+        showSuccess('Success', 'Expired appointment deleted successfully.');
+        // Refresh all appointment data
+        await Promise.all([
+          fetchBookingRequests(),
+          fetchConfirmedAppointments()
+        ]);
+      } else {
+        showError('Error', response.message || 'Failed to delete expired appointment. Please try again.');
+      }
+    } catch (error: any) {
+      console.error('❌ [DoctorDashboard] Error deleting expired appointment:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to delete expired appointment. Please try again.';
+      if (error?.response?.status === 422) {
+        const backendMessage = error?.response?.data?.message;
+        if (backendMessage) {
+          errorMessage = backendMessage;
+        } else {
+          errorMessage = 'Cannot delete this appointment. It may not be expired or in a deletable state (only pending or cancelled appointments can be deleted).';
+        }
+      } else if (error?.response?.status === 404) {
+        // Appointment not found - treat as success since it's already gone
+        showSuccess('Success', 'Appointment has been removed.');
+        await fetchBookingRequests();
+        return;
+      } else if (error?.response?.status === 500) {
+        const backendMessage = error?.response?.data?.message;
+        if (backendMessage && backendMessage.includes('No query results for model')) {
+          // Appointment doesn't exist - treat as success since it's already gone
+          showSuccess('Success', 'Appointment has been removed.');
+          await fetchBookingRequests();
+          return;
+        }
+      } else if (error?.response?.status === 403) {
+        errorMessage = 'You do not have permission to delete this appointment.';
+      }
+      
+      showError('Error', errorMessage);
+    }
   };
 
   const handleSelectPatient = (patient: BookingRequest) => {
@@ -976,12 +948,12 @@ export default function DoctorDashboard() {
 
   const handleWithdrawal = async () => {
     if (!withdrawalAmount || parseFloat(withdrawalAmount) <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid withdrawal amount.');
+      customAlertService.error('Invalid Amount', 'Please enter a valid withdrawal amount.');
       return;
     }
 
     if (parseFloat(withdrawalAmount) > earnings) {
-      Alert.alert('Insufficient Funds', 'You cannot withdraw more than your available earnings.');
+      customAlertService.error('Insufficient Funds', 'You cannot withdraw more than your available earnings.');
       return;
     }
 
@@ -1343,7 +1315,7 @@ export default function DoctorDashboard() {
       //   callType: callData.callType || 'voice',
       // });
     } catch (err: any) {
-      Alert.alert('Call Error', err.message || 'Failed to accept call');
+      customAlertService.error('Call Error', err.message || 'Failed to accept call');
     }
   };
 
@@ -1371,7 +1343,7 @@ export default function DoctorDashboard() {
 
   const confirmCancelAppointment = async () => {
     if (!cancelReason.trim()) {
-      Alert.alert('Reason required', 'Please provide a reason for cancellation.');
+      customAlertService.error('Reason required', 'Please provide a reason for cancellation.');
       return;
     }
     

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Notification {
   id: string;
-  type: 'appointment' | 'message' | 'payment' | 'system' | 'reminder';
+  type: 'appointment' | 'message' | 'payment' | 'system' | 'reminder' | 'session_started' | 'session_ended' | 'session_reminder';
   title: string;
   message: string;
   timestamp: Date;
@@ -81,7 +81,7 @@ export class NotificationService {
   static async sendNotificationToUsers(
     title: string,
     message: string,
-    type: 'appointment' | 'message' | 'payment' | 'system' | 'reminder',
+    type: 'appointment' | 'message' | 'payment' | 'system' | 'reminder' | 'session_started' | 'session_ended' | 'session_reminder',
     recipientType: 'all' | 'doctors' | 'patients' | 'specific',
     recipientId?: string,
     sentBy?: string
@@ -245,6 +245,10 @@ export class NotificationService {
         return '/earnings';
       case 'wallet':
         return '/earnings';
+      case 'session_started':
+      case 'session_ended':
+      case 'session_reminder':
+        return '/sessions';
       case 'system':
         return undefined;
       default:

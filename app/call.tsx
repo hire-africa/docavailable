@@ -69,6 +69,8 @@ export default function CallScreen() {
   }, []);
 
   const initializeCall = async () => {
+    let initTimeout: ReturnType<typeof setTimeout> | null = null;
+    
     try {
       setIsLoading(true);
       setError(null);
@@ -77,8 +79,16 @@ export default function CallScreen() {
       setShowAudioCall(false);
       setShowVideoCall(false);
 
+      // Add timeout to prevent infinite loading
+      initTimeout = setTimeout(() => {
+        console.error('❌ [CallScreen] Initialization timeout');
+        setError('Call initialization timed out. Please try again.');
+        setIsLoading(false);
+      }, 15000); // 15 second timeout
+
       if (!sessionId) {
         setError('Missing required call parameters');
+        if (initTimeout) clearTimeout(initTimeout);
         return;
       }
       
@@ -87,6 +97,7 @@ export default function CallScreen() {
         if (!doctorId) {
           console.error('❌ [CallScreen] Missing doctorId for outgoing call');
           setError('Missing doctorId for outgoing call');
+          if (initTimeout) clearTimeout(initTimeout);
           return;
         }
         
@@ -95,6 +106,7 @@ export default function CallScreen() {
         if (Number.isNaN(doctorIdNum) || doctorIdNum <= 0) {
           console.error('❌ [CallScreen] Invalid doctorId format:', doctorId);
           setError('Invalid doctor ID. Please try again.');
+          if (initTimeout) clearTimeout(initTimeout);
           return;
         }
         
@@ -108,6 +120,7 @@ export default function CallScreen() {
 
       if (!user) {
         setError('User not authenticated');
+        if (initTimeout) clearTimeout(initTimeout);
         return;
       }
 
@@ -138,7 +151,8 @@ export default function CallScreen() {
           // Incoming call: render UI and let component initialize for incoming
           setShowAudioCall(true);
         } else {
-          // Outgoing call
+          // Outgoing call - show UI immediately
+          setShowAudioCall(true);
           audioCallService.current = AudioCallService.getInstance();
           await audioCallService.current.initialize(
             appointmentId,
@@ -147,7 +161,7 @@ export default function CallScreen() {
             {
               onCallAnswered: () => {
                 console.log('📞 Audio call answered');
-                setShowAudioCall(true);
+                // UI already shown, just log
               },
             onCallEnded: () => {
               console.log('📞 Audio call ended');
@@ -218,9 +232,13 @@ export default function CallScreen() {
       }
 
       setIsInitialized(true);
+      
+      // Clear timeout on successful initialization
+      if (initTimeout) clearTimeout(initTimeout);
     } catch (error) {
       console.error('❌ Error initializing call:', error);
       setError('Failed to initialize call. Please try again.');
+      if (initTimeout) clearTimeout(initTimeout);
     } finally {
       setIsLoading(false);
     }

@@ -5,7 +5,8 @@ import {
   Easing,
   StyleSheet,
   Text,
-  View
+  View,
+  useColorScheme
 } from 'react-native';
 import { Colors } from '../constants/Colors';
 
@@ -32,6 +33,13 @@ export default function InstantSessionTimer({
   isPatient,
   onTimerExpired
 }: InstantSessionTimerProps) {
+  const colorScheme = useColorScheme();
+  const themeColors = Colors[colorScheme ?? 'light'];
+  const PRIMARY_COLOR = themeColors.primary;
+  const SUCCESS_COLOR = themeColors.success;
+  const WARNING_COLOR = themeColors.warning;
+  const GRAY_COLOR = themeColors.gray;
+
   const [pulseAnim] = useState(new Animated.Value(1));
   const [warningAnim] = useState(new Animated.Value(0));
   const [timerHeight] = useState(new Animated.Value(hasPatientSentMessage && !isSessionExpired ? 1 : 0));
@@ -148,35 +156,35 @@ export default function InstantSessionTimer({
 
   const getStatusColor = () => {
     if (isSessionActivated) {
-      return Colors.success || '#4CAF50';
+      return SUCCESS_COLOR;
     }
-    
+
     if (hasDoctorResponded) {
-      return Colors.primary || '#2196F3';
+      return PRIMARY_COLOR;
     }
-    
+
     if (isSessionExpired) {
       return '#F44336';
     }
     
     if (hasPatientSentMessage && isActive) {
-      return timeRemaining <= 10 ? '#F44336' : (Colors.warning || '#FF9800');
+      return timeRemaining <= 10 ? '#F44336' : WARNING_COLOR;
     }
     
     if (hasPatientSentMessage && !isActive) {
       return '#F44336';
     }
-    
-    return Colors.gray || '#9E9E9E';
+
+    return GRAY_COLOR;
   };
 
   const getTimerColor = () => {
     if (timeRemaining <= 10) {
       return '#F44336';
     } else if (timeRemaining <= 30) {
-      return Colors.warning || '#FF9800';
+      return WARNING_COLOR;
     }
-    return Colors.primary || '#2196F3';
+    return SUCCESS_COLOR;
   };
 
   const formatTime = (seconds: number) => {
@@ -340,7 +348,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.text,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },

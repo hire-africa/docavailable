@@ -24,11 +24,7 @@ const withCallKeep = (config) => {
 
     const permissions = [
       'android.permission.BIND_TELECOM_CONNECTION_SERVICE',
-      'android.permission.CALL_PHONE',
       'android.permission.READ_PHONE_STATE',
-      'android.permission.WAKE_LOCK',
-      'android.permission.VIBRATE',
-      'android.permission.FOREGROUND_SERVICE',
       'android.permission.FOREGROUND_SERVICE_PHONE_CALL',
       'android.permission.USE_FULL_SCREEN_INTENT',
       'android.permission.MANAGE_OWN_CALLS'
