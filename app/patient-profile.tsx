@@ -347,12 +347,15 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         marginBottom: 30,
         marginTop: 20,
         paddingHorizontal: 10,
+        position: 'relative',
     },
     backButton: {
+        position: 'absolute',
+        left: 0,
         padding: 10,
         borderRadius: 8,
         backgroundColor: '#fff',
@@ -368,6 +371,8 @@ const styles = StyleSheet.create({
         color: '#333',
     },
     editButton: {
+        position: 'absolute',
+        right: 0,
         padding: 10,
         borderRadius: 8,
         backgroundColor: '#4CAF50',

@@ -4,7 +4,7 @@ import authService from '@/services/authService';
 import { NotificationService } from '@/services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
@@ -22,11 +22,13 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import customAlertService from '../services/customAlertService';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AppTour from '../components/AppTour';
 import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
 import OnboardingOverlay from '../components/OnboardingOverlay';
+import appTourService from '../services/appTourService';
+import customAlertService from '../services/customAlertService';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { getMissingFields } from '../utils/profileUtils';
@@ -131,6 +133,33 @@ export default function DoctorDashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  // App Tour state
+  const [showAppTour, setShowAppTour] = useState(false);
+  const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+
+  // Check if app tour should be shown
+  useEffect(() => {
+    const checkTourStatus = async () => {
+      if (!userData || userData.user_type !== 'doctor') return;
+      
+      // Don't show tour if onboarding overlay is showing
+      if (showOnboarding) return;
+      
+      // Check if tour has been completed
+      const hasCompleted = await appTourService.hasCompletedTour('doctor');
+      if (!hasCompleted && !showAppTour) {
+        // Ensure we're on home tab for tour
+        setActiveTab('home');
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          setShowAppTour(true);
+        }, 1000);
+      }
+    };
+
+    checkTourStatus();
+  }, [userData, showOnboarding]);
   
   // Approval status state
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
@@ -2421,6 +2450,9 @@ export default function DoctorDashboard() {
           <Animated.View
             style={[
               styles.sidebar,
+              {
+                bottom: insets.bottom,
+              },
               Platform.OS === 'web' ? {
                 transform: `translateX(${webSidebarTransform}px)`,
               } : {
@@ -2548,6 +2580,22 @@ export default function DoctorDashboard() {
         onDismiss={() => {
           setShowOnboarding(false);
           setOnboardingDismissed(true);
+        }}
+      />
+
+      {/* App Tour */}
+      <AppTour
+        visible={showAppTour && !showOnboarding}
+        userType="doctor"
+        onComplete={() => {
+          setShowAppTour(false);
+        }}
+        onSkip={() => {
+          setShowAppTour(false);
+        }}
+        elementRefs={tourTabRefs.current}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
         }}
       />
       
@@ -3453,7 +3501,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-    height: '100%',
+    bottom: 0,
     width: 300,
     backgroundColor: '#fff',
     borderTopLeftRadius: 18,
@@ -3506,6 +3554,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     overflow: 'hidden',
+    alignSelf: 'center',
+    width: '90%',
   },
   sidebarMenuItem: {
     flexDirection: 'row',

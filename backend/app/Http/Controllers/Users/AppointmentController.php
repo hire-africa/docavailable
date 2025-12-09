@@ -586,6 +586,56 @@ class AppointmentController extends Controller
                 ], 404);
             }
 
+            // CHECK 1: Time Window Validation
+            // Allow starting 15 minutes before and up to 24 hours after
+            $appointmentTime = \Carbon\Carbon::parse($appointment->appointment_date . ' ' . $appointment->appointment_time);
+            $now = now();
+            
+            if ($now->diffInMinutes($appointmentTime, false) > 15) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Too early to start session. You can start 15 minutes before the scheduled time.'
+                ], 400);
+            }
+
+            // CHECK 2: Subscription Validation
+            $patient = \App\Models\User::find($appointment->patient_id);
+            if (!$patient || !$patient->subscription || !$patient->subscription->isActive) {
+                 return response()->json([
+                    'success' => false,
+                    'message' => 'Patient does not have an active subscription.'
+                ], 403);
+            }
+
+            // CHECK 3: Balance Validation (Effective Balance)
+            // We don't deduct immediately (in case doctor doesn't show), but we must ensure
+            // the user has enough credits covering this AND any other active sessions.
+            
+            $subscription = $patient->subscription;
+            $activeAppointmentsCount = \App\Models\Appointment::where('patient_id', $patient->id)
+                ->where('status', 'in_progress')
+                ->where('id', '!=', $id) // Exclude current one if somehow already marked
+                ->count();
+                
+            // Note: Text sessions are pay-as-you-go, so we don't strictly reserve for them here,
+            // but we could check for active text sessions if we wanted to be very strict.
+            
+            $requiredSessions = 1 + $activeAppointmentsCount;
+            
+            $hasBalance = false;
+            switch ($appointment->appointment_type ?? 'text') {
+                case 'text': $hasBalance = $subscription->text_sessions_remaining >= $requiredSessions; break;
+                case 'audio': $hasBalance = $subscription->voice_calls_remaining >= $requiredSessions; break;
+                case 'video': $hasBalance = $subscription->video_calls_remaining >= $requiredSessions; break;
+            }
+
+            if (!$hasBalance) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Insufficient session balance. You have ' . $activeAppointmentsCount . ' other session(s) in progress.'
+                ], 403);
+            }
+
             $appointment->update([
                 'actual_start_time' => now(),
                 'status' => 'in_progress'

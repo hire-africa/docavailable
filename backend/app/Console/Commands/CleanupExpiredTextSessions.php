@@ -44,6 +44,19 @@ class CleanupExpiredTextSessions extends Command
 
         $this->info("Cleaned up {$count} expired text sessions.");
 
+        // Clean up stale waiting sessions (older than 24 hours)
+        $staleWaitingSessions = TextSession::where('status', 'waiting_for_doctor')
+            ->where('created_at', '<', Carbon::now()->subHours(24))
+            ->get();
+            
+        $waitingCount = 0;
+        foreach ($staleWaitingSessions as $session) {
+            $session->update(['status' => 'expired']);
+            $waitingCount++;
+        }
+        
+        $this->info("Cleaned up {$waitingCount} stale waiting sessions.");
+
         // Also clean up old ended/expired sessions (older than 30 days)
         $oldSessions = TextSession::whereIn('status', ['ended', 'expired'])
             ->where('created_at', '<', Carbon::now()->subDays(30))

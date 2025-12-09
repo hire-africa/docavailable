@@ -1,15 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import DoctorProfilePicture from './DoctorProfilePicture';
 import Icon from './Icon';
 import { stripDoctorPrefix } from '../utils/name';
+import favoriteDoctorsService from '../services/favoriteDoctorsService';
 
 interface DoctorCardProps {
   doctor: any;
   onPress: (doctor: any) => void;
+  onFavoriteChange?: (isFavorite: boolean) => void;
 }
 
-const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress }) => {
+const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onFavoriteChange }) => {
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  useEffect(() => {
+    checkFavoriteStatus();
+  }, [doctor.id]);
+
+  const checkFavoriteStatus = async () => {
+    const favorite = await favoriteDoctorsService.isFavorite(doctor.id);
+    setIsFavorite(favorite);
+  };
+
+  const handleFavoritePress = async (e: any) => {
+    e.stopPropagation();
+    try {
+      if (isFavorite) {
+        await favoriteDoctorsService.removeFavorite(doctor.id);
+        setIsFavorite(false);
+      } else {
+        await favoriteDoctorsService.addFavorite(doctor);
+        setIsFavorite(true);
+      }
+      onFavoriteChange?.(isFavorite);
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    }
+  };
   return (
     <TouchableOpacity 
       style={styles.card}
@@ -60,8 +88,21 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress }) =
         )}
       </View>
       
-      {/* Chevron Icon - Right Side */}
-      <Icon name="right" size={20} color="#4CAF50" style={styles.chevron} />
+      {/* Bookmark and Chevron Icons - Right Side */}
+      <View style={styles.rightActions}>
+        <TouchableOpacity 
+          style={styles.bookmarkButton}
+          onPress={handleFavoritePress}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Icon 
+            name={isFavorite ? 'bookmark' : 'bookmarkO'} 
+            size={20} 
+            color={isFavorite ? '#4CAF50' : '#CCC'} 
+          />
+        </TouchableOpacity>
+        <Icon name="right" size={20} color="#4CAF50" style={styles.chevron} />
+      </View>
     </TouchableOpacity>
   );
 }, (prevProps, nextProps) => {
@@ -155,6 +196,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#888',
     fontStyle: 'italic',
+  },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bookmarkButton: {
+    padding: 4,
   },
   chevron: {
     marginLeft: 8,

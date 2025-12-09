@@ -27,6 +27,7 @@ import InstantSessionTimer from '../../components/InstantSessionTimer';
 import { MessageReaction } from '../../components/MessageReaction';
 import RatingModal from '../../components/RatingModal';
 import ReadReceipt from '../../components/ReadReceipt';
+import SessionHeader from '../../components/SessionHeader';
 import { SwipeableMessage } from '../../components/SwipeableMessage';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
@@ -316,6 +317,11 @@ export default function ChatPage() {
   
   // Text session info state
   const [textSessionInfo, setTextSessionInfo] = useState<TextSessionInfo | null>(null);
+  
+  // Session timer state
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
   // Session validity state
   const [sessionValid, setSessionValid] = useState(true);
@@ -866,6 +872,28 @@ export default function ChatPage() {
     }
   }, [isTextAppointment, isAppointmentTime, textAppointmentSession.isActive, textAppointmentSession.isEnded]);
 
+  // Activate session header when doctor responds (for instant sessions) or when text appointment session becomes active
+  // Show for both patient and doctor
+  useEffect(() => {
+    // For instant sessions: activate when there are messages (show for both users)
+    if (isInstantSession && messages.length > 0 && !isSessionActive) {
+      console.log('🎬 [SessionHeader] Activating session header - messages present');
+      setIsSessionActive(true);
+      setSessionElapsedSeconds(0);
+    } 
+    // For text appointments: activate when session becomes active (show for both users)
+    else if (!isInstantSession && textAppointmentSession.isActive && !isSessionActive) {
+      console.log('🎬 [SessionHeader] Activating session header - text appointment active');
+      setIsSessionActive(true);
+      setSessionElapsedSeconds(0);
+    } 
+    // Deactivate when session ends
+    else if (isSessionActive && ((isInstantSession && messages.length === 0) || (!isInstantSession && !textAppointmentSession.isActive))) {
+      console.log('🛑 [SessionHeader] Deactivating session header');
+      setIsSessionActive(false);
+    }
+  }, [isInstantSession, messages.length, textAppointmentSession.isActive, isSessionActive]);
+
   // Function to start text appointment session via API
   const startTextAppointmentSession = async () => {
     try {
@@ -1015,6 +1043,32 @@ export default function ChatPage() {
     const interval = setInterval(checkAppointmentTime, 60000); // Check every minute
     return () => clearInterval(interval);
   }, [checkAppointmentTime]);
+
+  // Session timer effect - runs every second when session is active
+  useEffect(() => {
+    if (isSessionActive) {
+      sessionTimerRef.current = setInterval(() => {
+        setSessionElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (sessionTimerRef.current) {
+        clearInterval(sessionTimerRef.current);
+        sessionTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (sessionTimerRef.current) {
+        clearInterval(sessionTimerRef.current);
+        sessionTimerRef.current = null;
+      }
+    };
+  }, [isSessionActive]);
+
+  // Handle end session from header button
+  const handleEndSessionFromHeader = async () => {
+    setShowEndSessionModal(true);
+  };
 
   // Auto-scroll when messages change
   useEffect(() => {
@@ -2773,6 +2827,7 @@ export default function ChatPage() {
     console.log('🛑 [End Session] Starting session end process...');
     
     try {
+      setEndingSession(true);
       let sessionId;
       
       if (isTextSession) {
@@ -2787,18 +2842,21 @@ export default function ChatPage() {
         processTextAppointmentDeduction(1, 'manual_end');
         endTextAppointmentSession(1); // Deduct 1 session for manual end
         
-        // FIX: Trigger refresh for both participants
+        // IMMEDIATELY show rating modal
+        setShowEndSessionModal(false);
+        setSessionEnded(true);
+        setShowRatingModal(true);
+        setEndingSession(false);
+        
+        // FIX: Trigger refresh for both participants (non-blocking)
         console.log('🔄 [TextAppointment] Triggering chat refresh for both participants...');
         if (webrtcChatService) {
-          try {
-            await webrtcChatService.sendSessionEndNotification('manual_end');
-            console.log('✅ [TextAppointment] Session end notification sent via WebRTC');
-          } catch (error) {
+          webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
             console.error('❌ [TextAppointment] Failed to send session end notification:', error);
-          }
+          });
         }
         
-        // Force refresh chat data
+        // Force refresh chat data (non-blocking)
         setTimeout(() => {
           console.log('🔄 [TextAppointment] Forcing chat data refresh...');
           if (webrtcChatService) {
@@ -2807,8 +2865,6 @@ export default function ChatPage() {
           loadChat();
         }, 1000);
         
-        setShowEndSessionModal(false);
-        setShowRatingModal(true);
         return;
       }
       
@@ -2822,6 +2878,7 @@ export default function ChatPage() {
           'Cannot End Session',
           'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.'
         );
+        setEndingSession(false);
         return;
       }
       
@@ -2867,34 +2924,36 @@ export default function ChatPage() {
           message_count: cleanedMessages.length,
         };
 
-        try {
-          await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
-          if (webrtcChatService) {
-            console.log('🧹 Clearing messages from WebRTC service after manual end.');
-            await webrtcChatService.clearMessages();
-          }
-        } catch (e) {
-          console.error('Failed to store ended session locally:', e);
-        }
-
-        // Update UI - same as test button
+        // IMMEDIATELY show rating modal before async operations
         setShowEndSessionModal(false);
         setSessionEnded(true);
         setShowRatingModal(true);
+        setEndingSession(false);
         
-        // FIX: Trigger refresh for both participants to update chat state
+        console.log('✅ [End Session] UI updated - showing rating modal');
+        
+        // Handle background operations non-blocking
+        endedSessionStorageService.storeEndedSessionForBoth(endedSession).catch((e: any) => {
+          console.error('Failed to store ended session locally:', e);
+        });
+        
+        if (webrtcChatService) {
+          console.log('🧹 Clearing messages from WebRTC service after manual end.');
+          webrtcChatService.clearMessages().catch((e: any) => {
+            console.error('Failed to clear messages:', e);
+          });
+        }
+        
+        // FIX: Trigger refresh for both participants to update chat state (non-blocking)
         console.log('🔄 [End Session] Triggering chat refresh for both participants...');
         if (webrtcChatService) {
           // Send a session-ended notification to refresh both chats
-          try {
-            await webrtcChatService.sendSessionEndNotification('manual_end');
-            console.log('✅ [End Session] Session end notification sent via WebRTC');
-          } catch (error) {
+          webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
             console.error('❌ [End Session] Failed to send session end notification:', error);
-          }
+          });
         }
         
-        // Force refresh chat data for both participants
+        // Force refresh chat data for both participants (non-blocking)
         setTimeout(() => {
           console.log('🔄 [End Session] Forcing chat data refresh...');
           // Trigger a re-fetch of chat info and messages
@@ -2902,11 +2961,10 @@ export default function ChatPage() {
             webrtcChatService.requestSessionStatus();
           }
         }, 1000);
-        
-        console.log('✅ [End Session] UI updated - showing rating modal');
       } else {
         console.error('❌ [End Session] Failed to end session:', result);
         Alert.error('Error', 'Failed to end session. Please try again.');
+        setEndingSession(false);
       }
     } catch (error: any) {
       console.error('❌ [End Session] Error ending session:', error);
@@ -2917,12 +2975,15 @@ export default function ChatPage() {
         setShowEndSessionModal(false);
         setSessionEnded(true);
         setShowRatingModal(true);
+        setEndingSession(false);
       } else if (error?.response?.status === 403) {
         console.error('Unauthorized: You are not authorized to end this session.');
         Alert.error('Error', 'You are not authorized to end this session.');
+        setEndingSession(false);
       } else {
         console.error('Failed to end session. Please try again.');
         Alert.error('Error', 'Failed to end session. Please try again.');
+        setEndingSession(false);
       }
     }
   };
@@ -3532,6 +3593,15 @@ export default function ChatPage() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
+      
+      {/* Session Header - Shows when session is active */}
+      {isSessionActive && (
+        <SessionHeader
+          isActive={isSessionActive}
+          elapsedSeconds={sessionElapsedSeconds}
+          onEndSession={handleEndSessionFromHeader}
+        />
+      )}
       
       <KeyboardAvoidingView 
         style={{ flex: 1, backgroundColor: 'transparent' }}

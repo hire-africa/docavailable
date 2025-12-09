@@ -14,7 +14,6 @@ import {
   Dimensions,
   Easing,
   Image,
-  Linking,
   Modal,
   Platform,
   RefreshControl,
@@ -53,16 +52,18 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { useAnonymousMode } from '@/hooks/useAnonymousMode';
 import { useCustomTheme } from '@/hooks/useCustomTheme';
-import { useThemeColor } from '@/hooks/useThemeColor';
 import { useThemedColors } from '@/hooks/useThemedColors';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
+import AppTour from '../components/AppTour';
 import FilterModal from '../components/FilterModal';
 import IncompleteProfileBlock from '../components/IncompleteProfileBlock';
 import OnboardingOverlay from '../components/OnboardingOverlay';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
+import appTourService from '../services/appTourService';
+import favoriteDoctorsService from '../services/favoriteDoctorsService';
 import { imageCacheService } from '../services/imageCacheService';
 import { paymentsService } from '../services/paymentsService';
 import { getMissingFields } from '../utils/profileUtils';
@@ -118,17 +119,17 @@ export default function PatientDashboard() {
   const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
   const { isAnonymousModeEnabled } = useAnonymousMode();
-  
+
   // Theme support
   const colors = useThemedColors();
   const { theme, isDark } = useCustomTheme();
   const isDarkMode = isAnonymousModeEnabled && isDark;
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const insets = useSafeAreaInsets();
-  
+
   // Create theme-aware styles
   const styles = useMemo(() => createStyles(colors), [colors]);
-  
+
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
 
@@ -154,11 +155,38 @@ export default function PatientDashboard() {
   const bottomNavAnim = useRef(new Animated.Value(0)).current;
   const [pressedPill, setPressedPill] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  
+
   // Onboarding state
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+  // App Tour state
+  const [showAppTour, setShowAppTour] = useState(false);
+  const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+
+  // Check if app tour should be shown
+  useEffect(() => {
+    const checkTourStatus = async () => {
+      if (!userData || userData.user_type !== 'patient') return;
+      
+      // Don't show tour if onboarding overlay is showing
+      if (showOnboarding) return;
+      
+      // Check if tour has been completed
+      const hasCompleted = await appTourService.hasCompletedTour('patient');
+      if (!hasCompleted && !showAppTour) {
+        // Ensure we're on home tab for tour
+        setActiveTab('home');
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          setShowAppTour(true);
+        }, 1000);
+      }
+    };
+
+    checkTourStatus();
+  }, [userData, showOnboarding]);
 
   // Animate bottom nav
   const animateBottomNav = (hide: boolean) => {
@@ -181,7 +209,7 @@ export default function PatientDashboard() {
     try {
       // Only get real notifications from the service (no fake activities)
       const allNotifications = await NotificationService.getNotificationsForUser('patient', userData?.id?.toString());
-      
+
       const unreadCount = allNotifications.filter(n => !n.isRead).length;
       setUnreadNotificationCount(unreadCount);
     } catch (error) {
@@ -210,17 +238,20 @@ export default function PatientDashboard() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [visibleDoctorCards, setVisibleDoctorCards] = useState<number>(0);
-  const doctorCardAnimations = useRef<{[key: string]: Animated.Value}>({}).current;
+  const doctorCardAnimations = useRef<{ [key: string]: Animated.Value }>({}).current;
   const hasAnimatedDoctors = useRef(false);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [favoriteDoctors, setFavoriteDoctors] = useState<any[]>([]);
+  const [favoritesRefreshTrigger, setFavoritesRefreshTrigger] = useState(0);
 
   // Function to refresh subscription data
   const refreshSubscriptionData = useCallback(async () => {
     if (!user?.id) return;
-    
+
     try {
       console.log('PatientDashboard: Refreshing subscription data...');
       const response = await apiService.get('/subscription');
-      
+
       if (response.success && response.data) {
         console.log('PatientDashboard: Subscription data refreshed:', response.data);
         setCurrentSubscription(response.data);
@@ -233,6 +264,27 @@ export default function PatientDashboard() {
     }
   }, [user?.id]);
 
+  // Function to load favorite doctors
+  const loadFavoriteDoctors = useCallback(async () => {
+    try {
+      const favorites = await favoriteDoctorsService.getFavorites();
+      // Map favorite doctor IDs to full doctor objects from the doctors list
+      const favoriteDoctorObjects = doctors.filter(doc =>
+        favorites.some(fav => fav.id === doc.id)
+      );
+      setFavoriteDoctors(favoriteDoctorObjects);
+    } catch (error) {
+      console.error('Error loading favorite doctors:', error);
+    }
+  }, [doctors]);
+
+  // Load favorites when doctors list changes
+  useEffect(() => {
+    if (doctors.length > 0) {
+      loadFavoriteDoctors();
+    }
+  }, [doctors, favoritesRefreshTrigger, loadFavoriteDoctors]);
+
   const loadActivities = async () => {
     try {
       // Generate activities from real user data
@@ -243,7 +295,7 @@ export default function PatientDashboard() {
         [], // messages - can be added later
         currentSubscription
       );
-      
+
       // Get notifications and convert them to activities
       const notifications = await NotificationService.getNotificationsForUser('patient', userData?.id?.toString());
       const notificationActivities: Activity[] = notifications.map(notification => ({
@@ -255,25 +307,25 @@ export default function PatientDashboard() {
         icon: getIconForNotificationType(notification.type),
         color: getColorForNotificationType(notification.type)
       }));
-      
+
       // Merge user activities with notification activities
       setActivities(prevActivities => {
         // Keep real-time activities (those added via addRealtimeActivity)
-        const realtimeActivities = prevActivities.filter(activity => 
+        const realtimeActivities = prevActivities.filter(activity =>
           activity.id.startsWith('realtime_')
         );
-        
+
         // Combine all activities
         const allActivities = [...realtimeActivities, ...userActivities, ...notificationActivities];
-        
+
         // Remove duplicates based on ID
-        const uniqueActivities = allActivities.filter((activity, index, self) => 
+        const uniqueActivities = allActivities.filter((activity, index, self) =>
           index === self.findIndex(a => a.id === activity.id)
         );
-        
+
         // Sort by timestamp (newest first)
         const sortedActivities = uniqueActivities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        
+
         console.log('📱 Activities loaded:', sortedActivities.length, 'items');
         console.log('📱 Activity breakdown:', {
           realtime: realtimeActivities.length,
@@ -281,7 +333,7 @@ export default function PatientDashboard() {
           notifications: notificationActivities.length,
           total: sortedActivities.length
         });
-        
+
         return sortedActivities;
       });
     } catch (error) {
@@ -319,7 +371,7 @@ export default function PatientDashboard() {
   useEffect(() => {
     const unsubscribe = RealTimeEventService.subscribe((event) => {
       console.log('📡 [PatientDashboard] Received real-time event:', event);
-      
+
       // Add real-time activity
       const newActivity: Activity = {
         id: event.id,
@@ -330,8 +382,8 @@ export default function PatientDashboard() {
         icon: getIconForEventType(event.type, event.action),
         color: getColorForEventType(event.type, event.action)
       };
-      
-      setActivities(prevActivities => 
+
+      setActivities(prevActivities =>
         addRealtimeActivity(prevActivities, event.type, event.title, event.description, newActivity.icon, newActivity.color)
       );
     });
@@ -343,12 +395,12 @@ export default function PatientDashboard() {
   const getIconForEventType = (type: string, action: string): string => {
     switch (type) {
       case 'appointment':
-        return action === 'created' ? 'calendarPlus' : 
-               action === 'confirmed' ? 'calendarCheck' : 
-               action === 'cancelled' ? 'calendarTimes' : 'calendar';
+        return action === 'created' ? 'calendarPlus' :
+          action === 'confirmed' ? 'calendarCheck' :
+            action === 'cancelled' ? 'calendarTimes' : 'calendar';
       case 'session':
-        return action === 'started' ? 'play' : 
-               action === 'ended' ? 'stop' : 'clock';
+        return action === 'started' ? 'play' :
+          action === 'ended' ? 'stop' : 'clock';
       case 'payment':
         return 'dollar';
       case 'message':
@@ -361,12 +413,12 @@ export default function PatientDashboard() {
   const getColorForEventType = (type: string, action: string): string => {
     switch (type) {
       case 'appointment':
-        return action === 'created' ? '#2196F3' : 
-               action === 'confirmed' ? '#4CAF50' : 
-               action === 'cancelled' ? '#F44336' : '#FF9800';
+        return action === 'created' ? '#2196F3' :
+          action === 'confirmed' ? '#4CAF50' :
+            action === 'cancelled' ? '#F44336' : '#FF9800';
       case 'session':
-        return action === 'started' ? '#4CAF50' : 
-               action === 'ended' ? '#F44336' : '#FF9800';
+        return action === 'started' ? '#4CAF50' :
+          action === 'ended' ? '#F44336' : '#FF9800';
       case 'payment':
         return '#FF9800';
       case 'message':
@@ -425,7 +477,7 @@ export default function PatientDashboard() {
         console.error('PatientDashboard: Error refreshing user data:', error);
       }
     };
-    
+
     refreshData();
   }, []);
 
@@ -465,12 +517,12 @@ export default function PatientDashboard() {
   // Check if appointment is ready for session
   const isAppointmentReadyForSession = (appointment: any) => {
     if (!appointment.date || !appointment.time) return false;
-    
+
     const now = new Date();
-                const [month, day, year] = (appointment.date || '').split('/').map(Number);
-            const [hour, minute] = (appointment.time || '00:00').split(':').map(Number);
+    const [month, day, year] = (appointment.date || '').split('/').map(Number);
+    const [hour, minute] = (appointment.time || '00:00').split(':').map(Number);
     const appointmentDate = new Date(year, month - 1, day, hour, minute);
-    
+
     // Session is ready if appointment time has passed and status is confirmed
     return appointment.status === 'confirmed' && now >= appointmentDate;
   };
@@ -486,9 +538,9 @@ export default function PatientDashboard() {
   const isAppointmentUpcoming = (appointment: any) => {
     const dateStr = appointment.appointment_date || appointment.date;
     const timeStr = appointment.appointment_time || appointment.time;
-    
+
     if (!dateStr || !timeStr) return false;
-    
+
     try {
       // Handle different date formats
       let appointmentDateTime;
@@ -501,7 +553,7 @@ export default function PatientDashboard() {
         // Format: YYYY-MM-DD
         appointmentDateTime = new Date(`${dateStr}T${timeStr}`);
       }
-      
+
       const now = new Date();
       return appointmentDateTime.getTime() > now.getTime();
     } catch (error) {
@@ -514,14 +566,14 @@ export default function PatientDashboard() {
       style={[styles.tab, isActive && styles.activeTab]}
       onPress={onPress}
     >
-      <Icon 
+      <Icon
         name={icon}
         size={24}
         color={isActive ? '#4CAF50' : '#666'}
         style={styles.tabIcon}
       />
       <Text style={[
-        styles.tabLabel, 
+        styles.tabLabel,
         isActive && styles.activeTabLabel
       ]}>
         {label}
@@ -553,12 +605,12 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (user && user.id) { // Add user.id check to ensure user is fully loaded
       console.log('PatientDashboard: Loading subscription for user:', user.id);
-      
+
       // Load user's current subscription from Laravel API
       apiService.get('/subscription')
         .then((response: any) => {
           console.log('PatientDashboard: Subscription API response:', response);
-          
+
           if (response.success && response.data) {
             console.log('PatientDashboard: Setting subscription data:', response.data);
             setCurrentSubscription(response.data);
@@ -571,10 +623,10 @@ export default function PatientDashboard() {
           console.error('PatientDashboard: Error loading subscription:', error);
           console.error('PatientDashboard: Error response:', error.response?.data);
           console.error('PatientDashboard: Error status:', error.response?.status);
-          
+
           // Don't show error to user for subscription, just set null
           setCurrentSubscription(null);
-          
+
           // If it's an authentication error, don't retry
           if (error.response?.status === 401) {
             console.log('PatientDashboard: Authentication error loading subscription, not retrying');
@@ -591,7 +643,7 @@ export default function PatientDashboard() {
 
     const pollForSubscriptionUpdates = () => {
       console.log('PatientDashboard: Polling for subscription updates...');
-      
+
       apiService.get('/subscription')
         .then((response: any) => {
           if (response.success && response.data) {
@@ -607,7 +659,7 @@ export default function PatientDashboard() {
     // Poll every 10 seconds for the first 2 minutes after component mount
     // This helps catch subscription updates if the payment redirect didn't work properly
     const pollInterval = setInterval(pollForSubscriptionUpdates, 10000);
-    
+
     // Stop polling after 2 minutes
     const stopPollingTimeout = setTimeout(() => {
       clearInterval(pollInterval);
@@ -642,7 +694,7 @@ export default function PatientDashboard() {
   useEffect(() => {
     if (newAppointment === 'true' && user?.id) {
       // Add real-time activity for appointment offer sent
-      setActivities(prevActivities => 
+      setActivities(prevActivities =>
         addRealtimeActivity(
           prevActivities,
           'appointment_offer_sent',
@@ -655,14 +707,14 @@ export default function PatientDashboard() {
           }
         )
       );
-      
+
       // Clear the parameter to prevent re-triggering
       router.replace({ pathname: '/patient-dashboard', params: { tab: 'discover' } });
     }
-    
+
     if (sessionStarted === 'true' && user?.id) {
       // Add real-time activity for session started
-      setActivities(prevActivities => 
+      setActivities(prevActivities =>
         addRealtimeActivity(
           prevActivities,
           'text_session_started', // Default to text, could be enhanced to detect session type
@@ -675,7 +727,7 @@ export default function PatientDashboard() {
           }
         )
       );
-      
+
       // Clear the parameter to prevent re-triggering
       router.replace({ pathname: '/patient-dashboard', params: { tab: 'discover' } });
     }
@@ -767,11 +819,11 @@ export default function PatientDashboard() {
         hasUserData: !!userData,
         userType: userData?.user_type
       });
-      
+
       if (userData) {
         const missing = getMissingFields(userData);
         console.log('🔍 [PatientDashboard] Missing fields result:', missing);
-        
+
         if (missing.length > 0) {
           setMissingFields(missing);
           // Show onboarding overlay only if not dismissed in this session
@@ -824,7 +876,7 @@ export default function PatientDashboard() {
             // Handle paginated response from Laravel
             const doctorsData = response.data.data || response.data;
             // console.log('PatientDashboard: Fetched doctors:', doctorsData);
-            
+
             if (Array.isArray(doctorsData)) {
               // Filter for approved doctors and add default values for missing fields
               const approvedDoctors = doctorsData
@@ -851,7 +903,7 @@ export default function PatientDashboard() {
                     working_hours: doctor.working_hours,
                     max_patients_per_day: doctor.max_patients_per_day
                   };
-                  
+
                   // Debug logging for doctors with profile pictures (storage issue identified)
                   if (doctor.profile_picture_url) {
                     console.log('PatientDashboard - Doctor with profile picture (storage not accessible):', {
@@ -859,7 +911,7 @@ export default function PatientDashboard() {
                       profile_picture_url: doctor.profile_picture_url
                     });
                   }
-                  
+
                   return mappedDoctor;
                 });
               setDoctors(approvedDoctors);
@@ -878,9 +930,9 @@ export default function PatientDashboard() {
                   .map((d: any) => getImageUrlForCache(d.profile_picture_url || d.profile_picture))
                   .filter((u: any): u is string => typeof u === 'string' && u.length > 0);
                 if (urlsToPreload.length > 0) {
-                  imageCacheService.preloadImages(urlsToPreload).catch(() => {});
+                  imageCacheService.preloadImages(urlsToPreload).catch(() => { });
                 }
-              } catch {}
+              } catch { }
             } else {
               setDoctors([]);
               setLoadingDoctors(false);
@@ -914,18 +966,18 @@ export default function PatientDashboard() {
   // Auto-refresh mechanism for messages tab
   useEffect(() => {
     let refreshInterval: NodeJS.Timeout | null = null;
-    
+
     if (activeTab === 'messages' && user?.id) {
       // Initial load
       loadEndedSessions();
       fetchActiveTextSessions();
-      
+
       // Set up periodic refresh every 30 seconds when messages tab is active
       refreshInterval = setInterval(() => {
         // console.log('🔄 Auto-refreshing messages tab...');
         loadEndedSessions();
         fetchActiveTextSessions();
-        
+
         // Also refresh appointments to check for status changes
         if (user) {
           appointmentService.getAppointments()
@@ -939,7 +991,7 @@ export default function PatientDashboard() {
         }
       }, 30000); // 30 seconds
     }
-    
+
     return () => {
       if (refreshInterval) {
         clearInterval(refreshInterval);
@@ -954,7 +1006,7 @@ export default function PatientDashboard() {
         // console.log('🔄 App returned to foreground, refreshing messages...');
         loadEndedSessions();
         fetchActiveTextSessions();
-        
+
         // Also refresh appointments
         if (user) {
           appointmentService.getAppointments()
@@ -976,7 +1028,7 @@ export default function PatientDashboard() {
   // Manual refresh function for messages tab
   const refreshMessagesTab = async () => {
     if (!user?.id || refreshingMessages) return;
-    
+
     setRefreshingMessages(true);
     try {
       // console.log('🔄 Manual refresh of messages tab...');
@@ -984,7 +1036,7 @@ export default function PatientDashboard() {
         loadEndedSessions().catch(err => console.error('Error refreshing ended sessions:', err)),
         fetchActiveTextSessions().catch(err => console.error('Error refreshing text sessions:', err))
       ]);
-      
+
       // Also refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
         console.error('Error refreshing appointments:', err);
@@ -992,7 +1044,7 @@ export default function PatientDashboard() {
       });
       // console.log('PatientDashboard: Manual refresh - Fetched appointments:', appointmentsData);
       setAppointments(appointmentsData);
-      
+
       // Trigger conversion check for text appointments
       triggerConversionCheck();
     } catch (error) {
@@ -1020,21 +1072,21 @@ export default function PatientDashboard() {
   // Manual refresh function for home tab
   const refreshHomeTab = async () => {
     if (!user?.id || refreshingHome) return;
-    
+
     setRefreshingHome(true);
     try {
       // console.log('🔄 Manual refresh of home tab...');
-      
+
       // Refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
         console.error('Error refreshing appointments:', err);
         return [];
       });
       setAppointments(appointmentsData);
-      
+
       // Refresh subscription
       await refreshSubscription().catch(err => console.error('Error refreshing subscription:', err));
-      
+
       // Refresh API health
       await checkApiHealth().catch(err => console.error('Error checking API health:', err));
     } catch (error) {
@@ -1047,20 +1099,20 @@ export default function PatientDashboard() {
   // Manual refresh function for doctors tab
   const refreshDoctorsTab = async () => {
     if (!user?.id || refreshingDoctors) return;
-    
+
     setRefreshingDoctors(true);
     try {
       // console.log('🔄 Manual refresh of doctors tab...');
-      
+
       // Use the same endpoint as the original loading logic
       const response = await apiService.get('/doctors/active');
       // console.log('PatientDashboard: Doctors API response:', response);
-      
+
       if (response && response.success && response.data) {
         // Handle paginated response from Laravel (same as original logic)
         const doctorsData = response.data.data || response.data;
         // console.log('PatientDashboard: Fetched doctors:', doctorsData);
-        
+
         if (Array.isArray(doctorsData)) {
           // Filter for approved doctors and add default values for missing fields (same as original logic)
           const approvedDoctors = doctorsData
@@ -1111,7 +1163,7 @@ export default function PatientDashboard() {
   // Function to fetch available specializations
   const fetchSpecializations = async () => {
     if (loadingSpecializations) return;
-    
+
     setLoadingSpecializations(true);
     try {
       const response = await apiService.get('/doctors/specializations');
@@ -1133,11 +1185,11 @@ export default function PatientDashboard() {
   // Manual refresh function for appointments tab
   const refreshAppointmentsTab = async () => {
     if (!user?.id || refreshingAppointments) return;
-    
+
     setRefreshingAppointments(true);
     try {
       // console.log('🔄 Manual refresh of appointments tab...');
-      
+
       // Refresh appointments
       const appointmentsData = await appointmentService.getAppointments().catch(err => {
         console.error('Error refreshing appointments:', err);
@@ -1154,11 +1206,11 @@ export default function PatientDashboard() {
   // Manual refresh function for subscriptions tab
   const refreshSubscriptionsTab = async () => {
     if (!user?.id || refreshingSubscriptions) return;
-    
+
     setRefreshingSubscriptions(true);
     try {
       // console.log('🔄 Manual refresh of subscriptions tab...');
-      
+
       // Refresh subscription
       await refreshSubscription().catch(err => console.error('Error refreshing subscription:', err));
     } catch (error) {
@@ -1171,11 +1223,11 @@ export default function PatientDashboard() {
   // Manual refresh function for profile tab
   const refreshProfileTab = async () => {
     if (!user?.id || refreshingProfile) return;
-    
+
     setRefreshingProfile(true);
     try {
       // console.log('🔄 Manual refresh of profile tab...');
-      
+
       // Refresh user data
       const { refreshUserData } = useAuth();
       await refreshUserData().catch(err => console.error('Error refreshing user data:', err));
@@ -1205,8 +1257,8 @@ export default function PatientDashboard() {
         const [hour, minute] = (appt.time || '00:00').split(':');
         const apptDate = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
         if (apptDate < now) {
-                  // Expire the offer via Laravel API
-        apiService.patch(`/appointments/${appt.id}`, { status: 'expired', reschedule_pending: false });
+          // Expire the offer via Laravel API
+          apiService.patch(`/appointments/${appt.id}`, { status: 'expired', reschedule_pending: false });
         }
       }
     });
@@ -1233,7 +1285,7 @@ export default function PatientDashboard() {
     if (params.tab) {
       setActiveTab(params.tab);
     }
-    
+
     // If sessionId is provided, navigate to the chat after a short delay
     if (params.sessionId) {
       // Navigate to chat using appointment ID
@@ -1263,10 +1315,10 @@ export default function PatientDashboard() {
 
     if (user) {
       checkApiHealth();
-      
+
       // Set up periodic health checks every 30 seconds
       const healthCheckInterval = setInterval(checkApiHealth, 30000);
-      
+
       return () => clearInterval(healthCheckInterval);
     }
   }, [user]);
@@ -1274,7 +1326,7 @@ export default function PatientDashboard() {
   // Add polling for real-time status updates
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    
+
     if (user && activeTab === 'appointments') {
       // Poll for updates every 30 seconds
       interval = setInterval(async () => {
@@ -1289,7 +1341,7 @@ export default function PatientDashboard() {
         }
       }, 30000); // 30 seconds
     }
-    
+
     return () => {
       if (interval) {
         clearInterval(interval);
@@ -1298,7 +1350,7 @@ export default function PatientDashboard() {
   }, [user, activeTab]);
 
   const handleLogout = async () => {
-      setShowConfirm(true);
+    setShowConfirm(true);
   };
 
   const confirmLogout = async () => {
@@ -1331,18 +1383,18 @@ export default function PatientDashboard() {
           path: '/checkout',
           params: { url: res.data.checkout_url, tx_ref: res.data.reference }
         });
-        
+
         try {
-            // Navigate to checkout screen
-            console.log('🔄 Attempting router.navigate to checkout...');
-            console.log('🔄 URL being passed:', res.data.checkout_url);
-            console.log('🔄 Reference being passed:', res.data.reference);
-            
-            router.push('/payments/checkout?url=' + encodeURIComponent(res.data.checkout_url) + '&tx_ref=' + encodeURIComponent(res.data.reference || ''));
-            console.log('✅ Navigation command sent successfully');
-          
-          
-          
+          // Navigate to checkout screen
+          console.log('🔄 Attempting router.navigate to checkout...');
+          console.log('🔄 URL being passed:', res.data.checkout_url);
+          console.log('🔄 Reference being passed:', res.data.reference);
+
+          router.push('/payments/checkout?url=' + encodeURIComponent(res.data.checkout_url) + '&tx_ref=' + encodeURIComponent(res.data.reference || ''));
+          console.log('✅ Navigation command sent successfully');
+
+
+
         } catch (error) {
           console.error('❌ Navigation failed:', error);
           showError('Navigation Error', 'Failed to open payment page. Please try again.');
@@ -1376,7 +1428,7 @@ export default function PatientDashboard() {
 
   // Memoize filtered and sorted doctors to prevent unnecessary recalculations
   const filteredAndSortedDoctors = useMemo(() => {
-    let filteredDoctors = doctors;
+    let filteredDoctors = showFavoritesOnly ? favoriteDoctors : doctors;
 
     // Filter by online status if toggle is enabled
     if (showOnlyOnline) {
@@ -1387,10 +1439,10 @@ export default function PatientDashboard() {
     if (selectedSpecialization) {
       filteredDoctors = filteredDoctors.filter(doctor => {
         // Check both old single specialization and new multiple specializations
-        const hasSpecialization = 
+        const hasSpecialization =
           doctor.specialization === selectedSpecialization ||
-          (doctor.specializations && Array.isArray(doctor.specializations) && 
-           doctor.specializations.includes(selectedSpecialization));
+          (doctor.specializations && Array.isArray(doctor.specializations) &&
+            doctor.specializations.includes(selectedSpecialization));
         return hasSpecialization;
       });
     }
@@ -1401,22 +1453,22 @@ export default function PatientDashboard() {
       filteredDoctors = filteredDoctors.filter(doctor => {
         const name = `${doctor.first_name || ''} ${doctor.last_name || ''}`.toLowerCase();
         const specialization = (doctor.specialization || '').toLowerCase();
-        const specializations = Array.isArray(doctor.specializations) 
-          ? doctor.specializations.join(' ').toLowerCase() 
+        const specializations = Array.isArray(doctor.specializations)
+          ? doctor.specializations.join(' ').toLowerCase()
           : '';
         const location = (doctor.city || doctor.country || '').toLowerCase();
-        
-        return name.includes(query) || 
-               specialization.includes(query) || 
-               specializations.includes(query) ||
-               location.includes(query);
+
+        return name.includes(query) ||
+          specialization.includes(query) ||
+          specializations.includes(query) ||
+          location.includes(query);
       });
     }
 
     // Sort doctors
     switch (sortBy) {
       case 'name':
-        return filteredDoctors.sort((a, b) => 
+        return filteredDoctors.sort((a, b) =>
           `${a.first_name || ''} ${a.last_name || ''}`.localeCompare(`${b.first_name || ''} ${b.last_name || ''}`)
         );
       case 'rating':
@@ -1438,14 +1490,14 @@ export default function PatientDashboard() {
       default:
         return filteredDoctors;
     }
-  }, [doctors, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
+  }, [doctors, favoriteDoctors, showFavoritesOnly, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
 
   // Reset animation when filters/search/sort changes (only if not already animated)
   useEffect(() => {
     if (!loadingDoctors && !hasAnimatedDoctors.current) {
       setVisibleDoctorCards(0);
     }
-  }, [searchQuery, showOnlyOnline, selectedSpecialization, sortBy]);
+  }, [searchQuery, showOnlyOnline, selectedSpecialization, sortBy, showFavoritesOnly]);
 
   // Staggered animation effect for doctor cards (only on first load)
   // Start immediately when doctors arrive, don't wait for loadingDoctors to be false
@@ -1453,17 +1505,17 @@ export default function PatientDashboard() {
     if (filteredAndSortedDoctors.length > 0 && visibleDoctorCards < filteredAndSortedDoctors.length && !hasAnimatedDoctors.current) {
       const nextIndex = visibleDoctorCards;
       const doctorId = filteredAndSortedDoctors[nextIndex]?.id;
-      
+
       // For the first card, show immediately with no delay
       const delay = nextIndex === 0 ? 0 : 30;
-      
+
       const timer = setTimeout(() => {
         if (doctorId) {
           // Initialize animation value if not exists
           if (!doctorCardAnimations[doctorId]) {
             doctorCardAnimations[doctorId] = new Animated.Value(0);
           }
-          
+
           // Animate the card in
           Animated.timing(doctorCardAnimations[doctorId], {
             toValue: 1,
@@ -1472,15 +1524,15 @@ export default function PatientDashboard() {
             useNativeDriver: true,
           }).start();
         }
-        
+
         setVisibleDoctorCards(nextIndex + 1);
-        
+
         // Mark as animated when all cards are shown
         if (nextIndex + 1 >= filteredAndSortedDoctors.length) {
           hasAnimatedDoctors.current = true;
         }
       }, delay);
-      
+
       return () => clearTimeout(timer);
     }
   }, [visibleDoctorCards, filteredAndSortedDoctors]);
@@ -1508,7 +1560,7 @@ export default function PatientDashboard() {
 
   const confirmBookAppointment = () => {
     if (!doctorToBook) return;
-    
+
     setShowBookAppointmentConfirm(false);
     setDoctorToBook(null);
   };
@@ -1523,21 +1575,21 @@ export default function PatientDashboard() {
       console.log('PatientDashboard: No user, skipping subscription refresh');
       return;
     }
-    
+
     // Check circuit breaker status before making request
     const circuitStatus = apiService.getCircuitBreakerStatus();
     if (circuitStatus.isOpen) {
       console.log('PatientDashboard: Circuit breaker is open, skipping subscription refresh');
       return;
     }
-    
+
     try {
       console.log('PatientDashboard: Refreshing subscription for user:', user.id);
-      
+
       // Get subscription from Laravel API instead of Firestore
       const response = await apiService.get('/subscription');
       console.log('PatientDashboard: Refresh subscription response:', response);
-      
+
       const subscription = response.success ? response.data as UserSubscription : null;
       console.log('PatientDashboard: Setting refreshed subscription:', subscription);
       setCurrentSubscription(subscription);
@@ -1559,7 +1611,7 @@ export default function PatientDashboard() {
   // Load ended sessions for the messages tab
   const loadEndedSessions = async () => {
     if (!user?.id) return;
-    
+
     try {
       setLoadingEndedSessions(true);
       const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
@@ -1597,7 +1649,7 @@ export default function PatientDashboard() {
   const handleDeleteEndedSession = async (appointmentId: number) => {
     try {
       await endedSessionStorageService.deleteEndedSession(appointmentId);
-              setEndedSessions(prev => prev.filter(session => session.appointmentId !== appointmentId));
+      setEndedSessions(prev => prev.filter(session => session.appointmentId !== appointmentId));
       setShowEndedSessionMenu(null);
       showSuccess('Session deleted successfully', 'The session has been permanently removed from your history.');
     } catch (error) {
@@ -1630,10 +1682,10 @@ export default function PatientDashboard() {
   };
 
   const renderHomeContent = () => {
-      return (
+    return (
       <View style={{ flex: 1 }}>
-        <ScrollView 
-          style={{ flex: 1, paddingHorizontal: isWeb ? 40 : 20, paddingTop: 20, backgroundColor: '#F8F9FA' }} 
+        <ScrollView
+          style={{ flex: 1, paddingHorizontal: isWeb ? 40 : 20, paddingTop: 20, backgroundColor: '#F8F9FA' }}
           contentContainerStyle={{ paddingBottom: 100 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -1647,26 +1699,26 @@ export default function PatientDashboard() {
         >
           {/* Welcome Section */}
           <ThemedView style={{
-            backgroundColor: '#FFFFFF', 
-            borderRadius: 20, 
-            padding: 24, 
+            backgroundColor: '#FFFFFF',
+            borderRadius: 20,
+            padding: 24,
             marginBottom: 24,
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.08,
             shadowRadius: 12,
             elevation: 4,
-            alignItems: 'center', 
-            flexDirection: 'column', 
+            alignItems: 'center',
+            flexDirection: 'column',
             gap: 0
           }}>
             {/* User Avatar */}
-            <View style={{ 
-              width: 64, 
-              height: 64, 
-              borderRadius: 32, 
-              overflow: 'hidden', 
-              backgroundColor: '#E8F5E8', 
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              overflow: 'hidden',
+              backgroundColor: '#E8F5E8',
               marginBottom: 16,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 2 },
@@ -1699,7 +1751,7 @@ export default function PatientDashboard() {
               ellipsizeMode="tail"
             >
               Hi {(user?.display_name && user.display_name.split(' ')[0]) || (user?.email && user.email.split('@')[0]) || 'there'}
-                </ThemedText>
+            </ThemedText>
             <ThemedText
               style={{
                 fontSize: 16,
@@ -1713,7 +1765,7 @@ export default function PatientDashboard() {
               ellipsizeMode="tail"
             >
               How can we support your health today?
-                </ThemedText>
+            </ThemedText>
           </ThemedView>
 
 
@@ -1734,14 +1786,14 @@ export default function PatientDashboard() {
                   </View>
                   <View style={styles.sessionProgress}>
                     <View style={styles.progressBar}>
-                      <View 
+                      <View
                         style={[
-                          styles.progressFill, 
-                          { 
+                          styles.progressFill,
+                          {
                             width: `${Math.max(0, Math.min(100, ((currentSubscription.textSessionsRemaining || 0) / (currentSubscription.totalTextSessions || 1)) * 100))}%`,
                             backgroundColor: '#4CAF50'
                           }
-                        ]} 
+                        ]}
                       />
                     </View>
                     <ThemedText style={styles.progressText}>
@@ -1762,14 +1814,14 @@ export default function PatientDashboard() {
                   </View>
                   <View style={styles.sessionProgress}>
                     <View style={styles.progressBar}>
-                      <View 
+                      <View
                         style={[
-                          styles.progressFill, 
-                          { 
+                          styles.progressFill,
+                          {
                             width: `${Math.max(0, Math.min(100, ((currentSubscription.voiceCallsRemaining || 0) / (currentSubscription.totalVoiceCalls || 1)) * 100))}%`,
                             backgroundColor: '#2196F3'
                           }
-                        ]} 
+                        ]}
                       />
                     </View>
                     <ThemedText style={styles.progressText}>
@@ -1790,14 +1842,14 @@ export default function PatientDashboard() {
                   </View>
                   <View style={styles.sessionProgress}>
                     <View style={styles.progressBar}>
-                      <View 
+                      <View
                         style={[
-                          styles.progressFill, 
-                          { 
+                          styles.progressFill,
+                          {
                             width: `${Math.max(0, Math.min(100, ((currentSubscription.videoCallsRemaining || 0) / (currentSubscription.totalVideoCalls || 1)) * 100))}%`,
                             backgroundColor: '#FF9800'
                           }
-                        ]} 
+                        ]}
                       />
                     </View>
                     <ThemedText style={styles.progressText}>
@@ -1809,7 +1861,7 @@ export default function PatientDashboard() {
             </ThemedView>
           )}
 
-                    {/* Quick Actions and My Appointments badge */}
+          {/* Quick Actions and My Appointments badge */}
           <View style={styles.quickActions}>
             <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
             <View style={styles.actionGrid}>
@@ -1897,7 +1949,7 @@ export default function PatientDashboard() {
                 fontWeight: 'bold',
                 color: '#222',
               }}>Recent Activity</ThemedText>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => router.push('/notifications')}
                 style={{
                   flexDirection: 'row',
@@ -1918,8 +1970,8 @@ export default function PatientDashboard() {
             </View>
             {activities.length > 0 ? (
               activities.slice(0, 5).map((activity, index) => (
-                <TouchableOpacity 
-                  key={activity.id} 
+                <TouchableOpacity
+                  key={activity.id}
                   style={{
                     backgroundColor: '#F8F9FA',
                     borderRadius: 16,
@@ -2016,14 +2068,14 @@ export default function PatientDashboard() {
     <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
 
       {/* Search Bar */}
-      <View style={{ 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        backgroundColor: '#F5F5F5', 
-        borderRadius: 25, 
-        marginHorizontal: 20, 
-        marginBottom: 16, 
-        paddingHorizontal: 18, 
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 25,
+        marginHorizontal: 20,
+        marginBottom: 16,
+        paddingHorizontal: 18,
         height: 50,
         borderWidth: 1,
         borderColor: '#E5E5E5',
@@ -2044,8 +2096,8 @@ export default function PatientDashboard() {
       </View>
 
       {/* Unified Chat List - WhatsApp Style Inbox */}
-      <ScrollView 
-        style={{ flex: 1 }} 
+      <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => setShowEndedSessionMenu(null)}
@@ -2072,11 +2124,11 @@ export default function PatientDashboard() {
             .filter(appt => {
               // Only show confirmed appointments in messages
               const status = appt.status;
-              const isConfirmed = 
+              const isConfirmed =
                 status === 'confirmed' || status === 1; // Only confirmed appointments
-              
+
               return isConfirmed && (
-                !messageSearchQuery || 
+                !messageSearchQuery ||
                 (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())
               );
@@ -2087,11 +2139,11 @@ export default function PatientDashboard() {
               sortDate: (() => {
                 if (appt.updatedAt) return new Date(appt.updatedAt).getTime();
                 if (appt.createdAt) return new Date(appt.createdAt).getTime();
-                
+
                 // Use appointment_date and appointment_time from API
                 const dateStr = appt.appointment_date || appt.date;
                 const timeStr = appt.appointment_time || appt.time;
-                
+
                 if (dateStr && timeStr && typeof dateStr === 'string' && typeof timeStr === 'string') {
                   try {
                     // Handle different date formats
@@ -2115,9 +2167,9 @@ export default function PatientDashboard() {
 
           // Get ended sessions (filtered by search if needed)
           const filteredEndedSessions = endedSessions
-            .filter(session => 
+            .filter(session =>
               session && session.doctor_name && (
-                !messageSearchQuery || 
+                !messageSearchQuery ||
                 session.doctor_name.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (session.reason && session.reason.toLowerCase().includes(messageSearchQuery.toLowerCase()))
               )
@@ -2132,17 +2184,17 @@ export default function PatientDashboard() {
           // Combine all items and sort by date (most recent first)
           const allItems = [...activeTextSessionItems, ...activeAppointments, ...filteredEndedSessions]
             .sort((a, b) => b.sortDate - a.sortDate);
-            
+
 
           return allItems.map((item, index) => {
             const isLastItem = index === allItems.length - 1;
-            
+
             if (item.type === 'active_text') {
               // Render active text session as card
               return (
                 <TouchableOpacity
                   key={`active_text_${item.id || item.appointment_id}`}
-                  style={{ 
+                  style={{
                     backgroundColor: '#FFFFFF',
                     borderRadius: 12,
                     marginHorizontal: 20,
@@ -2213,7 +2265,7 @@ export default function PatientDashboard() {
               return (
                 <TouchableOpacity
                   key={`active_${item.id}`}
-                  style={{ 
+                  style={{
                     backgroundColor: '#FFFFFF',
                     borderRadius: 12,
                     marginHorizontal: 20,
@@ -2252,9 +2304,9 @@ export default function PatientDashboard() {
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
-                          {item.consultationType === 'text' ? 'Text Chat' : 
-                           item.consultationType === 'voice' ? 'Voice Call' : 
-                           item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                          {item.consultationType === 'text' ? 'Text Chat' :
+                            item.consultationType === 'voice' ? 'Voice Call' :
+                              item.consultationType === 'video' ? 'Video Call' : 'Chat'}
                         </Text>
                         {getAppointmentSessionStatus(item) === 'pending' && (
                           <View style={{
@@ -2296,7 +2348,7 @@ export default function PatientDashboard() {
               return (
                 <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                   <TouchableOpacity
-                    style={{ 
+                    style={{
                       backgroundColor: '#FFFFFF',
                       borderRadius: 12,
                       marginHorizontal: 20,
@@ -2352,7 +2404,7 @@ export default function PatientDashboard() {
                       </View>
                     </View>
                   </TouchableOpacity>
-                  
+
                   {/* Menu dropdown */}
                   {showEndedSessionMenu === item.appointmentId && (
                     <View style={{
@@ -2418,7 +2470,7 @@ export default function PatientDashboard() {
           });
           const hasActiveAppointments = activeAppointments.length > 0;
           const hasEndedSessions = endedSessions.length > 0;
-          
+
           // Show text sessions if they exist (no filtering)
           const hasActiveTextSessions = activeTextSessions.length > 0;
           const hasSearchResults = messageSearchQuery && (activeAppointments.length > 0 || endedSessions.length > 0 || hasActiveTextSessions);
@@ -2458,8 +2510,8 @@ export default function PatientDashboard() {
   );
 
   const renderProfileContent = () => (
-    <ScrollView 
-      style={{...styles.content, backgroundColor: '#F8F9FA'}} 
+    <ScrollView
+      style={{ ...styles.content, backgroundColor: '#F8F9FA' }}
       contentContainerStyle={{ paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -2472,83 +2524,83 @@ export default function PatientDashboard() {
       }
     >
       {/* Profile Header */}
-      <View style={{alignItems: 'center', marginBottom: 18}}>
+      <View style={{ alignItems: 'center', marginBottom: 18 }}>
         {user?.profile_picture_url ? (
-          <Image source={{ uri: user.profile_picture_url }} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+          <Image source={{ uri: user.profile_picture_url }} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10 }} />
         ) : user?.profile_picture ? (
-          <Image source={{ uri: user.profile_picture }} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+          <Image source={{ uri: user.profile_picture }} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10 }} />
         ) : (
-          <Image source={profileImage} style={{width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10}} />
+          <Image source={profileImage} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10 }} />
         )}
-        <Text style={{fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center'}}>{user?.display_name || (user?.email && user.email.split('@')[0]) || 'Patient'}</Text>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center' }}>{user?.display_name || (user?.email && user.email.split('@')[0]) || 'Patient'}</Text>
       </View>
 
       {/* Account Section */}
-      <Text style={{fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18}}>Account</Text>
-      <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
-        <View style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Account</Text>
+      <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
           <Icon name="email" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Email</Text>
-          <Text style={{color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2}}>{user?.email || 'Not provided'}</Text>
-          </View>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => { setShowSubscriptions(true); setActiveTab('home'); }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Email</Text>
+          <Text style={{ color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2 }}>{user?.email || 'Not provided'}</Text>
+        </View>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => { setShowSubscriptions(true); setActiveTab('home'); }}>
           <Icon name="heart" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>My Health Plan</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>My Health Plan</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
-        </View>
+      </View>
 
       {/* Settings Section */}
-      <Text style={{fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18}}>Settings</Text>
-      <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8}}>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/patient-profile')}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Settings</Text>
+      <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8 }}>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/patient-profile')}>
           <Icon name="user" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>View Profile</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>View Profile</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/edit-patient-profile')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/edit-patient-profile')}>
           <Icon name="user" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Edit Profile</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Edit Profile</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/privacy-settings')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/privacy-settings')}>
           <Icon name="eye" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Privacy Settings</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Privacy Settings</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/notifications-settings')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/notifications-settings')}>
           <Icon name="bell" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Notifications</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Notifications</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/help-support')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/help-support')}>
           <Icon name="questionCircle" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Help & Support</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Help & Support</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/network-test')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/network-test')}>
           <Icon name="wifi" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Network Test</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Network Test</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6B6B', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => router.push('/test-webview')}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6B6B', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/test-webview')}>
           <Icon name="globe" size={20} color="#fff" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#fff', flex: 1}}>🧪 Test WebView Module</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#fff', flex: 1 }}>🧪 Test WebView Module</Text>
           <Icon name="chevronRight" size={20} color="#fff" />
-          </TouchableOpacity>
-        <TouchableOpacity style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}} onPress={() => setShowCacheManagement(true)}>
+        </TouchableOpacity>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => setShowCacheManagement(true)}>
           <Icon name="image" size={20} color="#666" />
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}}>Image Cache</Text>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Image Cache</Text>
           <Icon name="chevronRight" size={20} color="#666" />
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
+      </View>
 
       {/* Logout */}
-      <TouchableOpacity style={[{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}, {marginTop: 20}]} onPress={handleLogout}>
+      <TouchableOpacity style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }, { marginTop: 20 }]} onPress={handleLogout}>
         <Icon name="signOut" size={20} color="#666" />
-        <Text style={[{fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1}, {color: '#FF3B30'}]}>Logout</Text>
+        <Text style={[{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }, { color: '#FF3B30' }]}>Logout</Text>
         <Icon name="chevronRight" size={20} color="#666" />
-        </TouchableOpacity>
+      </TouchableOpacity>
     </ScrollView>
   );
 
@@ -2567,8 +2619,8 @@ export default function PatientDashboard() {
     }
 
     return (
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -2580,13 +2632,12 @@ export default function PatientDashboard() {
           />
         }
       >
-      <View style={styles.header}>
-      </View>
-      
-      {/* Search and Filter Container */}
-      <View style={styles.searchFilterContainer}>
-        {/* Search Bar with Filter Button */}
-        <View style={styles.searchBarContainer}>
+        <View style={styles.header}>
+        </View>
+
+        {/* Search and Filter Container */}
+        <View style={styles.searchFilterContainer}>
+          {/* Search Bar - Full Width */}
           <View style={styles.searchBar}>
             <Icon name="search" size={20} color="#4CAF50" />
             <TextInput
@@ -2596,12 +2647,7 @@ export default function PatientDashboard() {
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
-                <Icon name="times" size={18} color="#666" />
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.filterButton}
               onPress={() => setShowFilterModal(true)}
             >
@@ -2615,191 +2661,192 @@ export default function PatientDashboard() {
               )}
             </TouchableOpacity>
           </View>
+
+          {/* Active Filters Chips */}
+          {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
+            <View style={styles.activeFiltersContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.activeFiltersContent}
+              >
+                {showOnlyOnline && (
+                  <View style={styles.activeFilterChip}>
+                    <Icon name="online" size={10} color="#4CAF50" style={{ marginRight: 6 }} />
+                    <Text style={styles.activeFilterChipText}>Online Only</Text>
+                    <TouchableOpacity
+                      onPress={() => setShowOnlyOnline(false)}
+                      style={styles.removeFilterButton}
+                    >
+                      <Icon name="times" size={12} color="#4CAF50" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {selectedSpecialization && (
+                  <View style={styles.activeFilterChip}>
+                    <Text style={styles.activeFilterChipText}>{selectedSpecialization}</Text>
+                    <TouchableOpacity
+                      onPress={() => setSelectedSpecialization('')}
+                      style={styles.removeFilterButton}
+                    >
+                      <Icon name="times" size={12} color="#4CAF50" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {sortBy !== 'name' && (
+                  <View style={styles.activeFilterChip}>
+                    <Text style={styles.activeFilterChipText}>Sort: {getSortOptionLabel(sortBy)}</Text>
+                    <TouchableOpacity
+                      onPress={() => setSortBy('name')}
+                      style={styles.removeFilterButton}
+                    >
+                      <Icon name="times" size={12} color="#4CAF50" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.clearAllFiltersButton}
+                  onPress={() => {
+                    setShowOnlyOnline(false);
+                    setSelectedSpecialization('');
+                    setSortBy('name');
+                  }}
+                >
+                  <Text style={styles.clearAllFiltersText}>Clear All</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          )}
         </View>
 
-        {/* Active Filters Chips */}
-        {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
-          <View style={styles.activeFiltersContainer}>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.activeFiltersContent}
-            >
-              {showOnlyOnline && (
-                <View style={styles.activeFilterChip}>
-                  <Icon name="online" size={10} color="#4CAF50" style={{ marginRight: 6 }} />
-                  <Text style={styles.activeFilterChipText}>Online Only</Text>
-                  <TouchableOpacity 
-                    onPress={() => setShowOnlyOnline(false)}
-                    style={styles.removeFilterButton}
-                  >
-                    <Icon name="times" size={12} color="#4CAF50" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              {selectedSpecialization && (
-                <View style={styles.activeFilterChip}>
-                  <Text style={styles.activeFilterChipText}>{selectedSpecialization}</Text>
-                  <TouchableOpacity 
-                    onPress={() => setSelectedSpecialization('')}
-                    style={styles.removeFilterButton}
-                  >
-                    <Icon name="times" size={12} color="#4CAF50" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              {sortBy !== 'name' && (
-                <View style={styles.activeFilterChip}>
-                  <Text style={styles.activeFilterChipText}>Sort: {getSortOptionLabel(sortBy)}</Text>
-                  <TouchableOpacity 
-                    onPress={() => setSortBy('name')}
-                    style={styles.removeFilterButton}
-                  >
-                    <Icon name="times" size={12} color="#4CAF50" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              <TouchableOpacity 
-                style={styles.clearAllFiltersButton}
+        {/* Doctors List */}
+        <View style={styles.doctorsListNew}>
+          {loadingDoctors && doctors.length === 0 && filteredAndSortedDoctors.length === 0 ? (
+            // Initial load - show 6 skeleton cards
+            <DoctorCardSkeleton count={6} />
+          ) : doctorsError ? (
+            <View style={styles.errorContainer}>
+              <Icon name="warning" size={20} color="#666" />
+              <Text style={styles.errorText}>Unable to Load Doctors</Text>
+              <Text style={styles.errorSubtext}>{doctorsError}</Text>
+              <TouchableOpacity
+                style={styles.retryButton}
                 onPress={() => {
-                  setShowOnlyOnline(false);
-                  setSelectedSpecialization('');
-                  setSortBy('name');
-                }}
-              >
-                <Text style={styles.clearAllFiltersText}>Clear All</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        )}
-      </View>
-
-      {/* Doctors List */}
-      <View style={styles.doctorsListNew}>
-        {loadingDoctors && doctors.length === 0 && filteredAndSortedDoctors.length === 0 ? (
-          // Initial load - show 6 skeleton cards
-          <DoctorCardSkeleton count={6} />
-        ) : doctorsError ? (
-          <View style={styles.errorContainer}>
-            <Icon name="warning" size={20} color="#666" />
-            <Text style={styles.errorText}>Unable to Load Doctors</Text>
-            <Text style={styles.errorSubtext}>{doctorsError}</Text>
-            <TouchableOpacity 
-              style={styles.retryButton}
-              onPress={() => {
-                setDoctorsError(null);
-                setLoadingDoctors(true);
-                apiService.get('/doctors/active')
-                  .then((response: any) => {
-                    if (response.success && response.data) {
-                      const doctorsData = response.data.data || response.data;
-                      if (Array.isArray(doctorsData)) {
-                        const approvedDoctors = doctorsData
-                          .filter((doctor: any) => doctor.status === 'approved')
-                          .map((doctor: any) => ({
-                            id: doctor.id,
-                            first_name: doctor.first_name,
-                            last_name: doctor.last_name,
-                            name: doctor.display_name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown',
-                            specialization: doctor.specialization || doctor.occupation || 'General Medicine',
-                            rating: doctor.rating || 4.5,
-                            years_of_experience: doctor.years_of_experience || 5,
-                            experience: doctor.years_of_experience || 5,
-                            city: doctor.city,
-                            country: doctor.country,
-                            location: doctor.city && doctor.country ? `${doctor.city}, ${doctor.country}` : doctor.country || 'Unknown',
-                            email: doctor.email,
-                            status: doctor.status,
-                            profile_picture: doctor.profile_picture,
-                            profile_picture_url: doctor.profile_picture_url,
-                            is_online: doctor.is_online_for_instant_sessions || false
-                          }));
-                        setDoctors(approvedDoctors);
+                  setDoctorsError(null);
+                  setLoadingDoctors(true);
+                  apiService.get('/doctors/active')
+                    .then((response: any) => {
+                      if (response.success && response.data) {
+                        const doctorsData = response.data.data || response.data;
+                        if (Array.isArray(doctorsData)) {
+                          const approvedDoctors = doctorsData
+                            .filter((doctor: any) => doctor.status === 'approved')
+                            .map((doctor: any) => ({
+                              id: doctor.id,
+                              first_name: doctor.first_name,
+                              last_name: doctor.last_name,
+                              name: doctor.display_name || `${doctor.first_name || ''} ${doctor.last_name || ''}`.trim() || 'Dr. Unknown',
+                              specialization: doctor.specialization || doctor.occupation || 'General Medicine',
+                              rating: doctor.rating || 4.5,
+                              years_of_experience: doctor.years_of_experience || 5,
+                              experience: doctor.years_of_experience || 5,
+                              city: doctor.city,
+                              country: doctor.country,
+                              location: doctor.city && doctor.country ? `${doctor.city}, ${doctor.country}` : doctor.country || 'Unknown',
+                              email: doctor.email,
+                              status: doctor.status,
+                              profile_picture: doctor.profile_picture,
+                              profile_picture_url: doctor.profile_picture_url,
+                              is_online: doctor.is_online_for_instant_sessions || false
+                            }));
+                          setDoctors(approvedDoctors);
+                        } else {
+                          setDoctors([]);
+                        }
                       } else {
                         setDoctors([]);
                       }
-                    } else {
+                    })
+                    .catch((error) => {
+                      console.error('Error retrying doctors fetch:', error);
+                      setDoctorsError('Failed to load doctors. Please try again later.');
                       setDoctors([]);
-                    }
-                  })
-                  .catch((error) => {
-                    console.error('Error retrying doctors fetch:', error);
-                    setDoctorsError('Failed to load doctors. Please try again later.');
-                    setDoctors([]);
-                  })
-                  .finally(() => setLoadingDoctors(false));
-              }}
-            >
-              <Text style={styles.retryButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filteredAndSortedDoctors.length === 0 ? (
-          <View style={styles.noResultsContainer}>
-            <Text style={styles.noResultsText}>No doctors found</Text>
-            <Text style={styles.noResultsSubtext}>
-              {searchQuery ? 'Try adjusting your search criteria' : 'Check back later for available doctors'}
-            </Text>
-          </View>
-        ) : (
-          // Show hybrid of skeleton and real cards
-          (() => {
-            const totalToShow = loadingDoctors && !hasAnimatedDoctors.current 
-              ? Math.max(6, filteredAndSortedDoctors.length) 
-              : filteredAndSortedDoctors.length;
-            
-            return Array.from({ length: totalToShow }).map((_, index) => {
-              const doctor = filteredAndSortedDoctors[index];
-              const isVisible = index < visibleDoctorCards;
-              
-              // If already animated before, show all real cards immediately
-              if (hasAnimatedDoctors.current && doctor) {
+                    })
+                    .finally(() => setLoadingDoctors(false));
+                }}
+              >
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : filteredAndSortedDoctors.length === 0 ? (
+            <View style={styles.noResultsContainer}>
+              <Text style={styles.noResultsText}>No doctors found</Text>
+              <Text style={styles.noResultsSubtext}>
+                {searchQuery ? 'Try adjusting your search criteria' : 'Check back later for available doctors'}
+              </Text>
+            </View>
+          ) : (
+            // Show hybrid of skeleton and real cards
+            (() => {
+              const totalToShow = loadingDoctors && !hasAnimatedDoctors.current
+                ? Math.max(6, filteredAndSortedDoctors.length)
+                : filteredAndSortedDoctors.length;
+
+              return Array.from({ length: totalToShow }).map((_, index) => {
+                const doctor = filteredAndSortedDoctors[index];
+                const isVisible = index < visibleDoctorCards;
+
+                // If already animated before, show all real cards immediately
+                if (hasAnimatedDoctors.current && doctor) {
+                  return (
+                    <DoctorCard
+                      key={doctor.id}
+                      doctor={doctor}
+                      onPress={handleViewDoctorDetails}
+                      onFavoriteChange={() => setFavoritesRefreshTrigger(prev => prev + 1)}
+                    />
+                  );
+                }
+
+                // Show skeleton if card hasn't loaded yet or isn't visible
+                if (!doctor || !isVisible) {
+                  return (
+                    <View key={`skeleton-${index}`}>
+                      <DoctorCardSkeleton count={1} />
+                    </View>
+                  );
+                }
+
+                // First time animation for loaded card
+                const animValue = doctorCardAnimations[doctor.id] || new Animated.Value(0);
+
                 return (
-                  <DoctorCard
+                  <Animated.View
                     key={doctor.id}
-                    doctor={doctor}
-                    onPress={handleViewDoctorDetails}
-                  />
+                    style={{
+                      opacity: animValue,
+                      transform: [
+                        {
+                          translateY: animValue.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [20, 0],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    <DoctorCard
+                      doctor={doctor}
+                      onPress={handleViewDoctorDetails}
+                      onFavoriteChange={() => setFavoritesRefreshTrigger(prev => prev + 1)}
+                    />
+                  </Animated.View>
                 );
-              }
-              
-              // Show skeleton if card hasn't loaded yet or isn't visible
-              if (!doctor || !isVisible) {
-                return (
-                  <View key={`skeleton-${index}`}>
-                    <DoctorCardSkeleton count={1} />
-                  </View>
-                );
-              }
-              
-              // First time animation for loaded card
-              const animValue = doctorCardAnimations[doctor.id] || new Animated.Value(0);
-              
-              return (
-                <Animated.View
-                  key={doctor.id}
-                  style={{
-                    opacity: animValue,
-                    transform: [
-                      {
-                        translateY: animValue.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [20, 0],
-                        }),
-                      },
-                    ],
-                  }}
-                >
-                  <DoctorCard
-                    doctor={doctor}
-                    onPress={handleViewDoctorDetails}
-                  />
-                </Animated.View>
-              );
-            });
-          })()
-        )}
-      </View>
-    </ScrollView>
+              });
+            })()
+          )}
+        </View>
+      </ScrollView>
     );
   };
 
@@ -2808,8 +2855,8 @@ export default function PatientDashboard() {
     // Handle both string and numeric status values
     const statusStr = String(status);
     const statusNum = Number(status);
-    
-    switch(statusStr) {
+
+    switch (statusStr) {
       case 'pending':
       case '0':
         return { color: '#FFA500', text: 'Pending', icon: 'clock' };
@@ -2859,7 +2906,7 @@ export default function PatientDashboard() {
       try {
         // Handle different date formats
         let date: Date;
-        
+
         // If it's already in MM/DD/YYYY format, parse it properly
         if (dateStr && dateStr.includes('/')) {
           const parts = dateStr.split('/');
@@ -2867,7 +2914,7 @@ export default function PatientDashboard() {
             const month = parseInt(parts[0]) - 1; // Month is 0-indexed
             const day = parseInt(parts[1]);
             const year = parseInt(parts[2]);
-            
+
             // Validate the date components
             if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year > 1900) {
               date = new Date(year, month, day);
@@ -2881,12 +2928,12 @@ export default function PatientDashboard() {
           // Try parsing as ISO string or other formats
           date = new Date(dateStr);
         }
-        
+
         // Check if the date is valid
         if (isNaN(date.getTime())) {
           return 'Invalid Date';
         }
-        
+
         return date.toLocaleDateString('en-US', {
           weekday: 'short',
           month: 'short',
@@ -2915,8 +2962,8 @@ export default function PatientDashboard() {
       .sort((a, b) => (b.__ts || 0) - (a.__ts || 0));
 
     return (
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        style={styles.content}
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -2957,18 +3004,18 @@ export default function PatientDashboard() {
                       })()}
                     </Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                  </View>
+                      <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                        <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                        <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                      </View>
                       {appt.appointment_type || appt.type ? (
                         <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
                           <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
-                </View>
+                        </View>
                       ) : null}
-              </View>
-        </View>
+                    </View>
                   </View>
+                </View>
               </TouchableOpacity>
             ))
           )}
@@ -3018,14 +3065,14 @@ export default function PatientDashboard() {
                 {dt ? `${dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' })} • ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${appt.date} • ${appt.time}`}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
-                    <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
-                    <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
-                  </View>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+                  <FontAwesome name={getStatusIcon(appt.status) as any} size={12} color="#fff" />
+                  <Text style={styles.statusBadgeText}>{getStatusText(appt.status)}</Text>
+                </View>
                 {appt.appointment_type || appt.type ? (
                   <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8, marginLeft: 8 }}>
                     <Text style={{ color: '#2E7D32', fontWeight: '600' }}>{String(appt.appointment_type || appt.type)}</Text>
-                </View>
+                  </View>
                 ) : null}
               </View>
               {appt.reason && appt.reason.trim() !== '' ? (
@@ -3034,25 +3081,25 @@ export default function PatientDashboard() {
                   <Text style={{ color: '#666' }}>{String(appt.reason)}</Text>
                 </View>
               ) : null}
-                  </View>
-                </View>
-              </View>
+            </View>
+          </View>
+        </View>
       </Modal>
     );
   };
 
-    // Sidebar open/close handlers
-    const openSidebar = () => {
-      setSidebarVisible(true);
-      if (Platform.OS === 'web') {
-        setWebSidebarTransform(0);
-      } else {
-        Animated.timing(sidebarAnim, {
-          toValue: 1,
-          duration: 350,
-          useNativeDriver: true,
-        }).start();
-      }
+  // Sidebar open/close handlers
+  const openSidebar = () => {
+    setSidebarVisible(true);
+    if (Platform.OS === 'web') {
+      setWebSidebarTransform(0);
+    } else {
+      Animated.timing(sidebarAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }).start();
+    }
   };
 
   const closeSidebar = () => {
@@ -3072,20 +3119,20 @@ export default function PatientDashboard() {
 
   // Main content switcher
   let mainContent;
-    switch (activeTab) {
-      case 'messages':
+  switch (activeTab) {
+    case 'messages':
       mainContent = renderMessagesContent();
       break;
-      case 'profile':
+    case 'profile':
       mainContent = renderProfileContent();
       break;
-      case 'discover':
+    case 'discover':
       mainContent = renderDiscoverDoctorsContent();
       break;
-      case 'appointments':
+    case 'appointments':
       mainContent = renderAppointmentsContent();
       break;
-      case 'blogs':
+    case 'blogs':
       mainContent = (
         <Blog
           hideBottomNav
@@ -3117,8 +3164,8 @@ export default function PatientDashboard() {
 
               {/* Centered content based on active tab */}
               {activeTab === 'home' && (
-                <Image 
-                  source={require('../assets/images/DA logo green.png')} 
+                <Image
+                  source={require('../assets/images/DA logo green.png')}
                   style={styles.headerLogo}
                   resizeMode="contain"
                 />
@@ -3216,19 +3263,19 @@ export default function PatientDashboard() {
       );
       break;
     case 'home':
-      default:
+    default:
       mainContent = renderHomeContent();
       break;
-    }
+  }
 
   // 1. Add renderSubscriptionsContent (from backup, slightly adapted for overlay)
   const renderSubscriptionsContent = () => {
     // Find the selected plan object
     const selectedPlan = subscriptionPlans.find(plan => plan.id === selectedPlanId) || null;
-    
+
     // Use subscription data directly for active plan pricing instead of searching in plans array
     let activePlan = null;
-    
+
     if (currentSubscription) {
       // Try to get plan data from subscription first
       activePlan = {
@@ -3241,7 +3288,7 @@ export default function PatientDashboard() {
         videoCalls: currentSubscription.totalVideoCalls || 0,
         features: [] // We'll populate this if needed
       };
-      
+
       // If subscription data is missing price info, try to find it in plans array as fallback
       if (!currentSubscription.plan_price || currentSubscription.plan_price === 0) {
         const planFromArray = subscriptionPlans.find(plan => plan.id === currentSubscription.plan_id);
@@ -3252,7 +3299,7 @@ export default function PatientDashboard() {
         }
       }
     }
-    
+
     // Debug logging
     console.log('PatientDashboard: Active plan data:', {
       currentSubscription,
@@ -3260,7 +3307,7 @@ export default function PatientDashboard() {
       planPrice: currentSubscription?.plan_price,
       planCurrency: currentSubscription?.plan_currency
     });
-  return (
+    return (
       <View style={{
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
@@ -3285,12 +3332,12 @@ export default function PatientDashboard() {
           marginBottom: 20,
         }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-            <TouchableOpacity 
-              onPress={() => setShowSubscriptions(false)} 
-              style={{ 
-                position: 'absolute', 
-                left: 0, 
-                top: 0, 
+            <TouchableOpacity
+              onPress={() => setShowSubscriptions(false)}
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
                 padding: 8,
                 backgroundColor: '#F8F9FA',
                 borderRadius: 12,
@@ -3303,11 +3350,11 @@ export default function PatientDashboard() {
             >
               <Icon name="arrowLeft" size={20} color="#666" />
             </TouchableOpacity>
-            <Text style={{ 
-              fontSize: 24, 
-              fontWeight: 'bold', 
-              color: '#222', 
-              textAlign: 'center' 
+            <Text style={{
+              fontSize: 24,
+              fontWeight: 'bold',
+              color: '#222',
+              textAlign: 'center'
             }}>
               {currentSubscription ? 'Add Sessions' : 'Health Plans'}
             </Text>
@@ -3320,7 +3367,7 @@ export default function PatientDashboard() {
           }}>
             {currentSubscription ? 'Choose a plan to add more sessions' : 'Select the perfect plan for your health needs'}
           </Text>
-          
+
           {/* Clean Location Indicator */}
           {currentLocationInfo && (
             <View style={{
@@ -3334,14 +3381,14 @@ export default function PatientDashboard() {
               borderRadius: 20,
               alignSelf: 'center',
             }}>
-              <Icon 
-                name={(currentLocationInfo as any).source === 'gps' ? "mapMarker" : "user"} 
-                size={16} 
-                color="#4CAF50" 
+              <Icon
+                name={(currentLocationInfo as any).source === 'gps' ? "mapMarker" : "user"}
+                size={16}
+                color="#4CAF50"
               />
-              <Text style={{ 
-                fontSize: 12, 
-                color: '#666', 
+              <Text style={{
+                fontSize: 12,
+                color: '#666',
                 marginLeft: 6,
                 fontWeight: '500'
               }}>
@@ -3350,8 +3397,8 @@ export default function PatientDashboard() {
             </View>
           )}
         </View>
-        <ScrollView 
-          style={{ flex: 1, paddingHorizontal: 12 }} 
+        <ScrollView
+          style={{ flex: 1, paddingHorizontal: 12 }}
           contentContainerStyle={{ paddingBottom: Math.max(100, insets.bottom + 24) }}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -3396,7 +3443,7 @@ export default function PatientDashboard() {
               }}>
                 <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFFFFF' }}>CURRENT PLAN</Text>
               </View>
-              
+
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                 <View style={{
                   width: 48,
@@ -3418,14 +3465,14 @@ export default function PatientDashboard() {
                   </Text>
                 </View>
               </View>
-              
+
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 }}>
                 <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
                   {LocationService.getCurrencySymbol(activePlan.currency)}{activePlan.price.toLocaleString()}
                 </Text>
                 <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
               </View>
-              
+
               <TouchableOpacity
                 style={{
                   backgroundColor: '#4CAF50',
@@ -3456,7 +3503,7 @@ export default function PatientDashboard() {
               {/* Session Details - Modern Grid Layout */}
               <View style={{ marginBottom: 16 }}>
                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>Plan Benefits</Text>
-                
+
                 <View style={{
                   backgroundColor: '#F8F9FA',
                   borderRadius: 12,
@@ -3485,7 +3532,7 @@ export default function PatientDashboard() {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {/* Voice Calls */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                     <View style={{
@@ -3508,7 +3555,7 @@ export default function PatientDashboard() {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {/* Video Calls */}
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{
@@ -3533,7 +3580,7 @@ export default function PatientDashboard() {
                   </View>
                 </View>
               </View>
-              
+
               {/* Additional Features */}
               {activePlan.features && activePlan.features.length > 0 && (
                 <View>
@@ -3564,17 +3611,17 @@ export default function PatientDashboard() {
               )}
             </View>
           )}
-          
-          
-          
-          
+
+
+
+
 
           {plansError ? (
             <View style={styles.errorContainer}>
               <Icon name="warning" size={20} color="#666" />
               <Text style={styles.errorText}>Unable to Load Plans</Text>
               <Text style={styles.errorSubtext}>{plansError}</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.retryButton}
                 onPress={() => {
                   setPlansError(null);
@@ -3585,7 +3632,7 @@ export default function PatientDashboard() {
                       if (response.success && (response as any).plans) {
                         const userCurrency = LocationService.getCurrencyForCountry(userCountry);
                         const filteredPlans = (response as any).plans.filter((plan: any) => plan.currency === userCurrency);
-                        
+
                         const transformedPlans = filteredPlans.map((plan: any) => ({
                           id: plan.id.toString(),
                           name: plan.name,
@@ -3623,271 +3670,271 @@ export default function PatientDashboard() {
             </View>
           ) : (
             subscriptionPlans.map((plan) => {
-            const isSelected = selectedPlanId === plan.id;
-            const isActivePlan = currentSubscription && currentSubscription.plan_id === plan.id;
-            
-            return (
-              <View key={plan.id} style={{
-                backgroundColor: isActivePlan ? '#F8FFF8' : '#FFFFFF',
-                borderRadius: 20,
-                borderWidth: 2,
-                borderColor: isActivePlan ? '#4CAF50' : isSelected ? '#4CAF50' : '#E6ECE3',
-                marginBottom: 20,
-                padding: 24,
-                shadowColor: isActivePlan ? '#4CAF50' : '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: isActivePlan ? 0.15 : 0.08,
-                shadowRadius: isActivePlan ? 12 : 8,
-                elevation: isActivePlan ? 6 : 3,
-                position: 'relative',
-              }}>
-                {/* Active Plan Badge - Highest Priority */}
-                {isActivePlan && (
-                  <View style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: 16,
-                    backgroundColor: '#4CAF50',
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    zIndex: 3,
-                  }}>
-                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>ACTIVE</Text>
-                  </View>
-                )}
-                
-                {/* Popular Badge - Only show if not active */}
-                {plan.popular && !isActivePlan && (
-                  <View style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: 16,
-                    backgroundColor: '#FF6B35',
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    zIndex: 1,
-                  }}>
-                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>POPULAR</Text>
-                  </View>
-                )}
-                
-                {/* Best Value Badge - Only show if not active */}
-                {plan.bestValue && !isActivePlan && (
-                  <View style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: 16,
-                    backgroundColor: '#4CAF50',
-                    paddingHorizontal: 12,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                    zIndex: 1,
-                  }}>
-                    <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>BEST VALUE</Text>
-                  </View>
-                )}
-                {/* Plan Header */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                  <View style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: isActivePlan ? '#E8F5E8' : '#F8F9FA',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 16,
-                  }}>
-                    <Icon 
-                      name={isActivePlan ? "check" : "heart"} 
-                      size={24} 
-                      color={isActivePlan ? "#4CAF50" : "#666"} 
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ 
-                      fontSize: 20, 
-                      fontWeight: 'bold', 
-                      color: isActivePlan ? '#4CAF50' : '#222', 
-                      marginBottom: 4 
-                    }}>
-                      {plan.name}
-                    </Text>
-                    <Text style={{ 
-                      fontSize: 14, 
-                      color: isActivePlan ? '#4CAF50' : '#666',
-                      fontWeight: '600'
-                    }}>
-                      {isActivePlan ? 'Your Current Plan' : 'Health Plan'}
-                    </Text>
-                  </View>
-                </View>
-                
-                {/* Price Section */}
-                <View style={{ 
-                  flexDirection: 'row', 
-                  alignItems: 'flex-end', 
+              const isSelected = selectedPlanId === plan.id;
+              const isActivePlan = currentSubscription && currentSubscription.plan_id === plan.id;
+
+              return (
+                <View key={plan.id} style={{
+                  backgroundColor: isActivePlan ? '#F8FFF8' : '#FFFFFF',
+                  borderRadius: 20,
+                  borderWidth: 2,
+                  borderColor: isActivePlan ? '#4CAF50' : isSelected ? '#4CAF50' : '#E6ECE3',
                   marginBottom: 20,
-                  paddingVertical: 16,
-                  paddingHorizontal: 20,
-                  backgroundColor: '#F8F9FA',
-                  borderRadius: 12,
+                  padding: 24,
+                  shadowColor: isActivePlan ? '#4CAF50' : '#000',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: isActivePlan ? 0.15 : 0.08,
+                  shadowRadius: isActivePlan ? 12 : 8,
+                  elevation: isActivePlan ? 6 : 3,
+                  position: 'relative',
                 }}>
-                  <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
-                    {LocationService.getCurrencySymbol(plan.currency)}{plan.price.toLocaleString()}
-                  </Text>
-                  <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
-                </View>
-                
-                {/* Action Button */}
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: isActivePlan ? '#E8F5E8' : isSelected ? '#4CAF50' : '#F5F8F3',
-                    borderRadius: 16,
-                    paddingVertical: 16,
-                    alignItems: 'center',
-                    marginBottom: 20,
-                    borderWidth: isActivePlan ? 2 : isSelected ? 0 : 1,
-                    borderColor: isActivePlan ? '#4CAF50' : isSelected ? 'transparent' : '#E0E0E0',
-                    shadowColor: isSelected ? '#4CAF50' : 'transparent',
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: isSelected ? 0.3 : 0,
-                    shadowRadius: 8,
-                    elevation: isSelected ? 4 : 0,
-                  }}
-                  onPress={() => !isActivePlan && setSelectedPlanId(plan.id)}
-                  activeOpacity={isActivePlan ? 1 : 0.85}
-                  disabled={isActivePlan}
-                >
-                  <Text style={{ 
-                    fontWeight: 'bold', 
-                    fontSize: 18, 
-                    color: isActivePlan ? '#4CAF50' : isSelected ? '#FFFFFF' : '#222' 
-                  }}>
-                    {isActivePlan ? `Current Plan` : currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
-                  </Text>
-                </TouchableOpacity>
-                {/* Session Details - Modern Grid */}
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>What's Included</Text>
-                  
+                  {/* Active Plan Badge - Highest Priority */}
+                  {isActivePlan && (
+                    <View style={{
+                      position: 'absolute',
+                      top: -8,
+                      right: 16,
+                      backgroundColor: '#4CAF50',
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 12,
+                      zIndex: 3,
+                    }}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>ACTIVE</Text>
+                    </View>
+                  )}
+
+                  {/* Popular Badge - Only show if not active */}
+                  {plan.popular && !isActivePlan && (
+                    <View style={{
+                      position: 'absolute',
+                      top: -8,
+                      right: 16,
+                      backgroundColor: '#FF6B35',
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 12,
+                      zIndex: 1,
+                    }}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>POPULAR</Text>
+                    </View>
+                  )}
+
+                  {/* Best Value Badge - Only show if not active */}
+                  {plan.bestValue && !isActivePlan && (
+                    <View style={{
+                      position: 'absolute',
+                      top: -8,
+                      right: 16,
+                      backgroundColor: '#4CAF50',
+                      paddingHorizontal: 12,
+                      paddingVertical: 4,
+                      borderRadius: 12,
+                      zIndex: 1,
+                    }}>
+                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>BEST VALUE</Text>
+                    </View>
+                  )}
+                  {/* Plan Header */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                    <View style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: isActivePlan ? '#E8F5E8' : '#F8F9FA',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: 16,
+                    }}>
+                      <Icon
+                        name={isActivePlan ? "check" : "heart"}
+                        size={24}
+                        color={isActivePlan ? "#4CAF50" : "#666"}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{
+                        fontSize: 20,
+                        fontWeight: 'bold',
+                        color: isActivePlan ? '#4CAF50' : '#222',
+                        marginBottom: 4
+                      }}>
+                        {plan.name}
+                      </Text>
+                      <Text style={{
+                        fontSize: 14,
+                        color: isActivePlan ? '#4CAF50' : '#666',
+                        fontWeight: '600'
+                      }}>
+                        {isActivePlan ? 'Your Current Plan' : 'Health Plan'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Price Section */}
                   <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'flex-end',
+                    marginBottom: 20,
+                    paddingVertical: 16,
+                    paddingHorizontal: 20,
                     backgroundColor: '#F8F9FA',
                     borderRadius: 12,
-                    padding: 16,
-                    marginBottom: 12,
                   }}>
-                    {/* Text Sessions */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                      <View style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        backgroundColor: '#E8F5E8',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 12,
-                      }}>
-                        <Icon name="message" size={16} color="#4CAF50" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                          {plan.textSessions} Text Sessions
-                        </Text>
-                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                          10 minutes each
-                        </Text>
-                      </View>
-                    </View>
-                    
-                    {/* Voice Calls */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                      <View style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        backgroundColor: '#E8F5E8',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 12,
-                      }}>
-                        <Icon name="voice" size={16} color="#4CAF50" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                          {plan.voiceCalls} Voice Calls
-                        </Text>
-                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                          Audio consultations
-                        </Text>
-                      </View>
-                    </View>
-                    
-                    {/* Video Calls */}
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <View style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        backgroundColor: '#E8F5E8',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 12,
-                      }}>
-                        <Icon name="video" size={16} color="#4CAF50" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                          {plan.videoCalls} Video Calls
-                        </Text>
-                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                          Face-to-face consultations
-                        </Text>
-                      </View>
-                    </View>
+                    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
+                      {LocationService.getCurrencySymbol(plan.currency)}{plan.price.toLocaleString()}
+                    </Text>
+                    <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
                   </View>
-                </View>
-                
-                {/* Additional Features */}
-                {plan.features && plan.features.length > 0 && (
-                  <View>
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
+
+                  {/* Action Button */}
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: isActivePlan ? '#E8F5E8' : isSelected ? '#4CAF50' : '#F5F8F3',
+                      borderRadius: 16,
+                      paddingVertical: 16,
+                      alignItems: 'center',
+                      marginBottom: 20,
+                      borderWidth: isActivePlan ? 2 : isSelected ? 0 : 1,
+                      borderColor: isActivePlan ? '#4CAF50' : isSelected ? 'transparent' : '#E0E0E0',
+                      shadowColor: isSelected ? '#4CAF50' : 'transparent',
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: isSelected ? 0.3 : 0,
+                      shadowRadius: 8,
+                      elevation: isSelected ? 4 : 0,
+                    }}
+                    onPress={() => !isActivePlan && setSelectedPlanId(plan.id)}
+                    activeOpacity={isActivePlan ? 1 : 0.85}
+                    disabled={isActivePlan}
+                  >
+                    <Text style={{
+                      fontWeight: 'bold',
+                      fontSize: 18,
+                      color: isActivePlan ? '#4CAF50' : isSelected ? '#FFFFFF' : '#222'
+                    }}>
+                      {isActivePlan ? `Current Plan` : currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Session Details - Modern Grid */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>What's Included</Text>
+
                     <View style={{
                       backgroundColor: '#F8F9FA',
                       borderRadius: 12,
                       padding: 16,
+                      marginBottom: 12,
                     }}>
-                      {plan.features.map((feature: string, idx: number) => (
-                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                          <View style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: 10,
-                            backgroundColor: '#4CAF50',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            marginRight: 12,
-                          }}>
-                            <Icon name="check" size={12} color="#FFFFFF" />
-                          </View>
-                          <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
+                      {/* Text Sessions */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                        <View style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: '#E8F5E8',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}>
+                          <Icon name="message" size={16} color="#4CAF50" />
                         </View>
-                      ))}
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                            {plan.textSessions} Text Sessions
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                            10 minutes each
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Voice Calls */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                        <View style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: '#E8F5E8',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}>
+                          <Icon name="voice" size={16} color="#4CAF50" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                            {plan.voiceCalls} Voice Calls
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                            Audio consultations
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Video Calls */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          backgroundColor: '#E8F5E8',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginRight: 12,
+                        }}>
+                          <Icon name="video" size={16} color="#4CAF50" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                            {plan.videoCalls} Video Calls
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                            Face-to-face consultations
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
-                )}
-              </View>
-            );
-          })
+
+                  {/* Additional Features */}
+                  {plan.features && plan.features.length > 0 && (
+                    <View>
+                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
+                      <View style={{
+                        backgroundColor: '#F8F9FA',
+                        borderRadius: 12,
+                        padding: 16,
+                      }}>
+                        {plan.features.map((feature: string, idx: number) => (
+                          <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                            <View style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 10,
+                              backgroundColor: '#4CAF50',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginRight: 12,
+                            }}>
+                              <Icon name="check" size={12} color="#FFFFFF" />
+                            </View>
+                            <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })
           )}
           <View style={{ height: 32 }} />
         </ScrollView>
         {/* Modern Bottom Action Button */}
-        <View style={{ 
-          position: 'absolute', 
-          left: 0, 
-          right: 0, 
+        <View style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
           bottom: 0,
           backgroundColor: '#FFFFFF',
           paddingTop: 20,
@@ -3962,12 +4009,12 @@ export default function PatientDashboard() {
       <StatusBar backgroundColor={isDarkMode ? '#151718' : '#fff'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
       {/* Hide header for DocBot tab */}
       {activeTab !== 'docbot' && (
-        <View style={{ 
-          flexDirection: 'row', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          padding: 4, 
-          backgroundColor: '#FFFFFF', 
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: 4,
+          backgroundColor: '#FFFFFF',
           zIndex: 10,
           marginBottom: 8,
         }}>
@@ -3978,11 +4025,11 @@ export default function PatientDashboard() {
               <View style={styles.hamburgerLine3} />
             </View>
           </TouchableOpacity>
-          
+
           {/* Header content based on active tab */}
           {activeTab === 'home' ? (
-            <Image 
-              source={require('../assets/images/DA logo green.png')} 
+            <Image
+              source={require('../assets/images/DA logo green.png')}
               style={styles.headerLogo}
               resizeMode="contain"
             />
@@ -3999,26 +4046,40 @@ export default function PatientDashboard() {
               <Text style={styles.headerTitle}>Blogs</Text>
             </View>
           ) : (
-            <Image 
-              source={require('../assets/images/DA logo green.png')} 
+            <Image
+              source={require('../assets/images/DA logo green.png')}
               style={styles.headerLogo}
               resizeMode="contain"
             />
           )}
-          
-          {/* Notification Icon - Right side with margin */}
-          <TouchableOpacity 
-            style={styles.notificationButton}
-            onPress={() => router.push('/notifications')}
-          >
-            <FontAwesome name="bell" size={20} color="#4CAF50" />
-            {/* Unread notification badge */}
-            {unreadNotificationCount > 0 && (
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+
+          {/* Right side button - Bookmark for Discover, Notification for others */}
+          {activeTab === 'discover' ? (
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon
+                name={showFavoritesOnly ? 'bookmark' : 'bookmarkO'}
+                size={20}
+                color={showFavoritesOnly ? '#4CAF50' : '#CCC'}
+              />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.notificationButton}
+              onPress={() => router.push('/notifications')}
+            >
+              <FontAwesome name="bell" size={20} color="#4CAF50" />
+              {/* Unread notification badge */}
+              {unreadNotificationCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
       <View style={styles.mainContent}>
@@ -4042,8 +4103,8 @@ export default function PatientDashboard() {
           }
         })()}
       </View>
-      
-      <Animated.View 
+
+      <Animated.View
         style={[
           activeTab === 'docbot' && {
             transform: [{
@@ -4149,6 +4210,9 @@ export default function PatientDashboard() {
           <Animated.View
             style={[
               styles.sidebar,
+              {
+                bottom: insets.bottom,
+              },
               Platform.OS === 'web' ? {
                 transform: `translateX(${webSidebarTransform}px)`,
               } : {
@@ -4165,78 +4229,62 @@ export default function PatientDashboard() {
           >
             <ScrollView 
               style={styles.sidebarScrollView}
-              contentContainerStyle={[styles.sidebarContent, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 20, flexGrow: 1 }]}
+              contentContainerStyle={[styles.sidebarContent, { paddingTop: insets.top + 32, paddingBottom: 20, flexGrow: 1 }]}
               showsVerticalScrollIndicator={true}
               bounces={true}
-              alwaysBounceVertical={false}
-              scrollEnabled={true}
-              nestedScrollEnabled={true}
-              keyboardShouldPersistTaps="handled"
             >
-            <View style={{ flexGrow: 1 }}>
-            {/* Profile Header */}
-            <View style={styles.profileHeader}>
-              {user?.profile_picture_url ? (
-                <Image source={{ uri: user.profile_picture_url }} style={styles.profileImage} />
-              ) : user?.profile_picture ? (
-                <Image source={{ uri: user.profile_picture }} style={styles.profileImage} />
-              ) : (
-                <Image source={profileImage} style={styles.profileImage} />
-              )}
-              <Text style={styles.profileName}>{userData?.first_name && userData?.last_name ? `${userData.first_name} ${userData.last_name}` : userData?.display_name || user?.display_name || 'Patient'}</Text>
-            </View>
-            
-            {/* Profile Section */}
-            <View style={styles.sectionGroup}>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); setShowSubscriptions(true); }}>
-                <View style={styles.iconBox}><Icon name="heart" size={20} color="#E91E63" /></View>
-                <Text style={styles.sidebarMenuItemText}>My Health Plan</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#999" />
+                {/* Profile Section */}
+                <View style={styles.modernProfileSection}>
+                  {user?.profile_picture_url ? (
+                    <Image source={{ uri: user.profile_picture_url }} style={styles.modernProfileImage} />
+                  ) : user?.profile_picture ? (
+                    <Image source={{ uri: user.profile_picture }} style={styles.modernProfileImage} />
+                  ) : (
+                    <Image source={profileImage} style={styles.modernProfileImage} />
+                  )}
+                  <Text style={styles.modernProfileName}>
+                    {userData?.first_name && userData?.last_name ? `${userData.first_name} ${userData.last_name}` : userData?.display_name || user?.display_name || 'Patient'}
+                  </Text>
+                  <TouchableOpacity onPress={() => { closeSidebar(); router.push('/patient-profile'); }}>
+                    <Text style={styles.viewProfileLink}>View profile</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/patient-profile'); }}>
-                <View style={styles.iconBox}><Icon name="eye" size={20} color="#2196F3" /></View>
-                <Text style={styles.sidebarMenuItemText}>View Profile</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#999" />
+
+                {/* Menu Items */}
+                <View style={styles.modernMenuSection}>
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); setShowSubscriptions(true); }}>
+                    <Icon name="heart" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>My Health Plan</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); router.push('/patient-profile'); }}>
+                    <Icon name="eye" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>View Profile</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); router.push('/edit-patient-profile'); }}>
+                    <Icon name="edit" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>Edit Profile</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); router.push('/help-support'); }}>
+                    <Icon name="questionCircle" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>Help & Support</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); router.push('/patient-settings'); }}>
+                    <Icon name="cog" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>Settings</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/edit-patient-profile'); }}>
-                <View style={styles.iconBox}><Icon name="edit" size={20} color="#FF9800" /></View>
-                <Text style={styles.sidebarMenuItemText}>Edit Profile</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#999" />
+
+                {/* Logout at Bottom */}
+                <View style={{ marginTop: 'auto', paddingTop: 32 }}>
+                  <TouchableOpacity style={styles.modernMenuItem} onPress={() => { closeSidebar(); handleLogout(); }}>
+                    <Icon name="signOut" size={20} color="#666" />
+                    <Text style={styles.modernMenuText}>Log out</Text>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/help-support'); }}>
-                <View style={styles.iconBox}><Icon name="questionCircle" size={20} color="#9C27B0" /></View>
-                <Text style={styles.sidebarMenuItemText}>Help & Support</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#999" />
-                </View>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sidebarMenuItem} onPress={() => { closeSidebar(); router.push('/patient-settings'); }}>
-                <View style={styles.iconBox}><Icon name="cog" size={20} color="#607D8B" /></View>
-                <Text style={styles.sidebarMenuItemText}>Settings</Text>
-                <View style={{ marginLeft: 'auto' }}>
-                  <Icon name="chevronRight" size={20} color="#999" />
-                </View>
-              </TouchableOpacity>
-            </View>
-              
-            
-            </View>
-            {/* Logout */}
-            <View style={{ paddingTop: 12 }}>
-            <TouchableOpacity style={[styles.sidebarMenuItem, styles.lastMenuItem]} onPress={() => { closeSidebar(); handleLogout(); }}>
-              <View style={styles.iconBox}><Icon name="signOut" size={20} color="#FF3B30" /></View>
-              <Text style={[styles.sidebarMenuItemText, { color: '#FF3B30' }]}>Logout</Text>
-              <View style={{ marginLeft: 'auto' }}>
-                <Icon name="chevronRight" size={20} color="#FF3B30" />
-              </View>
-            </TouchableOpacity>
-            </View>
             </ScrollView>
           </Animated.View>
         </View>
@@ -4267,7 +4315,7 @@ export default function PatientDashboard() {
         }}
         availableSpecializations={availableSpecializations}
       />
-      
+
       {/* Onboarding Overlay */}
       <OnboardingOverlay
         visible={showOnboarding}
@@ -4280,6 +4328,22 @@ export default function PatientDashboard() {
         onDismiss={() => {
           setShowOnboarding(false);
           setOnboardingDismissed(true);
+        }}
+      />
+
+      {/* App Tour */}
+      <AppTour
+        visible={showAppTour && !showOnboarding}
+        userType="patient"
+        onComplete={() => {
+          setShowAppTour(false);
+        }}
+        onSkip={() => {
+          setShowAppTour(false);
+        }}
+        elementRefs={tourTabRefs.current}
+        onTabChange={(tab) => {
+          setActiveTab(tab);
         }}
       />
     </SafeAreaView>
@@ -5260,6 +5324,12 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     marginHorizontal: 20,
     marginBottom: 16,
   },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 16,
+  },
   searchBarContainer: {
     marginBottom: 16,
   },
@@ -5268,9 +5338,10 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 14,
     height: 56,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -5278,6 +5349,22 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     elevation: 2,
     borderWidth: 1,
     borderColor: '#E8F5E8',
+  },
+  sideButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E8F5E8',
+    position: 'relative',
   },
   searchInput: {
     flex: 1,
@@ -5502,16 +5589,16 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     position: 'absolute',
     left: 0,
     top: 0,
-    height: '100%',
+    bottom: 0,
     width: 300,
     backgroundColor: '#fff',
-    borderTopLeftRadius: 18,
-    borderBottomLeftRadius: 18,
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
+    shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 8,
   },
   sidebarScrollView: {
     flex: 1,
@@ -5610,6 +5697,51 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     fontSize: 18,
     fontWeight: 'bold',
     color: '#222',
+  },
+  // Modern Sidebar Styles
+  modernProfileSection: {
+    alignItems: 'center',
+    paddingBottom: 24,
+    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  modernProfileImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#F0F0F0',
+  },
+  modernProfileName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 8,
+  },
+  viewProfileLink: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 4,
+  },
+  modernMenuSection: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  modernMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 4,
+    width: '90%',
+  },
+  modernMenuText: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 16,
+    fontWeight: '400',
   },
   sectionHeader: {
     fontSize: 18,

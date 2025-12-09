@@ -357,136 +357,162 @@ class CallSessionController extends Controller
             $sessionDuration = $request->input('session_duration', 0);
             $wasConnected = $request->input('was_connected', false);
 
-            // Find the call session to end
-            $callSession = null;
-            if ($sessionId) {
-                $callSession = CallSession::where('id', $sessionId)
-                    ->where('patient_id', $user->id)
-                    ->first();
-            } elseif ($appointmentId) {
-                $callSession = CallSession::where('appointment_id', $appointmentId)
-                    ->where('patient_id', $user->id)
-                    ->first();
-            }
-
-            if (!$callSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Call session not found'
-                ], 404);
-            }
-
-            // Calculate sessions to deduct based on duration and connection
-            // Convert session duration from seconds to minutes
-            $elapsedMinutes = floor($sessionDuration / 60);
-            $autoDeductions = floor($elapsedMinutes / 10); // Every 10 minutes
-            $manualDeduction = $wasConnected ? 1 : 0; // Only deduct on hangup if connected
-            $totalSessionsToDeduct = $autoDeductions + $manualDeduction;
-
-            // Log billing calculation for debugging
-            Log::info("Call session billing calculation", [
-                'session_duration_seconds' => $sessionDuration,
-                'elapsed_minutes' => $elapsedMinutes,
-                'auto_deductions' => $autoDeductions,
-                'manual_deduction' => $manualDeduction,
-                'total_sessions_to_deduct' => $totalSessionsToDeduct,
-                'was_connected' => $wasConnected
-            ]);
-
-            // Update the call session status
-            $callSession->update([
-                'status' => CallSession::STATUS_ENDED,
-                'ended_at' => now(),
-                'last_activity_at' => now(),
-                'is_connected' => $wasConnected,
-                'call_duration' => $sessionDuration,
-                'sessions_used' => $totalSessionsToDeduct,
-            ]);
-
-            // Process deductions and doctor payments if there are sessions to deduct
-            $deductionResult = [
-                'doctor_payment_success' => false,
-                'patient_deduction_success' => false,
-                'doctor_payment_amount' => 0,
-                'patient_sessions_deducted' => 0,
-                'auto_deductions' => $autoDeductions,
-                'manual_deduction' => $manualDeduction,
-                'errors' => []
-            ];
-
-            if ($totalSessionsToDeduct > 0 && $wasConnected) {
-                // Get patient subscription
-                $patient = $user;
-                $subscription = $patient->subscription;
+            return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId, $sessionDuration, $wasConnected) {
+                // Find the call session to end with lock
+                $query = CallSession::query();
+                if ($sessionId) {
+                    $query->where('id', $sessionId)->where('patient_id', $user->id);
+                } elseif ($appointmentId) {
+                    $query->where('appointment_id', $appointmentId)->where('patient_id', $user->id);
+                } else {
+                    return response()->json(['success' => false, 'message' => 'Session ID or Appointment ID required'], 400);
+                }
                 
-                if ($subscription) {
-                    // Determine call type field
-                    $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-                    
-                    // Check if patient has enough sessions
-                    if ($subscription->$callTypeField >= $totalSessionsToDeduct) {
-                        // Deduct from patient subscription
-                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - $totalSessionsToDeduct);
-                        $subscription->save();
-                        $deductionResult['patient_deduction_success'] = true;
-                        $deductionResult['patient_sessions_deducted'] = $totalSessionsToDeduct;
+                $callSession = $query->lockForUpdate()->first();
 
-                        // Pay the doctor
-                        $doctor = User::find($callSession->doctor_id);
-                        if ($doctor) {
-                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $totalSessionsToDeduct;
-                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-                            
-                            $doctorWallet->credit(
-                                $paymentAmount,
-                                "Payment for {$totalSessionsToDeduct} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
-                                $callType,
-                                $callSession->id,
-                                'call_sessions',
-                                [
-                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                    'session_duration' => $sessionDuration,
-                                    'sessions_used' => $totalSessionsToDeduct,
-                                    'auto_deductions' => $autoDeductions,
-                                    'manual_deduction' => $manualDeduction,
-                                    'currency' => $currency,
-                                    'payment_amount' => $paymentAmount,
-                                ]
-                            );
-                            
-                            $deductionResult['doctor_payment_success'] = true;
-                            $deductionResult['doctor_payment_amount'] = $paymentAmount;
+                if (!$callSession) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Call session not found'
+                    ], 404);
+                }
+
+                // Calculate sessions to deduct based on duration and connection
+                
+                // SECURITY FIX: Validate session_duration against server-side elapsed time
+                // Allow a small buffer (e.g., 60 seconds) for network latency/clock drift
+                $serverElapsedSeconds = $callSession->started_at->diffInSeconds(now());
+                $maxAllowedDuration = $serverElapsedSeconds + 60;
+                
+                if ($sessionDuration > $maxAllowedDuration) {
+                    Log::warning("Suspicious session duration detected", [
+                        'session_id' => $callSession->id,
+                        'reported_duration' => $sessionDuration,
+                        'server_elapsed' => $serverElapsedSeconds,
+                        'capped_at' => $maxAllowedDuration
+                    ]);
+                    $sessionDuration = $maxAllowedDuration;
+                }
+
+                // Convert session duration from seconds to minutes
+                $elapsedMinutes = floor($sessionDuration / 60);
+                $autoDeductions = floor($elapsedMinutes / 10); // Every 10 minutes
+                
+                // FIX: Account for already processed auto-deductions
+                $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
+                $remainingAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
+                
+                $manualDeduction = $wasConnected ? 1 : 0; // Only deduct on hangup if connected
+                $totalSessionsToDeduct = $remainingAutoDeductions + $manualDeduction;
+
+                // Log billing calculation for debugging
+                Log::info("Call session billing calculation", [
+                    'session_duration_seconds' => $sessionDuration,
+                    'elapsed_minutes' => $elapsedMinutes,
+                    'auto_deductions' => $autoDeductions,
+                    'already_processed' => $alreadyProcessed,
+                    'remaining_auto_deductions' => $remainingAutoDeductions,
+                    'manual_deduction' => $manualDeduction,
+                    'total_sessions_to_deduct' => $totalSessionsToDeduct,
+                    'was_connected' => $wasConnected
+                ]);
+
+                // Update the call session status
+                $callSession->update([
+                    'status' => CallSession::STATUS_ENDED,
+                    'ended_at' => now(),
+                    'last_activity_at' => now(),
+                    'is_connected' => $wasConnected,
+                    'call_duration' => $sessionDuration,
+                    'sessions_used' => ($callSession->sessions_used ?? 0) + $totalSessionsToDeduct,
+                    'auto_deductions_processed' => $autoDeductions // Update to full count
+                ]);
+
+                // Process deductions and doctor payments if there are sessions to deduct
+                $deductionResult = [
+                    'doctor_payment_success' => false,
+                    'patient_deduction_success' => false,
+                    'doctor_payment_amount' => 0,
+                    'patient_sessions_deducted' => 0,
+                    'auto_deductions' => $autoDeductions,
+                    'manual_deduction' => $manualDeduction,
+                    'errors' => []
+                ];
+
+                if ($totalSessionsToDeduct > 0 && $wasConnected) {
+                    // Get patient subscription with lock
+                    $patient = $user;
+                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    
+                    if ($subscription) {
+                        // Determine call type field
+                        $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
+                        
+                        // Check if patient has enough sessions
+                        if ($subscription->$callTypeField >= $totalSessionsToDeduct) {
+                            // Deduct from patient subscription
+                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $totalSessionsToDeduct);
+                            $subscription->save();
+                            $deductionResult['patient_deduction_success'] = true;
+                            $deductionResult['patient_sessions_deducted'] = $totalSessionsToDeduct;
+
+                            // Pay the doctor
+                            $doctor = User::find($callSession->doctor_id);
+                            if ($doctor) {
+                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $totalSessionsToDeduct;
+                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                                
+                                $doctorWallet->credit(
+                                    $paymentAmount,
+                                    "Payment for {$totalSessionsToDeduct} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
+                                    $callType,
+                                    $callSession->id,
+                                    'call_sessions',
+                                    [
+                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                        'session_duration' => $sessionDuration,
+                                        'sessions_used' => $totalSessionsToDeduct,
+                                        'auto_deductions' => $autoDeductions,
+                                        'manual_deduction' => $manualDeduction,
+                                        'currency' => $currency,
+                                        'payment_amount' => $paymentAmount,
+                                    ]
+                                );
+                                
+                                $deductionResult['doctor_payment_success'] = true;
+                                $deductionResult['doctor_payment_amount'] = $paymentAmount;
+                            }
+                        } else {
+                            $deductionResult['errors'][] = 'Insufficient remaining calls for deduction';
                         }
                     } else {
-                        $deductionResult['errors'][] = 'Insufficient remaining calls for deduction';
+                        $deductionResult['errors'][] = 'Patient subscription not found';
                     }
-                } else {
-                    $deductionResult['errors'][] = 'Patient subscription not found';
                 }
-            }
 
-            Log::info("Call session ended", [
-                'user_id' => $user->id,
-                'call_session_id' => $callSession->id,
-                'call_type' => $callType,
-                'appointment_id' => $appointmentId,
-                'session_duration' => $sessionDuration,
-                'was_connected' => $wasConnected,
-                'sessions_deducted' => $totalSessionsToDeduct,
-                'auto_deductions' => $autoDeductions,
-                'manual_deduction' => $manualDeduction,
-                'deduction_result' => $deductionResult
-            ]);
+                Log::info("Call session ended", [
+                    'user_id' => $user->id,
+                    'call_session_id' => $callSession->id,
+                    'call_type' => $callType,
+                    'appointment_id' => $appointmentId,
+                    'session_duration' => $sessionDuration,
+                    'was_connected' => $wasConnected,
+                    'sessions_deducted' => $totalSessionsToDeduct,
+                    'auto_deductions' => $autoDeductions,
+                    'manual_deduction' => $manualDeduction,
+                    'deduction_result' => $deductionResult
+                ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Call session ended successfully',
-                'session_duration' => $sessionDuration,
-                'was_connected' => $wasConnected,
-                'sessions_deducted' => $totalSessionsToDeduct,
-                'deduction_result' => $deductionResult
-            ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Call session ended successfully',
+                    'session_duration' => $sessionDuration,
+                    'was_connected' => $wasConnected,
+                    'sessions_deducted' => $totalSessionsToDeduct,
+                    'deduction_result' => $deductionResult
+                ]);
+            });
 
         } catch (\Exception $e) {
             Log::error("Error ending call session", [
@@ -504,125 +530,7 @@ class CallSessionController extends Controller
         }
     }
 
-    /**
-     * Re-send incoming call push for an existing connecting session (rate-limited)
-     */
-    public function reNotify(Request $request): JsonResponse
-    {
-        try {
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not authenticated'
-                ], 401);
-            }
-
-            $appointmentId = $request->input('appointment_id');
-            $doctorId = $request->input('doctor_id');
-            if (!$appointmentId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Appointment ID is required'
-                ], 400);
-            }
-
-            // Find session still connecting
-            $callSession = CallSession::where('appointment_id', $appointmentId)
-                ->whereIn('status', [CallSession::STATUS_CONNECTING, CallSession::STATUS_WAITING_FOR_DOCTOR])
-                ->first();
-            if (!$callSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No connecting session found for re-notify'
-                ], 404);
-            }
-
-            if (!$doctorId) {
-                $doctorId = $callSession->doctor_id;
-            }
-
-            $doctor = User::find($doctorId);
-            if (!$doctor) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Doctor not found'
-                ], 404);
-            }
-
-            // Basic rate limit (10s per appointment)
-            $key = 'call_notify:' . $appointmentId;
-            if (\Illuminate\Support\Facades\Cache::has($key)) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Re-notify skipped due to rate limit'
-                ]);
-            }
-            \Illuminate\Support\Facades\Cache::put($key, 1, 10);
-
-            // Build and send
-            $notified = false;
-            $tokensCount = !empty($doctor->push_token) ? 1 : 0;
-            Log::info('📣 Re-notify incoming call', [
-                'appointment_id' => $appointmentId,
-                'doctor_id' => $doctorId,
-                'tokens_count' => $tokensCount,
-            ]);
-
-            try {
-                $notification = new \App\Notifications\IncomingCallNotification($callSession, $user);
-                if (method_exists($notification, 'toFcm')) {
-                    $payload = $notification->toFcm($doctor);
-                    $sanitized = [
-                        'title' => $payload['title'] ?? null,
-                        'body' => $payload['body'] ?? null,
-                        'data_keys' => array_keys($payload['data'] ?? []),
-                        'data_preview' => [
-                            'type' => $payload['data']['type'] ?? null,
-                            'appointment_id' => $payload['data']['appointment_id'] ?? null,
-                            'call_type' => $payload['data']['call_type'] ?? null,
-                            'doctor_id' => $payload['data']['doctor_id'] ?? null,
-                            'caller_id' => $payload['data']['caller_id'] ?? null,
-                        ],
-                    ];
-                    Log::info('FCM payload (sanitized) for Re-Notify IncomingCall', $sanitized);
-                }
-
-                if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
-                    $doctor->notify($notification);
-                    $notified = true;
-                } else {
-                    Log::warning('⚠️ Re-notify skipped: no token or push disabled', [
-                        'doctor_id' => $doctorId,
-                        'push_enabled' => $doctor->push_notifications_enabled,
-                        'has_token' => $tokensCount > 0,
-                    ]);
-                }
-            } catch (\Throwable $t) {
-                Log::error('Failed to re-notify incoming call', [
-                    'error' => $t->getMessage(),
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => $notified ? 'Re-notify dispatched' : 'Re-notify skipped',
-                'data' => [
-                    'appointment_id' => $appointmentId,
-                    'notified' => $notified,
-                    'tokens' => $tokensCount,
-                ]
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Error in reNotify', [
-                'error' => $e->getMessage(),
-            ]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to re-notify'
-            ], 500);
-        }
-    }
+    // ... reNotify method ...
 
     /**
      * Process call deduction (for periodic billing)
@@ -642,103 +550,106 @@ class CallSessionController extends Controller
             $appointmentId = $request->input('appointment_id');
             $sessionDuration = $request->input('session_duration', 0);
 
-            // Find the active call session
-            $callSession = CallSession::where('appointment_id', $appointmentId)
-                ->where('patient_id', $user->id)
-                ->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_CONNECTING])
-                ->first();
+            return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionDuration) {
+                // Find the active call session with lock
+                $callSession = CallSession::where('appointment_id', $appointmentId)
+                    ->where('patient_id', $user->id)
+                    ->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_CONNECTING])
+                    ->lockForUpdate()
+                    ->first();
 
-            if (!$callSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No active call session found'
-                ], 404);
-            }
-
-            // Calculate auto-deductions for every 10 minutes
-            // Convert session duration from seconds to minutes
-            $elapsedMinutes = floor($sessionDuration / 60);
-            $autoDeductions = floor($elapsedMinutes / 10);
-            $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
-            $newDeductions = $autoDeductions - $alreadyProcessed;
-
-            $deductionResult = [
-                'deductions_processed' => 0,
-                'remaining_calls' => 0,
-                'auto_deductions' => $autoDeductions,
-                'new_deductions' => $newDeductions,
-                'errors' => []
-            ];
-
-            // Only process if there are new deductions to make
-            if ($newDeductions > 0) {
-                $patient = $user;
-                $subscription = $patient->subscription;
-                
-                if ($subscription) {
-                    // Determine call type field
-                    $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-                    
-                    // Check if patient has enough sessions
-                    if ($subscription->$callTypeField >= $newDeductions) {
-                        // Deduct from patient subscription
-                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
-                        $subscription->save();
-                        
-                        // Update call session
-                        $callSession->auto_deductions_processed = $autoDeductions;
-                        $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
-                        $callSession->save();
-                        
-                        // Pay the doctor for new deductions
-                        $doctor = User::find($callSession->doctor_id);
-                        if ($doctor) {
-                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
-                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-                            
-                            $doctorWallet->credit(
-                                $paymentAmount,
-                                "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
-                                $callType,
-                                $callSession->id,
-                                'call_sessions_auto',
-                                [
-                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                    'session_duration' => $sessionDuration,
-                                    'sessions_used' => $newDeductions,
-                                    'auto_deductions' => $newDeductions,
-                                    'currency' => $currency,
-                                    'payment_amount' => $paymentAmount,
-                                ]
-                            );
-                        }
-                        
-                        $deductionResult['deductions_processed'] = $newDeductions;
-                        $deductionResult['remaining_calls'] = $subscription->$callTypeField;
-                    } else {
-                        $deductionResult['errors'][] = 'Insufficient remaining calls for auto-deduction';
-                    }
-                } else {
-                    $deductionResult['errors'][] = 'Patient subscription not found';
+                if (!$callSession) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No active call session found'
+                    ], 404);
                 }
-            }
 
-            Log::info("Call auto-deduction processed", [
-                'user_id' => $user->id,
-                'call_type' => $callType,
-                'appointment_id' => $appointmentId,
-                'session_duration' => $sessionDuration,
-                'auto_deductions' => $autoDeductions,
-                'new_deductions' => $newDeductions,
-                'deduction_result' => $deductionResult
-            ]);
+                // Calculate auto-deductions for every 10 minutes
+                // Convert session duration from seconds to minutes
+                $elapsedMinutes = floor($sessionDuration / 60);
+                $autoDeductions = floor($elapsedMinutes / 10);
+                $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
+                $newDeductions = max(0, $autoDeductions - $alreadyProcessed);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Call deduction processed successfully',
-                'data' => $deductionResult
-            ]);
+                $deductionResult = [
+                    'deductions_processed' => 0,
+                    'remaining_calls' => 0,
+                    'auto_deductions' => $autoDeductions,
+                    'new_deductions' => $newDeductions,
+                    'errors' => []
+                ];
+
+                // Only process if there are new deductions to make
+                if ($newDeductions > 0) {
+                    $patient = $user;
+                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    
+                    if ($subscription) {
+                        // Determine call type field
+                        $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
+                        
+                        // Check if patient has enough sessions
+                        if ($subscription->$callTypeField >= $newDeductions) {
+                            // Deduct from patient subscription
+                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
+                            $subscription->save();
+                            
+                            // Update call session
+                            $callSession->auto_deductions_processed = $autoDeductions;
+                            $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
+                            $callSession->save();
+                            
+                            // Pay the doctor for new deductions
+                            $doctor = User::find($callSession->doctor_id);
+                            if ($doctor) {
+                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
+                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                                
+                                $doctorWallet->credit(
+                                    $paymentAmount,
+                                    "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
+                                    $callType,
+                                    $callSession->id,
+                                    'call_sessions_auto',
+                                    [
+                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                        'session_duration' => $sessionDuration,
+                                        'sessions_used' => $newDeductions,
+                                        'auto_deductions' => $newDeductions,
+                                        'currency' => $currency,
+                                        'payment_amount' => $paymentAmount,
+                                    ]
+                                );
+                            }
+                            
+                            $deductionResult['deductions_processed'] = $newDeductions;
+                            $deductionResult['remaining_calls'] = $subscription->$callTypeField;
+                        } else {
+                            $deductionResult['errors'][] = 'Insufficient remaining calls for auto-deduction';
+                        }
+                    } else {
+                        $deductionResult['errors'][] = 'Patient subscription not found';
+                    }
+                }
+
+                Log::info("Call auto-deduction processed", [
+                    'user_id' => $user->id,
+                    'call_type' => $callType,
+                    'appointment_id' => $appointmentId,
+                    'session_duration' => $sessionDuration,
+                    'auto_deductions' => $autoDeductions,
+                    'new_deductions' => $newDeductions,
+                    'deduction_result' => $deductionResult
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Call deduction processed successfully',
+                    'data' => $deductionResult
+                ]);
+            });
 
         } catch (\Exception $e) {
             Log::error("Error processing call deduction", [

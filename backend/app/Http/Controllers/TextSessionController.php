@@ -87,69 +87,65 @@ class TextSessionController extends Controller
                 ], 403);
             }
 
-            // Check if there's already an active session between this patient and doctor
-            $existingSession = TextSession::where('patient_id', $patientId)
-                ->where('doctor_id', $doctorId)
-                ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
-                ->first();
+            // Use transaction to ensure atomicity and prevent race conditions
+            $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining) {
+                // Lock and check for existing session again within transaction
+                $existingSession = TextSession::where('patient_id', $patientId)
+                    ->where('doctor_id', $doctorId)
+                    ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
+                    ->lockForUpdate()
+                    ->first();
 
-            if ($existingSession) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You already have an active session with this doctor'
-                ], 400);
-            }
+                if ($existingSession) {
+                    throw new \Exception('You already have an active session with this doctor');
+                }
 
-            // Reset any aborted transactions first
-            try {
-                DB::statement('ROLLBACK');
-            } catch (Exception $e) {
-                // Ignore rollback errors
-            }
+                // Create text session
+                $textSession = TextSession::create([
+                    'patient_id' => $patientId,
+                    'doctor_id' => $doctorId,
+                    'status' => TextSession::STATUS_WAITING_FOR_DOCTOR,
+                    'started_at' => now(),
+                    'last_activity_at' => now(),
+                    'sessions_used' => 0,
+                    'sessions_remaining_before_start' => $sessionsRemaining,
+                    'reason' => $reason,
+                ]);
 
-            // Create text session using raw SQL to avoid transaction issues
-            $textSessionId = DB::select("
-                INSERT INTO text_sessions (patient_id, doctor_id, status, started_at, last_activity_at, sessions_used, sessions_remaining_before_start, reason, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
-                RETURNING id
-            ", [
-                $patientId, 
-                $doctorId, 
-                TextSession::STATUS_WAITING_FOR_DOCTOR, 
-                now(), 
-                now(), 
-                0, // FIXED: Start with 0 sessions used, not 1
-                $sessionsRemaining, 
-                $reason, 
-                now(), 
-                now()
-            ])[0]->id;
+                // Create chat room
+                $chatRoomName = "text_session_{$textSession->id}";
+                $chatRoomId = DB::table('chat_rooms')->insertGetId([
+                    'name' => $chatRoomName,
+                    'type' => 'text_session',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
 
-            // Create a chat room for this session using raw SQL to avoid quoting issues
-            $chatRoomName = "text_session_{$textSessionId}";
-            $chatRoom = DB::select("
-                INSERT INTO chat_rooms (name, type, created_at, updated_at) 
-                VALUES (?, ?, ?, ?) 
-                RETURNING id
-            ", [$chatRoomName, 'text_session', now(), now()])[0]->id;
+                // Update session with chat_id
+                $textSession->update(['chat_id' => $chatRoomId]);
 
-            // Update the text session with the chat_id
-            DB::update("
-                UPDATE text_sessions 
-                SET chat_id = ? 
-                WHERE id = ?
-            ", [$chatRoom, $textSessionId]);
+                // Add participants
+                DB::table('chat_room_participants')->insert([
+                    [
+                        'chat_room_id' => $chatRoomId,
+                        'user_id' => $patientId,
+                        'role' => 'member',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'chat_room_id' => $chatRoomId,
+                        'user_id' => $doctorId,
+                        'role' => 'member',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                ]);
 
-            // Add participants to chat room using raw SQL
-            DB::insert("
-                INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?)
-            ", [$chatRoom, $patientId, 'member', now(), now()]);
+                return $textSession;
+            });
 
-                        DB::insert("
-                INSERT INTO chat_room_participants (chat_room_id, user_id, role, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?)
-            ", [$chatRoom, $doctorId, 'member', now(), now()]);
+            $textSessionId = $textSession->id;
 
             // Clear any existing message cache for this text session to prevent old messages from showing
             // This ensures each new text session starts with a clean chat history
@@ -950,10 +946,9 @@ class TextSessionController extends Controller
                 $success = $paymentService->processAutoDeduction($session);
                 
                 if ($success) {
-                    $session->update([
-                        'auto_deductions_processed' => $expectedDeductions,
-                        'sessions_used' => $session->sessions_used + $newDeductions
-                    ]);
+                    // Service handles the update now
+                    // Refresh session to get latest data
+                    $session->refresh();
                     
                     Log::info("Auto-deduction processed via API", [
                         'session_id' => $sessionId,
@@ -978,10 +973,26 @@ class TextSessionController extends Controller
                         ]
                     ]);
                 } else {
+                    // CRITICAL: If payment fails, we must end the session to prevent free usage
+                    Log::warning("Auto-deduction failed - Terminating session", ['session_id' => $sessionId]);
+                    
+                    $session->update([
+                        'status' => TextSession::STATUS_ENDED,
+                        'ended_at' => now(),
+                        'ended_by' => 'system', // System ended due to payment failure
+                        'reason' => 'Insufficient funds for auto-deduction'
+                    ]);
+                    
+                    $this->notificationService->sendTextSessionNotification(
+                        $session, 
+                        'session_ended', 
+                        "Session ended due to insufficient funds."
+                    );
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'Failed to process payment for auto-deduction'
-                    ], 500);
+                        'message' => 'Failed to process payment. Session has been ended.'
+                    ], 402); // 402 Payment Required
                 }
             }
             

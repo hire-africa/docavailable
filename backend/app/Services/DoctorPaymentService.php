@@ -108,6 +108,15 @@ class DoctorPaymentService
     public function processAppointmentPayment(Appointment $appointment): bool
     {
         try {
+            // IDEMPOTENCY CHECK: Prevent double payment
+            if ($appointment->earnings_awarded > 0) {
+                \Log::warning('Attempted double payment for appointment', [
+                    'appointment_id' => $appointment->id,
+                    'earnings_awarded' => $appointment->earnings_awarded
+                ]);
+                return true; // Already paid, consider success
+            }
+
             $doctor = $appointment->doctor;
             $wallet = DoctorWallet::getOrCreate($doctor->id);
 
@@ -126,23 +135,29 @@ class DoctorPaymentService
                 $paymentGateway = $appointment->patient->subscription->payment_gateway;
             }
 
-            $wallet->credit(
-                $paymentAmount,
-                $description,
-                $sessionType,
-                $appointment->id,
-                'appointments',
-                [
-                    'patient_name' => $appointment->patient->first_name . " " . $appointment->patient->last_name,
-                    'appointment_date' => $appointment->appointment_date,
-                    'appointment_type' => $appointment->appointment_type,
-                    'duration_minutes' => $appointment->duration_minutes ?? 30,
-                    'payment_transaction_id' => $paymentTransactionId,
-                    'payment_gateway' => $paymentGateway,
-                    'currency' => $currency,
-                    'payment_amount' => $paymentAmount,
-                ]
-            );
+            // Use transaction for atomic update
+            DB::transaction(function () use ($wallet, $paymentAmount, $description, $sessionType, $appointment, $currency, $paymentTransactionId, $paymentGateway) {
+                $wallet->credit(
+                    $paymentAmount,
+                    $description,
+                    $sessionType,
+                    $appointment->id,
+                    'appointments',
+                    [
+                        'patient_name' => $appointment->patient->first_name . " " . $appointment->patient->last_name,
+                        'appointment_date' => $appointment->appointment_date,
+                        'appointment_type' => $appointment->appointment_type,
+                        'duration_minutes' => $appointment->duration_minutes ?? 30,
+                        'payment_transaction_id' => $paymentTransactionId,
+                        'payment_gateway' => $paymentGateway,
+                        'currency' => $currency,
+                        'payment_amount' => $paymentAmount,
+                    ]
+                );
+
+                // Mark appointment as paid
+                $appointment->update(['earnings_awarded' => $paymentAmount]);
+            });
 
             // Send notification to doctor about payment
             $notificationService = new NotificationService();
@@ -324,9 +339,18 @@ class DoctorPaymentService
     /**
      * Deduct from patient's subscription for appointment
      */
-    private function deductFromPatientSubscriptionForAppointment(Appointment $appointment): bool
+    public function deductFromPatientSubscriptionForAppointment(Appointment $appointment): bool
     {
         try {
+            // IDEMPOTENCY CHECK: Prevent double deduction
+            if ($appointment->sessions_deducted > 0) {
+                \Log::warning('Attempted double deduction for appointment', [
+                    'appointment_id' => $appointment->id,
+                    'sessions_deducted' => $appointment->sessions_deducted
+                ]);
+                return true; // Already deducted, consider success
+            }
+
             $patient = $appointment->patient;
             if (!$patient || !$patient->subscription) {
                 \Log::warning('Patient has no subscription for appointment deduction', [
@@ -350,54 +374,42 @@ class DoctorPaymentService
 
             // Determine which session type to deduct based on appointment type
             $appointmentType = $appointment->appointment_type ?? 'text';
+            $sessionsRemaining = 0;
             
-            switch ($appointmentType) {
-                case 'text':
-                    if ($subscription->text_sessions_remaining <= 0) {
-                        \Log::warning('Patient has no text sessions remaining for appointment deduction', [
-                            'appointment_id' => $appointment->id,
-                            'patient_id' => $appointment->patient_id,
-                            'text_sessions_remaining' => $subscription->text_sessions_remaining,
-                        ]);
-                        return false;
-                    }
-                    $subscription->decrement('text_sessions_remaining');
-                    $sessionsRemaining = $subscription->text_sessions_remaining;
-                    break;
-                    
-                case 'audio':
-                    if ($subscription->voice_calls_remaining <= 0) {
-                        \Log::warning('Patient has no voice calls remaining for appointment deduction', [
-                            'appointment_id' => $appointment->id,
-                            'patient_id' => $appointment->patient_id,
-                            'voice_calls_remaining' => $subscription->voice_calls_remaining,
-                        ]);
-                        return false;
-                    }
-                    $subscription->decrement('voice_calls_remaining');
-                    $sessionsRemaining = $subscription->voice_calls_remaining;
-                    break;
-                    
-                case 'video':
-                    if ($subscription->video_calls_remaining <= 0) {
-                        \Log::warning('Patient has no video calls remaining for appointment deduction', [
-                            'appointment_id' => $appointment->id,
-                            'patient_id' => $appointment->patient_id,
-                            'video_calls_remaining' => $subscription->video_calls_remaining,
-                        ]);
-                        return false;
-                    }
-                    $subscription->decrement('video_calls_remaining');
-                    $sessionsRemaining = $subscription->video_calls_remaining;
-                    break;
-                    
-                default:
-                    \Log::warning('Unknown appointment type for deduction', [
-                        'appointment_id' => $appointment->id,
-                        'appointment_type' => $appointmentType,
-                    ]);
-                    return false;
-            }
+            // Use transaction for atomic update
+            \DB::transaction(function () use ($subscription, $appointment, $appointmentType, &$sessionsRemaining) {
+                switch ($appointmentType) {
+                    case 'text':
+                        if ($subscription->text_sessions_remaining <= 0) {
+                            throw new \Exception('Insufficient text sessions');
+                        }
+                        $subscription->decrement('text_sessions_remaining');
+                        $sessionsRemaining = $subscription->text_sessions_remaining;
+                        break;
+                        
+                    case 'audio':
+                        if ($subscription->voice_calls_remaining <= 0) {
+                            throw new \Exception('Insufficient voice calls');
+                        }
+                        $subscription->decrement('voice_calls_remaining');
+                        $sessionsRemaining = $subscription->voice_calls_remaining;
+                        break;
+                        
+                    case 'video':
+                        if ($subscription->video_calls_remaining <= 0) {
+                            throw new \Exception('Insufficient video calls');
+                        }
+                        $subscription->decrement('video_calls_remaining');
+                        $sessionsRemaining = $subscription->video_calls_remaining;
+                        break;
+                        
+                    default:
+                        throw new \Exception('Unknown appointment type');
+                }
+                
+                // Mark appointment as deducted
+                $appointment->update(['sessions_deducted' => 1]);
+            });
             
             \Log::info('Successfully deducted session from patient subscription for appointment', [
                 'appointment_id' => $appointment->id,
@@ -506,63 +518,78 @@ class DoctorPaymentService
             if ($newDeductions > 0) {
                 // FIX: Use database transaction with atomic updates to prevent race conditions
                 return \DB::transaction(function () use ($session, $newDeductions, $autoDeductions, $alreadyProcessed, $elapsedMinutes) {
-                    $patient = $session->patient;
+                    // Refresh session to get latest state inside transaction
+                    $freshSession = TextSession::where('id', $session->id)->lockForUpdate()->first();
+                    
+                    if (!$freshSession) {
+                        return false;
+                    }
+
+                    // Recalculate based on fresh session data
+                    $freshAlreadyProcessed = $freshSession->auto_deductions_processed ?? 0;
+                    $freshNewDeductions = $autoDeductions - $freshAlreadyProcessed;
+
+                    if ($freshNewDeductions <= 0) {
+                        return true; // Already processed by another request
+                    }
+
+                    $patient = $freshSession->patient;
                     if ($patient && $patient->subscription) {
                         // Lock subscription for update to prevent race conditions
                         $subscription = $patient->subscription()->lockForUpdate()->first();
                         
                         if (!$subscription) {
                             \Log::warning('Subscription not found during auto-deduction', [
-                                'session_id' => $session->id,
+                                'session_id' => $freshSession->id,
                                 'patient_id' => $patient->id,
                             ]);
                             return false;
                         }
                         
                         // SAFETY CHECK: Prevent negative sessions with locked record
-                        if ($subscription->text_sessions_remaining < $newDeductions) {
+                        if ($subscription->text_sessions_remaining < $freshNewDeductions) {
                             \Log::warning('Insufficient sessions remaining for auto-deduction', [
-                                'session_id' => $session->id,
+                                'session_id' => $freshSession->id,
                                 'patient_id' => $patient->id,
                                 'sessions_remaining' => $subscription->text_sessions_remaining,
-                                'new_deductions' => $newDeductions,
+                                'new_deductions' => $freshNewDeductions,
                                 'elapsed_minutes' => $elapsedMinutes,
                             ]);
                             return false;
                         }
                         
                         // Atomic deduction from subscription
-                        $subscription->text_sessions_remaining = max(0, $subscription->text_sessions_remaining - $newDeductions);
+                        $subscription->text_sessions_remaining = max(0, $subscription->text_sessions_remaining - $freshNewDeductions);
                         $subscription->save();
                         
                         // Award doctor earnings for new deductions only
-                        $doctor = $session->doctor;
+                        $doctor = $freshSession->doctor;
                         if ($doctor) {
                             $wallet = DoctorWallet::getOrCreate($doctor->id);
-                            $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $newDeductions;
-                            $wallet->credit($paymentAmount, "Auto-deduction for session {$session->id} ({$newDeductions} sessions)");
+                            $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $freshNewDeductions;
+                            $wallet->credit($paymentAmount, "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)");
                             
                             // Send notification to doctor about payment
                             $notificationService = new NotificationService();
                             $notificationService->sendWalletNotification(
                                 $wallet->transactions()->latest()->first(),
                                 'payment_received',
-                                "You received {$paymentAmount} for {$newDeductions} session(s) from auto-deduction"
+                                "You received {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
                             );
                         }
                         
                         // Update session to track processed deductions
-                        $session->update([
+                        $freshSession->update([
                             'auto_deductions_processed' => $autoDeductions,
-                            'sessions_used' => $session->sessions_used + $newDeductions
+                            'sessions_used' => $freshSession->sessions_used + $freshNewDeductions
                         ]);
                         
-                        \Log::info("Auto-deducted {$newDeductions} new sessions (total: {$autoDeductions})", [
-                            'session_id' => $session->id,
+                        \Log::info("Auto-deducted {$freshNewDeductions} new sessions (total: {$autoDeductions})", [
+                            'session_id' => $freshSession->id,
                             'elapsed_minutes' => $elapsedMinutes,
                             'auto_deductions' => $autoDeductions,
-                            'already_processed' => $alreadyProcessed,
-                            'new_deductions' => $newDeductions,
+                            'already_processed' => $freshAlreadyProcessed,
+                            'new_deductions' => $freshNewDeductions,
                             'sessions_remaining_after' => $subscription->text_sessions_remaining,
                         ]);
                         

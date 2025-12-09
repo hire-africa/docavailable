@@ -59,40 +59,22 @@ class ProcessAutoDeductions extends Command
                 }
                 
                 if ($newDeductions > 0) {
-                    // Atomic update to prevent double processing
-                    $updated = DB::table('text_sessions')
-                        ->where('id', $session->id)
-                        ->where('status', TextSession::STATUS_ACTIVE)
-                        ->where('auto_deductions_processed', $alreadyProcessed) // Ensure no concurrent updates
-                        ->update([
-                            'auto_deductions_processed' => $expectedDeductions,
-                            'sessions_used' => DB::raw("sessions_used + {$newDeductions}"),
-                            'updated_at' => now()
-                        ]);
+                    // Process the actual deduction directly via service
+                    // The service now handles atomic updates and race condition prevention
+                    $success = $paymentService->processAutoDeduction($session);
                     
-                    if ($updated > 0) {
-                        // Process the actual deduction
-                        $success = $paymentService->processAutoDeduction($session);
+                    if ($success) {
+                        $processedCount++;
+                        $this->info("✅ Processed deduction check for session {$session->id}");
                         
-                        if ($success) {
-                            $processedCount++;
-                            $this->info("✅ Processed {$newDeductions} deductions for session {$session->id}");
-                            
-                            Log::info("Scheduler auto-deduction processed", [
-                                'session_id' => $session->id,
-                                'elapsed_minutes' => $elapsedMinutes,
-                                'deductions_processed' => $newDeductions,
-                                'total_deductions' => $expectedDeductions
-                            ]);
-                        } else {
-                            $errorCount++;
-                            $this->error("❌ Failed to process deduction for session {$session->id}");
-                        }
+                        Log::info("Scheduler auto-deduction check completed", [
+                            'session_id' => $session->id,
+                            'elapsed_minutes' => $elapsedMinutes,
+                            'expected_deductions' => $expectedDeductions
+                        ]);
                     } else {
-                        $skippedCount++;
-                        if ($debug) {
-                            $this->warn("⚠️ Skipped session {$session->id} (concurrent update or already processed)");
-                        }
+                        $errorCount++;
+                        $this->error("❌ Failed to process deduction for session {$session->id}");
                     }
                 } else {
                     $skippedCount++;
