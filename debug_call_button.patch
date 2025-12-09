@@ -1,0 +1,28 @@
+--- a/app/chat/[appointmentId].tsx
++++ b/app/chat/[appointmentId].tsx
+@@ -167,7 +167,16 @@ export default function ChatPage() {
+   // Determine if call button should be enabled
+   const isCallEnabled = () => {
+     const enabled = isTextSession ? true : (appointmentType === 'audio' || appointmentType === 'voice');
+-    console.log('🔍 [isCallEnabled] Debug:', {
+-      isTextSession,
+-      appointmentType,
+-      enabled,
+-      webrtcReady,
+-      showIncomingCall
+-    });
++    console.log('🔍 [isCallEnabled] Debug:', {
++      isTextSession,
++      appointmentType,
++      enabled,
++      webrtcReady,
++      showIncomingCall,
++      userType: user?.user_type,
++      appointmentId,
++      chatInfo: chatInfo ? {
++        appointment_type: chatInfo.appointment_type,
++        status: chatInfo.status
++      } : null
++    });
+     return enabled;
+   };

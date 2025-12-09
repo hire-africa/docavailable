@@ -1,0 +1,627 @@
+meta {
+  name: Appointments
+  type: http
+  seq: 5
+}
+
+get {
+  url: http://172.20.10.11:8000/api/appointments
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2xvZ2luIiwiaWF0IjoxNzUyNDQwODY4LCJleHAiOjE3NTI0NDQ0NjgsIm5iZiI6MTc1MjQ0MDg2OCwianRpIjoidFRQelhwc3NwZExHSkJrMyIsInN1YiI6IjEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.iMvUCfquLHzoRMiljf0AAhqfZ_h5Pk3YcUXiecnfLHg
+    "message": "No query results for model [App\\Models\\Appointment] {id}",
+    "exception": "Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException",
+    "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Exceptions\\Handler.php",
+    "line": 639,
+    "trace": [
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Exceptions\\Handler.php",
+        "line": 587,
+        "function": "prepareException",
+        "class": "Illuminate\\Foundation\\Exceptions\\Handler",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Pipeline.php",
+        "line": 51,
+        "function": "render",
+        "class": "Illuminate\\Foundation\\Exceptions\\Handler",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 171,
+        "function": "handleException",
+        "class": "Illuminate\\Routing\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Middleware\\SubstituteBindings.php",
+        "line": 50,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Routing\\Middleware\\SubstituteBindings",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Auth\\Middleware\\Authenticate.php",
+        "line": 63,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Auth\\Middleware\\Authenticate",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\sanctum\\src\\Http\\Middleware\\EnsureFrontendRequestsAreStateful.php",
+        "line": 26,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 169,
+        "function": "Laravel\\Sanctum\\Http\\Middleware\\{closure}",
+        "class": "Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\sanctum\\src\\Http\\Middleware\\EnsureFrontendRequestsAreStateful.php",
+        "line": 25,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 807,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 786,
+        "function": "runRouteWithinStack",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 750,
+        "function": "runRoute",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 739,
+        "function": "dispatchToRoute",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 200,
+        "function": "dispatch",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 169,
+        "function": "Illuminate\\Foundation\\Http\\{closure}",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest.php",
+        "line": 21,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull.php",
+        "line": 31,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest.php",
+        "line": 21,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TrimStrings.php",
+        "line": 51,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TrimStrings",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\ValidatePostSize.php",
+        "line": 27,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\ValidatePostSize",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance.php",
+        "line": 109,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\HandleCors.php",
+        "line": 61,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\HandleCors",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\TrustProxies.php",
+        "line": 58,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\TrustProxies",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks.php",
+        "line": 22,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\ValidatePathEncoding.php",
+        "line": 26,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\ValidatePathEncoding",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 175,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 144,
+        "function": "sendRequestThroughRouter",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Application.php",
+        "line": 1219,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\public\\index.php",
+        "line": 20,
+        "function": "handleRequest",
+        "class": "Illuminate\\Foundation\\Application",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\resources\\server.php",
+        "line": 23,
+        "function": "require_once"
+      }
+    ]
+  {
+    "message": "No query results for model [App\\Models\\Appointment] {id}",
+    "exception": "Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException",
+    "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Exceptions\\Handler.php",
+    "line": 639,
+    "trace": [
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Exceptions\\Handler.php",
+        "line": 587,
+        "function": "prepareException",
+        "class": "Illuminate\\Foundation\\Exceptions\\Handler",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Pipeline.php",
+        "line": 51,
+        "function": "render",
+        "class": "Illuminate\\Foundation\\Exceptions\\Handler",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 171,
+        "function": "handleException",
+        "class": "Illuminate\\Routing\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Middleware\\SubstituteBindings.php",
+        "line": 50,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Routing\\Middleware\\SubstituteBindings",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Auth\\Middleware\\Authenticate.php",
+        "line": 63,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Auth\\Middleware\\Authenticate",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\sanctum\\src\\Http\\Middleware\\EnsureFrontendRequestsAreStateful.php",
+        "line": 26,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 169,
+        "function": "Laravel\\Sanctum\\Http\\Middleware\\{closure}",
+        "class": "Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\sanctum\\src\\Http\\Middleware\\EnsureFrontendRequestsAreStateful.php",
+        "line": 25,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Laravel\\Sanctum\\Http\\Middleware\\EnsureFrontendRequestsAreStateful",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 807,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 786,
+        "function": "runRouteWithinStack",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 750,
+        "function": "runRoute",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\Router.php",
+        "line": 739,
+        "function": "dispatchToRoute",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 200,
+        "function": "dispatch",
+        "class": "Illuminate\\Routing\\Router",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 169,
+        "function": "Illuminate\\Foundation\\Http\\{closure}",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest.php",
+        "line": 21,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull.php",
+        "line": 31,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\ConvertEmptyStringsToNull",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest.php",
+        "line": 21,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\TrimStrings.php",
+        "line": 51,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TransformsRequest",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\TrimStrings",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\ValidatePostSize.php",
+        "line": 27,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\ValidatePostSize",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance.php",
+        "line": 109,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\PreventRequestsDuringMaintenance",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\HandleCors.php",
+        "line": 61,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\HandleCors",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\TrustProxies.php",
+        "line": 58,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\TrustProxies",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks.php",
+        "line": 22,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Middleware\\InvokeDeferredCallbacks",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Http\\Middleware\\ValidatePathEncoding.php",
+        "line": 26,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 208,
+        "function": "handle",
+        "class": "Illuminate\\Http\\Middleware\\ValidatePathEncoding",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Pipeline\\Pipeline.php",
+        "line": 126,
+        "function": "Illuminate\\Pipeline\\{closure}",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 175,
+        "function": "then",
+        "class": "Illuminate\\Pipeline\\Pipeline",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Http\\Kernel.php",
+        "line": 144,
+        "function": "sendRequestThroughRouter",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Application.php",
+        "line": 1219,
+        "function": "handle",
+        "class": "Illuminate\\Foundation\\Http\\Kernel",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\public\\index.php",
+        "line": 20,
+        "function": "handleRequest",
+        "class": "Illuminate\\Foundation\\Application",
+        "type": "->"
+      },
+      {
+        "file": "C:\\Users\\BLACKSLEEKY\\Desktop\\DOCAVAILALE\\Doc_available\\backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\resources\\server.php",
+        "line": 23,
+        "function": "require_once"
+      }
+    ]
+  
+}

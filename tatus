@@ -1,0 +1,8 @@
+[33m1851b4a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Remove Google OAuth debug component
+[33m5d21311[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix Google OAuth environment variable loading
+[33m85034d4[m Add Google OAuth debug component and fix environment variable reading
+[33m05762af[m Fix Google OAuth environment variable configuration
+[33m3ab3d4a[m Fix Intervention Image v3 Laravel integration
+[33ma887bcc[m Fix Intervention Image v3 compatibility for DigitalOcean deployment
+[33maae8a57[m Enable Google OAuth authentication - Add environment variables and setup guide
+[33me6cafca[m[33m ([m[1;31morigin/clean-repo[m[33m, [m[1;32mclean-repo[m[33m)[m Initial clean commit - DocAvailable project without secrets

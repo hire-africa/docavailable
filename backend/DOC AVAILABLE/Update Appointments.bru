@@ -1,0 +1,24 @@
+meta {
+  name: Update Appointments
+  type: http
+  seq: 12
+}
+
+patch {
+  url: http://172.20.10.11:8000/api/appointments/{id}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwMDAvYXBpL2xvZ2luIiwiaWF0IjoxNzUyNDQwODY4LCJleHAiOjE3NTI0NDQ0NjgsIm5iZiI6MTc1MjQ0MDg2OCwianRpIjoidFRQelhwc3NwZExHSkJrMyIsInN1YiI6IjEiLCJwcnYiOiIyM2JkNWM4OTQ5ZjYwMGFkYjM5ZTcwMWM0MDA4NzJkYjdhNTk3NmY3In0.iMvUCfquLHzoRMiljf0AAhqfZ_h5Pk3YcUXiecnfLHg
+}
+
+body:json {
+  {
+    "doctor_id": 2,
+    "appointment_date": "2025-07-14",
+    "appointment_time": "10:00:00",
+    "status": 1
+  }
+}

@@ -1,0 +1,10 @@
+[33m0e7cdf6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m FIX: Restore sendMessage JOIN query and fix undefined property error - Reverted sendMessage to use direct JOIN query for doctor/patient names - Fixed undefined property error for doctor_first_name - Messages now send successfully with proper 200 status
+[33m2328ff7[m COMPREHENSIVE FIX: Prevent 500 errors for expired chat sessions - Add expired session validation in handleAppointmentIdAndVerifyAccess - Update sendMessage to use helper method - Return proper 410 status for expired sessions
+[33m62b6b54[m Fix chat 500 errors: Add authentication checks and error handling for expired sessions
+[33me44224d[m Fix chat 500 errors by adding proper authentication checks
+[33ma10668a[m FIX: Use numeric IDs for MessageStorageService methods - Fix 500 error by passing actualId instead of appointmentId string - MessageStorageService expects int but was receiving text_session_X strings
+[33ma34af99[m FIX: Better string/int appointment ID handling - Support both text_session_X and numeric IDs - Use full string for API endpoints, numeric for local storage - Maintain backward compatibility with existing code
+[33mb2ebdd6[m Remove temporary file
+[33m3a9432a[m Revert frontend changes - restore working chat system
+[33maac7abc[m FIX: Resolve text session expiration issue - messages now properly trigger server activation
+[33m2a1add4[m CRITICAL FIX: Fix auto-expiration bug that was killing sessions prematurely - Fix ProcessExpiredTextSessions command to only expire sessions where patient sent message - Changed from expiring after 90s from start to expiring after 90s from doctor_response_deadline - This prevents sessions from expiring before any messages are exchanged - Added logging to track which sessions are being expired and why
