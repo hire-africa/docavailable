@@ -990,7 +990,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-sessions/pending-sessions', [TextSessionController::class, 'pendingSessions']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
-    Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession'])->where('sessionId', '[0-9]+');
+    Route::get('/text-sessions/{manualSessionId}', [TextSessionController::class, 'getSession'])->where('manualSessionId', '[0-9]+');
 
     // Text appointment session routes
     Route::post('/text-appointments/start-session', [TextAppointmentController::class, 'startSession']);

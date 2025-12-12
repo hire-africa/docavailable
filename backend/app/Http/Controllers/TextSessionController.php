@@ -751,10 +751,10 @@ class TextSessionController extends Controller
     /**
      * Get a specific text session by ID.
      */
-    public function getSession(Request $request, $sessionId): JsonResponse
+    public function getSession(Request $request, $manualSessionId): JsonResponse
     {
         // Enforce numeric ID to prevent SQL errors if string routes are matched incorrectly
-        if (!is_numeric($sessionId)) {
+        if (!is_numeric($manualSessionId)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid session ID format'
@@ -765,7 +765,7 @@ class TextSessionController extends Controller
             $user = auth()->user();
 
             $session = TextSession::with(['patient.subscription', 'doctor'])
-                ->where('id', $sessionId)
+                ->where('id', $manualSessionId)
                 ->first();
 
             if (!$session) {
