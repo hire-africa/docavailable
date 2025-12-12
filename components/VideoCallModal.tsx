@@ -16,8 +16,9 @@ import {
   View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
-import { VideoCallEvents, VideoCallService, VideoCallState } from '../services/videoCallService';
+import backgroundBillingManager from '../services/backgroundBillingManager';
 import ringtoneService from '../services/ringtoneService';
+import { VideoCallEvents, VideoCallService, VideoCallState } from '../services/videoCallService';
 interface VideoCallModalProps {
   appointmentId: string;
   userId: string;
@@ -118,7 +119,7 @@ export default function VideoCallModal({
     }
     try {
       console.log('[VideoCallModal] Playing sound...');
-      await sound.stopAsync().catch(() => {});
+      await sound.stopAsync().catch(() => { });
       await sound.setIsMutedAsync(false);
       await sound.setVolumeAsync(1.0);
       await sound.setPositionAsync(0);
@@ -128,10 +129,10 @@ export default function VideoCallModal({
       console.error('[VideoCallModal] playSound failed:', e);
     }
   };
-  
+
   const videoCallService = useRef<VideoCallService | null>(null);
   const initOnceRef = useRef<string | null>(null);
-  
+
   // For incoming calls, show incoming UI until accepted, then show connected UI
   const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
 
@@ -150,13 +151,13 @@ export default function VideoCallModal({
         console.log('🚫 [VideoCallModal] Suppressing video init because audio call is active/current');
         return;
       }
-      
+
       // Prevent duplicate initialization for the same appointment
       if (initOnceRef.current === appointmentId) {
         return;
       }
       initOnceRef.current = appointmentId;
-      
+
       // Reset sound flags for new session
       hasPlayedConnectRef.current = false;
       hasPlayedHangupRef.current = false;
@@ -171,7 +172,7 @@ export default function VideoCallModal({
         await initializeIncomingCall();
       }
     };
-    
+
     // Preload sounds
     (async () => {
       try {
@@ -218,6 +219,7 @@ export default function VideoCallModal({
     setupCall();
     return () => {
       console.log('🧹 VideoCallModal cleanup - ending call');
+      backgroundBillingManager.stopBilling(appointmentId);
       initOnceRef.current = null;
       if (heroTimerRef.current) {
         clearTimeout(heroTimerRef.current);
@@ -236,7 +238,7 @@ export default function VideoCallModal({
         try {
           await connectSoundRef.current?.unloadAsync();
           await hangupSoundRef.current?.unloadAsync();
-        } catch {}
+        } catch { }
         connectSoundRef.current = null;
         hangupSoundRef.current = null;
       })();
@@ -253,6 +255,15 @@ export default function VideoCallModal({
   useEffect(() => {
     if (callState.connectionState === 'connected') {
       console.log('[VideoCallModal] Call connected! Setting up connect sound...');
+
+      // Start background billing
+      console.log('💰 [VideoCallModal] Starting background billing for connected video call');
+      backgroundBillingManager.startBilling(appointmentId, 'video', {
+        intervalMinutes: 10,
+        warningBeforeMinutes: 1,
+        maxCycles: 6
+      });
+
       setIsInitializing(false);
       setIsRinging(false);
       setUsePlaceholderOnReverse(false);
@@ -285,12 +296,12 @@ export default function VideoCallModal({
       setPipSettled(false);
       setPipTransitioning(false);
       shrinkProgress.setValue(0); // Start at full-screen
-      
+
       // Clear any existing hero timer
       if (heroTimerRef.current) {
         clearTimeout(heroTimerRef.current);
       }
-      
+
       // After 2.5s, animate shrink from full-screen to PiP
       heroTimerRef.current = setTimeout(() => {
         setHeroMode(false);
@@ -419,12 +430,12 @@ export default function VideoCallModal({
   const initializeIncomingCall = async () => {
     try {
       console.log('📞 VideoCallModal: Initializing for incoming call');
-      
+
       const events: VideoCallEvents = {
         onStateChange: (state) => {
           console.log('📊 Video call state changed:', state);
           setCallState(state);
-          
+
           // Update ringing state based on connection state
           if (state.connectionState === 'connected') {
             setIsRinging(false);
@@ -446,7 +457,7 @@ export default function VideoCallModal({
           if (!hasPlayedHangupRef.current) {
             console.log('[VideoCallModal] Playing hangup sound (incoming call ended)...');
             hasPlayedHangupRef.current = true;
-            playSound(hangupSoundRef).catch(() => {});
+            playSound(hangupSoundRef).catch(() => { });
           } else {
             console.log('[VideoCallModal] Hangup sound already played, skipping');
           }
@@ -491,7 +502,7 @@ export default function VideoCallModal({
       await VideoCallService.getInstance().initializeForIncomingCall(appointmentId, userId, events);
       videoCallService.current = VideoCallService.getInstance();
       console.log('✅ VideoCallModal: Incoming call initialized successfully');
-      
+
     } catch (error) {
       console.error('❌ VideoCallModal: Failed to initialize incoming call:', error);
       onEndCall();
@@ -508,7 +519,7 @@ export default function VideoCallModal({
         doctorName,
         isDoctor
       });
-      
+
       // Reset the service state before initializing
       await VideoCallService.getInstance().reset();
 
@@ -528,7 +539,7 @@ export default function VideoCallModal({
           if (!hasPlayedHangupRef.current) {
             console.log('[VideoCallModal] Playing hangup sound (outgoing call ended)...');
             hasPlayedHangupRef.current = true;
-            playSound(hangupSoundRef).catch(() => {});
+            playSound(hangupSoundRef).catch(() => { });
           } else {
             console.log('[VideoCallModal] Hangup sound already played, skipping');
           }
@@ -569,7 +580,7 @@ export default function VideoCallModal({
 
       await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
       videoCallService.current = VideoCallService.getInstance();
-      
+
       // Get local stream for display
       const localStream = videoCallService.current.getLocalStream();
       console.log('📹 [VideoCallModal] Local stream retrieved:', {
@@ -581,9 +592,9 @@ export default function VideoCallModal({
       });
       setLocalStream(localStream);
       setIsInitialized(true);
-      
+
       console.log('📞 Video call initialization completed - offer will be created automatically if needed');
-      
+
     } catch (error) {
       console.error('Failed to initialize video call:', error);
       Alert.alert('Call Failed', 'Unable to start video call. Please try again.', [
@@ -597,33 +608,33 @@ export default function VideoCallModal({
       if (isProcessingAnswer) return; // Prevent multiple taps
       Vibration.vibrate(50);
       console.log('📞 Accept button pressed - answering video call');
-      
+
       // Stop ringtone immediately when accepting call
       try {
         await ringtoneService.stop();
       } catch (e) {
         console.error('❌ Failed to stop ringtone:', e);
       }
-      
+
       // Immediately update UI state
       setIsRinging(false);
       setIsProcessingAnswer(true);
       setCallAccepted(true); // Mark call as accepted
-      
+
       if (videoCallService.current) {
         await videoCallService.current.acceptIncomingCall();
       }
-      
+
       // Get local stream for display after accepting
       const localStream = videoCallService.current?.getLocalStream();
       if (localStream) {
         setLocalStream(localStream);
       }
-      
+
       console.log('✅ Video call processed - resetting processing state');
       // Reset processing state after successful processing
       setIsProcessingAnswer(false);
-      
+
       // Just trigger the callback - let the parent handle the logic
       onCallAnswered?.();
     } catch (error) {
@@ -636,14 +647,14 @@ export default function VideoCallModal({
 
   const handleRejectCall = async () => {
     Vibration.vibrate(50);
-    
+
     // Stop ringtone when rejecting call
     try {
       await ringtoneService.stop();
     } catch (e) {
       console.error('❌ Failed to stop ringtone:', e);
     }
-    
+
     if (videoCallService.current) {
       // For incoming, send a rejection signal so the caller stops
       videoCallService.current.rejectIncomingCall?.('declined');
@@ -681,7 +692,7 @@ export default function VideoCallModal({
     Vibration.vibrate(50);
     const newState = !isSpeakerOn;
     setIsSpeakerOn(newState);
-    
+
     // Toggle speaker mode in VideoCallService
     if (videoCallService.current && typeof (videoCallService.current as any).toggleSpeaker === 'function') {
       Promise.resolve((videoCallService.current as any).toggleSpeaker())
@@ -699,14 +710,14 @@ export default function VideoCallModal({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
-    
+
     // Stop ringtone if still playing
     try {
       await ringtoneService.stop();
     } catch (e) {
       console.error('❌ Failed to stop ringtone:', e);
     }
-    
+
     await performEndCallWithAnimation();
   };
 
@@ -745,7 +756,7 @@ export default function VideoCallModal({
   const getStatusText = () => {
     if (shouldShowIncomingUI) return 'Incoming Video Call';
     if (isProcessingAnswer) return 'Answering...';
-    
+
     switch (callState.connectionState) {
       case 'connecting':
         return isIncomingCall ? 'Connecting...' : 'Calling...';
@@ -799,386 +810,311 @@ export default function VideoCallModal({
         startAutoHide();
       }}
     >
-    <SafeAreaView style={styles.container} onLayout={(e) => {
-      const { width, height } = e.nativeEvent.layout;
-      if (width && height) setContainerSize({ w: width, h: height });
-    }}>
-      <StatusBar backgroundColor="#000" barStyle="light-content" />
-      {shouldShowIncomingUI && (
-        <Image
-          source={require('../app/chat/black1.jpg')}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
-          resizeMode="cover"
-        />
-      )}
-      {/** Determine outgoing pre-connected state to show self preview */}
-      {/** Outgoing (caller) and not yet connected */}
-      {/** We'll use this to render local stream full-screen as background */}
-      
-      {/* Caller self-preview as background when dialing (outgoing only) */}
-      {!isIncomingCall && callState.connectionState !== 'connected' && localStream && (
-        <RTCView
-          style={styles.remoteVideo}
-          streamURL={localStream.toURL()}
-          objectFit="cover"
-          mirror={callState.isFrontCamera}
-          pointerEvents="none"
-        />
-      )}
-      
-      {/* Remote Video (Full Screen Background) */}
-      {callState.connectionState === 'connected' && !(isReverseAnimating && usePlaceholderOnReverse) && (
-        peerVideoEnabled && remoteStream ? (
+      <SafeAreaView style={styles.container} onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        if (width && height) setContainerSize({ w: width, h: height });
+      }}>
+        <StatusBar backgroundColor="#000" barStyle="light-content" />
+        {shouldShowIncomingUI && (
+          <Image
+            source={require('../app/chat/black1.jpg')}
+            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' }}
+            resizeMode="cover"
+          />
+        )}
+        {/** Determine outgoing pre-connected state to show self preview */}
+        {/** Outgoing (caller) and not yet connected */}
+        {/** We'll use this to render local stream full-screen as background */}
+
+        {/* Caller self-preview as background when dialing (outgoing only) */}
+        {!isIncomingCall && callState.connectionState !== 'connected' && localStream && (
           <RTCView
             style={styles.remoteVideo}
-            streamURL={remoteStream.toURL()}
+            streamURL={localStream.toURL()}
             objectFit="cover"
+            mirror={callState.isFrontCamera}
             pointerEvents="none"
           />
-        ) : (
-          <View style={[styles.remoteVideo, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'black' }]} pointerEvents="none">
-            <View style={{ alignItems: 'center' }}>
-              <Ionicons name="videocam-off" size={28} color="#fff" />
-              <Text style={{ color: 'white', marginTop: 6 }}>Camera off</Text>
+        )}
+
+        {/* Remote Video (Full Screen Background) */}
+        {callState.connectionState === 'connected' && !(isReverseAnimating && usePlaceholderOnReverse) && (
+          peerVideoEnabled && remoteStream ? (
+            <RTCView
+              style={styles.remoteVideo}
+              streamURL={remoteStream.toURL()}
+              objectFit="cover"
+              pointerEvents="none"
+            />
+          ) : (
+            <View style={[styles.remoteVideo, { alignItems: 'center', justifyContent: 'center', backgroundColor: 'black' }]} pointerEvents="none">
+              <View style={{ alignItems: 'center' }}>
+                <Ionicons name="videocam-off" size={28} color="#fff" />
+                <Text style={{ color: 'white', marginTop: 6 }}>Camera off</Text>
+              </View>
+            </View>
+          )
+        )}
+
+        {/* Local Video (PiP). Caller uses cross-fade transition; receiver shows static PiP. */}
+        {localStream && callState.connectionState !== 'connected' && !isIncomingCall && (
+          // Pre-connect full-screen caller self view (visible until connected)
+          <RTCView
+            style={styles.remoteVideo}
+            streamURL={localStream.toURL()}
+            objectFit="cover"
+            mirror={callState.isFrontCamera}
+            pointerEvents="none"
+          />
+        )}
+
+        {localStream && callState.connectionState === 'connected' && (
+          <>
+            {/* Shrinking self-view: transitions from full-screen to PiP */}
+            {(heroMode || pipTransitioning || isReverseAnimating) && (
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: containerSize.w,
+                  height: containerSize.h,
+                  borderRadius: shrinkProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 10],
+                  }),
+                  borderWidth: shrinkProgress.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [0, 1, 2],
+                  }),
+                  borderColor: '#4CAF50',
+                  overflow: 'hidden',
+                  zIndex: 2,
+                  transform: [
+                    {
+                      translateX: shrinkProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, PIP_MARGIN_LEFT + PIP_WIDTH / 2 - containerSize.w / 2],
+                      }),
+                    },
+                    {
+                      translateY: shrinkProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, containerSize.h - PIP_MARGIN_BOTTOM - PIP_HEIGHT / 2 - containerSize.h / 2],
+                      }),
+                    },
+                    {
+                      scaleX: shrinkProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, PIP_WIDTH / containerSize.w],
+                      }),
+                    },
+                    {
+                      scaleY: shrinkProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, PIP_HEIGHT / containerSize.h],
+                      }),
+                    },
+                  ],
+                }}
+                pointerEvents="none"
+              >
+                {isReverseAnimating && usePlaceholderOnReverse ? (
+                  <View style={{ flex: 1, backgroundColor: 'black' }} />
+                ) : (
+                  <RTCView
+                    key={(localStream as any)?.id || 'local-hero'}
+                    style={{ flex: 1 }}
+                    streamURL={localStream.toURL()}
+                    objectFit="cover"
+                    mirror={callState.isFrontCamera}
+                    pointerEvents="none"
+                  />
+                )}
+              </Animated.View>
+            )}
+
+            {/* Static PiP after transition settles */}
+            {pipSettled && !isReverseAnimating && (
+              <Animated.View
+                style={{
+                  position: 'absolute',
+                  bottom: PIP_MARGIN_BOTTOM,
+                  left: PIP_MARGIN_LEFT,
+                  width: PIP_WIDTH,
+                  height: PIP_HEIGHT,
+                  borderRadius: 10,
+                  borderWidth: 2,
+                  borderColor: '#4CAF50',
+                  zIndex: 1,
+                  overflow: 'hidden',
+                  transform: [{ scale: pipScale }],
+                }}
+                pointerEvents="none"
+              >
+                {peerLeftVisible ? (
+                  <View style={{ flex: 1, backgroundColor: 'black' }} />
+                ) : (
+                  <RTCView
+                    key={(localStream as any)?.id || 'local-pip'}
+                    style={{ flex: 1 }}
+                    streamURL={localStream.toURL()}
+                    objectFit="cover"
+                    mirror={callState.isFrontCamera}
+                    zOrder={1}
+                    pointerEvents="none"
+                  />
+                )}
+              </Animated.View>
+            )}
+          </>
+        )}
+
+        {/* Peer left banner */}
+        {peerLeftVisible && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 80,
+              left: 0,
+              right: 0,
+              alignItems: 'center',
+              zIndex: 3,
+            }}
+            pointerEvents="none"
+          >
+            <View style={styles.peerLeftBanner}>
+              <Text style={styles.peerLeftBannerText}>
+                {(isDoctor ? patientName : doctorName)} left the call
+              </Text>
             </View>
           </View>
-        )
-      )}
-      
-      {/* Local Video (PiP). Caller uses cross-fade transition; receiver shows static PiP. */}
-      {localStream && callState.connectionState !== 'connected' && !isIncomingCall && (
-        // Pre-connect full-screen caller self view (visible until connected)
-        <RTCView
-          style={styles.remoteVideo}
-          streamURL={localStream.toURL()}
-          objectFit="cover"
-          mirror={callState.isFrontCamera}
-          pointerEvents="none"
-        />
-      )}
+        )}
 
-      {localStream && callState.connectionState === 'connected' && (
-        <>
-          {/* Shrinking self-view: transitions from full-screen to PiP */}
-          {(heroMode || pipTransitioning || isReverseAnimating) && (
-            <Animated.View
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: containerSize.w,
-                height: containerSize.h,
-                borderRadius: shrinkProgress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 10],
-                }),
-                borderWidth: shrinkProgress.interpolate({
-                  inputRange: [0, 0.5, 1],
-                  outputRange: [0, 1, 2],
-                }),
-                borderColor: '#4CAF50',
-                overflow: 'hidden',
-                zIndex: 2,
-                transform: [
-                  {
-                    translateX: shrinkProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, PIP_MARGIN_LEFT + PIP_WIDTH/2 - containerSize.w/2],
-                    }),
-                  },
-                  {
-                    translateY: shrinkProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, containerSize.h - PIP_MARGIN_BOTTOM - PIP_HEIGHT/2 - containerSize.h/2],
-                    }),
-                  },
-                  {
-                    scaleX: shrinkProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, PIP_WIDTH / containerSize.w],
-                    }),
-                  },
-                  {
-                    scaleY: shrinkProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, PIP_HEIGHT / containerSize.h],
-                    }),
-                  },
-                ],
-              }}
-              pointerEvents="none"
-            >
-              {isReverseAnimating && usePlaceholderOnReverse ? (
-                <View style={{ flex: 1, backgroundColor: 'black' }} />
+        {/* Peer mic off badge */}
+        {callState.connectionState === 'connected' && !peerAudioEnabled && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 56,
+              right: 20,
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              borderRadius: 12,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              zIndex: 3,
+            }}
+            pointerEvents="none"
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="mic-off" size={14} color="#fff" />
+              <Text style={{ color: 'white', marginLeft: 4, fontSize: 12 }}>Mic off</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Dynamic Header based on call state */}
+        {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
+          // Incoming/connecting header
+          <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
+            pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
+          >
+            <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
+            <View style={styles.placeholder} />
+          </Animated.View>
+        ) : (
+          // Connected call header - vertical: name then duration
+          <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+            <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+
+            <View style={styles.connectedHeaderCenter}>
+              <Text style={styles.connectedUserName}>
+                {isDoctor ? patientName : doctorName}
+              </Text>
+              <Text style={styles.callDuration}>
+                {formatDuration(callState.callDuration)}
+              </Text>
+            </View>
+
+            <View style={styles.placeholder} />
+          </Animated.View>
+        )}
+
+        {/* Main Content - Streamlined for connected calls */}
+        {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
+          <Animated.View style={[styles.content, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
+            pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
+          >
+            {/* Profile Picture - Small and Simple */}
+            <View style={styles.profileContainer}>
+              {otherParticipantProfilePictureUrl ? (
+                <Image
+                  source={{ uri: otherParticipantProfilePictureUrl }}
+                  style={styles.profilePicture}
+                />
               ) : (
-                <RTCView
-                  key={(localStream as any)?.id || 'local-hero'}
-                  style={{ flex: 1 }}
-                  streamURL={localStream.toURL()}
-                  objectFit="cover"
-                  mirror={callState.isFrontCamera}
-                  pointerEvents="none"
-                />
+                <View style={styles.defaultProfilePicture}>
+                  <Ionicons
+                    name={isDoctor ? "medical" : "person"}
+                    size={24}
+                    color="white"
+                  />
+                </View>
               )}
-            </Animated.View>
-          )}
+            </View>
 
-          {/* Static PiP after transition settles */}
-          {pipSettled && !isReverseAnimating && (
-            <Animated.View
-              style={{
-                position: 'absolute',
-                bottom: PIP_MARGIN_BOTTOM,
-                left: PIP_MARGIN_LEFT,
-                width: PIP_WIDTH,
-                height: PIP_HEIGHT,
-                borderRadius: 10,
-                borderWidth: 2,
-                borderColor: '#4CAF50',
-                zIndex: 1,
-                overflow: 'hidden',
-                transform: [{ scale: pipScale }],
-              }}
-              pointerEvents="none"
-            >
-              {peerLeftVisible ? (
-                <View style={{ flex: 1, backgroundColor: 'black' }} />
-              ) : (
-                <RTCView
-                  key={(localStream as any)?.id || 'local-pip'}
-                  style={{ flex: 1 }}
-                  streamURL={localStream.toURL()}
-                  objectFit="cover"
-                  mirror={callState.isFrontCamera}
-                  zOrder={1}
-                  pointerEvents="none"
-                />
-              )}
-            </Animated.View>
-          )}
-        </>
-      )}
-      
-      {/* Peer left banner */}
-      {peerLeftVisible && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 80,
-            left: 0,
-            right: 0,
-            alignItems: 'center',
-            zIndex: 3,
-          }}
-          pointerEvents="none"
-        >
-          <View style={styles.peerLeftBanner}>
-            <Text style={styles.peerLeftBannerText}>
-              {(isDoctor ? patientName : doctorName)} left the call
-            </Text>
-          </View>
-        </View>
-      )}
+            {/* User Info */}
+            <View style={styles.userInfo}>
+              <Text style={styles.userName}>
+                {isDoctor ? patientName : doctorName}
+              </Text>
+              <Text style={styles.userRole}>
+                {isDoctor ? 'Patient' : 'Doctor'}
+              </Text>
+            </View>
 
-      {/* Peer mic off badge */}
-      {callState.connectionState === 'connected' && !peerAudioEnabled && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 56,
-            right: 20,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            borderRadius: 12,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            zIndex: 3,
-          }}
-          pointerEvents="none"
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="mic-off" size={14} color="#fff" />
-            <Text style={{ color: 'white', marginLeft: 4, fontSize: 12 }}>Mic off</Text>
-          </View>
-        </View>
-      )}
+            {/* Status */}
+            <View style={styles.statusContainer}>
+              <Text style={[styles.statusText, { color: getStatusColor() }]}>
+                {getStatusText()}
+              </Text>
+            </View>
+          </Animated.View>
+        ) : null}
 
-      {/* Dynamic Header based on call state */}
-      {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
-        // Incoming/connecting header
-        <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
-          pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
-        >
-          <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
-          <View style={styles.placeholder} />
-        </Animated.View>
-      ) : (
-        // Connected call header - vertical: name then duration
-        <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-          <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-
-          <View style={styles.connectedHeaderCenter}>
-            <Text style={styles.connectedUserName}>
-              {isDoctor ? patientName : doctorName}
-            </Text>
-            <Text style={styles.callDuration}>
-              {formatDuration(callState.callDuration)}
-            </Text>
-          </View>
-
-          <View style={styles.placeholder} />
-        </Animated.View>
-      )}
-      
-      {/* Main Content - Streamlined for connected calls */}
-      {shouldShowIncomingUI || callState.connectionState !== 'connected' ? (
-        <Animated.View style={[styles.content, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
-          pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
-        >
-          {/* Profile Picture - Small and Simple */}
-          <View style={styles.profileContainer}>
-            {otherParticipantProfilePictureUrl ? (
-              <Image
-                source={{ uri: otherParticipantProfilePictureUrl }}
-                style={styles.profilePicture}
-              />
-            ) : (
-              <View style={styles.defaultProfilePicture}>
-                <Ionicons 
-                  name={isDoctor ? "medical" : "person"} 
-                  size={24} 
-                  color="white" 
-                />
-              </View>
-            )}
-          </View>
-
-          {/* User Info */}
-          <View style={styles.userInfo}>
-            <Text style={styles.userName}>
-              {isDoctor ? patientName : doctorName}
-            </Text>
-            <Text style={styles.userRole}>
-              {isDoctor ? 'Patient' : 'Doctor'}
-            </Text>
-          </View>
-
-          {/* Status */}
-          <View style={styles.statusContainer}>
-            <Text style={[styles.statusText, { color: getStatusColor() }]}>
-              {getStatusText()}
-            </Text>
-          </View>
-        </Animated.View>
-      ) : null}
-
-      {/* Dynamic Controls based on call state */}
-      {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
-        /* Incoming Call Controls - Accept/Decline */
-        <Animated.View style={[styles.controls, { zIndex: 2 }]}>
-          {/* Decline Button */}
-          <TouchableOpacity
-            style={[styles.controlButton, styles.declineButton]}
-            onPress={handleRejectCall}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="call" size={20} color="white" />
-          </TouchableOpacity>
-
-          {/* Accept Button */}
-          <TouchableOpacity
-            style={[
-              styles.controlButton, 
-              styles.acceptButton,
-              isProcessingAnswer && styles.disabledButton
-            ]}
-            onPress={handleAcceptCall}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="videocam" size={20} color="white" />
-          </TouchableOpacity>
-        </Animated.View>
-      ) : callState.connectionState !== 'connected' ? (
-        /* Outgoing (connecting) minimal controls - End Call only at bottom center */
-        <Animated.View style={[styles.bottomCenterControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-          <TouchableOpacity
-            style={[styles.controlButton, styles.endCallButton]}
-            onPress={endCall}
-          >
-            <Ionicons name="call" size={20} color="white" />
-          </TouchableOpacity>
-        </Animated.View>
-      ) : (
-        /* Connected Call Controls */
-        <>
-          {/* Vertical tools on right side */}
-          <Animated.View style={[styles.rightControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            {/* Speaker */}
-            <TouchableOpacity 
-              style={[
-                styles.controlButton,
-                styles.sideControlButton,
-                isSpeakerOn && styles.activeButton
-              ]}
-              onPress={toggleSpeaker}
+        {/* Dynamic Controls based on call state */}
+        {shouldShowIncomingUI || (isIncomingCall && isProcessingAnswer) ? (
+          /* Incoming Call Controls - Accept/Decline */
+          <Animated.View style={[styles.controls, { zIndex: 2 }]}>
+            {/* Decline Button */}
+            <TouchableOpacity
+              style={[styles.controlButton, styles.declineButton]}
+              onPress={handleRejectCall}
               activeOpacity={0.8}
             >
-              <Ionicons 
-                name={isSpeakerOn ? "volume-high" : "volume-medium"} 
-                size={20} 
-                color="white" 
-              />
+              <Ionicons name="call" size={20} color="white" />
             </TouchableOpacity>
 
-            {/* Mute */}
+            {/* Accept Button */}
             <TouchableOpacity
               style={[
                 styles.controlButton,
-                styles.sideControlButton,
-                !callState.isAudioEnabled && styles.disabledButton
+                styles.acceptButton,
+                isProcessingAnswer && styles.disabledButton
               ]}
-              onPress={toggleAudio}
-              disabled={!localStream}
+              onPress={handleAcceptCall}
+              activeOpacity={0.8}
             >
-              <Ionicons
-                name={callState.isAudioEnabled ? "mic" : "mic-off"}
-                size={20}
-                color="white"
-              />
-            </TouchableOpacity>
-
-            {/* Video */}
-            <TouchableOpacity
-              style={[
-                styles.controlButton,
-                styles.sideControlButton,
-                !callState.isVideoEnabled && styles.disabledButton
-              ]}
-              onPress={toggleVideo}
-              disabled={!localStream}
-            >
-              <Ionicons
-                name={callState.isVideoEnabled ? "videocam" : "videocam-off"}
-                size={20}
-                color="white"
-              />
-            </TouchableOpacity>
-
-            {/* Switch camera */}
-            <TouchableOpacity
-              style={[styles.controlButton, styles.sideControlButton]}
-              onPress={switchCamera}
-              disabled={!localStream}
-            >
-              <Ionicons name="camera-reverse" size={20} color="white" />
+              <Ionicons name="videocam" size={20} color="white" />
             </TouchableOpacity>
           </Animated.View>
-
-          {/* End call at bottom center */}
+        ) : callState.connectionState !== 'connected' ? (
+          /* Outgoing (connecting) minimal controls - End Call only at bottom center */
           <Animated.View style={[styles.bottomCenterControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
             <TouchableOpacity
               style={[styles.controlButton, styles.endCallButton]}
@@ -1187,9 +1123,84 @@ export default function VideoCallModal({
               <Ionicons name="call" size={20} color="white" />
             </TouchableOpacity>
           </Animated.View>
-        </>
-      )}
-    </SafeAreaView>
+        ) : (
+          /* Connected Call Controls */
+          <>
+            {/* Vertical tools on right side */}
+            <Animated.View style={[styles.rightControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+              {/* Speaker */}
+              <TouchableOpacity
+                style={[
+                  styles.controlButton,
+                  styles.sideControlButton,
+                  isSpeakerOn && styles.activeButton
+                ]}
+                onPress={toggleSpeaker}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={isSpeakerOn ? "volume-high" : "volume-medium"}
+                  size={20}
+                  color="white"
+                />
+              </TouchableOpacity>
+
+              {/* Mute */}
+              <TouchableOpacity
+                style={[
+                  styles.controlButton,
+                  styles.sideControlButton,
+                  !callState.isAudioEnabled && styles.disabledButton
+                ]}
+                onPress={toggleAudio}
+                disabled={!localStream}
+              >
+                <Ionicons
+                  name={callState.isAudioEnabled ? "mic" : "mic-off"}
+                  size={20}
+                  color="white"
+                />
+              </TouchableOpacity>
+
+              {/* Video */}
+              <TouchableOpacity
+                style={[
+                  styles.controlButton,
+                  styles.sideControlButton,
+                  !callState.isVideoEnabled && styles.disabledButton
+                ]}
+                onPress={toggleVideo}
+                disabled={!localStream}
+              >
+                <Ionicons
+                  name={callState.isVideoEnabled ? "videocam" : "videocam-off"}
+                  size={20}
+                  color="white"
+                />
+              </TouchableOpacity>
+
+              {/* Switch camera */}
+              <TouchableOpacity
+                style={[styles.controlButton, styles.sideControlButton]}
+                onPress={switchCamera}
+                disabled={!localStream}
+              >
+                <Ionicons name="camera-reverse" size={20} color="white" />
+              </TouchableOpacity>
+            </Animated.View>
+
+            {/* End call at bottom center */}
+            <Animated.View style={[styles.bottomCenterControls, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
+              <TouchableOpacity
+                style={[styles.controlButton, styles.endCallButton]}
+                onPress={endCall}
+              >
+                <Ionicons name="call" size={20} color="white" />
+              </TouchableOpacity>
+            </Animated.View>
+          </>
+        )}
+      </SafeAreaView>
     </TouchableWithoutFeedback>
   );
 }

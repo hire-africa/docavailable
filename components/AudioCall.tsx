@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    Vibration,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -32,10 +32,10 @@ interface AudioCallProps {
   isIncomingCall?: boolean;
 }
 
-export default function AudioCall({ 
-  appointmentId, 
-  userId, 
-  isDoctor, 
+export default function AudioCall({
+  appointmentId,
+  userId,
+  isDoctor,
   doctorId,
   doctorName = 'Doctor',
   patientName = 'Patient',
@@ -52,7 +52,7 @@ export default function AudioCall({
     callDuration: 0,
     connectionState: isIncomingCall ? 'connecting' : 'disconnected',
   });
-  
+
   const [isInitializing, setIsInitializing] = useState(!isIncomingCall);
   const [isRinging, setIsRinging] = useState(isIncomingCall);
   const [isProcessingAnswer, setIsProcessingAnswer] = useState(false); // Track if we're processing the answer
@@ -61,7 +61,7 @@ export default function AudioCall({
 
   // Freeze UI to connected once we detect a connected state to avoid regressions
   const freezeConnectedRef = useRef(false);
-  
+
   // For outgoing calls, we should never show incoming call UI
   const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -72,7 +72,7 @@ export default function AudioCall({
 
   const initOnceRef = useRef<string | null>(null);
   const hasInitializedRef = useRef(false);
-  
+
   // Initialize call when component mounts
   useEffect(() => {
     const setupCall = async () => {
@@ -103,7 +103,7 @@ export default function AudioCall({
       }
       initOnceRef.current = appointmentId;
       hasInitializedRef.current = true;
-      
+
       if (!isIncomingCall) {
         console.log('🚀 AudioCall: Initializing call (outgoing)');
         await initializeCall();
@@ -120,11 +120,11 @@ export default function AudioCall({
         await initializeIncomingCall();
       }
     };
-    
+
     setupCall();
     startPulseAnimation();
   }, [isIncomingCall, appointmentId, userId, isDoctor]);
-  
+
   // Session end event listener (for safety limits)
   useEffect(() => {
     const handleSessionEnd = (event: any) => {
@@ -162,10 +162,10 @@ export default function AudioCall({
   useEffect(() => {
     return () => {
       console.log('🧹 AudioCall cleanup - component unmounting');
-      
+
       // Stop background billing
       backgroundBillingManager.stopBilling(appointmentId);
-      
+
       initOnceRef.current = null;
       hasInitializedRef.current = false;
       // Don't end call immediately - let the call complete naturally
@@ -186,7 +186,7 @@ export default function AudioCall({
   const initializeIncomingCall = async () => {
     try {
       console.log('📞 AudioCall: Initializing for incoming call');
-      
+
       const events: AudioCallEvents = {
         onStateChange: (state) => {
           console.log('📊 Call state changed:', state);
@@ -196,7 +196,7 @@ export default function AudioCall({
           if ((state.isConnected || state.connectionState === 'connected') && !freezeConnectedRef.current) {
             freezeConnectedRef.current = true;
           }
-          
+
           // Update ringing state and switch UI when connected
           if (state.connectionState === 'connected' || state.isConnected) {
             setIsRinging(false);
@@ -214,11 +214,11 @@ export default function AudioCall({
         onError: (error) => {
           console.error('❌ Call error:', error);
           // Only show alert for critical errors, not during normal transitions
-          if (!error.includes('connection') && 
-              !error.includes('transition') && 
-              !error.includes('WebRTC') &&
-              !error.includes('signaling') &&
-              !error.includes('Failed to initialize call')) {
+          if (!error.includes('connection') &&
+            !error.includes('transition') &&
+            !error.includes('WebRTC') &&
+            !error.includes('signaling') &&
+            !error.includes('Failed to initialize call')) {
             Alert.error('Call Error', error);
           }
         },
@@ -229,15 +229,15 @@ export default function AudioCall({
           setIsRinging(false);
           setIsProcessingAnswer(false);
           setCallAccepted(true);
-          
+
           // Start background billing when call is answered
           console.log('💰 [AudioCall] Starting background billing for answered call');
-          backgroundBillingManager.startBilling(appointmentId, {
+          backgroundBillingManager.startBilling(appointmentId, 'voice', {
             intervalMinutes: 10,      // Bill every 10 minutes
             warningBeforeMinutes: 1,  // Warn 1 minute before billing
             maxCycles: 6              // Safety limit (60 minutes)
           });
-          
+
           onCallAnswered?.();
         },
         onCallRejected: () => {
@@ -253,7 +253,7 @@ export default function AudioCall({
       // Initialize the AudioCallService for incoming call
       await AudioCallService.getInstance().initializeForIncomingCall(appointmentId, userId, events);
       console.log('✅ AudioCall: Incoming call initialized successfully');
-      
+
     } catch (error) {
       console.error('❌ AudioCall: Failed to initialize incoming call:', error);
       // Call initialization error logged to console only - no modal shown
@@ -279,20 +279,20 @@ export default function AudioCall({
         onError: (error) => {
           console.error('❌ Call error:', error);
           // Only show alert for critical errors, not during normal transitions
-          if (!error.includes('connection') && 
-              !error.includes('transition') && 
-              !error.includes('WebRTC') &&
-              !error.includes('signaling') &&
-              !error.includes('Failed to initialize call')) {
+          if (!error.includes('connection') &&
+            !error.includes('transition') &&
+            !error.includes('WebRTC') &&
+            !error.includes('signaling') &&
+            !error.includes('Failed to initialize call')) {
             Alert.error('Call Error', error, onEndCall);
           }
         },
         onCallAnswered: () => {
           console.log('✅ Call answered - session will be activated');
-          
+
           // Start background billing when outgoing call is answered
           console.log('💰 [AudioCall] Starting background billing for outgoing call');
-          backgroundBillingManager.startBilling(appointmentId, {
+          backgroundBillingManager.startBilling(appointmentId, 'voice', {
             intervalMinutes: 10,      // Bill every 10 minutes
             warningBeforeMinutes: 1,  // Warn 1 minute before billing
             maxCycles: 6              // Safety limit (60 minutes)
@@ -309,10 +309,10 @@ export default function AudioCall({
       };
 
       await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
-      
+
       // Audio calls start with earpiece mode by default (like normal phone calls)
       console.log('📞 Call initialization completed - audio starts with earpiece mode');
-      
+
     } catch (error) {
       console.error('Failed to initialize audio call:', error);
       Alert.error('Call Failed', 'Unable to start audio call. Please try again.', onEndCall);
@@ -390,13 +390,13 @@ export default function AudioCall({
       Vibration.vibrate(50);
       const newSpeakerState = !isSpeakerOn;
       setIsSpeakerOn(newSpeakerState);
-      
+
       console.log('🔊 [AudioCall] Toggling speaker from', isSpeakerOn ? 'ON' : 'OFF', 'to', newSpeakerState ? 'ON' : 'OFF');
-      
+
       // Toggle speaker mode in AudioCallService
       const audioCallService = AudioCallService.getInstance();
       await audioCallService.toggleSpeaker(newSpeakerState);
-      
+
       console.log('🔊 [AudioCall] Speaker toggled successfully to:', newSpeakerState ? 'ON' : 'OFF');
     } catch (error) {
       console.error('❌ [AudioCall] Error toggling speaker:', error);
@@ -408,14 +408,14 @@ export default function AudioCall({
   const endCall = async () => {
     // Haptic feedback for end call
     Vibration.vibrate([0, 100, 50, 100]);
-    
+
     // Stop ringtone if still playing
     try {
       await ringtoneService.stop();
     } catch (e) {
       console.error('❌ Failed to stop ringtone:', e);
     }
-    
+
     await AudioCallService.getInstance().endCall();
     onEndCall();
   };
@@ -433,7 +433,7 @@ export default function AudioCall({
     if (shouldShowIncomingUI) return 'Incoming Call';
     if (isEffectivelyConnected) return 'Connected';
     if (isIncomingCall && isProcessingAnswer) return 'Answering...';
-    
+
     switch (callState.connectionState) {
       case 'connecting':
         return isIncomingCall ? 'Connecting...' : 'Calling...';
@@ -493,7 +493,7 @@ export default function AudioCall({
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor="#000" barStyle="light-content" />
-      
+
       {/* Background Image */}
       <Image
         source={require('../app/chat/black1.jpg')}
@@ -511,7 +511,7 @@ export default function AudioCall({
         onLoad={() => console.log('✅ Audio call background loaded successfully')}
         onError={(error) => console.log('❌ Audio call background failed to load:', error)}
       />
-      
+
       {/* Dynamic Header based on call state */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
@@ -522,7 +522,7 @@ export default function AudioCall({
         </Text>
         <View style={styles.placeholder} />
       </View>
-      
+
       {/* Main Content - Simple Layout */}
       <View style={styles.content}>
         {/* Profile Picture - Small and Simple */}
@@ -534,10 +534,10 @@ export default function AudioCall({
             />
           ) : (
             <View style={styles.defaultProfilePicture}>
-              <Ionicons 
-                name={isDoctor ? "medical" : "person"} 
-                size={24} 
-                color="white" 
+              <Ionicons
+                name={isDoctor ? "medical" : "person"}
+                size={24}
+                color="white"
               />
             </View>
           )}
@@ -569,8 +569,8 @@ export default function AudioCall({
         </View>
       </View>
 
-          {/* Dynamic Controls based on call state */}
-          {isIncomingCall && !callAccepted ? (
+      {/* Dynamic Controls based on call state */}
+      {isIncomingCall && !callAccepted ? (
         /* Incoming Call Controls - Accept/Decline */
         <View style={styles.controls}>
           {/* Decline Button */}
@@ -585,7 +585,7 @@ export default function AudioCall({
               } catch (e) {
                 console.error('❌ Failed to stop ringtone on decline:', e);
               }
-              try { await AudioCallService.getInstance().rejectIncomingCall?.('declined'); } catch {}
+              try { await AudioCallService.getInstance().rejectIncomingCall?.('declined'); } catch { }
               onCallRejected?.();
             }}
             activeOpacity={0.8}
@@ -596,7 +596,7 @@ export default function AudioCall({
           {/* Accept Button */}
           <TouchableOpacity
             style={[
-              styles.controlButton, 
+              styles.controlButton,
               styles.acceptButton,
               isProcessingAnswer && styles.disabledButton
             ]}
@@ -604,27 +604,27 @@ export default function AudioCall({
               if (isProcessingAnswer) return; // Prevent multiple taps
               Vibration.vibrate(50);
               console.log('📞 Accept button pressed - answering call');
-              
+
               // Stop ringtone immediately when accepting call
               try {
                 await ringtoneService.stop();
               } catch (e) {
                 console.error('❌ Failed to stop ringtone:', e);
               }
-              
+
               // Immediately update UI state
               setIsRinging(false);
               setIsProcessingAnswer(true);
               setCallAccepted(true); // Mark call as accepted to show connected UI
-              
+
               // Start background billing immediately when user accepts
               console.log('💰 [AudioCall] Starting background billing on call accept');
-              backgroundBillingManager.startBilling(appointmentId, {
+              backgroundBillingManager.startBilling(appointmentId, 'voice', {
                 intervalMinutes: 10,      // Bill every 10 minutes
                 warningBeforeMinutes: 1,  // Warn 1 minute before billing
                 maxCycles: 6              // Safety limit (60 minutes)
               });
-              
+
               try {
                 // Process the stored pending offer and send answer
                 await AudioCallService.getInstance().processIncomingCall();
@@ -636,7 +636,7 @@ export default function AudioCall({
                 // Reset processing state even on error
                 setIsProcessingAnswer(false);
               }
-              
+
               // Trigger callback for any parent-side effects
               onCallAnswered?.();
             }}
@@ -649,7 +649,7 @@ export default function AudioCall({
         /* Connected Call Controls - Speaker/Mute/End */
         <View style={styles.controls}>
           {/* Speaker Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
               styles.controlButton,
               isSpeakerOn && styles.activeButton
@@ -657,10 +657,10 @@ export default function AudioCall({
             onPress={toggleSpeaker}
             activeOpacity={0.8}
           >
-            <Ionicons 
-              name={isSpeakerOn ? "volume-high" : "call"} 
-              size={20} 
-              color="white" 
+            <Ionicons
+              name={isSpeakerOn ? "volume-high" : "call"}
+              size={20}
+              color="white"
             />
           </TouchableOpacity>
 

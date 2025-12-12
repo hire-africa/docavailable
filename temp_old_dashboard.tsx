@@ -29,7 +29,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BottomNavigation from '../components/BottomNavigation';
 import Icon, { IconName } from '../components/Icon';
 import { RealTimeEventService } from '../services/realTimeEventService';
-import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { Activity, addRealtimeActivity, generateUserActivities } from '../utils/activityUtils';
 
 import AlertDialog from '../components/AlertDialog';
 import CacheManagementModal from '../components/CacheManagementModal';
@@ -51,19 +51,16 @@ import { apiService } from './services/apiService';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import { useAnonymousMode } from '@/hooks/useAnonymousMode';
-import { useCustomTheme } from '@/hooks/useCustomTheme';
 import { useThemedColors } from '@/hooks/useThemedColors';
 import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
-import AppTour from '../components/AppTour';
 import FilterModal from '../components/FilterModal';
 import IncompleteProfileBlock from '../components/IncompleteProfileBlock';
 import OnboardingOverlay from '../components/OnboardingOverlay';
 import SpecializationFilterModal from '../components/SpecializationFilterModal';
 import { Colors } from '../constants/Colors';
-import appTourService from '../services/appTourService';
-import favoriteDoctorsService from '../services/favoriteDoctorsService';
+import { useTheme } from '../contexts/ThemeContext';
 import { imageCacheService } from '../services/imageCacheService';
 import { paymentsService } from '../services/paymentsService';
 import { getMissingFields } from '../utils/profileUtils';
@@ -124,7 +121,7 @@ export default function PatientDashboard() {
 
   // Theme support
   const colors = useThemedColors();
-  const { theme, isDark } = useCustomTheme();
+  const { theme, isDark, toggleTheme } = useTheme();
   const isDarkMode = isAnonymousModeEnabled && isDark;
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const insets = useSafeAreaInsets();
@@ -132,18 +129,7 @@ export default function PatientDashboard() {
   // Create theme-aware styles
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const [activeTab, setActiveTab] = useState<string>('home');
-
-  // Dummy implementations for missing functions
-  // Dummy implementations for missing functions
-
-  const checkApiHealth = useCallback(async () => {
-    try {
-      await apiService.get('/health');
-    } catch (error) {
-      // console.error('API Health check failed:', error);
-    }
-  }, []);
+  const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
 
 
@@ -173,33 +159,6 @@ export default function PatientDashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
-
-  // App Tour state
-  const [showAppTour, setShowAppTour] = useState(false);
-  const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
-
-  // Check if app tour should be shown
-  useEffect(() => {
-    const checkTourStatus = async () => {
-      if (!userData || userData.user_type !== 'patient') return;
-
-      // Don't show tour if onboarding overlay is showing
-      if (showOnboarding) return;
-
-      // Check if tour has been completed
-      const hasCompleted = await appTourService.hasCompletedTour('patient');
-      if (!hasCompleted && !showAppTour) {
-        // Ensure we're on home tab for tour
-        setActiveTab('home');
-        // Small delay to ensure UI is ready
-        setTimeout(() => {
-          setShowAppTour(true);
-        }, 1000);
-      }
-    };
-
-    checkTourStatus();
-  }, [userData, showOnboarding]);
 
   // Animate bottom nav
   const animateBottomNav = (hide: boolean) => {
@@ -251,11 +210,10 @@ export default function PatientDashboard() {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [visibleDoctorCards, setVisibleDoctorCards] = useState<number>(0);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const discoverBanners = [discoverBanner1, discoverBanner2];
   const doctorCardAnimations = useRef<{ [key: string]: Animated.Value }>({}).current;
   const hasAnimatedDoctors = useRef(false);
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [favoriteDoctors, setFavoriteDoctors] = useState<any[]>([]);
-  const [favoritesRefreshTrigger, setFavoritesRefreshTrigger] = useState(0);
 
   // Function to refresh subscription data
   const refreshSubscriptionData = useCallback(async () => {
@@ -276,27 +234,6 @@ export default function PatientDashboard() {
       console.error('PatientDashboard: Error refreshing subscription:', error);
     }
   }, [user?.id]);
-
-  // Function to load favorite doctors
-  const loadFavoriteDoctors = useCallback(async () => {
-    try {
-      const favorites = await favoriteDoctorsService.getFavorites();
-      // Map favorite doctor IDs to full doctor objects from the doctors list
-      const favoriteDoctorObjects = doctors.filter(doc =>
-        favorites.some(fav => fav.id === doc.id)
-      );
-      setFavoriteDoctors(favoriteDoctorObjects);
-    } catch (error) {
-      console.error('Error loading favorite doctors:', error);
-    }
-  }, [doctors]);
-
-  // Load favorites when doctors list changes
-  useEffect(() => {
-    if (doctors.length > 0) {
-      loadFavoriteDoctors();
-    }
-  }, [doctors, favoritesRefreshTrigger, loadFavoriteDoctors]);
 
   const loadActivities = async () => {
     try {
@@ -460,22 +397,7 @@ export default function PatientDashboard() {
   const [currentLocationInfo, setCurrentLocationInfo] = useState<LocationInfo | null>(null);
   const [activeTextSessions, setActiveTextSessions] = useState<any[]>([]);
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
-  const [sessionElapsedTime, setSessionElapsedTime] = useState<number>(0);
-  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const discoverBanners = [discoverBanner1, discoverBanner2];
-
-  const formatSessionTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    const hours = Math.floor(mins / 60);
-
-    if (hours > 0) {
-      const remainingMins = mins % 60;
-      return `${hours}:${remainingMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  const [sessionElapsedTime, setSessionElapsedTime] = useState(0);
 
   const sidebarAnim = useRef(new Animated.Value(0)).current;
   const [webSidebarTransform, setWebSidebarTransform] = useState(-300);
@@ -510,6 +432,40 @@ export default function PatientDashboard() {
     refreshData();
   }, []);
 
+  // Auto-switch discover banners every 5 seconds
+  useEffect(() => {
+    const bannerInterval = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length);
+    }, 30000); // Switch every 30 seconds
+
+    return () => clearInterval(bannerInterval);
+  }, [discoverBanners.length]);
+
+  // Session elapsed time timer - updates every second when there's an active session
+  useEffect(() => {
+    if (activeTextSessions.length > 0) {
+      const sessionTimer = setInterval(() => {
+        setSessionElapsedTime((prev) => prev + 1);
+      }, 1000);
+
+      return () => clearInterval(sessionTimer);
+    } else {
+      // Reset timer when no active sessions
+      setSessionElapsedTime(0);
+    }
+  }, [activeTextSessions.length]);
+
+  // Helper function to format elapsed time as HH:MM:SS
+  const formatSessionTime = (seconds: number): string => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Log when user data changes
   useEffect(() => {
     if (userData) {
@@ -537,40 +493,6 @@ export default function PatientDashboard() {
 
     return () => clearInterval(interval);
   }, [user]);
-
-  // Session Timer Effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (activeTextSessions.length > 0) {
-      // Calculate initial elapsed time based on start time if available
-      const session = activeTextSessions[0];
-      if (session.started_at) {
-        const startTime = new Date(session.started_at).getTime();
-        const now = new Date().getTime();
-        const elapsed = Math.floor((now - startTime) / 1000);
-        setSessionElapsedTime(elapsed > 0 ? elapsed : 0);
-      }
-
-      interval = setInterval(() => {
-        setSessionElapsedTime(prev => prev + 1);
-      }, 1000);
-    } else {
-      setSessionElapsedTime(0);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [activeTextSessions]);
-
-  // Auto-switch discover banners every 5 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [discoverBanners.length]);
 
   // Helper function to ensure appointments is always an array
   const getSafeAppointments = () => {
@@ -1491,7 +1413,7 @@ export default function PatientDashboard() {
 
   // Memoize filtered and sorted doctors to prevent unnecessary recalculations
   const filteredAndSortedDoctors = useMemo(() => {
-    let filteredDoctors = showFavoritesOnly ? favoriteDoctors : doctors;
+    let filteredDoctors = doctors;
 
     // Filter by online status if toggle is enabled
     if (showOnlyOnline) {
@@ -1553,14 +1475,14 @@ export default function PatientDashboard() {
       default:
         return filteredDoctors;
     }
-  }, [doctors, favoriteDoctors, showFavoritesOnly, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
+  }, [doctors, showOnlyOnline, selectedSpecialization, searchQuery, sortBy]);
 
   // Reset animation when filters/search/sort changes (only if not already animated)
   useEffect(() => {
     if (!loadingDoctors && !hasAnimatedDoctors.current) {
       setVisibleDoctorCards(0);
     }
-  }, [searchQuery, showOnlyOnline, selectedSpecialization, sortBy, showFavoritesOnly]);
+  }, [searchQuery, showOnlyOnline, selectedSpecialization, sortBy]);
 
   // Staggered animation effect for doctor cards (only on first load)
   // Start immediately when doctors arrive, don't wait for loadingDoctors to be false
@@ -1760,66 +1682,6 @@ export default function PatientDashboard() {
             />
           }
         >
-          {/* Active Session Banner */}
-          {activeTextSessions.length > 0 && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => {
-                const session = activeTextSessions[0];
-                const appointmentId = session.appointment_id || `text_session_${session.id}`;
-                router.push(`/chat/${appointmentId}`);
-              }}
-              style={{
-                backgroundColor: '#4CAF50',
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                borderRadius: 12,
-                marginBottom: 20,
-                shadowColor: '#4CAF50',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 8,
-                elevation: 4,
-              }}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                <View style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 12
-                }}>
-                  <Icon name="comment" size={20} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>
-                    Session Active
-                  </Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
-                    {activeTextSessions[0]?.doctor?.display_name || 'Doctor'} • {formatSessionTime(sessionElapsedTime)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={{
-                backgroundColor: '#fff',
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 16,
-              }}>
-                <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 12 }}>
-                  Open Chat
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
           {/* Welcome Section */}
           <ThemedView style={{
             backgroundColor: '#FFFFFF',
@@ -2050,6 +1912,7 @@ export default function PatientDashboard() {
             </View>
           </View>
 
+          {/* Recent Activity Section - Commented Out
           <View style={{
             backgroundColor: '#FFFFFF',
             borderRadius: 20,
@@ -2109,7 +1972,6 @@ export default function PatientDashboard() {
                     elevation: 2,
                   }}
                   onPress={() => {
-                    // Navigate to relevant section based on activity type
                     if (activity.type === 'appointment') {
                       router.push('/my-appointments');
                     } else if (activity.type === 'message') {
@@ -2182,6 +2044,7 @@ export default function PatientDashboard() {
               </View>
             )}
           </View>
+          */}
         </ScrollView>
       </View>
     );
@@ -2799,29 +2662,36 @@ export default function PatientDashboard() {
 
         {/* Search and Filter Container */}
         <View style={styles.searchFilterContainer}>
-          {/* Search Bar - Full Width */}
-          <View style={styles.searchBar}>
-            <Icon name="search" size={20} color="#4CAF50" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search doctors by name or specialization..."
-              placeholderTextColor="#999"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            <TouchableOpacity
-              style={styles.filterButton}
-              onPress={() => setShowFilterModal(true)}
-            >
-              <FontAwesome name="sliders" size={18} color="#4CAF50" />
-              {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
-                <View style={styles.filterBadge}>
-                  <Text style={styles.filterBadgeText}>
-                    {[showOnlyOnline, selectedSpecialization, sortBy !== 'name'].filter(Boolean).length}
-                  </Text>
-                </View>
+          {/* Search Bar with Filter Button */}
+          <View style={styles.searchBarContainer}>
+            <View style={styles.searchBar}>
+              <Icon name="search" size={20} color="#4CAF50" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search doctors by name or specialization..."
+                placeholderTextColor="#999"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearButton}>
+                  <Icon name="times" size={18} color="#666" />
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.filterButton}
+                onPress={() => setShowFilterModal(true)}
+              >
+                <FontAwesome name="sliders" size={18} color="#4CAF50" />
+                {(showOnlyOnline || selectedSpecialization || sortBy !== 'name') && (
+                  <View style={styles.filterBadge}>
+                    <Text style={styles.filterBadgeText}>
+                      {[showOnlyOnline, selectedSpecialization, sortBy !== 'name'].filter(Boolean).length}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Active Filters Chips */}
@@ -2965,7 +2835,6 @@ export default function PatientDashboard() {
                       key={doctor.id}
                       doctor={doctor}
                       onPress={handleViewDoctorDetails}
-                      onFavoriteChange={() => setFavoritesRefreshTrigger(prev => prev + 1)}
                     />
                   );
                 }
@@ -3000,7 +2869,6 @@ export default function PatientDashboard() {
                     <DoctorCard
                       doctor={doctor}
                       onPress={handleViewDoctorDetails}
-                      onFavoriteChange={() => setFavoritesRefreshTrigger(prev => prev + 1)}
                     />
                   </Animated.View>
                 );
@@ -3093,12 +2961,16 @@ export default function PatientDashboard() {
 
         // Check if the date is valid
         if (isNaN(date.getTime())) {
-          return null;
+          return 'Invalid Date';
         }
 
-        return date;
+        return date.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric'
+        });
       } catch {
-        return null;
+        return 'Invalid Date';
       }
     };
 
@@ -4211,35 +4083,101 @@ export default function PatientDashboard() {
             />
           )}
 
-          {/* Right side button - Bookmark for Discover, Notification for others */}
-          {activeTab === 'discover' ? (
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Icon
-                name={showFavoritesOnly ? 'bookmark' : 'bookmarkO'}
-                size={20}
-                color={showFavoritesOnly ? '#4CAF50' : '#CCC'}
-              />
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={styles.notificationButton}
-              onPress={() => router.push('/notifications')}
-            >
-              <FontAwesome name="bell" size={20} color="#4CAF50" />
-              {/* Unread notification badge */}
-              {unreadNotificationCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
+          {/* Notification Icon - Right side with margin */}
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => router.push('/notifications')}
+          >
+            <FontAwesome name="bell" size={20} color="#4CAF50" />
+            {/* Unread notification badge */}
+            {unreadNotificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>{unreadNotificationCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
       )}
+
+      {/* Active Session Banner */}
+      {activeTextSessions.length > 0 && (
+        <TouchableOpacity
+          style={{
+            backgroundColor: '#4CAF50',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            marginHorizontal: 16,
+            marginBottom: 8,
+            borderRadius: 12,
+            shadowColor: '#4CAF50',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 4,
+          }}
+          onPress={() => {
+            const session = activeTextSessions[0];
+            const chatId = `text_session_${session.id || session.appointment_id}`;
+            router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            {/* Pulsing indicator */}
+            <View style={{
+              width: 12,
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: '#FFFFFF',
+              marginRight: 10,
+            }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '600' }}>
+                Session Active
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>
+                Dr. {activeTextSessions[0]?.doctor?.first_name || activeTextSessions[0]?.doctor_name || 'Doctor'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Timer */}
+          <View style={{
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 20,
+            marginRight: 12,
+          }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+              {formatSessionTime(sessionElapsedTime)}
+            </Text>
+          </View>
+
+          {/* End Session Button */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#FFFFFF',
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+              borderRadius: 20,
+            }}
+            onPress={(e) => {
+              e.stopPropagation();
+              const session = activeTextSessions[0];
+              const chatId = `text_session_${session.id || session.appointment_id}`;
+              router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+            }}
+          >
+            <Text style={{ color: '#4CAF50', fontSize: 13, fontWeight: '700' }}>
+              End Session
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.mainContent}>
         {(() => {
           switch (activeTab) {
@@ -4611,9 +4549,10 @@ export default function PatientDashboard() {
                 </View>
               </View>
             </ScrollView>
-          </Animated.View>
-        </View>
-      )}
+          </Animated.View >
+        </View >
+      )
+      }
 
       {/* Specialization Filter Modal */}
       <SpecializationFilterModal
@@ -4655,23 +4594,7 @@ export default function PatientDashboard() {
           setOnboardingDismissed(true);
         }}
       />
-
-      {/* App Tour */}
-      <AppTour
-        visible={showAppTour && !showOnboarding}
-        userType="patient"
-        onComplete={() => {
-          setShowAppTour(false);
-        }}
-        onSkip={() => {
-          setShowAppTour(false);
-        }}
-        elementRefs={tourTabRefs.current}
-        onTabChange={(tab) => {
-          setActiveTab(tab);
-        }}
-      />
-    </SafeAreaView>
+    </SafeAreaView >
   );
 }
 
@@ -5107,32 +5030,9 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     paddingVertical: 60,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#666',
-    marginTop: 2,
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: '#4CAF50',
-  },
-  tabIcon: {
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  activeTabLabel: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
+    marginTop: 16,
   },
   placeholderBox: {
     flex: 1,
@@ -5672,12 +5572,6 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     marginHorizontal: 20,
     marginBottom: 16,
   },
-  searchBarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 16,
-  },
   searchBarContainer: {
     marginBottom: 16,
   },
@@ -5686,10 +5580,9 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 14,
     height: 56,
-    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
@@ -5697,22 +5590,6 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     elevation: 2,
     borderWidth: 1,
     borderColor: '#E8F5E8',
-  },
-  sideButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E8F5E8',
-    position: 'relative',
   },
   searchInput: {
     flex: 1,
@@ -5937,16 +5814,16 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     position: 'absolute',
     left: 0,
     top: 0,
-    bottom: 0,
+    height: '100%',
     width: 300,
     backgroundColor: '#fff',
-    borderTopRightRadius: 24,
-    borderBottomRightRadius: 24,
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
+    shadowOffset: { width: -2, height: 0 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 5,
   },
   sidebarScrollView: {
     flex: 1,
@@ -6045,51 +5922,6 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     fontSize: 18,
     fontWeight: 'bold',
     color: '#222',
-  },
-  // Modern Sidebar Styles
-  modernProfileSection: {
-    alignItems: 'center',
-    paddingBottom: 24,
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  modernProfileImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#F0F0F0',
-  },
-  modernProfileName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 8,
-  },
-  viewProfileLink: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 4,
-  },
-  modernMenuSection: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  modernMenuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginBottom: 4,
-    width: '90%',
-  },
-  modernMenuText: {
-    fontSize: 16,
-    color: '#666',
-    marginLeft: 16,
-    fontWeight: '400',
   },
   sectionHeader: {
     fontSize: 18,

@@ -1,13 +1,16 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Image,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import appTourService, { TourStep } from '../services/appTourService';
@@ -22,6 +25,8 @@ interface AppTourProps {
   onSkip?: () => void;
   elementRefs?: Record<string, React.RefObject<View>>; // Refs to elements to highlight
   onTabChange?: (tab: string) => void; // Callback to switch tabs during tour
+  steps?: TourStep[]; // Optional custom steps
+  scrollViewRef?: React.RefObject<ScrollView>; // Ref to ScrollView for auto-scrolling
 }
 
 export default function AppTour({
@@ -31,6 +36,8 @@ export default function AppTour({
   onSkip,
   elementRefs = {},
   onTabChange,
+  steps: customSteps,
+  scrollViewRef,
 }: AppTourProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [highlightLayout, setHighlightLayout] = useState<{
@@ -44,7 +51,7 @@ export default function AppTour({
   const tooltipOpacity = useRef(new Animated.Value(0)).current;
   const tooltipScale = useRef(new Animated.Value(0.8)).current;
 
-  const steps = appTourService.getTourSteps(userType);
+  const steps = customSteps || appTourService.getTourSteps(userType);
   const currentStep = steps[currentStepIndex];
 
   // Measure element position when step changes
@@ -61,16 +68,59 @@ export default function AppTour({
 
       const ref = elementRefs[currentStep.target];
       if (ref?.current) {
-        // Try to measure the element
-        ref.current.measure((x, y, w, h, pageX, pageY) => {
-          setHighlightLayout({
-            x: pageX,
-            y: pageY,
-            width: w || 200,
-            height: h || 50,
+        // First scroll to the element, then measure
+        const scrollAndMeasure = () => {
+          // Get initial position to calculate scroll
+          ref.current?.measure((x, y, w, h, pageX, pageY) => {
+            // Auto-scroll to show the element
+            if (scrollViewRef?.current) {
+              const screenHeight = height;
+              const tooltipHeight = currentStep.imagePath ? 350 : 150;
+
+              let scrollTo = 0;
+              // Calculate scroll position based on tooltip position
+              if (currentStep.position === 'top') {
+                // For top tooltips, scroll to show element in lower half of screen
+                // This leaves room for tooltip above
+                scrollTo = Math.max(0, pageY - (screenHeight * 0.6));
+              } else if (currentStep.position === 'bottom') {
+                // For bottom tooltips, scroll to show element in upper half
+                scrollTo = Math.max(0, pageY - (screenHeight * 0.3));
+              }
+
+              scrollViewRef.current.scrollTo({
+                y: scrollTo,
+                animated: true,
+              });
+
+              // Wait for scroll to complete, then measure in window
+              setTimeout(() => {
+                ref.current?.measureInWindow((winX, winY, winW, winH) => {
+                  setHighlightLayout({
+                    x: winX,
+                    y: winY,
+                    width: winW || 200,
+                    height: winH || 50,
+                  });
+                  animateTooltip();
+                });
+              }, 400); // Wait for scroll animation
+            } else {
+              // No scroll view, just measure
+              ref.current?.measureInWindow((winX, winY, winW, winH) => {
+                setHighlightLayout({
+                  x: winX,
+                  y: winY,
+                  width: winW || 200,
+                  height: winH || 50,
+                });
+                animateTooltip();
+              });
+            }
           });
-          animateTooltip();
-        });
+        };
+
+        scrollAndMeasure();
       } else {
         // For bottom navigation tabs, we'll use a fixed position
         if (currentStep.target.includes('-tab')) {
@@ -78,12 +128,13 @@ export default function AppTour({
           if (tabIndex !== -1) {
             const tabCount = getTabCount();
             const tabWidth = width / tabCount;
-            const tabX = tabIndex * tabWidth + tabWidth / 2;
+            // Center the highlight on the tab
+            const tabX = tabIndex * tabWidth;
             setHighlightLayout({
-              x: tabX - 40,
-              y: height - (insets.bottom + 60),
-              width: 80,
-              height: 60,
+              x: tabX + (tabWidth / 2) - 35, // Center with 70px width
+              y: height - (insets.bottom + 65), // Adjusted for better alignment
+              width: 70, // Slightly narrower for better fit
+              height: 50, // Reduced height to fit tab better
             });
             animateTooltip();
             return;
@@ -95,8 +146,9 @@ export default function AppTour({
       }
     };
 
-    // Small delay to ensure layout is ready
-    const timer = setTimeout(measureElement, 300);
+    // No delay for center steps, minimal delay for others
+    const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') ? 0 : 50;
+    const timer = setTimeout(measureElement, delay);
     return () => clearTimeout(timer);
   }, [currentStepIndex, visible, currentStep, elementRefs, insets.bottom]);
 
@@ -104,13 +156,13 @@ export default function AppTour({
     Animated.parallel([
       Animated.timing(tooltipOpacity, {
         toValue: 1,
-        duration: 300,
+        duration: 200, // Reduced from 300ms
         useNativeDriver: true,
       }),
       Animated.spring(tooltipScale, {
         toValue: 1,
-        tension: 50,
-        friction: 7,
+        tension: 80, // Increased for faster animation
+        friction: 8,
         useNativeDriver: true,
       }),
     ]).start();
@@ -120,7 +172,7 @@ export default function AppTour({
     if (visible) {
       Animated.timing(overlayOpacity, {
         toValue: 1,
-        duration: 300,
+        duration: 200, // Reduced from 300ms
         useNativeDriver: true,
       }).start();
     } else {
@@ -132,12 +184,17 @@ export default function AppTour({
 
   const handleNext = () => {
     if (currentStepIndex < steps.length - 1) {
-      tooltipOpacity.setValue(0);
-      tooltipScale.setValue(0.8);
       const nextStepIndex = currentStepIndex + 1;
       const nextStep = steps[nextStepIndex];
-      
-      // Switch to appropriate tab if needed
+
+      // Immediately update step index for faster perceived transition
+      setCurrentStepIndex(nextStepIndex);
+
+      // Reset animations immediately without waiting
+      tooltipOpacity.setValue(0);
+      tooltipScale.setValue(0.8);
+
+      // Switch to appropriate tab if needed (non-blocking)
       if (onTabChange && nextStep) {
         const tabMap: Record<string, string> = {
           'home-tab': 'home',
@@ -151,15 +208,18 @@ export default function AppTour({
         };
         const tab = tabMap[nextStep.target];
         if (tab) {
-          onTabChange(tab);
+          // Use requestAnimationFrame for non-blocking tab change
+          requestAnimationFrame(() => {
+            onTabChange(tab);
+          });
         }
       }
-      
-      setCurrentStepIndex(nextStepIndex);
-      
-      // Execute step action if present
+
+      // Execute step action if present (non-blocking)
       if (currentStep.action) {
-        currentStep.action();
+        requestAnimationFrame(() => {
+          currentStep.action?.();
+        });
       }
     } else {
       handleComplete();
@@ -207,7 +267,8 @@ export default function AppTour({
 
   const getTooltipPosition = () => {
     const tooltipWidth = 300;
-    const tooltipHeight = 150;
+    // Larger height when image is present
+    const tooltipHeight = currentStep.imagePath ? 350 : 150;
     const spacing = 20;
 
     // For center/welcome/complete steps, center the tooltip
@@ -223,14 +284,14 @@ export default function AppTour({
     switch (currentStep.position) {
       case 'top':
         return {
-          top: Math.max(insets.top + 20, y - tooltipHeight - spacing),
+          top: Math.max(insets.top + 20, y - tooltipHeight - 60), // Increased spacing
           left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
         };
       case 'bottom':
-        // For bottom nav tabs, show tooltip above
+        // For bottom nav tabs, show tooltip well above with extra spacing
         if (currentStep.target.includes('-tab')) {
           return {
-            top: y - tooltipHeight - spacing,
+            top: y - tooltipHeight - 80, // Much more spacing to keep nav visible
             left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
           };
         }
@@ -280,10 +341,9 @@ export default function AppTour({
           />
         )}
 
-        {/* Tooltip */}
         <Animated.View
           style={[
-            styles.tooltip,
+            styles.tooltipContainer,
             tooltipPosition,
             {
               opacity: tooltipOpacity,
@@ -291,52 +351,69 @@ export default function AppTour({
             },
           ]}
         >
-          <View style={styles.tooltipContent}>
-            <Text style={styles.tooltipTitle}>{currentStep.title}</Text>
-            <Text style={styles.tooltipDescription}>{currentStep.description}</Text>
+          <LinearGradient
+            colors={['#2E7D32', '#1B5E20']} // Darker green gradient
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.tooltipGradient}
+          >
+            <View style={styles.tooltipContent}>
+              {currentStep.imagePath && (
+                <Image
+                  source={currentStep.imagePath}
+                  style={styles.tourImage}
+                  resizeMode="contain"
+                />
+              )}
+              <Text style={styles.tooltipTitle}>{currentStep.title}</Text>
+              <Text style={styles.tooltipDescription}>{currentStep.description}</Text>
 
-            <View style={styles.tooltipFooter}>
-              <View style={styles.stepIndicator}>
-                {steps.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.stepDot,
-                      index === currentStepIndex && styles.stepDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
+              <View style={styles.tooltipFooter}>
+                {/* Step indicators removed per user request */}
+                {/* {!isFirstStep && (
+                  <View style={styles.stepIndicator}>
+                    {steps.map((_, index) => (
+                      <View
+                        key={index}
+                        style={[
+                          styles.stepDot,
+                          index === currentStepIndex && styles.stepDotActive,
+                        ]}
+                      />
+                    ))}
+                  </View>
+                )} */}
 
-              <View style={styles.tooltipButtons}>
-                {!isFirstStep && (
-                  <TouchableOpacity
-                    style={styles.tooltipButtonSecondary}
-                    onPress={handlePrevious}
-                  >
-                    <Text style={styles.tooltipButtonSecondaryText}>Previous</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.tooltipButtonSkip}
-                  onPress={handleSkip}
-                >
-                  <Text style={styles.tooltipButtonSkipText}>Skip</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.tooltipButtonPrimary}
-                  onPress={handleNext}
-                >
-                  <Text style={styles.tooltipButtonPrimaryText}>
-                    {isLastStep ? 'Get Started' : 'Next'}
-                  </Text>
-                  {!isLastStep && (
-                    <Icon name="chevron-right" size={16} color="#FFFFFF" />
+                <View style={styles.tooltipButtons}>
+                  {!isFirstStep && (
+                    <TouchableOpacity
+                      style={styles.tooltipButtonSecondary}
+                      onPress={handlePrevious}
+                    >
+                      <Text style={styles.tooltipButtonSecondaryText}>Previous</Text>
+                    </TouchableOpacity>
                   )}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.tooltipButtonSkip}
+                    onPress={handleSkip}
+                  >
+                    <Text style={styles.tooltipButtonSkipText}>Skip</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.tooltipButtonPrimary}
+                    onPress={handleNext}
+                  >
+                    <Text style={styles.tooltipButtonPrimaryText}>
+                      {isLastStep ? 'Get Started' : 'Next'}
+                    </Text>
+                    {!isLastStep && (
+                      <Icon name="chevronRight" size={16} color="#1B5E20" />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
+          </LinearGradient>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -353,96 +430,113 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: 'transparent',
     borderWidth: 3,
-    borderColor: '#4CAF50',
-    shadowColor: '#4CAF50',
+    borderColor: '#B4FF3C', // Lime green for high visibility
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
+    shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 10,
   },
-  tooltip: {
+  tooltipContainer: {
     position: 'absolute',
-    width: 300,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    width: 320, // Slightly wider
+    borderRadius: 20,
     ...Platform.select({
       web: {
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.3)',
+        boxShadow: '0 15px 35px rgba(0, 50, 20, 0.5)',
       },
       default: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 20,
+        elevation: 15,
       },
     }),
+  },
+  tooltipGradient: {
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
   },
   tooltipContent: {
     flex: 1,
   },
-  tooltipTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  tooltipDescription: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+  tourImage: {
+    width: 150,
+    height: 150,
+    alignSelf: 'center',
     marginBottom: 16,
   },
+  tooltipTitle: {
+    fontSize: 20,
+    fontWeight: '700', // Professional bold
+    color: '#FFFFFF',
+    marginBottom: 10,
+    letterSpacing: 0.3,
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
+  tooltipDescription: {
+    fontSize: 15,
+    color: '#F1F8E9', // Very light green/white
+    lineHeight: 24, // Better readability
+    marginBottom: 24,
+    fontWeight: '400',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+  },
   tooltipFooter: {
-    marginTop: 8,
+    marginTop: 0,
   },
   stepIndicator: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 6,
+    marginBottom: 20,
+    gap: 8,
   },
   stepDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   stepDotActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FFFFFF',
     width: 24,
   },
   tooltipButtons: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
   },
   tooltipButtonPrimary: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
+    shadowColor: 'rgba(0,0,0,0.2)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   tooltipButtonPrimaryText: {
-    color: '#FFFFFF',
-    fontSize: 14,
+    color: '#1B5E20', // Dark green text
+    fontSize: 15,
     fontWeight: '600',
   },
   tooltipButtonSecondary: {
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   tooltipButtonSecondaryText: {
-    color: '#666',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -451,8 +545,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   tooltipButtonSkipText: {
-    color: '#999',
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
+    fontWeight: '500',
   },
 });
 

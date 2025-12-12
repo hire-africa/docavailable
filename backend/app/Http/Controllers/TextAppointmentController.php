@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use App\Models\DoctorWallet;
+use App\Services\DoctorPaymentService;
 
 class TextAppointmentController extends Controller
 {
@@ -72,12 +74,12 @@ class TextAppointmentController extends Controller
             // Check if appointment time has been reached using TimezoneService
             $userTimezone = $request->get('user_timezone') ?: config('app.timezone', 'UTC');
             $isTimeReached = TimezoneService::isAppointmentTimeReached(
-                $appointment->appointment_date, 
-                $appointment->appointment_time, 
-                $userTimezone, 
+                $appointment->appointment_date,
+                $appointment->appointment_time,
+                $userTimezone,
                 5 // 5 minute buffer
             );
-            
+
             // Debug logging for appointment time validation
             Log::info('🕐 [TextAppointmentController] Time validation debug', [
                 'appointment_id' => $appointmentId,
@@ -88,13 +90,13 @@ class TextAppointmentController extends Controller
                 'current_time_utc' => now()->utc()->toDateTimeString(),
                 'app_timezone' => config('app.timezone', 'UTC')
             ]);
-            
+
             if (!$isTimeReached) {
                 Log::info('⏰ [TextAppointmentController] Appointment time not reached', [
                     'appointment_id' => $appointmentId,
                     'user_timezone' => $userTimezone
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Appointment time has not been reached yet'
@@ -339,23 +341,65 @@ class TextAppointmentController extends Controller
                 ], 400);
             }
 
-            // Deduct sessions from subscription
-            $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
+            DB::transaction(function () use ($subscription, $sessionsToDeduct, $appointmentId, $appointment, $reason) {
+                // Deduct sessions from subscription
+                $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
 
-            // Update session with deduction
-            $session = DB::table('text_appointment_sessions')
-                ->where('appointment_id', $appointmentId)
-                ->where('is_active', true)
-                ->first();
+                // Update session with deduction
+                $session = DB::table('text_appointment_sessions')
+                    ->where('appointment_id', $appointmentId)
+                    ->where('is_active', true)
+                    ->lockForUpdate() // Lock row
+                    ->first();
 
-            if ($session) {
-                DB::table('text_appointment_sessions')
-                    ->where('id', $session->id)
-                    ->update([
-                        'sessions_used' => $session->sessions_used + $sessionsToDeduct,
-                        'updated_at' => now(),
-                    ]);
-            }
+                if ($session) {
+                    DB::table('text_appointment_sessions')
+                        ->where('id', $session->id)
+                        ->update([
+                            'sessions_used' => $session->sessions_used + $sessionsToDeduct,
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                // Credit Doctor Wallet
+                $doctor = User::find($appointment->doctor_id);
+                if ($doctor) {
+                    try {
+                        $wallet = DoctorWallet::getOrCreate($doctor->id);
+                        $paymentAmount = DoctorPaymentService::getPaymentAmountForDoctor('text', $doctor) * $sessionsToDeduct;
+                        $currency = DoctorPaymentService::getCurrency($doctor);
+
+                        $wallet->credit(
+                            $paymentAmount,
+                            "Payment for {$sessionsToDeduct} scheduled text session(s) with {$appointment->patient->first_name} {$appointment->patient->last_name}",
+                            'text_appointment',
+                            $appointmentId,
+                            'appointments',
+                            [
+                                'patient_name' => $appointment->patient->first_name . " " . $appointment->patient->last_name,
+                                'appointment_id' => $appointmentId,
+                                'sessions_deducted' => $sessionsToDeduct,
+                                'reason' => $reason,
+                                'currency' => $currency,
+                                'payment_amount' => $paymentAmount,
+                            ]
+                        );
+
+                        Log::info("Credited doctor wallet for scheduled text session", [
+                            'doctor_id' => $doctor->id,
+                            'amount' => $paymentAmount,
+                            'currency' => $currency
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error("Failed to credit doctor wallet for scheduled text session", [
+                            'error' => $e->getMessage(),
+                            'doctor_id' => $doctor->id,
+                            'appointment_id' => $appointmentId
+                        ]);
+                        throw $e; // Re-throw to rollback transaction
+                    }
+                }
+            });
 
             Log::info("Text appointment session deduction processed", [
                 'appointment_id' => $appointmentId,
@@ -451,6 +495,44 @@ class TextAppointmentController extends Controller
 
                 if ($subscription && $subscription->text_sessions_remaining >= $sessionsToDeduct) {
                     $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
+
+                    // Credit Doctor Wallet for final deduction
+                    $doctor = User::find($appointment->doctor_id);
+                    if ($doctor) {
+                        try {
+                            $wallet = DoctorWallet::getOrCreate($doctor->id);
+                            $paymentAmount = DoctorPaymentService::getPaymentAmountForDoctor('text', $doctor) * $sessionsToDeduct;
+                            $currency = DoctorPaymentService::getCurrency($doctor);
+
+                            $wallet->credit(
+                                $paymentAmount,
+                                "Payment for {$sessionsToDeduct} scheduled text session(s) (End Session) with {$appointment->patient->first_name} {$appointment->patient->last_name}",
+                                'text_appointment',
+                                $appointmentId,
+                                'appointments',
+                                [
+                                    'patient_name' => $appointment->patient->first_name . " " . $appointment->patient->last_name,
+                                    'appointment_id' => $appointmentId,
+                                    'sessions_deducted' => $sessionsToDeduct,
+                                    'end_type' => 'manual',
+                                    'currency' => $currency,
+                                    'payment_amount' => $paymentAmount,
+                                ]
+                            );
+
+                            Log::info("Credited doctor wallet for scheduled text session end", [
+                                'doctor_id' => $doctor->id,
+                                'amount' => $paymentAmount,
+                                'currency' => $currency
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error("Failed to credit doctor wallet for scheduled text session end", [
+                                'error' => $e->getMessage(),
+                                'doctor_id' => $doctor->id,
+                                'appointment_id' => $appointmentId
+                            ]);
+                        }
+                    }
                 }
             }
 
@@ -584,16 +666,16 @@ class TextAppointmentController extends Controller
                 // Format: MM/DD/YYYY
                 $dateParts = explode('/', $dateStr);
                 if (count($dateParts) === 3) {
-                    $month = (int)$dateParts[0];
-                    $day = (int)$dateParts[1];
-                    $year = (int)$dateParts[2];
-                    
+                    $month = (int) $dateParts[0];
+                    $day = (int) $dateParts[1];
+                    $year = (int) $dateParts[2];
+
                     // Handle time format (remove AM/PM if present)
                     $timeStr = preg_replace('/\s*(AM|PM)/i', '', $timeStr);
                     $timeParts = explode(':', $timeStr);
-                    $hour = (int)$timeParts[0];
-                    $minute = (int)$timeParts[1];
-                    
+                    $hour = (int) $timeParts[0];
+                    $minute = (int) $timeParts[1];
+
                     // Create Carbon instance in the application timezone
                     return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0, config('app.timezone', 'Africa/Blantyre'));
                 }
@@ -609,7 +691,7 @@ class TextAppointmentController extends Controller
             ]);
             return null;
         }
-        
+
         return null;
     }
 }

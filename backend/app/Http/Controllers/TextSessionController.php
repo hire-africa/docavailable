@@ -166,10 +166,10 @@ class TextSessionController extends Controller
 
             // Get the created session to calculate remaining time
             $session = TextSession::find($textSessionId);
-            
+
             // Send notifications to both patient and doctor
             $this->notificationService->sendTextSessionNotification($session, 'started', 'Your text session has started');
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Text session started successfully',
@@ -205,25 +205,25 @@ class TextSessionController extends Controller
     {
         try {
             $session = TextSession::find($sessionId);
-            
+
             Log::info("Session status check requested", [
                 'session_id' => $sessionId,
                 'session_found' => $session ? 'yes' : 'no',
                 'session_status' => $session ? $session->status : 'not_found',
                 'current_time' => now()
             ]);
-            
+
             if (!$session) {
                 Log::error("Session not found for status check", [
                     'session_id' => $sessionId
                 ]);
-                
+
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Session not found'
                 ], 404);
             }
-            
+
             // Check if session has expired waiting for doctor
             if ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
                 Log::info("Session is waiting for doctor", [
@@ -232,13 +232,13 @@ class TextSessionController extends Controller
                     'patient_id' => $session->patient_id,
                     'doctor_id' => $session->doctor_id
                 ]);
-                
+
                 // If doctor_response_deadline is not set, patient hasn't sent first message yet
                 if (!$session->doctor_response_deadline) {
                     Log::info("No deadline set - patient hasn't sent first message", [
                         'session_id' => $sessionId
                     ]);
-                    
+
                     return response()->json([
                         'success' => true,
                         'status' => 'waiting',
@@ -248,16 +248,16 @@ class TextSessionController extends Controller
                         'message' => 'Waiting for patient to send first message'
                     ]);
                 }
-                
+
                 // Use doctor_response_deadline to calculate remaining time
                 $currentTime = now();
                 $deadline = $session->doctor_response_deadline;
-                
+
                 // Calculate time remaining using timestamp comparison
                 $currentTimestamp = $currentTime->timestamp;
                 $deadlineTimestamp = $deadline->timestamp;
                 $timeRemaining = max(0, $deadlineTimestamp - $currentTimestamp);
-                
+
                 Log::info("Calculating time remaining", [
                     'session_id' => $sessionId,
                     'current_time' => $currentTime,
@@ -267,7 +267,7 @@ class TextSessionController extends Controller
                     'time_remaining' => $timeRemaining,
                     'is_expired' => $timeRemaining <= 0
                 ]);
-                
+
                 if ($timeRemaining <= 0) {
                     Log::info("Session expired - auto-expiring", [
                         'session_id' => $sessionId,
@@ -276,17 +276,17 @@ class TextSessionController extends Controller
                         'current_time' => $currentTime,
                         'current_status' => $session->status
                     ]);
-                    
+
                     // Auto-expire the session
                     try {
                         $updateResult = $session->update([
                             'status' => TextSession::STATUS_EXPIRED,
                             'ended_at' => now()
                         ]);
-                        
+
                         // Refresh to verify update
                         $session->refresh();
-                        
+
                         Log::info("Session update result", [
                             'session_id' => $sessionId,
                             'update_successful' => $updateResult,
@@ -302,12 +302,12 @@ class TextSessionController extends Controller
                         ]);
                         // Still try to return expired status even if DB update fails
                     }
-                    
+
                     // Broadcast session-expired event via WebSocket
                     try {
                         $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable-3vbdv.ondigitalocean.app:8089');
                         $broadcastUrl = "{$webrtcUrl}/broadcast-session-expired";
-                        
+
                         $ch = curl_init($broadcastUrl);
                         curl_setopt($ch, CURLOPT_POST, true);
                         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
@@ -320,11 +320,11 @@ class TextSessionController extends Controller
                         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                         curl_setopt($ch, CURLOPT_TIMEOUT, 2); // Short timeout
                         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development
-                        
+
                         $response = curl_exec($ch);
                         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                         curl_close($ch);
-                        
+
                         Log::info("Broadcast session-expired event", [
                             'session_id' => $sessionId,
                             'http_code' => $httpCode,
@@ -337,7 +337,7 @@ class TextSessionController extends Controller
                         ]);
                         // Don't fail the expiry if broadcast fails
                     }
-                    
+
                     return response()->json([
                         'success' => true,
                         'status' => 'expired',
@@ -345,13 +345,13 @@ class TextSessionController extends Controller
                         'message' => 'Session expired - no session will be deducted'
                     ]);
                 }
-                
+
                 Log::info("Session still waiting with time remaining", [
                     'session_id' => $sessionId,
                     'time_remaining' => $timeRemaining,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes()
                 ]);
-                
+
                 return response()->json([
                     'success' => true,
                     'status' => 'waiting',
@@ -361,7 +361,7 @@ class TextSessionController extends Controller
                     'message' => 'Waiting for doctor response'
                 ]);
             }
-            
+
             // Check if active session has run out of time
             if ($session->status === TextSession::STATUS_ACTIVE && $session->hasRunOutOfTime()) {
                 Log::info("Active session has run out of time - auto-ending", [
@@ -370,18 +370,18 @@ class TextSessionController extends Controller
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                     'total_allowed_minutes' => $session->getTotalAllowedMinutes()
                 ]);
-                
+
                 // Auto-end the session and process payment/deduction
                 $session->update([
                     'status' => TextSession::STATUS_ENDED,
                     'ended_at' => now()
                 ]);
-                
+
                 // Process payment and deduction
                 try {
                     $paymentService = new \App\Services\DoctorPaymentService();
                     $paymentResult = $paymentService->processSessionEnd($session, true); // true for manual end
-                    
+
                     Log::info("Auto-ended session payment processing result", [
                         'session_id' => $sessionId,
                         'doctor_payment_success' => $paymentResult['doctor_payment_success'],
@@ -397,7 +397,7 @@ class TextSessionController extends Controller
                         'error' => $e->getMessage()
                     ]);
                 }
-                
+
                 return response()->json([
                     'success' => true,
                     'status' => 'ended',
@@ -405,20 +405,20 @@ class TextSessionController extends Controller
                     'message' => 'Session has ended - time limit reached'
                 ]);
             }
-            
+
             // Check if active session should end due to insufficient sessions
             if ($session->status === TextSession::STATUS_ACTIVE && $session->shouldAutoEndDueToInsufficientSessions()) {
                 Log::info("Active session should end due to insufficient sessions", [
                     'session_id' => $sessionId,
                     'session_details' => $session->getSessionStatusDetails()
                 ]);
-                
+
                 // Auto-end the session and process payment/deduction
                 $session->update([
                     'status' => TextSession::STATUS_ENDED,
                     'ended_at' => now()
                 ]);
-                
+
                 try {
                     $paymentService = new \App\Services\DoctorPaymentService();
                     $paymentResult = $paymentService->processSessionEnd($session, true);
@@ -426,7 +426,7 @@ class TextSessionController extends Controller
                 } catch (\Exception $e) {
                     Log::error("Failed to process payment for session ended due to insufficient sessions", ['session_id' => $sessionId, 'error' => $e->getMessage()]);
                 }
-                
+
                 return response()->json([
                     'success' => true,
                     'status' => 'ended',
@@ -434,7 +434,7 @@ class TextSessionController extends Controller
                     'message' => 'Session has ended - no sessions remaining'
                 ]);
             }
-            
+
             // Session is active and has time remaining
             Log::info("Session is active with time remaining", [
                 'session_id' => $sessionId,
@@ -442,12 +442,12 @@ class TextSessionController extends Controller
                 'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                 'elapsed_minutes' => $session->getElapsedMinutes()
             ]);
-            
+
             // Trigger auto-deduction processing for active sessions
             try {
                 $paymentService = new \App\Services\DoctorPaymentService();
                 $autoDeductionResult = $paymentService->processAutoDeduction($session);
-                
+
                 Log::info("Auto-deduction processed during status check", [
                     'session_id' => $sessionId,
                     'auto_deduction_result' => $autoDeductionResult,
@@ -462,7 +462,7 @@ class TextSessionController extends Controller
                 ]);
                 // Don't fail the status check if auto-deduction fails
             }
-            
+
             return response()->json([
                 'success' => true,
                 'status' => 'active',
@@ -471,14 +471,14 @@ class TextSessionController extends Controller
                 'remainingSessions' => $session->getRemainingSessions(),
                 'message' => 'Session is active'
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("Error checking session response", [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to check session status: ' . $e->getMessage()
@@ -494,7 +494,7 @@ class TextSessionController extends Controller
         try {
             // Clear any cached query plans to handle schema changes
             DB::statement('DISCARD PLANS');
-            
+
             $sessions = TextSession::with(['patient', 'doctor'])
                 ->where('status', 'active')
                 ->whereNotNull('activated_at')
@@ -527,6 +527,39 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Get pending sessions (waiting for doctor) for the authenticated user.
+     */
+    public function pendingSessions(Request $request): JsonResponse
+    {
+        try {
+            $userId = auth()->id();
+            $userType = auth()->user()->user_type;
+
+            $query = TextSession::with(['patient', 'doctor'])
+                ->where('status', TextSession::STATUS_WAITING_FOR_DOCTOR);
+
+            if ($userType === 'doctor') {
+                $query->where('doctor_id', $userId);
+            } else {
+                $query->where('patient_id', $userId);
+            }
+
+            $sessions = $query->orderBy('started_at', 'desc')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $sessions
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch pending sessions: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get active sessions for the authenticated user.
      */
     public function activeSessions(Request $request): JsonResponse
@@ -534,12 +567,12 @@ class TextSessionController extends Controller
         try {
             // Clear any cached query plans to handle schema changes
             DB::statement('DISCARD PLANS');
-            
+
             $userId = auth()->id();
             $userType = auth()->user()->user_type;
 
             $query = TextSession::with(['patient', 'doctor'])
-                ->whereIn('status', ['active', 'waiting_for_doctor']);
+                ->where('status', 'active');
 
             if ($userType === 'doctor') {
                 $query->where('doctor_id', $userId);
@@ -608,7 +641,7 @@ class TextSessionController extends Controller
 
             // First check if the session exists
             $session = TextSession::find($sessionId);
-            
+
             if (!$session) {
                 return response()->json([
                     'success' => false,
@@ -647,7 +680,7 @@ class TextSessionController extends Controller
             // Preserve the original reason when ending manually
             $originalReason = $session->reason ?: 'General Checkup';
             $endResult = $session->endManually($originalReason);
-            
+
             if (!$endResult) {
                 return response()->json([
                     'success' => false,
@@ -663,10 +696,10 @@ class TextSessionController extends Controller
                     'patient_id' => $session->patient_id,
                     'doctor_id' => $session->doctor_id,
                 ]);
-                
+
                 $paymentService = new \App\Services\DoctorPaymentService();
                 $paymentResult = $paymentService->processManualEndDeduction($session);
-                
+
                 if ($paymentResult) {
                     \Log::info('Payment processing successful for manual end', [
                         'session_id' => $sessionId,
@@ -690,7 +723,7 @@ class TextSessionController extends Controller
 
             // Send notifications to both patient and doctor
             $this->notificationService->sendTextSessionNotification($session, 'ended', 'Your text session has ended');
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Session ended successfully',
@@ -707,7 +740,7 @@ class TextSessionController extends Controller
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to end session: ' . $e->getMessage()
@@ -722,18 +755,18 @@ class TextSessionController extends Controller
     {
         try {
             $user = auth()->user();
-            
+
             $session = TextSession::with(['patient.subscription', 'doctor'])
                 ->where('id', $sessionId)
                 ->first();
-                
+
             if (!$session) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Text session not found'
                 ], 404);
             }
-            
+
             // Check if user is part of this session
             if ($session->patient_id !== $user->id && $session->doctor_id !== $user->id) {
                 return response()->json([
@@ -741,17 +774,17 @@ class TextSessionController extends Controller
                     'message' => 'Unauthorized access to session'
                 ], 403);
             }
-            
+
             // Get actual subscription balance
             $actualSessionsRemaining = 0;
             if ($session->patient && $session->patient->subscription) {
                 $actualSessionsRemaining = $session->patient->subscription->text_sessions_remaining;
             }
-            
+
             // Apply anonymization if needed
             $patientData = $session->patient;
             $doctorData = $session->doctor;
-            
+
             // If current user is doctor and patient has anonymous mode enabled, anonymize patient data
             if ($user->id === $session->doctor_id && $this->anonymizationService->isAnonymousModeEnabled($session->patient)) {
                 $patientData = $this->anonymizationService->getAnonymizedUserData($session->patient);
@@ -763,7 +796,7 @@ class TextSessionController extends Controller
                     'anonymized_name' => $patientData['display_name']
                 ]);
             }
-            
+
             // If current user is patient and doctor has anonymous mode enabled, anonymize doctor data
             if ($user->id === $session->patient_id && $this->anonymizationService->isAnonymousModeEnabled($session->doctor)) {
                 $doctorData = $this->anonymizationService->getAnonymizedUserData($session->doctor);
@@ -775,14 +808,17 @@ class TextSessionController extends Controller
                     'anonymized_name' => $doctorData['display_name']
                 ]);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $session->id,
                     'status' => $session->status,
                     'started_at' => $session->started_at,
+                    'activated_at' => $session->activated_at,
                     'ended_at' => $session->ended_at,
+                    'has_doctor_response' => $session->messages()->where('sender_id', $session->doctor_id)->exists(),
+                    'has_patient_messages' => $session->messages()->where('sender_id', $session->patient_id)->exists(),
                     'last_activity_at' => $session->last_activity_at,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                     'remaining_sessions' => $actualSessionsRemaining, // Use actual subscription balance
@@ -792,15 +828,15 @@ class TextSessionController extends Controller
                     'patient' => $patientData,
                     'doctor' => $doctorData,
                     // Add other_participant_name and other_participant_profile_picture_url for frontend compatibility
-                    'other_participant_name' => $user->id === $session->doctor_id ? 
-                        ($patientData['display_name'] ?? 'Patient') : 
+                    'other_participant_name' => $user->id === $session->doctor_id ?
+                        ($patientData['display_name'] ?? 'Patient') :
                         ($doctorData['display_name'] ?? 'Doctor'),
-                    'other_participant_profile_picture_url' => $user->id === $session->doctor_id ? 
-                        ($patientData['profile_picture_url'] ?? null) : 
+                    'other_participant_profile_picture_url' => $user->id === $session->doctor_id ?
+                        ($patientData['profile_picture_url'] ?? null) :
                         ($doctorData['profile_picture_url'] ?? null),
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -828,7 +864,7 @@ class TextSessionController extends Controller
             }
 
             $session = TextSession::find($sessionId);
-            
+
             if (!$session) {
                 return response()->json([
                     'success' => false,
@@ -838,7 +874,7 @@ class TextSessionController extends Controller
 
             $status = $request->input('status');
             $oldStatus = $session->status;
-            
+
             // Update session status
             $session->update([
                 'status' => $status,
@@ -850,7 +886,7 @@ class TextSessionController extends Controller
                 $session->update([
                     'activated_at' => now()
                 ]);
-                
+
                 Log::info("Session activated - timer should start immediately", [
                     'session_id' => $sessionId,
                     'patient_id' => $session->patient_id,
@@ -859,7 +895,7 @@ class TextSessionController extends Controller
                     'old_status' => $oldStatus,
                     'new_status' => $status
                 ]);
-                
+
                 // Trigger immediate timer start
                 $this->triggerImmediateTimerStart($session);
             }
@@ -921,49 +957,49 @@ class TextSessionController extends Controller
     {
         try {
             $session = TextSession::find($sessionId);
-            
+
             if (!$session) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Session not found'
                 ], 404);
             }
-            
+
             if ($session->status !== TextSession::STATUS_ACTIVE) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Session is not active'
                 ], 400);
             }
-            
+
             $elapsedMinutes = $session->getElapsedMinutes();
             $expectedDeductions = floor($elapsedMinutes / 10);
             $alreadyProcessed = $session->auto_deductions_processed ?? 0;
             $newDeductions = $expectedDeductions - $alreadyProcessed;
-            
+
             if ($newDeductions > 0) {
                 $paymentService = new DoctorPaymentService();
                 $success = $paymentService->processAutoDeduction($session);
-                
+
                 if ($success) {
                     // Service handles the update now
                     // Refresh session to get latest data
                     $session->refresh();
-                    
+
                     Log::info("Auto-deduction processed via API", [
                         'session_id' => $sessionId,
                         'deductions_processed' => $newDeductions,
                         'total_deductions' => $expectedDeductions,
                         'triggered_by' => $request->input('triggered_by', 'api')
                     ]);
-                    
+
                     // Send notification about deduction
                     $this->notificationService->sendTextSessionNotification(
-                        $session, 
-                        'session_deduction', 
+                        $session,
+                        'session_deduction',
                         "Session deduction: {$newDeductions} session(s) deducted"
                     );
-                    
+
                     return response()->json([
                         'success' => true,
                         'message' => 'Auto-deduction processed successfully',
@@ -975,17 +1011,17 @@ class TextSessionController extends Controller
                 } else {
                     // CRITICAL: If payment fails, we must end the session to prevent free usage
                     Log::warning("Auto-deduction failed - Terminating session", ['session_id' => $sessionId]);
-                    
+
                     $session->update([
                         'status' => TextSession::STATUS_ENDED,
                         'ended_at' => now(),
                         'ended_by' => 'system', // System ended due to payment failure
                         'reason' => 'Insufficient funds for auto-deduction'
                     ]);
-                    
+
                     $this->notificationService->sendTextSessionNotification(
-                        $session, 
-                        'session_ended', 
+                        $session,
+                        'session_ended',
                         "Session ended due to insufficient funds."
                     );
 
@@ -995,7 +1031,7 @@ class TextSessionController extends Controller
                     ], 402); // 402 Payment Required
                 }
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'No new deductions needed',
@@ -1004,14 +1040,14 @@ class TextSessionController extends Controller
                     'total_deductions' => $expectedDeductions
                 ]
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error processing auto-deduction:', [
                 'session_id' => $sessionId,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to process auto-deduction: ' . $e->getMessage()
@@ -1123,12 +1159,12 @@ class TextSessionController extends Controller
             // Get user timezone and check if appointment time has been reached
             $userTimezone = TimezoneService::getUserTimezone($request);
             $isTimeReached = TimezoneService::isAppointmentTimeReached(
-                $appointment->appointment_date, 
-                $appointment->appointment_time, 
-                $userTimezone, 
+                $appointment->appointment_date,
+                $appointment->appointment_time,
+                $userTimezone,
                 5 // 5 minute buffer
             );
-            
+
             // Debug logging for appointment time validation
             Log::info('🕐 [TextSessionController] Time validation debug', [
                 'appointment_id' => $appointmentId,
@@ -1139,13 +1175,13 @@ class TextSessionController extends Controller
                 'current_time_utc' => now()->utc()->toDateTimeString(),
                 'app_timezone' => config('app.timezone', 'UTC')
             ]);
-            
+
             if (!$isTimeReached) {
                 Log::info('⏰ [TextSessionController] Appointment time not reached', [
                     'appointment_id' => $appointmentId,
                     'user_timezone' => $userTimezone
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Appointment time has not been reached yet'
@@ -1266,22 +1302,22 @@ class TextSessionController extends Controller
 
             // Use user's timezone if provided, otherwise fall back to app timezone
             $targetTimezone = $userTimezone ?: config('app.timezone', 'UTC');
-            
+
             // Handle different date formats
             if (strpos($dateStr, '/') !== false) {
                 // Format: MM/DD/YYYY
                 $dateParts = explode('/', $dateStr);
                 if (count($dateParts) === 3) {
-                    $month = (int)$dateParts[0];
-                    $day = (int)$dateParts[1];
-                    $year = (int)$dateParts[2];
-                    
+                    $month = (int) $dateParts[0];
+                    $day = (int) $dateParts[1];
+                    $year = (int) $dateParts[2];
+
                     // Handle time format (remove AM/PM if present)
                     $timeStr = preg_replace('/\s*(AM|PM)/i', '', $timeStr);
                     $timeParts = explode(':', $timeStr);
-                    $hour = (int)$timeParts[0];
-                    $minute = (int)$timeParts[1];
-                    
+                    $hour = (int) $timeParts[0];
+                    $minute = (int) $timeParts[1];
+
                     // Create Carbon instance in the target timezone
                     return \Carbon\Carbon::create($year, $month, $day, $hour, $minute, 0, $targetTimezone);
                 }
@@ -1298,7 +1334,7 @@ class TextSessionController extends Controller
             ]);
             return null;
         }
-        
+
         return null;
     }
-} 
+}

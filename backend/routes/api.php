@@ -55,7 +55,7 @@ Route::get('/debug/chat-test-migrate', function () {
         $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
         $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
         $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-        
+
         if ($usersExists && $appointmentsExists && $subscriptionsExists) {
             return response()->json([
                 'status' => 'ok',
@@ -64,15 +64,15 @@ Route::get('/debug/chat-test-migrate', function () {
                 'timestamp' => now()->toISOString()
             ]);
         }
-        
+
         // Run migrations
         $exitCode = \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        
+
         // Check tables after migration
         $usersExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('users');
         $appointmentsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('appointments');
         $subscriptionsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-        
+
         if ($exitCode === 0 && $usersExistsAfter && $appointmentsExistsAfter && $subscriptionsExistsAfter) {
             return response()->json([
                 'status' => 'success',
@@ -106,7 +106,7 @@ Route::get('/debug/trigger-migrations', function () {
         $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
         $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
         $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-        
+
         if ($usersExists && $appointmentsExists && $subscriptionsExists) {
             return response()->json([
                 'status' => 'ok',
@@ -115,15 +115,15 @@ Route::get('/debug/trigger-migrations', function () {
                 'timestamp' => now()->toISOString()
             ]);
         }
-        
+
         // Run migrations
         $exitCode = \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        
+
         // Check tables after migration
         $usersExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('users');
         $appointmentsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('appointments');
         $subscriptionsExistsAfter = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-        
+
         if ($exitCode === 0 && $usersExistsAfter && $appointmentsExistsAfter && $subscriptionsExistsAfter) {
             return response()->json([
                 'status' => 'success',
@@ -184,12 +184,12 @@ Route::get('/debug/migrations', function () {
         if (\Illuminate\Support\Facades\Schema::hasTable('migrations')) {
             $runMigrations = \Illuminate\Support\Facades\DB::table('migrations')->get();
             $migrationCount = $runMigrations->count();
-            
+
             // Check if key tables exist
             $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
             $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
             $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-            
+
             return response()->json([
                 'status' => 'ok',
                 'migrations_table_exists' => true,
@@ -223,13 +223,13 @@ Route::post('/debug/run-migrations', function () {
     try {
         // Run migrations
         $exitCode = \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        
+
         if ($exitCode === 0) {
             // Check tables after migration
             $usersExists = \Illuminate\Support\Facades\Schema::hasTable('users');
             $appointmentsExists = \Illuminate\Support\Facades\Schema::hasTable('appointments');
             $subscriptionsExists = \Illuminate\Support\Facades\Schema::hasTable('subscriptions');
-            
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Migrations completed successfully',
@@ -321,14 +321,14 @@ Route::post('/test-email-sending', function (Request $request) {
     try {
         $email = $request->input('email', 'test@example.com');
         $code = '123456';
-        
+
         // Test basic email sending
-        \Illuminate\Support\Facades\Mail::raw("Test email with code: $code", function($message) use ($email) {
+        \Illuminate\Support\Facades\Mail::raw("Test email with code: $code", function ($message) use ($email) {
             $message->to($email)
-                    ->subject('Test Email from DocAvailable')
-                    ->from('Docavailable01@gmail.com', 'DocAvailable');
+                ->subject('Test Email from DocAvailable')
+                ->from('Docavailable01@gmail.com', 'DocAvailable');
         });
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Test email sent successfully',
@@ -349,7 +349,7 @@ Route::post('/test-email-sending', function (Request $request) {
 Route::post('/test-password-reset-email', function (Request $request) {
     try {
         $email = $request->input('email', 'test@docavailable.com');
-        
+
         // Find or create a test user
         $user = \App\Models\User::where('email', $email)->first();
         if (!$user) {
@@ -363,13 +363,13 @@ Route::post('/test-password-reset-email', function (Request $request) {
                 'display_name' => 'Test User',
             ]);
         }
-        
+
         // Generate a test reset URL
         $resetUrl = config('app.frontend_url') . '/password-reset/test-token-123?email=' . urlencode($email);
-        
+
         // Send the password reset email
         \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\PasswordResetMail($user, $resetUrl));
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Password reset test email sent successfully',
@@ -391,7 +391,7 @@ Route::post('/test-password-reset-email', function (Request $request) {
 Route::post('/test-password-reset-code-email', function (Request $request) {
     try {
         $email = $request->input('email', 'test@docavailable.com');
-        
+
         // Find or create a test user
         $user = \App\Models\User::where('email', $email)->first();
         if (!$user) {
@@ -405,13 +405,13 @@ Route::post('/test-password-reset-code-email', function (Request $request) {
                 'display_name' => 'Test User',
             ]);
         }
-        
+
         // Generate a test reset code
         $resetCode = \App\Models\PasswordResetCode::createForEmail($email);
-        
+
         // Send the password reset code email
         \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\PasswordResetCodeMail($user, $resetCode->code));
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Password reset code test email sent successfully',
@@ -435,10 +435,10 @@ Route::post('/test-verification-email', function (Request $request) {
     try {
         $email = $request->input('email', 'test@example.com');
         $code = '123456';
-        
+
         // Test verification email sending
         \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\VerificationCodeMail($code, $email));
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Verification email sent successfully',
@@ -464,11 +464,7 @@ Route::post('/chat/{appointmentId}/typing/start', [ChatController::class, 'start
 Route::post('/chat/{appointmentId}/typing/stop', [ChatController::class, 'stopTyping']);
 Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUsers']);
 
-// Text session routes
-Route::post('/text-sessions/end/{sessionId}', [TextSessionController::class, 'endSession']);
-Route::get('/text-sessions/active', [TextSessionController::class, 'getAllActiveSessions']);
-Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'getActiveSessions']);
-Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
+
 
 // Simple test endpoint for frontend integration
 Route::get('/test', function () {
@@ -562,11 +558,11 @@ Route::get('/health', function () {
 });
 
 // Webhook for auto-deductions (called by external services every 10 minutes)
-Route::get('/webhook/auto-deductions', function() {
+Route::get('/webhook/auto-deductions', function () {
     try {
         // Process auto-deductions
         Artisan::call('sessions:process-auto-deductions');
-        
+
         return response()->json([
             'status' => 'success',
             'message' => 'Auto-deductions processed',
@@ -599,7 +595,7 @@ Route::post('/seed-plans', function () {
     try {
         // Check if plans already exist
         $existingPlans = \App\Models\Plan::count();
-        
+
         if ($existingPlans > 0) {
             return response()->json([
                 'success' => true,
@@ -758,7 +754,7 @@ Route::post('/create-test-user', function () {
     try {
         // Check if user already exists
         $existingUser = \App\Models\User::where('email', 'test@docavailable.com')->first();
-        
+
         if ($existingUser) {
             return response()->json([
                 'success' => true,
@@ -771,7 +767,7 @@ Route::post('/create-test-user', function () {
                 ]
             ]);
         }
-        
+
         // Create new test user
         $user = \App\Models\User::create([
             'first_name' => 'Test',
@@ -784,7 +780,7 @@ Route::post('/create-test-user', function () {
             'rating' => 0,
             'total_ratings' => 0,
         ]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Test user created successfully',
@@ -795,7 +791,7 @@ Route::post('/create-test-user', function () {
                 'status' => $user->status
             ]
         ]);
-        
+
     } catch (Exception $e) {
         return response()->json([
             'success' => false,
@@ -823,15 +819,15 @@ if (app()->environment('local')) {
         }
         return response()->json(['message' => 'No password reset links found']);
     });
-    
 
-    
+
+
     // Test email configuration
     Route::get('/dev/test-email', function () {
         try {
-            \Mail::raw('Test email from DocAvailable', function($message) {
+            \Mail::raw('Test email from DocAvailable', function ($message) {
                 $message->to('Docavailable01@gmail.com')
-                        ->subject('Test Email - DocAvailable');
+                    ->subject('Test Email - DocAvailable');
             });
             return response()->json(['message' => 'Test email sent successfully']);
         } catch (\Exception $e) {
@@ -849,19 +845,19 @@ Route::middleware(['auth:api'])->group(function () {
     Route::patch('/profile', [AuthenticationController::class, 'updateProfile']);
     Route::get('/private-document-url', [AuthenticationController::class, 'getPrivateDocumentUrl']);
     Route::post('/change-password', [AuthenticationController::class, 'changePassword']);
-    
+
     // User & Subscription routes
     Route::get('/subscription', [UserController::class, 'subscription']);
     Route::patch('/update_subscription', [UserController::class, 'update_subscription']);
     Route::get('/users/{id}', [UserController::class, 'getUserById']);
     Route::get('/subscriptions/patient/{patientId}', [UserController::class, 'getPatientSubscription']);
-    
+
     // Review routes
     Route::get('/reviews', [ReviewController::class, 'reviews']);
     Route::post('/create_review', [ReviewController::class, 'create_review']);
     Route::patch('/update_review', [ReviewController::class, 'update_review']);
     Route::delete('/reviews/{id}', [ReviewController::class, 'delete_review']);
-    
+
     // Appointment routes
     Route::get('/appointments', [AppointmentController::class, 'appointments']);
     Route::post('/appointments', [AppointmentController::class, 'create_appointment']);
@@ -872,24 +868,24 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/appointments/{id}/start-session', [AppointmentController::class, 'startSession']);
     Route::post('/appointments/{id}/end-session', [AppointmentController::class, 'endSession']);
     Route::post('/appointments/{id}/process-payment', [AppointmentController::class, 'processPayment']);
-    
+
     // Appointment statistics routes
     Route::get('/appointments/statistics/monthly', [AppointmentController::class, 'getMonthlyStatistics']);
     Route::get('/appointments/statistics/weekly', [AppointmentController::class, 'getWeeklyStatistics']);
-    
+
     // Reschedule routes
     Route::post('/appointments/{id}/propose-reschedule', [AppointmentController::class, 'propose_reschedule']);
     Route::post('/appointments/{id}/respond-reschedule', [AppointmentController::class, 'respond_to_reschedule']);
     Route::get('/pending-reschedules', [AppointmentController::class, 'pending_reschedules']);
     Route::get('/doctor/reschedule-proposals', [AppointmentController::class, 'doctor_reschedule_proposals']);
     Route::delete('/appointments/{id}/cancel-reschedule', [AppointmentController::class, 'cancel_reschedule_proposal']);
-    
+
     // Working hours routes
     Route::get('/working-hours', [WorkingHoursController::class, 'workinghours']);
     Route::post('/working-hours', [WorkingHoursController::class, 'create_workinghours']);
     Route::patch('/working-hours/{id}', [WorkingHoursController::class, 'update_workinghours']);
     Route::delete('/working-hours/{id}', [WorkingHoursController::class, 'delete_workinghours']);
-    
+
     // Plan routes
     Route::get('/plans', [\App\Http\Controllers\PlanController::class, 'getPlansForUser']);
     Route::get('/plans/all', [\App\Http\Controllers\PlanController::class, 'getAllPlans']);
@@ -898,7 +894,7 @@ Route::middleware(['auth:api'])->group(function () {
 
 
 
-    
+
 
 
     // File/Image upload routes
@@ -907,15 +903,15 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/upload/chat-image', [FileUploadController::class, 'uploadChatImage']);
     Route::post('/upload/chat-attachment', [FileUploadController::class, 'uploadChatAttachment']);
     Route::post('/upload/voice-message', [FileUploadController::class, 'uploadVoiceMessage']);
-    
+
     // Audio file serving route (no auth required for streaming)
     Route::get('/audio/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
-    
+
     // Image file serving route (no auth required for images)
     Route::get('/images/{path}', [FileUploadController::class, 'serveImageFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
     Route::post('/user/push-token', [UserController::class, 'updatePushToken']);
     Route::post('/user/active-status', [UserController::class, 'setActiveStatus']);
-    
+
     // Online status routes
     Route::get('/users/{userId}/online-status', [UserController::class, 'getOnlineStatus']);
     Route::post('/users/online-status', [UserController::class, 'updateOnlineStatus']);
@@ -932,15 +928,15 @@ Route::middleware(['auth:api'])->group(function () {
     Route::delete('/notifications/push-token', [NotificationController::class, 'removePushToken']);
     Route::get('/notifications/stats', [NotificationController::class, 'getStats']);
     Route::delete('/notifications/{id}', [NotificationController::class, 'deleteNotification']);
-    
+
     // User notification settings (frontend expects this structure)
     Route::get('/user/notification-settings', [NotificationController::class, 'getNotificationSettings']);
     Route::patch('/user/notification-settings', [NotificationController::class, 'updateNotificationSettings']);
-    
+
     // User privacy settings (frontend expects this structure)
     Route::get('/user/privacy-settings', [NotificationController::class, 'getPrivacySettings']);
     Route::patch('/user/privacy-settings', [NotificationController::class, 'updatePrivacySettings']);
-    
+
     // Timezone detection routes
     Route::get('/user/timezone-from-ip', [TimezoneController::class, 'getTimezoneFromIP']);
     Route::post('/user/timezone-from-coordinates', [TimezoneController::class, 'getTimezoneFromCoordinates']);
@@ -951,24 +947,24 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/chat/{appointmentId}/messages', [ChatController::class, 'sendMessage']);
     Route::delete('/chat/{appointmentId}/clear', [ChatController::class, 'clearMessages']);
     Route::get('/chat/{appointmentId}/info', [ChatController::class, 'getChatInfo']);
-    
+
     // Local storage sync routes
     Route::get('/chat/{appointmentId}/local-storage', [ChatController::class, 'getMessagesForLocalStorage']);
     Route::post('/chat/{appointmentId}/sync', [ChatController::class, 'syncFromLocalStorage']);
-    
+
     // Message reaction routes
     Route::post('/chat/{appointmentId}/messages/{messageId}/reactions', [ChatController::class, 'addReaction']);
     Route::delete('/chat/{appointmentId}/messages/{messageId}/reactions', [ChatController::class, 'removeReaction']);
-    
+
     // Read receipts route
     Route::post('/chat/{appointmentId}/mark-read', [ChatController::class, 'markAsRead']);
     Route::post('/chat/{appointmentId}/fix-delivery-status', [ChatController::class, 'fixDeliveryStatus']);
-    
+
     // Typing indicator routes
     Route::post('/chat/{appointmentId}/typing/start', [ChatController::class, 'startTyping']);
     Route::post('/chat/{appointmentId}/typing/stop', [ChatController::class, 'stopTyping']);
     Route::get('/chat/{appointmentId}/typing', [ChatController::class, 'getTypingUsers']);
-    
+
     // Reply routes
     Route::post('/chat/{appointmentId}/messages/{messageId}/reply', [ChatController::class, 'replyToMessage']);
 
@@ -979,33 +975,30 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/encryption/rooms/{roomId}/status', [EncryptionController::class, 'getRoomEncryptionStatus']);
     Route::get('/encryption/rooms/{roomId}/key', [EncryptionController::class, 'getRoomKey']);
     Route::post('/encryption/messages/{messageId}/decrypt', [EncryptionController::class, 'decryptMessage']);
-    
+
     // Doctor rating routes
     Route::post('/doctor-ratings/{doctorId}/{patientId}', [ReviewController::class, 'createDoctorRating']);
     Route::get('/doctor-ratings/check-rated/{chatId}/{patientId}', [ReviewController::class, 'checkIfRated']);
-    
+
     // Doctor availability routes (accessible to all authenticated users)
     Route::get('/doctors/{id}/availability', [DoctorController::class, 'getAvailability']);
     Route::put('/doctors/{id}/availability', [DoctorController::class, 'updateAvailability']);
-    
+
     // Text session routes
     Route::post('/text-sessions/start', [TextSessionController::class, 'start']);
     Route::post('/text-sessions/create-from-appointment', [TextSessionController::class, 'createFromAppointment']);
+    Route::get('/text-sessions/pending-sessions', [TextSessionController::class, 'pendingSessions']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
-    Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession']);
-    Route::get('/text-sessions/{sessionId}/check-response', [TextSessionController::class, 'checkResponse']);
-    Route::put('/text-sessions/{sessionId}/status', [TextSessionController::class, 'updateStatus']);
-    Route::post('/text-sessions/{sessionId}/auto-deduction', [TextSessionController::class, 'processAutoDeduction']);
-    Route::post('/text-sessions/{sessionId}/end', [TextSessionController::class, 'endSession']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
-    
+    Route::get('/text-sessions/{sessionId}', [TextSessionController::class, 'getSession'])->where('sessionId', '[0-9]+');
+
     // Text appointment session routes
     Route::post('/text-appointments/start-session', [TextAppointmentController::class, 'startSession']);
     Route::post('/text-appointments/update-activity', [TextAppointmentController::class, 'updateActivity']);
     Route::post('/text-appointments/process-deduction', [TextAppointmentController::class, 'processDeduction']);
     Route::post('/text-appointments/end-session', [TextAppointmentController::class, 'endSession']);
     Route::get('/text-appointments/{appointmentId}/session-status', [TextAppointmentController::class, 'getSessionStatus']);
-    
+
     // Call session routes
     Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);
     Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
@@ -1050,7 +1043,7 @@ Route::middleware(['auth:api'])->group(function () {
             ]
         ]);
     });
-    
+
 });
 
 // Public debug endpoints (guarded by shared secret)
@@ -1104,14 +1097,14 @@ Route::post('/chatbot/streaming', [App\Http\Controllers\ChatbotController::class
 Route::get('/chatbot/test-config', [App\Http\Controllers\ChatbotController::class, 'testConfig']);
 Route::get('/chatbot/test-openai', function () {
     $apiKey = env('OPENAI_API_KEY');
-    
+
     if (empty($apiKey)) {
         return response()->json(['error' => 'No API key found']);
     }
-    
+
     // Clean the API key - remove any whitespace or hidden characters
     $apiKey = trim($apiKey);
-    
+
     return response()->json([
         'api_key_length' => strlen($apiKey),
         'api_key_starts_with_sk' => str_starts_with($apiKey, 'sk-'),
@@ -1125,14 +1118,14 @@ Route::get('/chatbot/test-openai', function () {
 
 Route::get('/chatbot/test-simple-openai', function () {
     $apiKey = trim(env('OPENAI_API_KEY'));
-    
+
     try {
         // Try with a simpler model first
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
             'Content-Type' => 'application/json',
         ])->timeout(30)->post('https://api.openai.com/v1/models');
-        
+
         return response()->json([
             'status' => $response->status(),
             'success' => $response->successful(),
@@ -1178,13 +1171,13 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::get('/admin/appointments', [AdminController::class, 'getAllAppointments']);
     Route::patch('/admin/users/{userId}/role', [AdminController::class, 'updateUserRole']);
     Route::get('/admin/dashboard-stats', [AdminController::class, 'getDashboardStats']);
-    
+
     // Doctor approval routes
     Route::get('/admin/doctors/pending', [AdminController::class, 'getPendingDoctors']);
     Route::get('/admin/doctors/{doctorId}', [AdminController::class, 'getDoctorDetails']);
     Route::post('/admin/doctors/{doctorId}/approve', [AdminController::class, 'approveDoctor']);
     Route::post('/admin/doctors/{doctorId}/reject', [AdminController::class, 'rejectDoctor']);
-    
+
     // Withdrawal request management routes
     Route::get('/admin/withdrawal-requests', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'index']);
     Route::get('/admin/withdrawal-requests/stats', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'getStats']);
@@ -1193,7 +1186,7 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::post('/admin/withdrawal-requests/{id}/reject', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'reject']);
     Route::post('/admin/withdrawal-requests/{id}/mark-as-paid', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'markAsPaid']);
     Route::post('/admin/withdrawal-requests/send-completion-email', [\App\Http\Controllers\Admin\WithdrawalRequestController::class, 'sendWithdrawalCompletedEmail']);
-    
+
     // Plan management
     Route::get('/admin/plans', [\App\Http\Controllers\Admin\PlanController::class, 'index']);
     Route::post('/admin/plans', [\App\Http\Controllers\Admin\PlanController::class, 'store']);
@@ -1202,7 +1195,7 @@ Route::middleware(['auth:api', 'role:admin'])->group(function () {
     Route::post('/admin/users', [AdminController::class, 'createUser']);
     Route::patch('/admin/users/{userId}', [AdminController::class, 'updateUser']);
     Route::delete('/admin/users/{userId}', [AdminController::class, 'deleteUser']);
-    
+
     // Performance monitoring routes
     Route::get('/admin/performance/overall-stats', [PerformanceController::class, 'getOverallStats']);
     Route::get('/admin/performance/endpoint-stats', [PerformanceController::class, 'getEndpointStats']);
@@ -1220,7 +1213,7 @@ Route::middleware(['auth:api', 'role:doctor'])->group(function () {
     Route::patch('/doctor/appointments/{id}/status', [AppointmentController::class, 'updateAppointmentStatus']);
     Route::delete('/doctor/appointments/{id}', [AppointmentController::class, 'deleteExpiredAppointment']);
     Route::get('/doctor/patients', [AppointmentController::class, 'doctorPatients']);
-    
+
     // Doctor wallet routes
     Route::get('/doctor/wallet', [DoctorWalletController::class, 'getWallet']);
     Route::get('/doctor/wallet/transactions', [DoctorWalletController::class, 'getTransactions']);
@@ -1228,7 +1221,7 @@ Route::middleware(['auth:api', 'role:doctor'])->group(function () {
     Route::post('/doctor/wallet/withdraw', [DoctorWalletController::class, 'requestWithdrawal']);
     Route::get('/doctor/wallet/withdrawal-requests', [DoctorWalletController::class, 'getWithdrawalRequests']);
     Route::get('/doctor/wallet/payment-rates', [DoctorWalletController::class, 'getPaymentRates']);
-    
+
 });
 
 // Patient routes (patient only)
@@ -1270,21 +1263,21 @@ Route::post('/test-login-error-handling', function (Illuminate\Http\Request $req
             $errors = $validator->errors();
             $errorMessages = [];
             $detailedMessage = 'Please check your input and try again.';
-            
+
             if ($errors->has('email')) {
                 $errorMessages['email'] = 'Please enter a valid email address.';
                 $detailedMessage = 'Please enter a valid email address in the format: example@domain.com';
             }
-            
+
             if ($errors->has('password')) {
                 $errorMessages['password'] = 'Password is required.';
                 $detailedMessage = 'Password field cannot be empty. Please enter your password.';
             }
-            
+
             if ($errors->has('email') && $errors->has('password')) {
                 $detailedMessage = 'Please enter a valid email address and password.';
             }
-            
+
             return response()->json([
                 'success' => false,
                 'message' => $detailedMessage,
@@ -1298,7 +1291,7 @@ Route::post('/test-login-error-handling', function (Illuminate\Http\Request $req
 
         // Check if user exists
         $user = \App\Models\User::where('email', $email)->first();
-        
+
         if (!$user) {
             return response()->json([
                 'success' => false,
@@ -1317,7 +1310,7 @@ Route::post('/test-login-error-handling', function (Illuminate\Http\Request $req
                 'suggestion' => 'Contact our support team to reactivate your account.'
             ], 403);
         }
-        
+
         // Check if account is pending approval (for doctors)
         if ($user->user_type === 'doctor' && $user->status === 'pending') {
             return response()->json([
@@ -1348,7 +1341,7 @@ Route::post('/test-login-error-handling', function (Illuminate\Http\Request $req
 });
 
 // OneSignal Test Endpoints
-Route::get('/test-env', function() {
+Route::get('/test-env', function () {
     return response()->json([
         'fcm_project_id' => config('services.fcm.project_id'),
         'service_account_exists' => file_exists(storage_path('app/firebase-service-account.json')),
@@ -1356,7 +1349,7 @@ Route::get('/test-env', function() {
     ]);
 });
 
-Route::post('/test-notification', function(Request $request) {
+Route::post('/test-notification', function (Request $request) {
     $user = null;
     if ($request->has('user_id') && $request->user_id) {
         $user = User::find($request->user_id);
@@ -1367,26 +1360,26 @@ Route::post('/test-notification', function(Request $request) {
     if (!$user) {
         return response()->json(['error' => 'User not found'], 404);
     }
-    
+
     // Create a test appointment for the notification
     $testAppointment = new \App\Models\Appointment();
     $testAppointment->id = 'test-appointment-' . time();
     $testAppointment->appointment_date = now();
-    
+
     // Create a test sender user
     $testSender = new User();
     $testSender->id = 999;
     $testSender->first_name = 'Test';
     $testSender->last_name = 'Sender';
     $testSender->role = 'doctor';
-    
+
     $user->notify(new ChatMessageNotification(
         $testSender,
         $testAppointment,
         $request->message,
         'test-message-' . time()
     ));
-    
+
     return response()->json([
         'message' => 'Test notification sent',
         'user_id' => $user->id,
@@ -1397,7 +1390,7 @@ Route::post('/test-notification', function(Request $request) {
 });
 
 // New: Test notification by email (FCM)
-Route::post('/test-notification-by-email', function(Illuminate\Http\Request $request) {
+Route::post('/test-notification-by-email', function (Illuminate\Http\Request $request) {
     $email = $request->input('email');
     if (!$email) {
         return response()->json(['error' => 'Email is required'], 422);
@@ -1454,7 +1447,7 @@ Route::get('/oauth/callback', function (Request $request) {
     try {
         $code = $request->query('code');
         $error = $request->query('error');
-        
+
         if ($error) {
             return response()->json([
                 'success' => false,
@@ -1462,7 +1455,7 @@ Route::get('/oauth/callback', function (Request $request) {
                 'error_description' => $request->query('error_description', 'Unknown error')
             ], 400);
         }
-        
+
         if (!$code) {
             return response()->json([
                 'success' => false,
@@ -1470,20 +1463,20 @@ Route::get('/oauth/callback', function (Request $request) {
                 'error_description' => 'Authorization code not provided'
             ], 400);
         }
-        
+
         // Return JSON response with the code for frontend to process
         return response()->json([
             'success' => true,
             'code' => $code,
             'state' => $request->query('state', '')
         ]);
-        
+
     } catch (\Exception $e) {
         \Log::error('OAuth callback error', [
             'error' => $e->getMessage(),
             'request' => $request->all()
         ]);
-        
+
         return response()->json([
             'success' => false,
             'error' => 'server_error',
@@ -1511,11 +1504,11 @@ Route::post('/oauth/exchange-code', function (Request $request) {
 
         $code = $request->input('code');
         $redirectUri = $request->input('redirect_uri');
-        
+
         // Google OAuth configuration
         $clientId = env('GOOGLE_CLIENT_ID', '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com');
         $clientSecret = env('GOOGLE_CLIENT_SECRET', '');
-        
+
         if (!$clientSecret) {
             return response()->json([
                 'success' => false,
@@ -1534,13 +1527,13 @@ Route::post('/oauth/exchange-code', function (Request $request) {
         ];
 
         $response = \Illuminate\Support\Facades\Http::asForm()->post($tokenUrl, $tokenData);
-        
+
         if (!$response->successful()) {
             \Log::error('Google token exchange failed', [
                 'status' => $response->status(),
                 'body' => $response->body()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to exchange authorization code with Google'
@@ -1548,7 +1541,7 @@ Route::post('/oauth/exchange-code', function (Request $request) {
         }
 
         $tokenResponse = $response->json();
-        
+
         if (!isset($tokenResponse['id_token'])) {
             return response()->json([
                 'success' => false,
@@ -1568,7 +1561,7 @@ Route::post('/oauth/exchange-code', function (Request $request) {
             'error' => $e->getMessage(),
             'request' => $request->all()
         ]);
-        
+
         return response()->json([
             'success' => false,
             'message' => 'An error occurred during code exchange'
@@ -1580,7 +1573,7 @@ Route::post('/oauth/exchange-code', function (Request $request) {
 Route::post('/admin/process-queue', function () {
     try {
         $jobs = \Illuminate\Support\Facades\DB::table('jobs')->where('queue', 'text-sessions')->get();
-        
+
         if ($jobs->count() === 0) {
             return response()->json([
                 'success' => true,
@@ -1588,51 +1581,51 @@ Route::post('/admin/process-queue', function () {
                 'processed' => 0
             ]);
         }
-        
+
         $processedCount = 0;
-        
+
         foreach ($jobs as $job) {
             try {
                 $payload = json_decode($job->payload);
                 $jobClass = $payload->displayName ?? 'Unknown';
                 $jobData = $payload->data ?? [];
-                
+
                 if (strpos($jobClass, 'ProcessTextSessionAutoDeduction') !== false) {
                     $sessionId = $jobData->sessionId ?? null;
                     $expectedDeductionCount = $jobData->expectedDeductionCount ?? 1;
-                    
+
                     if ($sessionId) {
                         $autoDeductionJob = new \App\Jobs\ProcessTextSessionAutoDeduction($sessionId, $expectedDeductionCount);
                         $autoDeductionJob->handle();
                         $processedCount++;
                     }
-                    
+
                 } elseif (strpos($jobClass, 'EndTextSession') !== false) {
                     $sessionId = $jobData->sessionId ?? null;
                     $reason = $jobData->reason ?? 'time_expired';
-                    
+
                     if ($sessionId) {
                         $autoEndJob = new \App\Jobs\EndTextSession($sessionId, $reason);
                         $autoEndJob->handle();
                         $processedCount++;
                     }
                 }
-                
+
                 // Delete the processed job
                 \Illuminate\Support\Facades\DB::table('jobs')->where('id', $job->id)->delete();
-                
+
             } catch (Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to process queue job: ' . $e->getMessage());
             }
         }
-        
+
         return response()->json([
             'success' => true,
             'message' => "Processed {$processedCount} jobs",
             'processed' => $processedCount,
             'total_found' => $jobs->count()
         ]);
-        
+
     } catch (Exception $e) {
         return response()->json([
             'success' => false,

@@ -1,6 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -15,6 +15,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AppTour from '../../../components/AppTour';
 import AudioCallModal from '../../../components/AudioCallModal';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
@@ -24,6 +25,7 @@ import SubscriptionModal from '../../../components/SubscriptionModal';
 import VideoCallModal from '../../../components/VideoCallModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import { apiService } from '../../../services/apiService';
+import appTourService, { DOCTOR_PROFILE_TOUR_STEPS } from '../../../services/appTourService';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -75,11 +77,37 @@ export default function DoctorProfilePage() {
   // Reviews
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
-  
+
   // Progressive section loading
   const [visibleSections, setVisibleSections] = useState(0);
   const sectionAnimations = useRef<Animated.Value[]>([]).current;
   const hasAnimated = useRef(false);
+
+  // Tour state
+  const [showTour, setShowTour] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const tourRefs = useRef<Record<string, React.RefObject<View>>>({
+    'profile-info': React.createRef(),
+    'talk-now-btn': React.createRef(),
+    'book-appt-btn': React.createRef(),
+    'reviews-section': React.createRef(),
+  }).current;
+
+  // Check tour status
+  useEffect(() => {
+    const checkTour = async () => {
+      // Start tour after doctor data is loaded (don't wait for all animations)
+      if (doctor && !loading) {
+        const completed = await appTourService.hasCompletedDoctorProfileTour();
+        console.log('🎯 Doctor Profile Tour Check:', { completed, doctor: !!doctor, loading });
+        if (!completed) {
+          console.log('🎯 Starting doctor profile tour...');
+          setTimeout(() => setShowTour(true), 800); // Reduced delay
+        }
+      }
+    };
+    checkTour();
+  }, [doctor, loading]);
 
   useEffect(() => {
     if (uid) {
@@ -92,10 +120,10 @@ export default function DoctorProfilePage() {
   useEffect(() => {
     if (doctor && visibleSections < 6 && !hasAnimated.current) {
       const delay = visibleSections === 0 ? 0 : 100; // First section immediate, others 100ms apart
-      
+
       const timer = setTimeout(() => {
         const nextSection = visibleSections;
-        
+
         // Animate the section in
         Animated.timing(sectionAnimations[nextSection], {
           toValue: 1,
@@ -103,15 +131,15 @@ export default function DoctorProfilePage() {
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }).start();
-        
+
         setVisibleSections(nextSection + 1);
-        
+
         // Mark as animated when all sections are shown
         if (nextSection + 1 >= 6) {
           hasAnimated.current = true;
         }
       }, delay);
-      
+
       return () => clearTimeout(timer);
     }
   }, [doctor, visibleSections]);
@@ -139,19 +167,19 @@ export default function DoctorProfilePage() {
     try {
       setLoading(true);
       const response = await apiService.get(`/doctors/${uid}`);
-      
+
       if (response.success && response.data) {
         console.log('Doctor data received:', response.data);
         console.log('Languages spoken:', response.data.languages_spoken);
         setDoctor(response.data);
-        
+
         // Initialize animations for 6 sections
         if (sectionAnimations.length === 0) {
           for (let i = 0; i < 6; i++) {
             sectionAnimations.push(new Animated.Value(0));
           }
         }
-        
+
         // Start progressive loading if not already animated
         if (!hasAnimated.current) {
           setVisibleSections(0);
@@ -305,7 +333,7 @@ export default function DoctorProfilePage() {
 
   const handleDirectBooking = async () => {
     if (!doctor || !userData) return;
-    
+
     // Show the session type selection modal
     setShowSessionTypeModal(true);
   };
@@ -313,25 +341,25 @@ export default function DoctorProfilePage() {
   const handleSessionTypeSelect = (sessionType: SessionType) => {
     setSelectedSessionType(sessionType);
     setShowSessionTypeModal(false);
-    
+
     // Show the booking modal with selected session type
     setShowDirectBookingModal(true);
   };
 
   const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
     if (!doctor || !userData) return;
-    
+
     // CRITICAL: Prevent duplicate call initiations
     if (startingSession || callInitiated) {
       console.log('⚠️ Call already in progress, ignoring duplicate request');
       return;
     }
-    
+
     try {
       setStartingSession(true);
       setCallInitiated(true);
       let response;
-      
+
       if (sessionType === 'text') {
         // Start text session with reason
         response = await apiService.post('/text-sessions/start', {
@@ -349,11 +377,11 @@ export default function DoctorProfilePage() {
           reason: reason
         });
       }
-      
+
       if (response && response.success) {
         // Close the direct booking modal
         setShowDirectBookingModal(false);
-        
+
         if (sessionType === 'text') {
           // For text sessions, navigate to chat using the returned session id
           const sessionData = response.data as any;
@@ -363,7 +391,7 @@ export default function DoctorProfilePage() {
           // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
           const sessionData = response.data as any;
           const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
-          
+
           // Set session ID and show modal atomically to prevent race conditions
           setDirectSessionId(appointmentId);
           if (sessionType === 'audio') {
@@ -371,7 +399,7 @@ export default function DoctorProfilePage() {
           } else {
             setShowVideoCallModal(true);
           }
-          
+
           console.log('✅ Call modal opened for session:', appointmentId);
         }
       } else {
@@ -391,15 +419,15 @@ export default function DoctorProfilePage() {
 
   const handleBookAppointment = () => {
     if (!doctor) return;
-    router.push({ 
-      pathname: '/(tabs)/doctor-details/BookAppointmentFlow', 
-      params: { 
+    router.push({
+      pathname: '/(tabs)/doctor-details/BookAppointmentFlow',
+      params: {
         doctorId: doctor.id.toString(),
         doctorName: doctor.display_name || `${doctor.first_name} ${doctor.last_name}`,
         specialization: (doctor.specializations && doctor.specializations.length > 0)
           ? doctor.specializations.join(', ')
           : (doctor.specialization || 'General Medicine')
-      } 
+      }
     });
   };
 
@@ -410,7 +438,7 @@ export default function DoctorProfilePage() {
   const handleBuySessions = () => {
     setShowSubscriptionModal(false);
     // Navigate to patient dashboard with subscriptions tab
-    router.push({ 
+    router.push({
       pathname: '/patient-dashboard',
       params: { tab: 'home' }
     });
@@ -422,8 +450,8 @@ export default function DoctorProfilePage() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
           <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton} 
+            <TouchableOpacity
+              style={styles.backButton}
               onPress={() => router.back()}
             >
               <FontAwesome name="arrow-left" size={20} color="#333" />
@@ -445,8 +473,8 @@ export default function DoctorProfilePage() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
           <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton} 
+            <TouchableOpacity
+              style={styles.backButton}
               onPress={() => router.back()}
             >
               <FontAwesome name="arrow-left" size={20} color="#333" />
@@ -471,8 +499,8 @@ export default function DoctorProfilePage() {
         <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
         {/* Header with back button */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
+          <TouchableOpacity
+            style={styles.backButton}
             onPress={() => router.back()}
           >
             <FontAwesome name="arrow-left" size={20} color="#333" />
@@ -484,8 +512,9 @@ export default function DoctorProfilePage() {
         </View>
       </SafeAreaView>
 
-      <ScrollView 
-        style={styles.content} 
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.content}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
@@ -507,51 +536,51 @@ export default function DoctorProfilePage() {
               },
             ]}
           >
-          <View style={styles.profileImageContainer}>
-            {doctor.profile_picture_url || doctor.profile_picture ? (
-              <DoctorProfilePicture
-                profilePictureUrl={doctor.profile_picture_url}
-                profilePicture={doctor.profile_picture}
-                size={100}
-                name={`${doctor.first_name} ${doctor.last_name}`}
-              />
-            ) : (
-              <DoctorProfilePicture
-                size={100}
-                style={styles.profileImage}
-                name={`${doctor.first_name} ${doctor.last_name}`}
-              />
-            )}
-          </View>
-
-          <View style={styles.profileInfo}>
-            <Text style={styles.doctorName}>
-              Dr. {doctor.first_name} {doctor.last_name}
-            </Text>
-            
-            {Array.isArray(doctor.specializations) && doctor.specializations.length > 0 ? (
-              <View style={styles.specializationChipsContainer}>
-                {doctor.specializations.map((spec, idx) => (
-                  <View key={`${spec}-${idx}`} style={styles.specializationChip}>
-                    <Text style={styles.specializationChipText}>{spec}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.specialization}>{doctor.specialization}</Text>
-            )}
-            
-            {doctor.sub_specialization && (
-              <Text style={styles.subSpecialization}>{doctor.sub_specialization}</Text>
-            )}
-            
-            <View style={styles.statusContainer}>
-              <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#999' }]} />
-              <Text style={[styles.statusText, { color: isOnline ? '#4CAF50' : '#999' }]}>
-                {isOnline ? 'Online Now' : 'Offline'}
-              </Text>
+            <View style={styles.profileImageContainer}>
+              {doctor.profile_picture_url || doctor.profile_picture ? (
+                <DoctorProfilePicture
+                  profilePictureUrl={doctor.profile_picture_url}
+                  profilePicture={doctor.profile_picture}
+                  size={100}
+                  name={`${doctor.first_name} ${doctor.last_name}`}
+                />
+              ) : (
+                <DoctorProfilePicture
+                  size={100}
+                  style={styles.profileImage}
+                  name={`${doctor.first_name} ${doctor.last_name}`}
+                />
+              )}
             </View>
-          </View>
+
+            <View style={styles.profileInfo}>
+              <Text style={styles.doctorName}>
+                Dr. {doctor.first_name} {doctor.last_name}
+              </Text>
+
+              {Array.isArray(doctor.specializations) && doctor.specializations.length > 0 ? (
+                <View style={styles.specializationChipsContainer}>
+                  {doctor.specializations.map((spec, idx) => (
+                    <View key={`${spec}-${idx}`} style={styles.specializationChip}>
+                      <Text style={styles.specializationChipText}>{spec}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.specialization}>{doctor.specialization}</Text>
+              )}
+
+              {doctor.sub_specialization && (
+                <Text style={styles.subSpecialization}>{doctor.sub_specialization}</Text>
+              )}
+
+              <View style={styles.statusContainer}>
+                <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#999' }]} />
+                <Text style={[styles.statusText, { color: isOnline ? '#4CAF50' : '#999' }]}>
+                  {isOnline ? 'Online Now' : 'Offline'}
+                </Text>
+              </View>
+            </View>
           </Animated.View>
         ) : (
           <View style={styles.profileHeaderCard}>
@@ -577,64 +606,66 @@ export default function DoctorProfilePage() {
               },
             ]}
           >
-          <Text style={styles.sectionTitle}>Professional Information</Text>
-          
-          {/* Years of Experience */}
-          <View style={styles.infoItem}>
-            <View style={styles.infoIconContainer}>
-              <FontAwesome name="clock-o" size={18} color="#4CAF50" />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Experience</Text>
-              <Text style={styles.infoValue}>{doctor.years_of_experience}+ years of experience</Text>
-            </View>
-          </View>
+            <View ref={tourRefs['profile-info']} collapsable={false}>
+              <Text style={styles.sectionTitle}>Professional Information</Text>
 
-          {/* Location */}
-          {(doctor.city || doctor.country) && (
-            <View style={styles.infoItem}>
-              <View style={styles.infoIconContainer}>
-                <FontAwesome name="map-marker" size={18} color="#4CAF50" />
-              </View>
-              <View style={styles.infoContent}>
-                <Text style={styles.infoLabel}>Location</Text>
-                <Text style={styles.infoValue}>
-                  {[doctor.city, doctor.country].filter(Boolean).join(', ')}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Languages */}
-          <View style={styles.infoItem}>
-            <View style={styles.infoIconContainer}>
-              <FontAwesome name="language" size={18} color="#4CAF50" />
-            </View>
-            <View style={styles.infoContent}>
-              <Text style={styles.infoLabel}>Languages</Text>
-              {doctor.languages_spoken && doctor.languages_spoken.length > 0 ? (
-                <View style={styles.languagesContainer}>
-                  {doctor.languages_spoken.map((language, idx) => (
-                    <View key={idx} style={styles.languageChip}>
-                      <Text style={styles.languageChipText}>{language}</Text>
-                    </View>
-                  ))}
+              {/* Years of Experience */}
+              <View style={styles.infoItem}>
+                <View style={styles.infoIconContainer}>
+                  <FontAwesome name="clock-o" size={18} color="#4CAF50" />
                 </View>
-              ) : (
-                <View style={styles.languagesContainer}>
-                  <View style={styles.languageChip}>
-                    <Text style={styles.languageChipText}>English</Text>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Experience</Text>
+                  <Text style={styles.infoValue}>{doctor.years_of_experience}+ years of experience</Text>
+                </View>
+              </View>
+
+              {/* Location */}
+              {(doctor.city || doctor.country) && (
+                <View style={styles.infoItem}>
+                  <View style={styles.infoIconContainer}>
+                    <FontAwesome name="map-marker" size={18} color="#4CAF50" />
                   </View>
-                  <View style={styles.languageChip}>
-                    <Text style={styles.languageChipText}>Chichewa</Text>
-                  </View>
-                  <View style={styles.languageChip}>
-                    <Text style={styles.languageChipText}>French</Text>
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Location</Text>
+                    <Text style={styles.infoValue}>
+                      {[doctor.city, doctor.country].filter(Boolean).join(', ')}
+                    </Text>
                   </View>
                 </View>
               )}
+
+              {/* Languages */}
+              <View style={styles.infoItem}>
+                <View style={styles.infoIconContainer}>
+                  <FontAwesome name="language" size={18} color="#4CAF50" />
+                </View>
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Languages</Text>
+                  {doctor.languages_spoken && doctor.languages_spoken.length > 0 ? (
+                    <View style={styles.languagesContainer}>
+                      {doctor.languages_spoken.map((language, idx) => (
+                        <View key={idx} style={styles.languageChip}>
+                          <Text style={styles.languageChipText}>{language}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.languagesContainer}>
+                      <View style={styles.languageChip}>
+                        <Text style={styles.languageChipText}>English</Text>
+                      </View>
+                      <View style={styles.languageChip}>
+                        <Text style={styles.languageChipText}>Chichewa</Text>
+                      </View>
+                      <View style={styles.languageChip}>
+                        <Text style={styles.languageChipText}>French</Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
             </View>
-          </View>
           </Animated.View>
         ) : visibleSections > 0 ? (
           <View style={styles.infoCard}>
@@ -687,28 +718,32 @@ export default function DoctorProfilePage() {
               },
             ]}
           >
-          <TouchableOpacity 
-            style={[
-              styles.directBookingButton,
-              !isOnline && styles.directBookingButtonDisabled
-            ]}
-            onPress={handleDirectBooking}
-            disabled={!isOnline}
-          >
-            <Text style={[
-              styles.directBookingButtonText,
-              !isOnline && styles.directBookingButtonTextDisabled
-            ]}>
-              {isOnline ? 'Talk Now' : 'Talk Now (Offline)'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.directBookingButton,
+                !isOnline && styles.directBookingButtonDisabled
+              ]}
+              onPress={handleDirectBooking}
+              disabled={!isOnline}
+              ref={tourRefs['talk-now-btn']}
+              collapsable={false}
+            >
+              <Text style={[
+                styles.directBookingButtonText,
+                !isOnline && styles.directBookingButtonTextDisabled
+              ]}>
+                {isOnline ? 'Talk Now' : 'Talk Now (Offline)'}
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={styles.bookAppointmentButton}
-            onPress={handleBookAppointment}
-          >
-            <Text style={styles.bookAppointmentButtonText}>Book Appointment</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bookAppointmentButton}
+              onPress={handleBookAppointment}
+              ref={tourRefs['book-appt-btn']}
+              collapsable={false}
+            >
+              <Text style={styles.bookAppointmentButtonText}>Book Appointment</Text>
+            </TouchableOpacity>
           </Animated.View>
         ) : visibleSections > 2 ? (
           <View style={styles.actionButtonsContainer}>
@@ -734,43 +769,45 @@ export default function DoctorProfilePage() {
               },
             ]}
           >
-          <View style={styles.reviewsHeader}>
-            <Text style={styles.sectionTitle}>Reviews & Ratings</Text>
-            <View style={styles.ratingSummary}>
-              <View style={styles.starsContainer}>
-                {renderStars(doctor.rating, 20)}
-              </View>
-              <Text style={styles.ratingText}>
-                {doctor.rating ? doctor.rating.toFixed(1) : '0.0'} ({doctor.total_ratings || 0} reviews)
-              </Text>
-            </View>
-          </View>
-          
-          {/* Individual Reviews Placeholder */}
-          <View style={styles.reviewsList}>
-            {loadingReviews ? (
-              <Text style={styles.noReviewsText}>Loading reviews...</Text>
-            ) : reviews.length === 0 ? (
-              <Text style={styles.noReviewsText}>No reviews yet</Text>
-            ) : (
-              reviews.slice(0, 3).map((rev: any) => (
-                <View key={rev.id} style={styles.reviewItem}>
-                  <View style={styles.reviewHeader}>
-                    <Text style={styles.reviewReviewer} numberOfLines={1}>
-                      {rev.reviewer?.display_name || `${rev.reviewer?.first_name || ''} ${rev.reviewer?.last_name || ''}`.trim() || 'Patient'}
-                    </Text>
-                    <View style={styles.reviewStars}>{renderStars(rev.rating || 0, 14)}</View>
+            <View ref={tourRefs['reviews-section']} collapsable={false}>
+              <View style={styles.reviewsHeader}>
+                <Text style={styles.sectionTitle}>Reviews & Ratings</Text>
+                <View style={styles.ratingSummary}>
+                  <View style={styles.starsContainer}>
+                    {renderStars(doctor.rating, 20)}
                   </View>
-                  {!!rev.comment && (
-                    <Text style={styles.reviewComment} numberOfLines={3}>{rev.comment}</Text>
-                  )}
-                  {!!rev.created_at && (
-                    <Text style={styles.reviewDate}>{new Date(rev.created_at).toLocaleDateString()}</Text>
-                  )}
+                  <Text style={styles.ratingText}>
+                    {doctor.rating ? doctor.rating.toFixed(1) : '0.0'} ({doctor.total_ratings || 0} reviews)
+                  </Text>
                 </View>
-              ))
-            )}
-          </View>
+              </View>
+
+              {/* Individual Reviews Placeholder */}
+              <View style={styles.reviewsList}>
+                {loadingReviews ? (
+                  <Text style={styles.noReviewsText}>Loading reviews...</Text>
+                ) : reviews.length === 0 ? (
+                  <Text style={styles.noReviewsText}>No reviews yet</Text>
+                ) : (
+                  reviews.slice(0, 3).map((rev: any) => (
+                    <View key={rev.id} style={styles.reviewItem}>
+                      <View style={styles.reviewHeader}>
+                        <Text style={styles.reviewReviewer} numberOfLines={1}>
+                          {rev.reviewer?.display_name || `${rev.reviewer?.first_name || ''} ${rev.reviewer?.last_name || ''}`.trim() || 'Patient'}
+                        </Text>
+                        <View style={styles.reviewStars}>{renderStars(rev.rating || 0, 14)}</View>
+                      </View>
+                      {!!rev.comment && (
+                        <Text style={styles.reviewComment} numberOfLines={3}>{rev.comment}</Text>
+                      )}
+                      {!!rev.created_at && (
+                        <Text style={styles.reviewDate}>{new Date(rev.created_at).toLocaleDateString()}</Text>
+                      )}
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
           </Animated.View>
         ) : visibleSections > 3 ? (
           <View style={styles.reviewsCard}>
@@ -796,50 +833,50 @@ export default function DoctorProfilePage() {
               },
             ]}
           >
-          <Text style={styles.sectionTitle}>Similar Doctors</Text>
-          {loadingSimilar ? (
-            <Text style={styles.similarDoctorsText}>Loading recommendations...</Text>
-          ) : similarDoctors.length === 0 ? (
-            <Text style={styles.similarDoctorsText}>
-              Recommended doctors in the same specialization will appear here
-            </Text>
-          ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.similarDoctorsHorizontalContent}
-            >
-              {similarDoctors.map((d: any) => (
-                <TouchableOpacity
-                  key={d.id}
-                  style={styles.similarDoctorCard}
-                  onPress={() => router.push({ pathname: '/(tabs)/doctor-details/[uid]', params: { uid: d.id.toString() } })}
-                >
-                  <View style={styles.similarDoctorCardHeader}>
-                    <DoctorProfilePicture
-                      profilePictureUrl={d.profile_picture_url}
-                      profilePicture={d.profile_picture}
-                      size={56}
-                      name={`${d.first_name || ''} ${d.last_name || ''}`.trim()}
-                    />
-                    <View style={styles.similarDoctorInfo}>
-                      <Text style={styles.similarDoctorName} numberOfLines={2}>
-                        {d.display_name || `Dr. ${(d.first_name || '')} ${(d.last_name || '')}`.trim()}
-                      </Text>
-                      <Text style={styles.similarDoctorSpec} numberOfLines={2}>
-                        {Array.isArray(d.specializations) && d.specializations.length > 0 ? d.specializations.join(', ') : (d.specialization || 'General Medicine')}
-                      </Text>
-                      {(d.city || d.country) && (
-                        <Text style={styles.similarDoctorLoc} numberOfLines={1}>
-                          {[d.city, d.country].filter(Boolean).join(', ')}
+            <Text style={styles.sectionTitle}>Similar Doctors</Text>
+            {loadingSimilar ? (
+              <Text style={styles.similarDoctorsText}>Loading recommendations...</Text>
+            ) : similarDoctors.length === 0 ? (
+              <Text style={styles.similarDoctorsText}>
+                Recommended doctors in the same specialization will appear here
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.similarDoctorsHorizontalContent}
+              >
+                {similarDoctors.map((d: any) => (
+                  <TouchableOpacity
+                    key={d.id}
+                    style={styles.similarDoctorCard}
+                    onPress={() => router.push({ pathname: '/(tabs)/doctor-details/[uid]', params: { uid: d.id.toString() } })}
+                  >
+                    <View style={styles.similarDoctorCardHeader}>
+                      <DoctorProfilePicture
+                        profilePictureUrl={d.profile_picture_url}
+                        profilePicture={d.profile_picture}
+                        size={56}
+                        name={`${d.first_name || ''} ${d.last_name || ''}`.trim()}
+                      />
+                      <View style={styles.similarDoctorInfo}>
+                        <Text style={styles.similarDoctorName} numberOfLines={2}>
+                          {d.display_name || `Dr. ${(d.first_name || '')} ${(d.last_name || '')}`.trim()}
                         </Text>
-                      )}
+                        <Text style={styles.similarDoctorSpec} numberOfLines={2}>
+                          {Array.isArray(d.specializations) && d.specializations.length > 0 ? d.specializations.join(', ') : (d.specialization || 'General Medicine')}
+                        </Text>
+                        {(d.city || d.country) && (
+                          <Text style={styles.similarDoctorLoc} numberOfLines={1}>
+                            {[d.city, d.country].filter(Boolean).join(', ')}
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
           </Animated.View>
         ) : visibleSections > 4 ? (
           <View style={styles.similarDoctorsCard}>
@@ -876,54 +913,74 @@ export default function DoctorProfilePage() {
       />
 
       {/* Outgoing audio call modal (reuses chat call flow) */}
-      {directSessionId && (
-        <AudioCallModal
-          visible={showAudioCallModal}
-          onClose={() => {
-            setShowAudioCallModal(false);
-            setCallInitiated(false); // Reset flag when audio modal closes
-          }}
-          appointmentId={directSessionId}
-          userId={(user?.id ?? userData?.id ?? 0).toString()}
-          isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
-          doctorId={doctor?.id}
-          doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
-          patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
-          otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
-          isIncomingCall={false}
-          onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
-          onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
-        />
-      )}
+      {
+        directSessionId && (
+          <AudioCallModal
+            visible={showAudioCallModal}
+            onClose={() => {
+              setShowAudioCallModal(false);
+              setCallInitiated(false); // Reset flag when audio modal closes
+            }}
+            appointmentId={directSessionId}
+            userId={(user?.id ?? userData?.id ?? 0).toString()}
+            isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+            doctorId={doctor?.id}
+            doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+            patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+            otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
+            isIncomingCall={false}
+            onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
+            onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
+          />
+        )
+      }
 
       {/* Outgoing video call modal (reuses chat call flow) */}
-      {directSessionId && showVideoCallModal && (
-        <VideoCallModal
-          appointmentId={directSessionId}
-          userId={(user?.id ?? userData?.id ?? 0).toString()}
-          isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
-          doctorId={doctor?.id}
-          doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
-          patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
-          otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
-          onEndCall={() => {
-            setShowVideoCallModal(false);
-            setCallInitiated(false); // Reset flag when call ends
-          }}
-          onCallTimeout={() => {
-            Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.');
-            setShowVideoCallModal(false);
-            setCallInitiated(false); // Reset flag on timeout
-          }}
-          onCallRejected={() => {
-            Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
-            setShowVideoCallModal(false);
-            setCallInitiated(false); // Reset flag on rejection
-          }}
-          isIncomingCall={false}
-        />
-      )}
-    </View>
+      {
+        directSessionId && showVideoCallModal && (
+          <VideoCallModal
+            appointmentId={directSessionId}
+            userId={(user?.id ?? userData?.id ?? 0).toString()}
+            isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
+            doctorId={doctor?.id}
+            doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
+            patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
+            otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
+            onEndCall={() => {
+              setShowVideoCallModal(false);
+              setCallInitiated(false); // Reset flag when call ends
+            }}
+            onCallTimeout={() => {
+              Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.');
+              setShowVideoCallModal(false);
+              setCallInitiated(false); // Reset flag on timeout
+            }}
+            onCallRejected={() => {
+              Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+              setShowVideoCallModal(false);
+              setCallInitiated(false); // Reset flag on rejection
+            }}
+            isIncomingCall={false}
+          />
+        )
+      }
+      {/* App Tour */}
+      <AppTour
+        visible={showTour}
+        userType="patient"
+        steps={DOCTOR_PROFILE_TOUR_STEPS}
+        onComplete={() => {
+          setShowTour(false);
+          appTourService.markDoctorProfileTourCompleted();
+        }}
+        onSkip={() => {
+          setShowTour(false);
+          appTourService.markDoctorProfileTourCompleted();
+        }}
+        elementRefs={tourRefs}
+        scrollViewRef={scrollViewRef}
+      />
+    </View >
   );
 }
 

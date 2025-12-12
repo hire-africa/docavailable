@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
+import onDutyNotificationService from '../services/onDutyNotificationService';
 
 interface WorkingHours {
     [key: string]: {
@@ -84,29 +85,28 @@ const WorkingHours: React.FC = () => {
         try {
             setLoading(true);
             console.log('[WorkingHours] Loading availability for user:', user?.id);
-            
+
             if (!user?.id) {
                 console.log('[WorkingHours] No user ID found');
                 return;
             }
-            
+
             const response = await authService.getDoctorAvailability(user.id.toString());
             console.log('[WorkingHours] API response:', response);
-            
+
             if (response.success && response.data) {
                 // Map backend snake_case to frontend camelCase
                 const data = response.data;
                 console.log('[WorkingHours] Mapped data:', data);
-                
+
                 const newAvailability = {
                     isOnline: data.is_online || false,
                     workingHours: data.working_hours || availability.workingHours,
                     maxPatientsPerDay: data.max_patients_per_day || 10,
                 };
-                
+
                 console.log('[WorkingHours] Setting availability:', newAvailability);
                 setAvailability(newAvailability);
-                setBackendData(data);
                 console.log('[WorkingHours] Availability state updated');
             } else {
                 console.log('[WorkingHours] API call failed:', response.message);
@@ -122,21 +122,21 @@ const WorkingHours: React.FC = () => {
         try {
             setSaving(true);
             setSaveSuccess(false);
-            
+
             if (!user?.id) {
                 console.error('WorkingHours: User not found');
                 return;
             }
-            
+
             // Map frontend camelCase to backend snake_case
             const backendData = {
                 is_online: availability.isOnline,
                 working_hours: availability.workingHours,
                 max_patients_per_day: availability.maxPatientsPerDay,
             };
-            
+
             const response = await authService.updateDoctorAvailability(user.id.toString(), backendData);
-            
+
             if (response.success) {
                 setSaveSuccess(true);
                 // Hide success state after 2 seconds
@@ -155,7 +155,7 @@ const WorkingHours: React.FC = () => {
 
     const toggleOnlineStatus = () => {
         const newOnlineStatus = !availability.isOnline;
-        
+
         if (newOnlineStatus) {
             // Show modal when turning online
             setShowOnlineModal(true);
@@ -165,6 +165,8 @@ const WorkingHours: React.FC = () => {
                 ...prev,
                 isOnline: newOnlineStatus,
             }));
+            // Hide on-duty notification when going offline
+            onDutyNotificationService.hideOnDutyNotification();
         }
     };
 
@@ -174,6 +176,8 @@ const WorkingHours: React.FC = () => {
             isOnline: true,
         }));
         setShowOnlineModal(false);
+        // Show on-duty notification when going online
+        onDutyNotificationService.showOnDutyNotification(user?.first_name || user?.display_name);
     };
 
     const cancelOnlineStatus = () => {
@@ -269,15 +273,15 @@ const WorkingHours: React.FC = () => {
             <View style={styles.header}>
                 <View style={styles.headerTop}>
                     <Text style={styles.title}>Availability & Working Hours</Text>
-                    <TouchableOpacity 
-                        style={styles.refreshButton} 
+                    <TouchableOpacity
+                        style={styles.refreshButton}
                         onPress={loadAvailability}
                         disabled={loading}
                     >
-                        <FontAwesome 
-                            name="refresh" 
-                            size={16} 
-                            color={loading ? "#999" : "#4CAF50"} 
+                        <FontAwesome
+                            name="refresh"
+                            size={16}
+                            color={loading ? "#999" : "#4CAF50"}
                         />
                     </TouchableOpacity>
                 </View>
@@ -298,8 +302,8 @@ const WorkingHours: React.FC = () => {
                             {availability.isOnline ? 'Online' : 'Offline'}
                         </Text>
                         <Text style={styles.onlineStatusDescription}>
-                            {availability.isOnline 
-                                ? 'Patients can see you and request instant chats' 
+                            {availability.isOnline
+                                ? 'Patients can see you and request instant chats'
                                 : 'You are currently unavailable for instant chats'
                             }
                         </Text>
@@ -342,7 +346,7 @@ const WorkingHours: React.FC = () => {
                 <Text style={styles.sectionDescription}>
                     Set your availability for each day of the week. Patients will only be able to book appointments during these hours.
                 </Text>
-                
+
                 {days.map(({ key, label, icon }) => (
                     <View key={key} style={styles.dayContainer}>
                         <View style={styles.dayHeader}>
@@ -451,7 +455,7 @@ const WorkingHours: React.FC = () => {
             <View style={styles.saveSection}>
                 <TouchableOpacity
                     style={[
-                        styles.saveButton, 
+                        styles.saveButton,
                         saving && styles.saveButtonDisabled,
                         saveSuccess && styles.saveButtonSuccess
                     ]}
@@ -492,11 +496,11 @@ const WorkingHours: React.FC = () => {
                             </View>
                             <Text style={styles.modalTitle}>Important Notice</Text>
                         </View>
-                        
+
                         <Text style={styles.modalMessage}>
                             Only turn online when you're actively available. Remember to turn off when going offline to avoid account restrictions.
                         </Text>
-                        
+
                         <View style={styles.modalButtons}>
                             <TouchableOpacity
                                 style={styles.modalCancelButton}

@@ -1,16 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { environment } from '../config/environment';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
+import onDutyNotificationService from '../services/onDutyNotificationService';
 
 interface OnlineStatusToggleProps {
   style?: any;
@@ -18,10 +19,10 @@ interface OnlineStatusToggleProps {
   compact?: boolean;
 }
 
-export default function OnlineStatusToggle({ 
-  style, 
-  showLabel = true, 
-  compact = false 
+export default function OnlineStatusToggle({
+  style,
+  showLabel = true,
+  compact = false
 }: OnlineStatusToggleProps) {
   const { user, token } = useAuth();
   const [isOnline, setIsOnline] = useState(false);
@@ -30,7 +31,7 @@ export default function OnlineStatusToggle({
 
   const fetchOnlineStatus = async () => {
     if (!user || user.role !== 'doctor') return;
-    
+
     setLoading(true);
     try {
       // You can fetch the current status from user data or make an API call
@@ -58,10 +59,19 @@ export default function OnlineStatusToggle({
       const data = await response.json();
 
       if (response.ok) {
-        setIsOnline(data.data.is_online);
+        const nowOnline = data.data.is_online;
+        setIsOnline(nowOnline);
+
+        // Show/hide on-duty notification
+        if (nowOnline) {
+          onDutyNotificationService.showOnDutyNotification(user.first_name || user.display_name);
+        } else {
+          onDutyNotificationService.hideOnDutyNotification();
+        }
+
         Alert.alert(
           'Status Updated',
-          `You are now ${data.data.is_online ? 'online' : 'offline'} for instant sessions.`,
+          `You are now ${nowOnline ? 'online' : 'offline'} for instant sessions.`,
           [{ text: 'OK' }]
         );
       } else {
@@ -134,7 +144,7 @@ export default function OnlineStatusToggle({
             />
           )}
         </View>
-        
+
         {showLabel && (
           <View style={styles.labelSection}>
             <Text style={[styles.statusText, { color: isOnline ? Colors.success : Colors.gray }]}>
