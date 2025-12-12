@@ -753,6 +753,14 @@ class TextSessionController extends Controller
      */
     public function getSession(Request $request, $sessionId): JsonResponse
     {
+        // Enforce numeric ID to prevent SQL errors if string routes are matched incorrectly
+        if (!is_numeric($sessionId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid session ID format'
+            ], 404);
+        }
+
         try {
             $user = auth()->user();
 
