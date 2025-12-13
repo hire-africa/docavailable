@@ -58,6 +58,18 @@ class TextSession extends Model
     }
 
     /**
+     * Get the messages for the text session.
+     */
+    public function messages(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        // Assuming the TextSession's ID corresponds to the chat_room_id in ChatMessage
+        // OR the TextSession has a 'chat_id' field linking to ChatMessages
+        // Based on TextSessionController line 184 fix: 'chat_room_id' => $textSessionId
+        // It implies chat_room_id in ChatMessage table equals text_session->id
+        return $this->hasMany(ChatMessage::class, 'chat_room_id');
+    }
+
+    /**
      * Check if the session is active.
      */
     public function isActive(): bool
@@ -122,7 +134,7 @@ class TextSession extends Model
 
         $endTime = $this->ended_at ?? now();
         $duration = $this->started_at->diffInMinutes($endTime);
-        
+
         return max(1, $duration); // Minimum 1 minute
     }
 
@@ -134,7 +146,7 @@ class TextSession extends Model
         if (!$this->activated_at) {
             return 0; // Session not activated yet
         }
-        
+
         $endTime = $this->ended_at ?? now();
         return $this->activated_at->diffInMinutes($endTime);
     }
@@ -167,10 +179,10 @@ class TextSession extends Model
         if (!$this->activated_at) {
             return null; // Session not activated yet
         }
-        
+
         $elapsedMinutes = $this->getElapsedMinutes();
         $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
-        
+
         return $this->activated_at->addMinutes($nextDeductionMinute);
     }
 
@@ -193,7 +205,7 @@ class TextSession extends Model
         $totalAllowedMinutes = $this->getTotalAllowedMinutes();
         $elapsedMinutes = $this->getElapsedMinutes();
         $bufferMinutes = 1; // 1-minute buffer to allow auto-deductions to process
-        
+
         return max(0, ($totalAllowedMinutes + $bufferMinutes) - $elapsedMinutes);
     }
 
@@ -216,7 +228,7 @@ class TextSession extends Model
         $totalAllowedMinutes = $this->getTotalAllowedMinutes();
         $elapsedMinutes = $this->getElapsedMinutes();
         $bufferMinutes = 1; // 1-minute buffer to allow auto-deductions to process
-        
+
         return ($totalAllowedMinutes + $bufferMinutes) - $elapsedMinutes <= 0;
     }
 
@@ -229,17 +241,17 @@ class TextSession extends Model
         if (!$patient || !$patient->subscription) {
             return true; // No subscription, auto-end
         }
-        
+
         $subscription = $patient->subscription;
         if (!$subscription->isActive) {
             return true; // Inactive subscription, auto-end
         }
-        
+
         // Check if we have enough sessions for the next 10-minute block
         $elapsedMinutes = $this->getElapsedMinutes();
         $nextDeductionMinute = ceil($elapsedMinutes / 10) * 10;
         $sessionsNeededForNextBlock = 1; // 1 session per 10 minutes
-        
+
         return $subscription->text_sessions_remaining < $sessionsNeededForNextBlock;
     }
 
@@ -279,7 +291,7 @@ class TextSession extends Model
             'activated_at' => now(),
             'last_activity_at' => now()
         ]);
-        
+
         // Scheduler will handle auto-deductions - no queue jobs needed
         \Illuminate\Support\Facades\Log::info("Text session activated", [
             'session_id' => $this->id,
@@ -295,7 +307,7 @@ class TextSession extends Model
     {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($reason) {
             $session = self::lockForUpdate()->find($this->id);
-            
+
             if (!$session || $session->status !== self::STATUS_ACTIVE) {
                 return false;
             }
@@ -320,4 +332,4 @@ class TextSession extends Model
             return true;
         });
     }
-} 
+}
