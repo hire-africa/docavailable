@@ -181,7 +181,7 @@ class TextSessionController extends Controller
                         'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
                         'response_time' => 2, // 2 minutes response time
                     ],
-                    'chat_room_id' => $chatRoom,
+                    'chat_room_id' => (string) $textSessionId,
                     'sessions_remaining' => $subscription ? $subscription->text_sessions_remaining : $sessionsRemaining,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                     'remaining_sessions' => $session->getRemainingSessions(),
