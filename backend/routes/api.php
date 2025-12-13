@@ -1018,8 +1018,18 @@ Route::middleware(['auth:api'])->group(function () {
             $lines = @file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
             $tail = array_slice($lines, -200);
             return response()->json(['success' => true, 'data' => $tail]);
-        } catch (\Throwable $t) {
-            return response()->json(['success' => false, 'error' => $t->getMessage()], 500);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
+        }
+    });
+
+    // Debug: Clear Cache (Force remote update)
+    Route::get('/debug/clear-cache', function () {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+            return response()->json(['success' => true, 'message' => 'Cache cleared successfully (optimize:clear)']);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()]);
         }
     });
 
