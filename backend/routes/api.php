@@ -25,6 +25,7 @@ use App\Http\Controllers\ChatController;
 use App\Http\Controllers\TextSessionController;
 use App\Http\Controllers\TextAppointmentController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\BlogFeedController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\DB;
@@ -1245,6 +1246,7 @@ Route::middleware(['auth:api', 'role:patient'])->group(function () {
 Route::get('/doctors/active', [UserController::class, 'getActiveDoctors']);
 Route::get('/doctors/{id}/working-hours', [WorkingHoursController::class, 'doctor_working_hours']);
 Route::get('/doctors/{id}/reviews', [ReviewController::class, 'doctor_reviews']);
+Route::get('/blog/feed', [BlogFeedController::class, 'feed']);
 
 // Doctor routes
 Route::prefix('doctors')->group(function () {

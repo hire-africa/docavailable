@@ -71,6 +71,9 @@ import Blog from './blog';
 const profileImage = require('../assets/images/profile.jpg');
 const discoverBanner1 = require('../assets/images/discover.png');
 const discoverBanner2 = require('../assets/images/discover2.png');
+const discoverBanner3 = require('../assets/images/discover3.png');
+const discoverBanner5 = require('../assets/images/discover5.png');
+const discoverBanner6 = require('../assets/images/discover6.png');
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -462,7 +465,16 @@ export default function PatientDashboard() {
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [sessionElapsedTime, setSessionElapsedTime] = useState<number>(0);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-  const discoverBanners = [discoverBanner1, discoverBanner2];
+  const [isDiscoverBannerLoading, setIsDiscoverBannerLoading] = useState(true);
+  const [showDiscoverBannerLoader, setShowDiscoverBannerLoader] = useState(false);
+  const discoverBannerLoaderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const discoverBanners = [
+    discoverBanner1,
+    discoverBanner2,
+    discoverBanner3,
+    discoverBanner5,
+    discoverBanner6,
+  ];
 
   const formatSessionTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -564,11 +576,11 @@ export default function PatientDashboard() {
     };
   }, [activeTextSessions]);
 
-  // Auto-switch discover banners every 5 seconds
+  // Auto-switch discover banners every 12 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length);
-    }, 5000);
+    }, 12000);
     return () => clearInterval(interval);
   }, [discoverBanners.length]);
 
@@ -2758,45 +2770,6 @@ export default function PatientDashboard() {
         <View style={styles.header}>
         </View>
 
-        {/* Discover Banner Carousel */}
-        <View style={{ marginHorizontal: 0, marginBottom: 16, paddingHorizontal: 0 }}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length)}
-          >
-            <Image
-              source={discoverBanners[currentBannerIndex]}
-              style={{
-                width: '100%',
-                height: 180,
-                borderRadius: 16,
-                resizeMode: 'cover'
-              }}
-            />
-          </TouchableOpacity>
-          {/* Banner Indicator Dots */}
-          <View style={{
-            flexDirection: 'row',
-            justifyContent: 'center',
-            marginTop: 10,
-            gap: 8
-          }}>
-            {discoverBanners.map((_, index) => (
-              <TouchableOpacity
-                key={index}
-                onPress={() => setCurrentBannerIndex(index)}
-              >
-                <View style={{
-                  width: currentBannerIndex === index ? 24 : 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor: currentBannerIndex === index ? '#4CAF50' : '#D0D0D0',
-                }} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Search and Filter Container */}
         <View style={styles.searchFilterContainer}>
           {/* Search Bar - Full Width */}
@@ -2880,6 +2853,94 @@ export default function PatientDashboard() {
             </View>
           )}
         </View>
+
+        {/* Discover Banner Carousel (hide while searching) */}
+        {searchQuery.trim().length === 0 && (
+          <View style={{ marginHorizontal: 0, marginBottom: 32, paddingHorizontal: 0 }}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length)}
+            >
+              <View style={{ position: 'relative' }}>
+                <Image
+                  source={discoverBanners[currentBannerIndex]}
+                  onLoadStart={() => {
+                    setIsDiscoverBannerLoading(true);
+                    setShowDiscoverBannerLoader(false);
+                    if (discoverBannerLoaderTimeoutRef.current) {
+                      clearTimeout(discoverBannerLoaderTimeoutRef.current);
+                    }
+                    // Avoid spinner flashing on fast loads; only show if it’s actually slow.
+                    discoverBannerLoaderTimeoutRef.current = setTimeout(() => {
+                      setShowDiscoverBannerLoader(true);
+                    }, 400);
+                  }}
+                  onLoadEnd={() => {
+                    setIsDiscoverBannerLoading(false);
+                    setShowDiscoverBannerLoader(false);
+                    if (discoverBannerLoaderTimeoutRef.current) {
+                      clearTimeout(discoverBannerLoaderTimeoutRef.current);
+                      discoverBannerLoaderTimeoutRef.current = null;
+                    }
+                  }}
+                  onError={() => {
+                    setIsDiscoverBannerLoading(false);
+                    setShowDiscoverBannerLoader(false);
+                    if (discoverBannerLoaderTimeoutRef.current) {
+                      clearTimeout(discoverBannerLoaderTimeoutRef.current);
+                      discoverBannerLoaderTimeoutRef.current = null;
+                    }
+                    setCurrentBannerIndex((prev) => (prev + 1) % discoverBanners.length);
+                  }}
+                  fadeDuration={250}
+                  style={{
+                    width: '100%',
+                    height: 180,
+                    borderRadius: 16,
+                    resizeMode: 'cover'
+                  }}
+                />
+                {isDiscoverBannerLoading && showDiscoverBannerLoader && (
+                  <View style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    borderRadius: 16,
+                    backgroundColor: '#F3F4F6',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                    <ActivityIndicator color="#4CAF50" />
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+            {/* Banner Indicator Dots */}
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'center',
+              marginTop: 10,
+              marginBottom: 6,
+              gap: 8
+            }}>
+              {discoverBanners.map((_, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => setCurrentBannerIndex(index)}
+                >
+                  <View style={{
+                    width: currentBannerIndex === index ? 24 : 8,
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: currentBannerIndex === index ? '#4CAF50' : '#D0D0D0',
+                  }} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Doctors List */}
         <View style={styles.doctorsListNew}>

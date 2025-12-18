@@ -2,17 +2,17 @@ name: Deploy to DigitalOcean
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Deploy to DigitalOcean
-      uses: digitalocean/app_action@v1
-      with:
-        app_id: ${{ secrets.DIGITALOCEAN_APP_ID }}
-        token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - uses: actions/checkout@v3
+
+      - name: Deploy to DigitalOcean
+        uses: digitalocean/app_action@v1
+        with:
+          app_name: ${{ secrets.DIGITALOCEAN_APP_NAME }}
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}

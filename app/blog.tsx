@@ -2,13 +2,32 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
 import BottomNavigation from '../components/BottomNavigation';
 import Icon from '../components/Icon';
+import apiService from './services/apiService';
 
+type BlogSource = 'internal' | 'web';
 
-const featuredBlogs = [
+interface BlogItem {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  date: string;
+  author: string;
+  readTime: string;
+  isBookmarked: boolean;
+  source: BlogSource;
+  route?: string;
+  url?: string;
+  image?: any;
+  imageUrl?: string;
+}
+
+const featuredBlogs: BlogItem[] = [
   {
-    id: 1,
+    id: 'featured-1',
     title: 'The Doctor Will See You… Through Your Selfie Camera',
     description: 'Funny but real — emphasizes video consultations',
     image: require('../assets/images/video.jpg'),
@@ -17,9 +36,11 @@ const featuredBlogs = [
     author: 'DocAvailable Team',
     readTime: '5 min read',
     isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-2',
   },
   {
-    id: 2,
+    id: 'featured-2',
     title: 'The Future of Healthcare: Telemedicine and AI',
     description: 'Explore the advantages of telemedicine and AI in healthcare.',
     image: require('../assets/images/ai.jpg'),
@@ -28,9 +49,11 @@ const featuredBlogs = [
     author: 'DocAvailable Team',
     readTime: '8 min read',
     isBookmarked: true,
+    source: 'internal',
+    route: '/blog-article-3',
   },
   {
-    id: 3,
+    id: 'featured-3',
     title: 'Your Phone = Your Doctor: 7 Health Services You Didn\'t Know You Could Get Online',
     description: 'Discover how your smartphone can provide essential healthcare services from the comfort of your home.',
     image: require('../assets/images/your phone.jpg'),
@@ -39,12 +62,14 @@ const featuredBlogs = [
     author: 'DocAvailable Team',
     readTime: '6 min read',
     isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article',
   },
 ];
 
-const articles = [
+const articles: BlogItem[] = [
   {
-    id: 1,
+    id: 'internal-1',
     category: 'Mental Health',
     title: 'Coping with Stress and Anxiety: Tips to Manage It in Everyday Life',
     description: 'Stress and anxiety happen. Work, school, family—sometimes it all feels like too much. But small things done daily can help you stay in control.',
@@ -53,9 +78,11 @@ const articles = [
     author: 'DocAvailable Team',
     readTime: '7 min read',
     isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-4',
   },
   {
-    id: 2,
+    id: 'internal-2',
     category: 'Nutrition',
     title: 'Healthy Eating Habits for a Balanced Diet',
     description: 'Learn about the essential nutrients and foods for a healthy and balanced diet.',
@@ -64,9 +91,11 @@ const articles = [
     author: 'DocAvailable Team',
     readTime: '4 min read',
     isBookmarked: true,
+    source: 'internal',
+    route: '/blog-article-5',
   },
   {
-    id: 3,
+    id: 'internal-3',
     category: 'Fitness',
     title: 'From Couch to 5K: Building Fitness Habits That Actually Stick',
     description: 'Transform your fitness journey with practical tips and exercises that fit into your busy lifestyle.',
@@ -75,6 +104,8 @@ const articles = [
     author: 'DocAvailable Team',
     readTime: '9 min read',
     isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-6',
   },
 ];
 
@@ -88,11 +119,13 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [bookmarkedArticles, setBookmarkedArticles] = useState<number[]>([]);
+  const [bookmarkedArticles, setBookmarkedArticles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [webArticles, setWebArticles] = useState<BlogItem[]>([]);
+  const [webArticlesError, setWebArticlesError] = useState<string | null>(null);
 
   // Combine all blogs for search
-  const allBlogs = [...featuredBlogs, ...articles];
+  const allBlogs: BlogItem[] = [...featuredBlogs, ...webArticles, ...articles];
 
   // Filter blogs by search query
   const getFilteredBlogs = () => {
@@ -114,17 +147,86 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
     return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
+  const getBlogImageSource = (blog: BlogItem) => {
+    if (blog.imageUrl) return { uri: blog.imageUrl };
+    if (blog.image) return blog.image;
+    return require('../assets/images/doc-available.jpg');
+  };
+
+  const openBlog = async (blog: BlogItem) => {
+    if (blog.source === 'internal' && blog.route) {
+      router.push(blog.route as any);
+      return;
+    }
+
+    if (blog.url) {
+      try {
+        await WebBrowser.openBrowserAsync(blog.url);
+      } catch (e) {
+        Alert.alert('Unable to open article', 'Please try again.');
+      }
+      return;
+    }
+
+    Alert.alert('Coming Soon', 'This article will be available soon!');
+  };
+
+  const fetchWebArticles = React.useCallback(async () => {
+    try {
+      setWebArticlesError(null);
+      setIsLoading(true);
+
+      const res = await apiService.get<{ articles: Array<any> }>('/blog/feed', { limit: 20 });
+      if (!res?.success) {
+        setWebArticlesError(res?.message || 'Failed to load web articles');
+        setWebArticles([]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!res.data?.articles) {
+        setWebArticlesError('Web feed returned an unexpected response');
+        setWebArticles([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const mapped: BlogItem[] = res.data.articles.map((a) => {
+        const publishedAt = typeof a.publishedAt === 'string' ? a.publishedAt : null;
+        const date = publishedAt ? publishedAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+        return {
+          id: `web-${a.id || Math.random().toString(36).slice(2)}`,
+          title: a.title || 'Untitled',
+          description: a.description || '',
+          category: a.source || 'From the Web',
+          date,
+          author: a.source || 'External',
+          readTime: 'Read',
+          isBookmarked: false,
+          source: 'web',
+          url: a.url,
+          imageUrl: a.imageUrl || undefined,
+        };
+      });
+
+      setWebArticles(mapped.filter((x) => !!x.url));
+    } catch (e: any) {
+      setWebArticlesError(e?.message || 'Failed to load web articles');
+      setWebArticles([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   // Handle refresh
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
-    // Simulate API call
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    fetchWebArticles().finally(() => setRefreshing(false));
   }, []);
 
   // Toggle bookmark
-  const toggleBookmark = (articleId: number) => {
+  const toggleBookmark = (articleId: string) => {
     setBookmarkedArticles(prev => 
       prev.includes(articleId) 
         ? prev.filter(id => id !== articleId)
@@ -133,6 +235,10 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   };
 
   const filteredBlogs = getFilteredBlogs();
+
+  React.useEffect(() => {
+    fetchWebArticles();
+  }, [fetchWebArticles]);
 
   // Empty state component
   const renderEmptyState = () => (
@@ -215,20 +321,9 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                 <TouchableOpacity 
                   key={blog.id} 
                   style={styles.searchResultItem}
-                  onPress={() => {
-                    // Handle navigation based on blog ID
-                    if (blog.id === 3) {
-                      router.push('/blog-article');
-                    } else if (blog.id === 1) {
-                      router.push('/blog-article-2');
-                    } else if (blog.id === 2) {
-                      router.push('/blog-article-3');
-                    } else {
-                      Alert.alert('Coming Soon', 'This article will be available soon!');
-                    }
-                  }}
+                  onPress={() => openBlog(blog)}
                 >
-                  <Image source={blog.image} style={styles.searchResultImage} />
+                  <Image source={getBlogImageSource(blog)} style={styles.searchResultImage} />
                   <View style={styles.searchResultContent}>
                     <View style={styles.searchResultHeader}>
                     <Text style={styles.searchResultCategory}>{blog.category}</Text>
@@ -265,20 +360,10 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
               <TouchableOpacity 
                 key={blog.id} 
                 style={styles.featuredCard}
-                onPress={() => {
-                  if (blog.id === 3) {
-                    router.push('/blog-article');
-                  } else if (blog.id === 1) {
-                    router.push('/blog-article-2');
-                  } else if (blog.id === 2) {
-                    router.push('/blog-article-3');
-                  } else {
-                    Alert.alert('Coming Soon', 'This article will be available soon!');
-                  }
-                }}
+                onPress={() => openBlog(blog)}
               >
                   <View style={styles.featuredImageContainer}>
-                <Image source={blog.image} style={styles.featuredImage} />
+                <Image source={getBlogImageSource(blog)} style={styles.featuredImage} />
                     <TouchableOpacity 
                       onPress={() => toggleBookmark(blog.id)}
                       style={styles.featuredBookmarkButton}
@@ -305,6 +390,65 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
           </>
         )}
 
+        {/* From the Web (only show when not searching) */}
+        {!isLoading && !searchQuery.trim() && (
+          <>
+            <Text style={styles.sectionHeader}>From the Web</Text>
+            {webArticlesError ? (
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateTitle}>Couldn’t load web articles</Text>
+                <Text style={styles.emptyStateDescription}>{webArticlesError}</Text>
+                <TouchableOpacity style={styles.emptyStateButton} onPress={fetchWebArticles}>
+                  <Text style={styles.emptyStateButtonText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : webArticles.length === 0 ? (
+              <View style={styles.emptyStateContainer}>
+                <Text style={styles.emptyStateTitle}>No web articles right now</Text>
+                <Text style={styles.emptyStateDescription}>
+                  Pull to refresh, or try again in a moment.
+                </Text>
+                <TouchableOpacity style={styles.emptyStateButton} onPress={fetchWebArticles}>
+                  <Text style={styles.emptyStateButtonText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.articlesList}>
+                {webArticles.slice(0, 6).map(article => (
+                  <TouchableOpacity
+                    key={article.id}
+                    style={styles.articleRow}
+                    onPress={() => openBlog(article)}
+                  >
+                    <View style={styles.articleContent}>
+                      <View style={styles.articleHeader}>
+                        <Text style={styles.articleCategory}>{article.category}</Text>
+                        <TouchableOpacity
+                          onPress={() => toggleBookmark(article.id)}
+                          style={styles.articleBookmarkButton}
+                        >
+                          <Icon
+                            name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmark-o"}
+                            size={16}
+                            color={bookmarkedArticles.includes(article.id) ? "#4CAF50" : "#999"}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                      <Text style={styles.articleTitle}>{article.title}</Text>
+                      <Text style={styles.articleDesc}>{article.description}</Text>
+                      <View style={styles.articleMeta}>
+                        <Text style={styles.articleAuthor}>{article.author}</Text>
+                        <Text style={styles.articleReadTime}>{article.readTime}</Text>
+                      </View>
+                    </View>
+                    <Image source={getBlogImageSource(article)} style={styles.articleImage} />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
         {/* All Articles Section (only show when not searching) */}
         {!isLoading && !searchQuery.trim() && (
           <>
@@ -314,17 +458,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                 <TouchableOpacity 
                   key={article.id} 
                   style={styles.articleRow}
-                  onPress={() => {
-                    if (article.id === 1) {
-                      router.push('/blog-article-4');
-                    } else if (article.id === 2) {
-                      router.push('/blog-article-5');
-                    } else if (article.id === 3) {
-                      router.push('/blog-article-6');
-                    } else {
-                      Alert.alert('Coming Soon', 'This article will be available soon!');
-                    }
-                  }}
+                  onPress={() => openBlog(article)}
                 >
                   <View style={styles.articleContent}>
                     <View style={styles.articleHeader}>
@@ -347,7 +481,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                       <Text style={styles.articleReadTime}>{article.readTime}</Text>
                     </View>
                   </View>
-                  <Image source={article.image} style={styles.articleImage} />
+                  <Image source={getBlogImageSource(article)} style={styles.articleImage} />
                 </TouchableOpacity>
               ))}
             </View>
