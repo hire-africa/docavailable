@@ -182,7 +182,8 @@ ios/Pods/
 ios/Podfile.lock
 
 # Generated Android resources and build artifacts (should not be tracked)
-assets/
+# NOTE: Do not ignore the repo root `assets/` folder (Expo app assets live there).
+android/app/src/main/assets/
 android/app/build/
 android/build/
 android/local.properties
