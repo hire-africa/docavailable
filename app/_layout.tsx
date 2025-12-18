@@ -553,6 +553,7 @@ export default function RootLayout() {
               <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
               <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
               <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-web" options={{ headerShown: false }} />
               <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
               <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
               <Stack.Screen name="call" options={{ headerShown: false }} />

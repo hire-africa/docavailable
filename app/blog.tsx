@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as WebBrowser from 'expo-web-browser';
+// Removed expo-web-browser - now using in-app WebView instead
 import BottomNavigation from '../components/BottomNavigation';
 import Icon from '../components/Icon';
 import apiService from './services/apiService';
@@ -148,8 +148,13 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   };
 
   const getBlogImageSource = (blog: BlogItem) => {
-    if (blog.imageUrl) return { uri: blog.imageUrl };
+    // For web articles, prioritize imageUrl (remote image from RSS feed)
+    if (blog.imageUrl && typeof blog.imageUrl === 'string' && blog.imageUrl.trim() !== '') {
+      return { uri: blog.imageUrl.trim() };
+    }
+    // For internal articles, use the local image asset
     if (blog.image) return blog.image;
+    // Fallback to default logo
     return require('../assets/images/doc-available.jpg');
   };
 
@@ -160,11 +165,14 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
     }
 
     if (blog.url) {
-      try {
-        await WebBrowser.openBrowserAsync(blog.url);
-      } catch (e) {
-        Alert.alert('Unable to open article', 'Please try again.');
-      }
+      // Navigate to in-app WebView instead of external browser
+      router.push({
+        pathname: '/blog-article-web',
+        params: {
+          url: blog.url,
+          title: blog.title || 'Article',
+        },
+      } as any);
       return;
     }
 
@@ -176,7 +184,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       setWebArticlesError(null);
       setIsLoading(true);
 
-      const res = await apiService.get<{ articles: Array<any> }>('/blog/feed', { limit: 20 });
+      const res = await apiService.get<{ articles: Array<any> }>('/blog/feed', { limit: 3 });
       if (!res?.success) {
         setWebArticlesError(res?.message || 'Failed to load web articles');
         setWebArticles([]);
@@ -194,19 +202,24 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
       const mapped: BlogItem[] = res.data.articles.map((a) => {
         const publishedAt = typeof a.publishedAt === 'string' ? a.publishedAt : null;
         const date = publishedAt ? publishedAt.slice(0, 10) : new Date().toISOString().slice(0, 10);
+        
+        // Ensure imageUrl is a valid string (not null, not empty)
+        const imageUrl = (a.imageUrl && typeof a.imageUrl === 'string' && a.imageUrl.trim() !== '') 
+          ? a.imageUrl.trim() 
+          : undefined;
 
         return {
           id: `web-${a.id || Math.random().toString(36).slice(2)}`,
           title: a.title || 'Untitled',
           description: a.description || '',
-          category: a.source || 'From the Web',
+          category: a.source || 'WHO News',
           date,
           author: a.source || 'External',
           readTime: 'Read',
           isBookmarked: false,
           source: 'web',
           url: a.url,
-          imageUrl: a.imageUrl || undefined,
+          imageUrl: imageUrl,
         };
       });
 
@@ -332,7 +345,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                         style={styles.bookmarkButton}
                       >
                         <Icon 
-                          name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmark-o"} 
+                          name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmarkO"} 
                           size={16} 
                           color={bookmarkedArticles.includes(blog.id) ? "#4CAF50" : "#999"} 
                         />
@@ -368,11 +381,11 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                       onPress={() => toggleBookmark(blog.id)}
                       style={styles.featuredBookmarkButton}
                     >
-                      <Icon 
-                        name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmark-o"} 
-                        size={16} 
-                        color={bookmarkedArticles.includes(blog.id) ? "#4CAF50" : "#fff"} 
-                      />
+                        <Icon 
+                          name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmarkO"} 
+                          size={16} 
+                          color={bookmarkedArticles.includes(blog.id) ? "#4CAF50" : "#fff"} 
+                        />
                     </TouchableOpacity>
                   </View>
                   <View style={styles.featuredContent}>
@@ -390,10 +403,10 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
           </>
         )}
 
-        {/* From the Web (only show when not searching) */}
+        {/* World Health Organization News (only show when not searching) */}
         {!isLoading && !searchQuery.trim() && (
           <>
-            <Text style={styles.sectionHeader}>From the Web</Text>
+            <Text style={styles.sectionHeader}>World Health Organization News</Text>
             {webArticlesError ? (
               <View style={styles.emptyStateContainer}>
                 <Text style={styles.emptyStateTitle}>Couldn’t load web articles</Text>
@@ -414,7 +427,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
               </View>
             ) : (
               <View style={styles.articlesList}>
-                {webArticles.slice(0, 6).map(article => (
+                {webArticles.slice(0, 3).map(article => (
                   <TouchableOpacity
                     key={article.id}
                     style={styles.articleRow}
@@ -428,7 +441,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                           style={styles.articleBookmarkButton}
                         >
                           <Icon
-                            name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmark-o"}
+                            name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmarkO"}
                             size={16}
                             color={bookmarkedArticles.includes(article.id) ? "#4CAF50" : "#999"}
                           />
@@ -468,7 +481,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                         style={styles.articleBookmarkButton}
                       >
                         <Icon 
-                          name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmark-o"} 
+                          name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmarkO"} 
                           size={16} 
                           color={bookmarkedArticles.includes(article.id) ? "#4CAF50" : "#999"} 
                         />

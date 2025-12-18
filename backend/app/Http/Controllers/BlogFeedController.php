@@ -192,6 +192,9 @@ class BlogFeedController extends Controller
 
         $publishedAt = $this->toIsoDate($updated);
         $description = $this->excerpt($summaryRaw, 220);
+        
+        // Try to extract image from Atom entry
+        $imageUrl = $this->extractAtomImageUrl($entry, $summaryRaw);
 
         return [
             'id' => substr(sha1($link), 0, 16),
@@ -200,7 +203,7 @@ class BlogFeedController extends Controller
             'url' => $link,
             'publishedAt' => $publishedAt,
             'description' => $description,
-            'imageUrl' => null,
+            'imageUrl' => $imageUrl,
         ];
     }
 
@@ -253,6 +256,86 @@ class BlogFeedController extends Controller
                 foreach ($media->thumbnail as $thumb) {
                     $url = (string) ($thumb['url'] ?? '');
                     if ($url) return $url;
+                }
+            }
+        }
+
+        // Extract image from description HTML (common in RSS feeds like WHO)
+        $description = (string) ($item->description ?? '');
+        if ($description) {
+            // Look for <img src="..." /> tags
+            if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $description, $matches)) {
+                $imgUrl = trim($matches[1]);
+                // Validate it's a proper image URL
+                if ($imgUrl && (str_starts_with($imgUrl, 'http') || str_starts_with($imgUrl, '//'))) {
+                    // Convert protocol-relative URLs to HTTPS
+                    if (str_starts_with($imgUrl, '//')) {
+                        $imgUrl = 'https:' . $imgUrl;
+                    }
+                    return $imgUrl;
+                }
+            }
+            // Also check for CDATA wrapped content
+            if (preg_match('/<!\[CDATA\[.*?<img[^>]+src=["\']([^"\']+)["\'].*?\]\]>/is', $description, $matches)) {
+                $imgUrl = trim($matches[1]);
+                if ($imgUrl && (str_starts_with($imgUrl, 'http') || str_starts_with($imgUrl, '//'))) {
+                    if (str_starts_with($imgUrl, '//')) {
+                        $imgUrl = 'https:' . $imgUrl;
+                    }
+                    return $imgUrl;
+                }
+            }
+        }
+
+        // Check content:encoded (some feeds use this)
+        $namespaces = $item->getNamespaces(true);
+        foreach ($namespaces as $prefix => $ns) {
+            $content = $item->children($ns, true);
+            if (isset($content->encoded)) {
+                $encoded = (string) $content->encoded;
+                if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $encoded, $matches)) {
+                    $imgUrl = trim($matches[1]);
+                    if ($imgUrl && (str_starts_with($imgUrl, 'http') || str_starts_with($imgUrl, '//'))) {
+                        if (str_starts_with($imgUrl, '//')) {
+                            $imgUrl = 'https:' . $imgUrl;
+                        }
+                        return $imgUrl;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function extractAtomImageUrl(\SimpleXMLElement $entry, string $summaryOrContent): ?string
+    {
+        // Check media namespace (similar to RSS)
+        $media = $entry->children('media', true);
+        if ($media) {
+            if (isset($media->content)) {
+                foreach ($media->content as $content) {
+                    $url = (string) ($content['url'] ?? '');
+                    if ($url) return $url;
+                }
+            }
+            if (isset($media->thumbnail)) {
+                foreach ($media->thumbnail as $thumb) {
+                    $url = (string) ($thumb['url'] ?? '');
+                    if ($url) return $url;
+                }
+            }
+        }
+
+        // Extract from summary/content HTML
+        if ($summaryOrContent) {
+            if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $summaryOrContent, $matches)) {
+                $imgUrl = trim($matches[1]);
+                if ($imgUrl && (str_starts_with($imgUrl, 'http') || str_starts_with($imgUrl, '//'))) {
+                    if (str_starts_with($imgUrl, '//')) {
+                        $imgUrl = 'https:' . $imgUrl;
+                    }
+                    return $imgUrl;
                 }
             }
         }
