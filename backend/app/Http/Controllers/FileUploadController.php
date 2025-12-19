@@ -550,18 +550,10 @@ class FileUploadController extends Controller
             // Generate unique filename for voice message with timestamp
             $filename = 'voice_' . time() . '_' . Str::random(10) . '.' . $extension;
             
-            // CRITICAL FIX: For text sessions, include timestamp in folder name to prevent file conflicts
-            // Text sessions can reuse the same appointment ID, so we need unique folders per session instance
-            // Format: chat_voice_messages/{appointmentId}_{timestamp}/
-            $folderTimestamp = time();
-            $folder = 'chat_voice_messages/' . $appointmentId . '_' . $folderTimestamp;
+            // Store in regular folder structure for now
+            // TODO: Add timestamped folders when deployment is ready
+            $folder = 'chat_voice_messages/' . $appointmentId;
             $path = $file->storeAs($folder, $filename, 'public');
-            
-            \Log::info('Voice message folder created:', [
-                'folder' => $folder,
-                'appointment_id' => $appointmentId,
-                'timestamp' => $folderTimestamp
-            ]);
             
             // Get the public URL - use a custom route for better audio streaming
             // CRITICAL: Always return FULL URL with domain for frontend to use
@@ -572,6 +564,7 @@ class FileUploadController extends Controller
                 'path' => $path,
                 'url' => $url,
                 'base_url' => $baseUrl,
+                'is_full_url' => str_starts_with($url, 'http'),
                 'folder' => $folder,
                 'appointment_id' => $appointmentId
             ]);
