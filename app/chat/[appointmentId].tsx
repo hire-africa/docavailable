@@ -4,7 +4,7 @@ import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { environment } from '../../services/environment';
+import { environment } from '../../config/environment';
 import {
   ActivityIndicator,
   Animated,
