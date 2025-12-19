@@ -337,8 +337,22 @@ class TextSession extends Model
      */
     public function endManually($reason = 'manual_end'): bool
     {
+        // Validate that we have an ID before attempting database operations
+        if (!$this->id) {
+            \Illuminate\Support\Facades\Log::error('Attempted to end session without ID');
+            return false;
+        }
+
         return \Illuminate\Support\Facades\DB::transaction(function () use ($reason) {
-            $session = self::lockForUpdate()->find($this->id);
+            try {
+                $session = self::where('id', $this->id)->lockForUpdate()->first();
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Error locking session for update', [
+                    'session_id' => $this->id,
+                    'error' => $e->getMessage()
+                ]);
+                throw $e; // Re-throw to be caught by controller
+            }
 
             if (!$session || $session->status !== self::STATUS_ACTIVE) {
                 return false;

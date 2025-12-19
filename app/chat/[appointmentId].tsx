@@ -1536,18 +1536,8 @@ export default function ChatPage() {
             console.log('🏁 Session ended via WebRTC:', sessionId, reason, sessionType);
             setSessionEnded(true);
 
-            // FIX: Refresh chat data when session ends to update UI immediately
-            console.log('🔄 [SessionEnded] Refreshing chat data for session end notification...');
-            setTimeout(() => {
-              // Force refresh of chat info and messages
-              if (webrtcChatService) {
-                webrtcChatService.requestSessionStatus();
-              }
-              // Also refresh local chat info
-              loadChat();
-            }, 500);
-
-            // Show rating modal or navigate back
+            // Show rating modal immediately - don't try to refresh chat data
+            // The session is ended, so no need to fetch more data
             setShowRatingModal(true);
           },
 
@@ -2124,6 +2114,12 @@ export default function ChatPage() {
       return;
     }
 
+    // Don't load chat if session is already ended
+    if (sessionEnded) {
+      console.log('⚠️ [loadChat] Session already ended, skipping chat load');
+      return;
+    }
+
     try {
       console.log('🔄 [loadChat] Starting chat load...', {
         userType: user?.user_type,
@@ -2140,7 +2136,24 @@ export default function ChatPage() {
             // For text sessions, fetch session info
             const sessionId = appointmentId.replace('text_session_', '');
             console.log('📊 [InstantSession] Making API call to:', `/text-sessions/${sessionId}`);
-            const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+            
+            // Wrap in try-catch to handle HTML error responses gracefully
+            let sessionResponse;
+            try {
+              sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+            } catch (apiError: any) {
+              // If backend returns HTML error page, handle gracefully
+              console.warn('⚠️ [InstantSession] API call failed (possibly HTML error):', apiError);
+              // Check if response is HTML
+              if (apiError?.response?.data && typeof apiError.response.data === 'string' && apiError.response.data.includes('<!DOCTYPE')) {
+                console.error('❌ [InstantSession] Backend returned HTML error page instead of JSON');
+                // Don't throw - just skip this load attempt
+                setIsLoadingChat(false);
+                setLoading(false);
+                return;
+              }
+              throw apiError; // Re-throw if it's not an HTML error
+            }
             console.log('📊 [InstantSession] Text session API response:', {
               success: sessionResponse.success,
               data: sessionResponse.data,
@@ -2295,7 +2308,7 @@ export default function ChatPage() {
               } else if (isPatient && chatInfoData.other_participant_name && chatInfoData.other_participant_name !== 'User') {
                 // Only add doctor prefix if it's not already there and not "User"
                 if (!chatInfoData.other_participant_name.startsWith('Dr.') && !chatInfoData.other_participant_name.startsWith('Dr ')) {
-                  chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
+                chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
                 }
               }
 
@@ -3012,28 +3025,44 @@ export default function ChatPage() {
 
       const sessionType = isTextSession ? 'text' : 'appointment';
 
-      // Call backend to end session based on type
-      let backendSuccess = false;
-      try {
-        if (isTextSession) {
-          await sessionService.endTextSession(sessionId);
-          backendSuccess = true;
-        } else {
-          await sessionService.endTextAppointmentSession(sessionId);
-          backendSuccess = true;
+      // IMMEDIATELY update UI state first - don't wait for anything
+      setShowEndSessionModal(false);
+      setSessionEnded(true);
+      setEndingSession(false);
+      
+      // Use setTimeout to ensure UI updates happen in next tick
+      setTimeout(() => {
+        setShowRatingModal(true);
+        console.log('✅ [End Session] Rating modal shown');
+      }, 0);
+
+      console.log('✅ [End Session] UI updated immediately - rating modal will show');
+
+      // Now do backend call and message retrieval in background (non-blocking)
+      // Call backend to end session based on type (non-blocking)
+      const backendPromise = (async () => {
+        try {
+          if (isTextSession) {
+            await sessionService.endTextSession(sessionId);
+            console.log('✅ [End Session] Backend call successful');
+          } else {
+            await sessionService.endTextAppointmentSession(sessionId);
+            console.log('✅ [End Session] Backend call successful');
+          }
+        } catch (backendError: any) {
+          // Check if it's an HTML error response
+          const errorMessage = backendError?.message || String(backendError);
+          if (errorMessage.includes('HTML') || errorMessage.includes('<!DOCTYPE')) {
+            console.warn('⚠️ [End Session] Backend returned HTML error (deployment issue), but session is ended in UI');
+          } else {
+            console.warn('⚠️ [End Session] Backend call failed, but continuing with local storage:', backendError);
+          }
+          // Don't throw - we've already updated the UI, so just log and continue
         }
-        console.log('✅ [End Session] Backend call successful');
-      } catch (backendError: any) {
-        console.warn('⚠️ [End Session] Backend call failed, but continuing with local storage:', backendError);
-        // Continue with local storage even if backend fails
-        backendSuccess = false;
-      }
+      })();
 
-      // Always proceed with storing session locally and showing rating modal
-      // even if backend call failed (session might already be ended, etc.)
-      console.log('✅ [End Session] Proceeding with session storage and rating modal');
-
-        // Archive messages before clearing - ensure we get all messages
+      // Get messages in background (non-blocking)
+      const messagesPromise = (async () => {
         let archiveMessages = [];
         try {
           if (webrtcChatService) {
@@ -3053,11 +3082,14 @@ export default function ChatPage() {
           }
         } catch (error) {
           console.error('❌ [End Session] Error retrieving messages:', error);
-          // Continue with empty messages array rather than failing
         }
-        
-        const cleanedMessages = archiveMessages.map(m => {
-          const { temp_id, ...rest } = m as any;
+        return archiveMessages;
+      })();
+
+      // Wait for both to complete, then store session
+      Promise.all([backendPromise, messagesPromise]).then(([_, archiveMessages]) => {
+        const cleanedMessages = (archiveMessages || []).map((m: any) => {
+          const { temp_id, ...rest } = m;
           return { ...rest, delivery_status: rest.delivery_status || 'sent' };
         });
         
@@ -3097,20 +3129,12 @@ export default function ChatPage() {
           ended_at: new Date().toISOString(),
           session_duration: undefined,
           session_summary: undefined,
-          reason: textSessionInfo?.reason || 'General Checkup', // Use original reason, fallback to generic
+          reason: textSessionInfo?.reason || 'General Checkup',
           messages: cleanedMessages,
           message_count: cleanedMessages.length,
         };
 
-        // IMMEDIATELY show rating modal before async operations
-        setShowEndSessionModal(false);
-        setSessionEnded(true);
-        setShowRatingModal(true);
-        setEndingSession(false);
-
-        console.log('✅ [End Session] UI updated - showing rating modal');
-
-        // Handle background operations non-blocking - ensure it completes
+        // Store session in background
         endedSessionStorageService.storeEndedSessionForBoth(endedSession)
           .then(() => {
             console.log('✅ [End Session] Session stored successfully locally');
@@ -3124,42 +3148,51 @@ export default function ChatPage() {
                 .catch((retryError: any) => console.error('❌ [End Session] Retry also failed:', retryError));
             }, 1000);
           });
+      }).catch((error) => {
+        console.error('❌ [End Session] Error in background processing:', error);
+      });
 
+      // Clear messages in background (non-blocking) - but don't try to refresh status
+      // The session is ended, so no need to fetch more data from backend
         if (webrtcChatService) {
+        setTimeout(() => {
           console.log('🧹 Clearing messages from WebRTC service after manual end.');
           webrtcChatService.clearMessages().catch((e: any) => {
             console.error('Failed to clear messages:', e);
           });
-        }
 
-        // FIX: Trigger refresh for both participants to update chat state (non-blocking)
-        console.log('🔄 [End Session] Triggering chat refresh for both participants...');
-        if (webrtcChatService) {
-          // Send a session-ended notification to refresh both chats
+          // Send a session-ended notification (non-blocking, don't wait for response)
           webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
             console.error('❌ [End Session] Failed to send session end notification:', error);
           });
-        }
-
-        // Force refresh chat data for both participants (non-blocking)
-        setTimeout(() => {
-          console.log('🔄 [End Session] Forcing chat data refresh...');
-          // Trigger a re-fetch of chat info and messages
-          if (webrtcChatService) {
-            webrtcChatService.requestSessionStatus();
-          }
-        }, 1000);
+          
+          // DON'T call requestSessionStatus() - session is ended, no need to fetch status
+          // This was causing the freeze when backend returns HTML error
+        }, 100);
+      }
     } catch (error: any) {
       console.error('❌ [End Session] Error in session end process:', error);
 
-      // Even if there's an error, try to store the session locally and show rating modal
+      // IMMEDIATELY update UI state first - don't wait for anything
+        setShowEndSessionModal(false);
+        setSessionEnded(true);
+        setEndingSession(false);
+      
+      // Use setTimeout to ensure UI updates happen in next tick
+      setTimeout(() => {
+        setShowRatingModal(true);
+        console.log('✅ [End Session] Rating modal shown despite error');
+      }, 0);
+
+      // Even if there's an error, try to store the session locally in background
       // This ensures the user can still rate the session even if something went wrong
-      try {
-        // Try multiple sources for messages
-        let archiveMessages = [];
+      (async () => {
         try {
-          if (webrtcChatService) {
-            archiveMessages = await webrtcChatService.getMessages();
+          // Try multiple sources for messages
+          let archiveMessages = [];
+          try {
+            if (webrtcChatService) {
+              archiveMessages = await webrtcChatService.getMessages();
             console.log('📦 [End Session Error] Retrieved messages from WebRTC service:', archiveMessages.length);
           }
         } catch (webrtcError) {
@@ -3223,37 +3256,24 @@ export default function ChatPage() {
           message_count: cleanedMessages.length,
         };
 
-        // Store session locally with retry
-        endedSessionStorageService.storeEndedSessionForBoth(endedSession)
-          .then(() => {
-            console.log('✅ [End Session Error] Session stored successfully locally');
-          })
-          .catch((e: any) => {
-            console.error('❌ [End Session Error] Failed to store ended session locally:', e);
-            // Retry after delay
-            setTimeout(() => {
-              endedSessionStorageService.storeEndedSessionForBoth(endedSession)
-                .then(() => console.log('✅ [End Session Error] Retry: Session stored successfully'))
-                .catch((retryError: any) => console.error('❌ [End Session Error] Retry also failed:', retryError));
-            }, 1000);
-          });
-
-        // Show rating modal even if backend call failed
-        setShowEndSessionModal(false);
-        setSessionEnded(true);
-        setShowRatingModal(true);
-        setEndingSession(false);
-
-        console.log('✅ [End Session] UI updated despite error - showing rating modal');
-      } catch (fallbackError: any) {
-        console.error('❌ [End Session] Even fallback failed:', fallbackError);
-        // Still try to show rating modal
-        setShowEndSessionModal(false);
-        setSessionEnded(true);
-        setShowRatingModal(true);
-        setEndingSession(false);
-        Alert.error('Error', 'Failed to end session, but you can still rate it.');
-      }
+          // Store session locally with retry
+          endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+            .then(() => {
+              console.log('✅ [End Session Error] Session stored successfully locally');
+            })
+            .catch((e: any) => {
+              console.error('❌ [End Session Error] Failed to store ended session locally:', e);
+              // Retry after delay
+              setTimeout(() => {
+                endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+                  .then(() => console.log('✅ [End Session Error] Retry: Session stored successfully'))
+                  .catch((retryError: any) => console.error('❌ [End Session Error] Retry also failed:', retryError));
+              }, 1000);
+            });
+        } catch (fallbackError: any) {
+          console.error('❌ [End Session] Even fallback failed:', fallbackError);
+        }
+      })();
     } finally {
       setEndingSession(false);
     }
