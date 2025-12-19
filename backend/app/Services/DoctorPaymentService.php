@@ -647,7 +647,7 @@ class DoctorPaymentService
     }
 
     /**
-     * Process manual end deduction (1 session for manual ending)
+     * Process manual end deduction - accounts for already processed auto-deductions
      */
     public function processManualEndDeduction(TextSession $session): bool
     {
@@ -678,47 +678,69 @@ class DoctorPaymentService
                 // Continue with deduction even if subscription is inactive
             }
             
+            // Calculate sessions to deduct (accounts for auto-deductions already processed)
+            $sessionsToDeduct = $session->getSessionsToDeduct(true);
+            
+            if ($sessionsToDeduct <= 0) {
+                \Log::info('No sessions to deduct for manual end (already processed via auto-deductions)', [
+                    'session_id' => $session->id,
+                    'elapsed_minutes' => $session->getElapsedMinutes(),
+                    'auto_deductions_processed' => $session->auto_deductions_processed,
+                    'sessions_used' => $session->sessions_used
+                ]);
+                return true; // Already deducted, nothing to do
+            }
+            
             // More flexible safety check - allow ending even with 0 sessions
-            if ($subscription->text_sessions_remaining < 0) {
-                \Log::warning('Negative sessions remaining - allowing manual end', [
+            if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
+                \Log::warning('Insufficient sessions remaining - deducting what we can', [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
                     'sessions_remaining' => $subscription->text_sessions_remaining,
+                    'sessions_to_deduct' => $sessionsToDeduct,
                 ]);
+                // Deduct what we can
+                $sessionsToDeduct = max(0, $subscription->text_sessions_remaining);
             }
             
-            // Deduct 1 session for manual end
-            $subscription->decrement('text_sessions_remaining', 1);
-            
-            // Award doctor earnings for manual end
-            $doctor = $session->doctor;
-            if ($doctor) {
-                $wallet = DoctorWallet::getOrCreate($doctor->id);
-                $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor);
-                $currency = self::getCurrency($doctor);
+            // Deduct sessions (only what hasn't been auto-deducted)
+            if ($sessionsToDeduct > 0) {
+                $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
                 
-                $wallet->credit(
-                    $paymentAmount,
-                    "Manual end payment for session {$session->id}",
-                    'text',
-                    $session->id,
-                    'text_sessions',
-                    [
-                        'patient_name' => $session->patient->first_name . " " . $session->patient->last_name,
-                        'session_duration' => $session->getElapsedMinutes(),
-                        'sessions_used' => 1,
-                        'payment_transaction_id' => $subscription->payment_transaction_id,
-                        'payment_gateway' => $subscription->payment_gateway,
-                        'currency' => $currency,
-                        'payment_amount' => $paymentAmount,
-                        'end_type' => 'manual'
-                    ]
-                );
+                // Award doctor earnings for remaining sessions
+                $doctor = $session->doctor;
+                if ($doctor) {
+                    $wallet = DoctorWallet::getOrCreate($doctor->id);
+                    $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $sessionsToDeduct;
+                    $currency = self::getCurrency($doctor);
+                    
+                    $wallet->credit(
+                        $paymentAmount,
+                        "Manual end payment for session {$session->id} ({$sessionsToDeduct} session(s))",
+                        'text',
+                        $session->id,
+                        'text_sessions',
+                        [
+                            'patient_name' => $session->patient->first_name . " " . $session->patient->last_name,
+                            'session_duration' => $session->getElapsedMinutes(),
+                            'sessions_used' => $sessionsToDeduct,
+                            'auto_deductions_processed' => $session->auto_deductions_processed ?? 0,
+                            'payment_transaction_id' => $subscription->payment_transaction_id,
+                            'payment_gateway' => $subscription->payment_gateway,
+                            'currency' => $currency,
+                            'payment_amount' => $paymentAmount,
+                            'end_type' => 'manual'
+                        ]
+                    );
+                }
             }
             
             \Log::info("Manual end deduction processed", [
                 'session_id' => $session->id,
                 'patient_id' => $session->patient_id,
+                'sessions_to_deduct' => $sessionsToDeduct,
+                'auto_deductions_processed' => $session->auto_deductions_processed ?? 0,
+                'elapsed_minutes' => $session->getElapsedMinutes(),
                 'sessions_remaining_after' => $subscription->text_sessions_remaining,
                 'end_type' => 'manual'
             ]);

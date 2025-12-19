@@ -3013,35 +3013,85 @@ export default function ChatPage() {
       const sessionType = isTextSession ? 'text' : 'appointment';
 
       // Call backend to end session based on type
-      let result;
-      if (isTextSession) {
-        await sessionService.endTextSession(sessionId);
-        result = { status: 'success' };
-      } else {
-        await sessionService.endTextAppointmentSession(sessionId);
-        result = { status: 'success' };
+      let backendSuccess = false;
+      try {
+        if (isTextSession) {
+          await sessionService.endTextSession(sessionId);
+          backendSuccess = true;
+        } else {
+          await sessionService.endTextAppointmentSession(sessionId);
+          backendSuccess = true;
+        }
+        console.log('✅ [End Session] Backend call successful');
+      } catch (backendError: any) {
+        console.warn('⚠️ [End Session] Backend call failed, but continuing with local storage:', backendError);
+        // Continue with local storage even if backend fails
+        backendSuccess = false;
       }
 
-      console.log('🔍 [End Session] Backend response:', result);
+      // Always proceed with storing session locally and showing rating modal
+      // even if backend call failed (session might already be ended, etc.)
+      console.log('✅ [End Session] Proceeding with session storage and rating modal');
 
-      if (result.status === 'success') {
-        console.log('✅ [End Session] Session ended successfully');
-
-        // Archive messages before clearing
-        const archiveMessages = webrtcChatService ? await webrtcChatService.getMessages() : [];
+        // Archive messages before clearing - ensure we get all messages
+        let archiveMessages = [];
+        try {
+          if (webrtcChatService) {
+            archiveMessages = await webrtcChatService.getMessages();
+            console.log('📦 [End Session] Retrieved messages from WebRTC service:', archiveMessages.length);
+          } else {
+            // Fallback: try to get messages from backend API
+            try {
+              const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
+              if (messagesResponse.success && messagesResponse.data) {
+                archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
+                console.log('📦 [End Session] Retrieved messages from backend API:', archiveMessages.length);
+              }
+            } catch (apiError) {
+              console.warn('⚠️ [End Session] Failed to get messages from API, using empty array:', apiError);
+            }
+          }
+        } catch (error) {
+          console.error('❌ [End Session] Error retrieving messages:', error);
+          // Continue with empty messages array rather than failing
+        }
+        
         const cleanedMessages = archiveMessages.map(m => {
           const { temp_id, ...rest } = m as any;
           return { ...rest, delivery_status: rest.delivery_status || 'sent' };
         });
+        
+        console.log('📦 [End Session] Cleaned messages count:', cleanedMessages.length);
+
+        // Determine patient and doctor info based on current user
+        const isPatient = user?.user_type === 'patient';
+        const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
+        const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
+        
+        // Get names - if current user is patient, other participant is doctor, and vice versa
+        const patientName = isPatient 
+          ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+          : (textSessionInfo?.patient?.display_name || 
+             `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+             chatInfo?.other_participant_name || 'Patient');
+        
+        const doctorName = isPatient
+          ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
+             `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+          : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
 
         const endedSession: EndedSession = {
           appointment_id: getNumericAppointmentId(),
-          doctor_id: chatInfo?.doctor_id,
-          doctor_name: chatInfo?.other_participant_name,
-          doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-          doctor_profile_picture: chatInfo?.other_participant_profile_picture,
-          patient_id: user?.id || 0,
-          patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+          doctor_id: doctorId,
+          doctor_name: doctorName,
+          doctor_profile_picture_url: isPatient 
+            ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
+            : (user?.profile_picture_url || user?.profile_picture),
+          doctor_profile_picture: isPatient
+            ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
+            : (user?.profile_picture || user?.profile_picture_url),
+          patient_id: patientId,
+          patient_name: patientName,
           appointment_date: chatInfo?.appointment_date,
           appointment_time: chatInfo?.appointment_time,
           ended_at: new Date().toISOString(),
@@ -3060,10 +3110,20 @@ export default function ChatPage() {
 
         console.log('✅ [End Session] UI updated - showing rating modal');
 
-        // Handle background operations non-blocking
-        endedSessionStorageService.storeEndedSessionForBoth(endedSession).catch((e: any) => {
-          console.error('Failed to store ended session locally:', e);
-        });
+        // Handle background operations non-blocking - ensure it completes
+        endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+          .then(() => {
+            console.log('✅ [End Session] Session stored successfully locally');
+          })
+          .catch((e: any) => {
+            console.error('❌ [End Session] Failed to store ended session locally:', e);
+            // Try again after a short delay
+            setTimeout(() => {
+              endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+                .then(() => console.log('✅ [End Session] Retry: Session stored successfully'))
+                .catch((retryError: any) => console.error('❌ [End Session] Retry also failed:', retryError));
+            }, 1000);
+          });
 
         if (webrtcChatService) {
           console.log('🧹 Clearing messages from WebRTC service after manual end.');
@@ -3089,29 +3149,110 @@ export default function ChatPage() {
             webrtcChatService.requestSessionStatus();
           }
         }, 1000);
-      } else {
-        console.error('❌ [End Session] Failed to end session:', result);
-        Alert.error('Error', 'Failed to end session. Please try again.');
-        setEndingSession(false);
-      }
     } catch (error: any) {
-      console.error('❌ [End Session] Error ending session:', error);
+      console.error('❌ [End Session] Error in session end process:', error);
 
-      if (error?.response?.status === 404) {
-        console.error('Session Not Found: This session may have already been ended or no longer exists.');
-        // Store messages locally anyway and show rating modal
+      // Even if there's an error, try to store the session locally and show rating modal
+      // This ensures the user can still rate the session even if something went wrong
+      try {
+        // Try multiple sources for messages
+        let archiveMessages = [];
+        try {
+          if (webrtcChatService) {
+            archiveMessages = await webrtcChatService.getMessages();
+            console.log('📦 [End Session Error] Retrieved messages from WebRTC service:', archiveMessages.length);
+          }
+        } catch (webrtcError) {
+          console.warn('⚠️ [End Session Error] Failed to get messages from WebRTC:', webrtcError);
+        }
+        
+        // Fallback: try backend API
+        if (archiveMessages.length === 0) {
+          try {
+            const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
+            if (messagesResponse.success && messagesResponse.data) {
+              archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
+              console.log('📦 [End Session Error] Retrieved messages from backend API:', archiveMessages.length);
+            }
+          } catch (apiError) {
+            console.warn('⚠️ [End Session Error] Failed to get messages from API:', apiError);
+          }
+        }
+        
+        const cleanedMessages = archiveMessages.map(m => {
+          const { temp_id, ...rest } = m as any;
+          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+        });
+        
+        console.log('📦 [End Session Error] Cleaned messages count:', cleanedMessages.length);
+
+        const isPatient = user?.user_type === 'patient';
+        const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
+        const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
+        
+        const patientName = isPatient 
+          ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+          : (textSessionInfo?.patient?.display_name || 
+             `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+             chatInfo?.other_participant_name || 'Patient');
+        
+        const doctorName = isPatient
+          ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
+             `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+          : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+
+        const endedSession: EndedSession = {
+          appointment_id: getNumericAppointmentId(),
+          doctor_id: doctorId,
+          doctor_name: doctorName,
+          doctor_profile_picture_url: isPatient 
+            ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
+            : (user?.profile_picture_url || user?.profile_picture),
+          doctor_profile_picture: isPatient
+            ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
+            : (user?.profile_picture || user?.profile_picture_url),
+          patient_id: patientId,
+          patient_name: patientName,
+          appointment_date: chatInfo?.appointment_date,
+          appointment_time: chatInfo?.appointment_time,
+          ended_at: new Date().toISOString(),
+          session_duration: undefined,
+          session_summary: undefined,
+          reason: textSessionInfo?.reason || 'General Checkup',
+          messages: cleanedMessages,
+          message_count: cleanedMessages.length,
+        };
+
+        // Store session locally with retry
+        endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+          .then(() => {
+            console.log('✅ [End Session Error] Session stored successfully locally');
+          })
+          .catch((e: any) => {
+            console.error('❌ [End Session Error] Failed to store ended session locally:', e);
+            // Retry after delay
+            setTimeout(() => {
+              endedSessionStorageService.storeEndedSessionForBoth(endedSession)
+                .then(() => console.log('✅ [End Session Error] Retry: Session stored successfully'))
+                .catch((retryError: any) => console.error('❌ [End Session Error] Retry also failed:', retryError));
+            }, 1000);
+          });
+
+        // Show rating modal even if backend call failed
         setShowEndSessionModal(false);
         setSessionEnded(true);
         setShowRatingModal(true);
         setEndingSession(false);
-      } else if (error?.response?.status === 403) {
-        console.error('Unauthorized: You are not authorized to end this session.');
-        Alert.error('Error', 'You are not authorized to end this session.');
+
+        console.log('✅ [End Session] UI updated despite error - showing rating modal');
+      } catch (fallbackError: any) {
+        console.error('❌ [End Session] Even fallback failed:', fallbackError);
+        // Still try to show rating modal
+        setShowEndSessionModal(false);
+        setSessionEnded(true);
+        setShowRatingModal(true);
         setEndingSession(false);
-      } else {
-        console.error('Failed to end session. Please try again.');
-        Alert.error('Error', 'Failed to end session. Please try again.');
-        setEndingSession(false);
+        Alert.error('Error', 'Failed to end session, but you can still rate it.');
       }
     } finally {
       setEndingSession(false);
@@ -3127,14 +3268,35 @@ export default function ChatPage() {
         return { ...rest, delivery_status: rest.delivery_status || 'sent' };
       });
 
+      // Determine patient and doctor info based on current user
+      const isPatient = user?.user_type === 'patient';
+      const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
+      const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
+      
+      // Get names - if current user is patient, other participant is doctor, and vice versa
+      const patientName = isPatient 
+        ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+        : (textSessionInfo?.patient?.display_name || 
+           `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+           chatInfo?.other_participant_name || 'Patient');
+      
+      const doctorName = isPatient
+        ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
+           `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+        : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+
       const endedSession: EndedSession = {
         appointment_id: getNumericAppointmentId(),
-        doctor_id: chatInfo?.doctor_id,
-        doctor_name: chatInfo?.other_participant_name,
-        doctor_profile_picture_url: chatInfo?.other_participant_profile_picture_url,
-        doctor_profile_picture: chatInfo?.other_participant_profile_picture,
-        patient_id: user?.id || 0,
-        patient_name: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
+        doctor_id: doctorId,
+        doctor_name: doctorName,
+        doctor_profile_picture_url: isPatient 
+          ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
+          : (user?.profile_picture_url || user?.profile_picture),
+        doctor_profile_picture: isPatient
+          ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
+          : (user?.profile_picture || user?.profile_picture_url),
+        patient_id: patientId,
+        patient_name: patientName,
         appointment_date: chatInfo?.appointment_date,
         appointment_time: chatInfo?.appointment_time,
         ended_at: new Date().toISOString(),

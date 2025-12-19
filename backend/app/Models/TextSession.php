@@ -302,6 +302,37 @@ class TextSession extends Model
     }
 
     /**
+     * Get sessions to deduct when ending session
+     * Accounts for auto-deductions that have already been processed
+     */
+    public function getSessionsToDeduct(bool $isManualEnd = true): int
+    {
+        $elapsedMinutes = $this->getElapsedMinutes();
+        
+        // Calculate total sessions needed based on elapsed time
+        // Every 10 minutes = 1 session, plus 1 for manual end
+        $totalSessionsNeeded = floor($elapsedMinutes / 10);
+        if ($isManualEnd) {
+            $totalSessionsNeeded += 1; // Add 1 for manual end
+        }
+        
+        // Subtract what's already been auto-deducted
+        $alreadyProcessed = $this->auto_deductions_processed ?? 0;
+        $sessionsToDeduct = max(0, $totalSessionsNeeded - $alreadyProcessed);
+        
+        \Illuminate\Support\Facades\Log::info("Calculating sessions to deduct", [
+            'session_id' => $this->id,
+            'elapsed_minutes' => $elapsedMinutes,
+            'total_sessions_needed' => $totalSessionsNeeded,
+            'already_processed' => $alreadyProcessed,
+            'sessions_to_deduct' => $sessionsToDeduct,
+            'is_manual_end' => $isManualEnd
+        ]);
+        
+        return $sessionsToDeduct;
+    }
+
+    /**
      * Handle manual session ending with atomic operations
      */
     public function endManually($reason = 'manual_end'): bool
@@ -316,18 +347,23 @@ class TextSession extends Model
             // Preserve the original reason if it exists, otherwise use the provided reason
             $finalReason = $session->reason && $session->reason !== 'manual_end' ? $session->reason : $reason;
 
+            // Calculate sessions to deduct (accounts for auto-deductions)
+            $sessionsToDeduct = $session->getSessionsToDeduct(true);
+            
             // Update session status first
             $session->update([
                 'status' => self::STATUS_ENDED,
                 'ended_at' => now(),
                 'reason' => $finalReason,
-                'sessions_used' => $session->sessions_used + 1 // +1 for manual end
+                'sessions_used' => $session->sessions_used + $sessionsToDeduct
             ]);
 
             \Illuminate\Support\Facades\Log::info("Session ended manually", [
                 'session_id' => $this->id,
                 'original_reason' => $session->reason,
-                'final_reason' => $finalReason
+                'final_reason' => $finalReason,
+                'sessions_to_deduct' => $sessionsToDeduct,
+                'total_sessions_used' => $session->sessions_used
             ]);
 
             return true;
