@@ -429,6 +429,13 @@ export default function DoctorProfilePage() {
             sessionData
           });
 
+          // Clear any lingering global call flags before starting new call
+          const g: any = global as any;
+          console.log('🧹 [DoctorProfile] Clearing global flags before new call');
+          g.activeAudioCall = false;
+          g.activeVideoCall = false;
+          g.currentCallType = null;
+
           // Set session ID and show modal atomically to prevent race conditions
           setDirectSessionId(appointmentId);
           if (sessionType === 'audio') {

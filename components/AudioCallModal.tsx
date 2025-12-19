@@ -40,8 +40,23 @@ export default function AudioCallModal({
 }: AudioCallModalProps) {
   const [showAudioCall, setShowAudioCall] = useState(false);
 
+  // Debug: Log all props
+  console.log('🎤 [AudioCallModal] Rendered with props:', {
+    visible,
+    appointmentId,
+    userId,
+    isDoctor,
+    doctorId,
+    doctorName,
+    patientName,
+    isIncomingCall,
+    showAudioCall
+  });
+
   // Auto-start the outgoing call as soon as this modal becomes visible
   useEffect(() => {
+    console.log('🎤 [AudioCallModal] useEffect triggered:', { visible, isIncomingCall, showAudioCall });
+    
     if (visible && !isIncomingCall) {
       console.log('📞 [AudioCallModal] Starting outgoing call...');
       setShowAudioCall(true);

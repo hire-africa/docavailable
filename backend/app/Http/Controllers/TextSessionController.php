@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Services\MessageStorageService;
 use App\Services\NotificationService;
 use App\Services\TimezoneService;
+use App\Services\VoiceMessageArchiveService;
 use App\Services\AnonymizationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -20,12 +21,18 @@ class TextSessionController extends Controller
     protected $messageStorageService;
     protected $notificationService;
     protected $anonymizationService;
+    protected $voiceArchiveService;
 
-    public function __construct(MessageStorageService $messageStorageService, NotificationService $notificationService, AnonymizationService $anonymizationService)
-    {
+    public function __construct(
+        MessageStorageService $messageStorageService, 
+        NotificationService $notificationService, 
+        AnonymizationService $anonymizationService,
+        VoiceMessageArchiveService $voiceArchiveService
+    ) {
         $this->messageStorageService = $messageStorageService;
         $this->notificationService = $notificationService;
         $this->anonymizationService = $anonymizationService;
+        $this->voiceArchiveService = $voiceArchiveService;
     }
 
     /**
@@ -693,6 +700,20 @@ class TextSessionController extends Controller
                     'success' => false,
                     'message' => 'Failed to end session. It may have already been ended or is not active.'
                 ], 400);
+            }
+
+            // Archive voice messages BEFORE any cleanup
+            try {
+                $archiveResult = $this->voiceArchiveService->archiveSessionVoiceMessages($sessionId);
+                \Log::info('Voice messages archived for ended session', [
+                    'session_id' => $sessionId,
+                    'archived_count' => $archiveResult['archived']
+                ]);
+            } catch (\Exception $e) {
+                \Log::error('Failed to archive voice messages', [
+                    'session_id' => $sessionId,
+                    'error' => $e->getMessage()
+                ]);
             }
 
             // Process payment after session is ended (outside transaction)

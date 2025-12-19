@@ -4,6 +4,7 @@ module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "docavailable",
+    owner: "xee777",
     workflow: "managed",
     version: "1.0.0",
     orientation: "portrait",
@@ -67,7 +68,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "ba4644ef-6ee9-4580-aa2a-594d16da0061"
+        projectId: "12737d94-2401-4ad9-992c-4f7a3635db77"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

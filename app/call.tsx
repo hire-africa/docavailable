@@ -5,10 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../components/AudioCall';
 import VideoCallModal from '../components/VideoCallModal';
 import { useAuth } from '../contexts/AuthContext';
+import { useSecureScreen } from '../hooks/useSecureScreen';
 import { AudioCallService } from '../services/audioCallService';
 import { VideoCallService } from '../services/videoCallService';
 
 export default function CallScreen() {
+  // Enable screenshot prevention for all calls (audio/video)
+  useSecureScreen('Call');
+  
   const params = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();

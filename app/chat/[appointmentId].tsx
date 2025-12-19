@@ -256,24 +256,36 @@ export default function ChatPage() {
   const router = useRouter();
   const { user, token, loading: authLoading, refreshUserData } = useAuth();
   const { isAnonymousModeEnabled } = useAnonymousMode();
-  const { enable: enableScreenshotPrevention } = useScreenshotPrevention();
+  const { enable: enableScreenshotPrevention, disable: disableScreenshotPrevention } = useScreenshotPrevention();
 
-  // Ensure screenshot prevention is enabled when chat loads
+  // Enable screenshot prevention when chat loads, disable when it unmounts
   useEffect(() => {
     const enableScreenshotProtection = async () => {
       try {
-        console.log('🔒 [Chat] Ensuring screenshot prevention is enabled...');
-
-        // Enable screenshot prevention
+        console.log('🔒 [Chat] Enabling screenshot prevention for chat...');
         await enableScreenshotPrevention();
-        console.log('✅ [Chat] Screenshot prevention enabled for chat');
+        console.log('✅ [Chat] Screenshot prevention enabled');
       } catch (error) {
         console.error('❌ [Chat] Failed to enable screenshot prevention:', error);
       }
     };
 
     enableScreenshotProtection();
-  }, [enableScreenshotPrevention]);
+
+    // Cleanup: Disable screenshot prevention when leaving chat
+    return () => {
+      const disableScreenshotProtection = async () => {
+        try {
+          console.log('🔓 [Chat] Disabling screenshot prevention...');
+          await disableScreenshotPrevention();
+          console.log('✅ [Chat] Screenshot prevention disabled');
+        } catch (error) {
+          console.error('❌ [Chat] Failed to disable screenshot prevention:', error);
+        }
+      };
+      disableScreenshotProtection();
+    };
+  }, [enableScreenshotPrevention, disableScreenshotPrevention]);
 
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');

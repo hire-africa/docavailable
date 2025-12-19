@@ -14,6 +14,7 @@ import {
 import { apiService } from '../app/services/apiService';
 import { Colors } from '../constants/Colors';
 import { useAuth } from '../contexts/AuthContext';
+import { useScreenshotPrevention } from '../hooks/useScreenshotPrevention';
 
 interface SessionHistory {
   session_id: number;
@@ -33,12 +34,24 @@ interface RetentionInfo {
 
 export default function TextSessionHistory() {
   const { user } = useAuth();
+  const { enable: enableScreenshotPrevention, disable: disableScreenshotPrevention } = useScreenshotPrevention();
   const [history, setHistory] = useState<SessionHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [retentionInfo, setRetentionInfo] = useState<RetentionInfo | null>(null);
   const [selectedSession, setSelectedSession] = useState<number | null>(null);
   const [sessionMessages, setSessionMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Enable screenshot prevention when viewing messages
+  useEffect(() => {
+    if (selectedSession) {
+      enableScreenshotPrevention();
+      console.log('🔒 [Session History] Screenshot prevention enabled for viewing messages');
+    } else {
+      disableScreenshotPrevention();
+      console.log('🔓 [Session History] Screenshot prevention disabled');
+    }
+  }, [selectedSession, enableScreenshotPrevention, disableScreenshotPrevention]);
 
   useEffect(() => {
     loadHistory();

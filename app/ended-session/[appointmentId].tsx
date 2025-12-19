@@ -34,7 +34,11 @@ interface Message {
   replyTo?: any;
 }
 
+import { useSecureScreen } from '../../hooks/useSecureScreen';
+
 export default function EndedSessionPage() {
+  // Enable screenshot prevention for viewing ended sessions
+  useSecureScreen('Ended Session');
   const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
   const { user } = useAuth();
   const [session, setSession] = useState<EndedSession | null>(null);

@@ -607,14 +607,16 @@ class FileUploadController extends Controller
             ]);
             
             // Validate the path to prevent directory traversal
-            // Accept both old format (chat_voice_messages/{id}/) and new format (chat_voice_messages/{id}_{timestamp}/)
-            $isValidPath = str_starts_with($path, 'chat_voice_messages/') && !str_contains($path, '..');
+            // Accept: chat_voice_messages/, archived_voice_messages/
+            $isValidPath = (str_starts_with($path, 'chat_voice_messages/') || str_starts_with($path, 'archived_voice_messages/')) 
+                && !str_contains($path, '..');
             
             if (!$isValidPath) {
                 \Log::warning('Audio file path validation failed:', [
                     'path' => $path,
                     'contains_dots' => str_contains($path, '..'),
-                    'starts_with_chat_voice' => str_starts_with($path, 'chat_voice_messages/')
+                    'starts_with_chat_voice' => str_starts_with($path, 'chat_voice_messages/'),
+                    'starts_with_archived' => str_starts_with($path, 'archived_voice_messages/')
                 ]);
                 abort(404);
             }
