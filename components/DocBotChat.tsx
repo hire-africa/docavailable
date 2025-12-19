@@ -299,30 +299,53 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
       ])
     );
 
-    // Wave animation for dots
-    const createDotAnimation = (animValue: Animated.Value, delay: number) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(animValue, {
-            toValue: 1,
-            duration: 600,
-            delay: delay,
-            useNativeDriver: true,
-          }),
-          Animated.timing(animValue, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-    };
+    // Smooth sequential left-to-right dot animation
+    const dotAnimation = Animated.loop(
+      Animated.sequence([
+        // First dot - scale up and fade in
+        Animated.timing(typingAnim1, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // First dot - scale down and fade out
+        Animated.timing(typingAnim1, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Second dot - scale up and fade in
+        Animated.timing(typingAnim2, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Second dot - scale down and fade out
+        Animated.timing(typingAnim2, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Third dot - scale up and fade in
+        Animated.timing(typingAnim3, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Third dot - scale down and fade out
+        Animated.timing(typingAnim3, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Small pause before next cycle
+        Animated.delay(150),
+      ])
+    );
 
-    // Start all animations
+    // Start animations
     pulseAnimation.start();
-    createDotAnimation(typingAnim1, 0).start();
-    createDotAnimation(typingAnim2, 200).start();
-    createDotAnimation(typingAnim3, 400).start();
+    dotAnimation.start();
   };
 
   const stopTypingAnimation = () => {
@@ -909,7 +932,6 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
               >
                 <View style={styles.typingCard}>
                   <View style={styles.typingContainer}>
-                    <Text style={styles.typingText}>just a sec</Text>
                     <View style={styles.typingDots}>
                       <Animated.View 
                         style={[
@@ -924,8 +946,8 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
                               })
                             }],
                             opacity: typingAnim1.interpolate({
-                              inputRange: [0, 0.5, 1],
-                              outputRange: [0.3, 1, 0.3],
+                              inputRange: [0, 1],
+                              outputRange: [0.3, 1],
                               extrapolate: 'clamp',
                             })
                           }
@@ -944,8 +966,8 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
                               })
                             }],
                             opacity: typingAnim2.interpolate({
-                              inputRange: [0, 0.5, 1],
-                              outputRange: [0.3, 1, 0.3],
+                              inputRange: [0, 1],
+                              outputRange: [0.3, 1],
                               extrapolate: 'clamp',
                             })
                           }
@@ -964,8 +986,8 @@ export default function AIDocChat({ onBottomHiddenChange }: AIDocChatProps) {
                               })
                             }],
                             opacity: typingAnim3.interpolate({
-                              inputRange: [0, 0.5, 1],
-                              outputRange: [0.3, 1, 0.3],
+                              inputRange: [0, 1],
+                              outputRange: [0.3, 1],
                               extrapolate: 'clamp',
                             })
                           }

@@ -2212,11 +2212,27 @@ export default function ChatPage() {
               const actualDoctorId = sessionData.doctor?.id || 0;
               const actualPatientId = sessionData.patient?.id || 0;
 
+              // Extract names with better fallbacks
               const rawDoctorName = sessionData.doctor?.display_name ||
-                `${sessionData.doctor?.first_name || ''} ${sessionData.doctor?.last_name || ''}`.trim();
+                sessionData.doctor?.first_name && sessionData.doctor?.last_name
+                  ? `${sessionData.doctor.first_name} ${sessionData.doctor.last_name}`.trim()
+                  : sessionData.doctor?.first_name || sessionData.doctor?.last_name || 'Doctor';
+              
               const doctorName = isPatient ? withDoctorPrefix(rawDoctorName) : rawDoctorName;
+              
               const patientName = sessionData.patient?.display_name ||
-                `${sessionData.patient?.first_name} ${sessionData.patient?.last_name}`;
+                sessionData.patient?.first_name && sessionData.patient?.last_name
+                  ? `${sessionData.patient.first_name} ${sessionData.patient.last_name}`.trim()
+                  : sessionData.patient?.first_name || sessionData.patient?.last_name || 'Patient';
+
+              console.log('📊 [Chat] Setting chat info with names:', {
+                isPatient,
+                doctorName,
+                patientName,
+                other_participant_name: isPatient ? doctorName : patientName,
+                doctorData: sessionData.doctor,
+                patientData: sessionData.patient
+              });
 
               const chatInfoData: ChatInfo = {
                 appointment_id: parseInt(sessionId, 10),
@@ -2256,21 +2272,38 @@ export default function ChatPage() {
               const chatInfoData = infoResponse.data as ChatInfo;
 
               // Ensure other_participant_name is set properly
-              if (!chatInfoData.other_participant_name) {
-                console.log('⚠️ other_participant_name is missing, using fallback');
+              if (!chatInfoData.other_participant_name || chatInfoData.other_participant_name === 'User' || chatInfoData.other_participant_name.trim() === '') {
+                console.log('⚠️ other_participant_name is missing, empty, or "User", using fallback');
                 // Try to get the name from other fields or use a fallback
                 if (isPatient) {
                   // If current user is patient, other participant is doctor
-                  chatInfoData.other_participant_name = withDoctorPrefix(infoResponse.data?.doctor_name || 'Doctor');
+                  const doctorName = infoResponse.data?.doctor_name || 
+                                   infoResponse.data?.doctor_display_name ||
+                                   (infoResponse.data?.doctor_first_name && infoResponse.data?.doctor_last_name
+                                     ? `${infoResponse.data.doctor_first_name} ${infoResponse.data.doctor_last_name}`
+                                     : 'Doctor');
+                  chatInfoData.other_participant_name = withDoctorPrefix(doctorName);
                 } else {
                   // If current user is doctor, other participant is patient
-                  chatInfoData.other_participant_name = 'Patient';
+                  const patientName = infoResponse.data?.patient_name ||
+                                    infoResponse.data?.patient_display_name ||
+                                    (infoResponse.data?.patient_first_name && infoResponse.data?.patient_last_name
+                                      ? `${infoResponse.data.patient_first_name} ${infoResponse.data.patient_last_name}`
+                                      : 'Patient');
+                  chatInfoData.other_participant_name = patientName;
+                }
+              } else if (isPatient && chatInfoData.other_participant_name && chatInfoData.other_participant_name !== 'User') {
+                // Only add doctor prefix if it's not already there and not "User"
+                if (!chatInfoData.other_participant_name.startsWith('Dr.') && !chatInfoData.other_participant_name.startsWith('Dr ')) {
+                  chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
                 }
               }
 
-              if (isPatient && chatInfoData.other_participant_name) {
-                chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
-              }
+              console.log('✅ [Chat] Setting chat info for appointment:', {
+                other_participant_name: chatInfoData.other_participant_name,
+                isPatient,
+                raw_response: infoResponse.data
+              });
 
               setChatInfo(chatInfoData);
 
@@ -3712,7 +3745,7 @@ export default function ChatPage() {
           paddingHorizontal: 16,
           paddingVertical: 12,
           borderBottomWidth: 1,
-          borderBottomColor: '#E5E5E5',
+          borderBottomColor: '#E0E0E0',
           backgroundColor: '#fff',
         }}>
           <TouchableOpacity onPress={handleBackPress} style={{ marginRight: 12 }}>

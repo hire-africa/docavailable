@@ -1,3 +1,4 @@
+import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
@@ -14,9 +15,10 @@ interface BottomNavigationProps {
   tabs: TabItem[];
   style?: any;
   animatedStyle?: any;
+  tabRefs?: Record<string, React.RefObject<View>>; // Optional refs for tour highlighting
 }
 
-export default function BottomNavigation({ tabs, style, animatedStyle }: BottomNavigationProps) {
+export default function BottomNavigation({ tabs, style, animatedStyle, tabRefs }: BottomNavigationProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -28,9 +30,19 @@ export default function BottomNavigation({ tabs, style, animatedStyle }: BottomN
         animatedStyle
       ]}
     >
-      {tabs.map((tab, index) => (
+      {tabs.map((tab, index) => {
+        // Map tab index to ref key (for patient: home=0, discover=1, messages=2, blogs=3, docbot=4)
+        const refKey = index === 0 ? 'home-tab' : 
+                       index === 1 ? 'discover-tab' :
+                       index === 2 ? 'messages-tab' :
+                       index === 3 ? 'blogs-tab' :
+                       index === 4 ? 'docbot-tab' : `tab-${index}`;
+        const tabRef = tabRefs?.[refKey];
+        
+        return (
         <TouchableOpacity
           key={index}
+          ref={tabRef}
           style={styles.tab}
           onPress={tab.onPress}
         >
@@ -53,7 +65,8 @@ export default function BottomNavigation({ tabs, style, animatedStyle }: BottomN
             )}
           </View>
         </TouchableOpacity>
-      ))}
+        );
+      })}
     </View>
   );
 }

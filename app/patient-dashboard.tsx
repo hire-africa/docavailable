@@ -180,6 +180,26 @@ export default function PatientDashboard() {
   // App Tour state
   const [showAppTour, setShowAppTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+  const discoverScrollViewRef = useRef<ScrollView>(null);
+  
+  // Initialize refs for tour elements
+  useEffect(() => {
+    // Initialize tab refs
+    const tabKeys = ['home-tab', 'discover-tab', 'messages-tab', 'blogs-tab', 'docbot-tab'];
+    tabKeys.forEach(key => {
+      if (!tourTabRefs.current[key]) {
+        tourTabRefs.current[key] = React.createRef<View>();
+      }
+    });
+    
+    // Initialize discover page refs
+    const discoverKeys = ['discover-bookmark-btn', 'discover-search-bar', 'discover-doctors-list'];
+    discoverKeys.forEach(key => {
+      if (!tourTabRefs.current[key]) {
+        tourTabRefs.current[key] = React.createRef<View>();
+      }
+    });
+  }, []);
 
   // Check if app tour should be shown
   useEffect(() => {
@@ -2062,138 +2082,6 @@ export default function PatientDashboard() {
             </View>
           </View>
 
-          <View style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 20,
-            padding: 20,
-            marginBottom: 24,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 16,
-            }}>
-              <ThemedText style={{
-                fontSize: 20,
-                fontWeight: 'bold',
-                color: '#222',
-              }}>Recent Activity</ThemedText>
-              <TouchableOpacity
-                onPress={() => router.push('/notifications')}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  backgroundColor: '#F0F8FF',
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                }}
-              >
-                <ThemedText style={{
-                  fontSize: 14,
-                  color: '#2196F3',
-                  marginRight: 4,
-                }}>View All</ThemedText>
-                <Icon name="chevronRight" size={14} color="#2196F3" />
-              </TouchableOpacity>
-            </View>
-            {activities.length > 0 ? (
-              activities.slice(0, 5).map((activity, index) => (
-                <TouchableOpacity
-                  key={activity.id}
-                  style={{
-                    backgroundColor: '#F8F9FA',
-                    borderRadius: 16,
-                    padding: 16,
-                    borderWidth: 1,
-                    borderColor: activity.color + '30',
-                    marginBottom: index < 2 ? 12 : 0,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.05,
-                    shadowRadius: 4,
-                    elevation: 2,
-                  }}
-                  onPress={() => {
-                    // Navigate to relevant section based on activity type
-                    if (activity.type === 'appointment') {
-                      router.push('/my-appointments');
-                    } else if (activity.type === 'message') {
-                      setActiveTab('messages');
-                    } else if (activity.type === 'payment' || activity.type === 'wallet') {
-                      setShowSubscriptions(true);
-                    } else if (activity.type === 'system') {
-                      router.push('/notifications');
-                    }
-                  }}
-                >
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    marginBottom: 8,
-                  }}>
-                    <View style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: activity.color + '20',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 12,
-                    }}>
-                      <Icon name={activity.icon as any} size={20} color={activity.color} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <ThemedText style={{
-                        fontSize: 16,
-                        fontWeight: 'bold',
-                        color: '#222',
-                        marginBottom: 2,
-                      }}>{activity.title}</ThemedText>
-                      <ThemedText style={{
-                        fontSize: 12,
-                        color: '#666',
-                      }}>{formatTimestamp(activity.timestamp)}</ThemedText>
-                    </View>
-                    <Icon name="chevronRight" size={16} color="#999" />
-                  </View>
-                  <ThemedText style={{
-                    fontSize: 14,
-                    color: '#666',
-                    lineHeight: 20,
-                  }}>{activity.description}</ThemedText>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <View style={{
-                alignItems: 'center',
-                paddingVertical: 20,
-              }}>
-                <View style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  backgroundColor: '#F0F0F0',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 12,
-                }}>
-                  <Icon name="clock" size={24} color="#999" />
-                </View>
-                <ThemedText style={{
-                  fontSize: 16,
-                  color: '#666',
-                  textAlign: 'center'
-                }}>No recent activity.</ThemedText>
-              </View>
-            )}
-          </View>
         </ScrollView>
       </View>
     );
@@ -2755,6 +2643,7 @@ export default function PatientDashboard() {
 
     return (
       <ScrollView
+        ref={discoverScrollViewRef}
         style={styles.content}
         contentContainerStyle={{ paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
@@ -2773,7 +2662,7 @@ export default function PatientDashboard() {
         {/* Search and Filter Container */}
         <View style={styles.searchFilterContainer}>
           {/* Search Bar - Full Width */}
-          <View style={styles.searchBar}>
+          <View ref={tourTabRefs.current['discover-search-bar']} style={styles.searchBar}>
             <Icon name="search" size={20} color="#4CAF50" />
             <TextInput
               style={styles.searchInput}
@@ -2943,7 +2832,7 @@ export default function PatientDashboard() {
         )}
 
         {/* Doctors List */}
-        <View style={styles.doctorsListNew}>
+        <View ref={tourTabRefs.current['discover-doctors-list']} style={styles.doctorsListNew}>
           {loadingDoctors && doctors.length === 0 && filteredAndSortedDoctors.length === 0 ? (
             // Initial load - show 6 skeleton cards
             <DoctorCardSkeleton count={6} />
@@ -3362,6 +3251,8 @@ export default function PatientDashboard() {
                 alignItems: 'center',
                 padding: 4,
                 backgroundColor: '#FFFFFF',
+                borderBottomWidth: 1,
+                borderBottomColor: '#E0E0E0',
                 zIndex: 10,
                 position: 'relative',
                 shadowColor: '#000',
@@ -4234,6 +4125,8 @@ export default function PatientDashboard() {
           alignItems: 'center',
           padding: 4,
           backgroundColor: '#FFFFFF',
+          borderBottomWidth: 1,
+          borderBottomColor: '#E0E0E0',
           zIndex: 10,
           marginBottom: 8,
         }}>
@@ -4275,6 +4168,7 @@ export default function PatientDashboard() {
           {/* Right side button - Bookmark for Discover, Notification for others */}
           {activeTab === 'discover' ? (
             <TouchableOpacity
+              ref={tourTabRefs.current['discover-bookmark-btn']}
               style={styles.notificationButton}
               onPress={() => setShowFavoritesOnly(!showFavoritesOnly)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -4342,6 +4236,7 @@ export default function PatientDashboard() {
         ]}
       >
         <BottomNavigation
+          tabRefs={tourTabRefs.current}
           tabs={[
             {
               icon: "home",
@@ -4731,6 +4626,7 @@ export default function PatientDashboard() {
         onTabChange={(tab) => {
           setActiveTab(tab);
         }}
+        scrollViewRef={activeTab === 'discover' ? discoverScrollViewRef : undefined}
       />
     </SafeAreaView>
   );

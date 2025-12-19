@@ -553,6 +553,26 @@ export default function RootLayout() {
               <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
               <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
               <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-7" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-8" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-9" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-10" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-11" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-12" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-13" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-14" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-15" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-16" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-17" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-18" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-19" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-20" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-21" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-22" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-23" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-24" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-25" options={{ headerShown: false }} />
+              <Stack.Screen name="blog-article-26" options={{ headerShown: false }} />
               <Stack.Screen name="blog-article-web" options={{ headerShown: false }} />
               <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
               <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />

@@ -46,6 +46,27 @@ export const PATIENT_TOUR_STEPS: TourStep[] = [
     position: 'top',
   },
   {
+    id: 'discover-bookmark',
+    title: 'Your Bookmarked Doctors',
+    description: 'Tap the bookmark button to view all your saved doctors. This makes it easy to find and connect with your favorite healthcare providers.',
+    target: 'discover-bookmark-btn',
+    position: 'bottom',
+  },
+  {
+    id: 'discover-search',
+    title: 'Search & Filter Doctors',
+    description: 'Use the search bar to find doctors by name or specialization. You can also use filters to narrow down your search by availability, specialization, and more.',
+    target: 'discover-search-bar',
+    position: 'bottom',
+  },
+  {
+    id: 'discover-doctors-list',
+    title: 'Browse Doctor Profiles',
+    description: 'Scroll through the list of available doctors. Tap on any doctor card to view their full profile, read reviews, and book an appointment.',
+    target: 'discover-doctors-list',
+    position: 'top',
+  },
+  {
     id: 'messages-tab',
     title: 'Secure Messaging',
     description: 'Direct, private communication with your doctors. Keep all your health conversations organized.',
@@ -105,7 +126,7 @@ export const DOCTOR_PROFILE_TOUR_STEPS: TourStep[] = [
     title: 'Schedule a Visit',
     description: 'Prefer to plan ahead? Use "Book Appointment" to schedule a consultation for a later time.',
     target: 'book-appt-btn',
-    position: 'top',
+    position: 'bottom',
   },
   {
     id: 'reviews',

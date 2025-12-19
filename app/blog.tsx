@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Image, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // Removed expo-web-browser - now using in-app WebView instead
@@ -107,6 +107,308 @@ const articles: BlogItem[] = [
     source: 'internal',
     route: '/blog-article-6',
   },
+  {
+    id: 'internal-4',
+    category: 'Infectious Disease',
+    title: 'Cholera Explained Simply: Symptoms, Treatment, and When to Seek Help',
+    description: 'What actually happens in the body—and what saves lives fast. Learn the critical signs and immediate steps to take.',
+    image: require('../assets/images/articles/chorela.jpg.webp'),
+    date: '2024-01-20',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-7',
+  },
+  {
+    id: 'internal-5',
+    category: 'Infectious Disease',
+    title: 'Diarrhea Isn\'t Always "Normal": Warning Signs You Should Never Ignore',
+    description: 'When common symptoms become dangerous. Know when to seek immediate medical attention.',
+    image: require('../assets/images/articles/Diarrhea.jpg'),
+    date: '2024-01-18',
+    author: 'DocAvailable Team',
+    readTime: '5 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-8',
+  },
+  {
+    id: 'internal-6',
+    category: 'Infectious Disease',
+    title: 'Malaria Symptoms Can Look Mild — Until They\'re Not',
+    description: 'How to spot malaria early and why timing matters. Early detection can be lifesaving.',
+    image: require('../assets/images/articles/Mosquito-insect-feeding-on-human-culex-pipiens.webp'),
+    date: '2024-01-16',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-9',
+  },
+  {
+    id: 'internal-7',
+    category: 'Infectious Disease',
+    title: 'Fever, Chills, Headache: Is It Malaria, Flu, or Something Else?',
+    description: 'A simple guide to telling the difference between these common but serious conditions.',
+    image: require('../assets/images/articles/headech.webp'),
+    date: '2024-01-14',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-10',
+  },
+  {
+    id: 'internal-8',
+    category: 'Women\'s Health',
+    title: 'Cervical Cancer: Early Symptoms Most Women Miss',
+    description: 'Why screening saves lives even before symptoms appear. Know the signs and protect your health.',
+    image: require('../assets/images/articles/cervical cancer.avif'),
+    date: '2024-01-22',
+    author: 'DocAvailable Team',
+    readTime: '8 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-11',
+  },
+  {
+    id: 'internal-9',
+    category: 'Infectious Disease',
+    title: 'HIV Today: Symptoms, Treatment, and Why Life Expectancy Has Changed',
+    description: 'HIV is no longer a death sentence — here\'s what\'s different now and how modern treatment works.',
+    image: require('../assets/images/articles/HIV.avif'),
+    date: '2024-01-19',
+    author: 'DocAvailable Team',
+    readTime: '9 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-12',
+  },
+  {
+    id: 'internal-10',
+    category: 'Infectious Disease',
+    title: 'Tuberculosis (TB) Isn\'t Just a Cough — Here\'s How It Really Spreads',
+    description: 'Symptoms, testing, and modern treatment explained. Understanding TB prevention and care.',
+    image: require('../assets/images/articles/TB.jpg'),
+    date: '2024-01-17',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-13',
+  },
+  {
+    id: 'internal-11',
+    category: 'Respiratory Health',
+    title: 'Pneumonia Explained: When a Cough Turns Serious',
+    description: 'Who is most at risk and when to get urgent care. Recognizing the signs of a serious lung infection.',
+    image: require('../assets/images/articles/pnemunonia.jpg'),
+    date: '2024-01-15',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-14',
+  },
+  {
+    id: 'internal-12',
+    category: 'Cardiovascular',
+    title: 'High Blood Pressure Has No Symptoms — Until It\'s Too Late',
+    description: 'Why hypertension is called the "silent killer" and what you can do to protect yourself.',
+    image: require('../assets/images/articles/headech.webp'),
+    date: '2024-01-21',
+    author: 'DocAvailable Team',
+    readTime: '5 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-15',
+  },
+  {
+    id: 'internal-13',
+    category: 'Chronic Disease',
+    title: 'Diabetes Symptoms Start Quietly: Early Signs Most People Miss',
+    description: 'Thirst, fatigue, and slow healing explained. Recognizing diabetes before complications develop.',
+    image: require('../assets/images/articles/diabetes.jpeg'),
+    date: '2024-01-13',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-16',
+  },
+  {
+    id: 'internal-14',
+    category: 'Emergency',
+    title: 'Stroke Warning Signs Everyone Should Know (FAST Could Save a Life)',
+    description: 'Minutes matter more than you think. Learn the FAST method and act quickly to save lives.',
+    image: require('../assets/images/articles/stroke.png'),
+    date: '2024-01-11',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-17',
+  },
+  {
+    id: 'internal-15',
+    category: 'Emergency',
+    title: 'Heart Attacks Don\'t Always Look Like the Movies',
+    description: 'Common myths and real symptoms in men and women. Know what a heart attack actually feels like.',
+    image: require('../assets/images/articles/heart attack.png'),
+    date: '2024-01-09',
+    author: 'DocAvailable Team',
+    readTime: '8 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-18',
+  },
+  {
+    id: 'internal-16',
+    category: 'Respiratory Health',
+    title: 'Asthma Attacks Explained: Triggers, Symptoms, and Emergency Care',
+    description: 'What to do when breathing becomes difficult. Managing asthma and preventing severe attacks.',
+    image: require('../assets/images/articles/asthma.jpg'),
+    date: '2024-01-07',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-19',
+  },
+  {
+    id: 'internal-17',
+    category: 'Pediatrics',
+    title: 'Why Children Get Dehydrated Faster — and How to Treat It at Home',
+    description: 'A simple guide for parents and caregivers. Recognizing and treating dehydration in children.',
+    image: require('../assets/images/articles/children dehydrated.webp'),
+    date: '2024-01-25',
+    author: 'DocAvailable Team',
+    readTime: '5 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-20',
+  },
+  {
+    id: 'internal-18',
+    category: 'Infectious Disease',
+    title: 'Food Poisoning vs. Stomach Flu: How to Tell the Difference',
+    description: 'Similar symptoms, very different causes. Learn when to seek help and how to recover faster.',
+    image: require('../assets/images/articles/food poisoing.jpg'),
+    date: '2024-01-23',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-21',
+  },
+  {
+    id: 'internal-19',
+    category: 'Dermatology',
+    title: 'Skin Rashes Explained: When It\'s Harmless and When It\'s Serious',
+    description: 'From allergies to infections. Understanding what your skin is telling you.',
+    image: require('../assets/images/articles/rashes.jpg'),
+    date: '2024-01-06',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-22',
+  },
+  {
+    id: 'internal-20',
+    category: 'Mental Health',
+    title: 'Mental Health Isn\'t "Just Stress": Signs of Depression and Anxiety',
+    description: 'Symptoms, treatment options, and when to seek help. Breaking the stigma around mental health.',
+    image: require('../assets/images/articles/manage-stress-in-the-workplace-min.png'),
+    date: '2024-01-04',
+    author: 'DocAvailable Team',
+    readTime: '8 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-23',
+  },
+  {
+    id: 'internal-21',
+    category: 'Neurology',
+    title: 'Epilepsy Explained: What Seizures Look Like and How Treatment Works',
+    description: 'Breaking myths and reducing stigma. Understanding epilepsy and modern treatment options.',
+    image: require('../assets/images/articles/epilipsy.webp'),
+    date: '2024-01-02',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-24',
+  },
+  {
+    id: 'internal-22',
+    category: 'Hematology',
+    title: 'Anemia Explained: Why You\'re Always Tired',
+    description: 'Symptoms, causes, and treatment options. Understanding why fatigue might be more than just being busy.',
+    image: require('../assets/images/articles/anemia.jpeg'),
+    date: '2024-01-01',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-25',
+  },
+  {
+    id: 'internal-23',
+    category: 'General Medicine',
+    title: 'Antibiotics Explained: When They Work — and When They Don\'t',
+    description: 'Why misuse makes infections harder to treat. Understanding proper antibiotic use and antibiotic resistance.',
+    image: require('../assets/images/articles/antiobitics.jpg'),
+    date: '2023-12-30',
+    author: 'DocAvailable Team',
+    readTime: '7 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-26',
+  },
+];
+
+const excitingArticles: BlogItem[] = [
+  {
+    id: 'exciting-1',
+    category: 'Emergency',
+    title: 'Stroke Warning Signs Everyone Should Know (FAST Could Save a Life)',
+    description: 'Minutes matter more than you think. Learn the FAST method and act quickly to save lives.',
+    image: require('../assets/images/articles/stroke.png'),
+    date: '2024-01-26',
+    author: 'DocAvailable Team',
+    readTime: '6 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-17',
+  },
+  {
+    id: 'exciting-2',
+    category: 'Emergency',
+    title: 'Heart Attacks Don\'t Always Look Like the Movies',
+    description: 'Common myths and real symptoms in men and women. Know what a heart attack actually feels like.',
+    image: require('../assets/images/articles/heart attack.png'),
+    date: '2024-01-24',
+    author: 'DocAvailable Team',
+    readTime: '8 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-18',
+  },
+  {
+    id: 'exciting-3',
+    category: 'Emergency',
+    title: 'High Blood Pressure Has No Symptoms — Until It\'s Too Late',
+    description: 'Why hypertension is called the "silent killer" and what you can do to protect yourself.',
+    image: require('../assets/images/articles/headech.webp'),
+    date: '2024-01-21',
+    author: 'DocAvailable Team',
+    readTime: '5 min read',
+    isBookmarked: false,
+    source: 'internal',
+    route: '/blog-article-15',
+  },
 ];
 
 interface BlogProps {
@@ -124,17 +426,17 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   const [webArticles, setWebArticles] = useState<BlogItem[]>([]);
   const [webArticlesError, setWebArticlesError] = useState<string | null>(null);
 
-  // Combine all blogs for search
-  const allBlogs: BlogItem[] = [...featuredBlogs, ...webArticles, ...articles];
+  // Combine all blogs for search - memoized
+  const allBlogs = useMemo(() => [...featuredBlogs, ...excitingArticles, ...webArticles, ...articles], [webArticles]);
 
-  // Filter blogs by search query
-  const getFilteredBlogs = () => {
-    let filteredBlogs = allBlogs;
+  // Filter blogs by search query - memoized
+  const filteredBlogs = useMemo(() => {
+    let filtered = allBlogs;
     
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      filteredBlogs = filteredBlogs.filter(blog => {
+      filtered = filtered.filter(blog => {
         const title = (blog.title || '').toLowerCase();
         const description = (blog.description || '').toLowerCase();
         const category = (blog.category || '').toLowerCase();
@@ -144,21 +446,21 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
     }
 
     // Sort by date (newest first) by default
-    return filteredBlogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  };
+    return [...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [allBlogs, searchQuery]);
 
-  const getBlogImageSource = (blog: BlogItem) => {
+  const getBlogImageSource = useCallback((blog: BlogItem) => {
     // For web articles, prioritize imageUrl (remote image from RSS feed)
     if (blog.imageUrl && typeof blog.imageUrl === 'string' && blog.imageUrl.trim() !== '') {
       return { uri: blog.imageUrl.trim() };
     }
     // For internal articles, use the local image asset
     if (blog.image) return blog.image;
-    // Fallback to default logo
-    return require('../assets/images/doc-available.jpg');
-  };
+    // Fallback to icon.png instead of logo
+    return require('../assets/images/icon.png');
+  }, []);
 
-  const openBlog = async (blog: BlogItem) => {
+  const openBlog = useCallback(async (blog: BlogItem) => {
     if (blog.source === 'internal' && blog.route) {
       router.push(blog.route as any);
       return;
@@ -177,7 +479,7 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
     }
 
     Alert.alert('Coming Soon', 'This article will be available soon!');
-  };
+  }, [router]);
 
   const fetchWebArticles = React.useCallback(async () => {
     try {
@@ -239,15 +541,13 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
   }, []);
 
   // Toggle bookmark
-  const toggleBookmark = (articleId: string) => {
+  const toggleBookmark = useCallback((articleId: string) => {
     setBookmarkedArticles(prev => 
       prev.includes(articleId) 
         ? prev.filter(id => id !== articleId)
         : [...prev, articleId]
     );
-  };
-
-  const filteredBlogs = getFilteredBlogs();
+  }, []);
 
   React.useEffect(() => {
     fetchWebArticles();
@@ -313,6 +613,8 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={true}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -336,20 +638,14 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                   style={styles.searchResultItem}
                   onPress={() => openBlog(blog)}
                 >
-                  <Image source={getBlogImageSource(blog)} style={styles.searchResultImage} />
+                  <Image 
+                    source={getBlogImageSource(blog)} 
+                    style={styles.searchResultImage}
+                    resizeMode="cover"
+                  />
                   <View style={styles.searchResultContent}>
                     <View style={styles.searchResultHeader}>
                     <Text style={styles.searchResultCategory}>{blog.category}</Text>
-                      <TouchableOpacity 
-                        onPress={() => toggleBookmark(blog.id)}
-                        style={styles.bookmarkButton}
-                      >
-                        <Icon 
-                          name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmarkO"} 
-                          size={16} 
-                          color={bookmarkedArticles.includes(blog.id) ? "#4CAF50" : "#999"} 
-                        />
-                      </TouchableOpacity>
                     </View>
                     <Text style={styles.searchResultTitle}>{blog.title}</Text>
                     <Text style={styles.searchResultDesc}>{blog.description}</Text>
@@ -368,7 +664,13 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
         {!isLoading && !searchQuery.trim() && (
           <>
             <Text style={styles.sectionTitle}>Featured Articles</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            style={styles.featuredScroll}
+            removeClippedSubviews={true}
+            scrollEventThrottle={16}
+          >
             {featuredBlogs.map(blog => (
               <TouchableOpacity 
                 key={blog.id} 
@@ -376,17 +678,11 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                 onPress={() => openBlog(blog)}
               >
                   <View style={styles.featuredImageContainer}>
-                <Image source={getBlogImageSource(blog)} style={styles.featuredImage} />
-                    <TouchableOpacity 
-                      onPress={() => toggleBookmark(blog.id)}
-                      style={styles.featuredBookmarkButton}
-                    >
-                        <Icon 
-                          name={bookmarkedArticles.includes(blog.id) ? "bookmark" : "bookmarkO"} 
-                          size={16} 
-                          color={bookmarkedArticles.includes(blog.id) ? "#4CAF50" : "#fff"} 
-                        />
-                    </TouchableOpacity>
+                <Image 
+                  source={getBlogImageSource(blog)} 
+                  style={styles.featuredImage}
+                  resizeMode="cover"
+                />
                   </View>
                   <View style={styles.featuredContent}>
                     <Text style={styles.featuredCategory}>{blog.category}</Text>
@@ -400,6 +696,39 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
               </TouchableOpacity>
             ))}
           </ScrollView>
+          </>
+        )}
+
+        {/* Health Alerts Section (only show when not searching) */}
+        {!isLoading && !searchQuery.trim() && (
+          <>
+            <Text style={styles.sectionHeader}>Health Alerts</Text>
+            <View style={styles.articlesList}>
+              {excitingArticles.slice(0, 2).map(article => (
+                <TouchableOpacity
+                  key={article.id}
+                  style={styles.articleRow}
+                  onPress={() => openBlog(article)}
+                >
+                  <View style={styles.articleContent}>
+                    <View style={styles.articleHeader}>
+                      <Text style={styles.articleCategory}>{article.category}</Text>
+                    </View>
+                    <Text style={styles.articleTitle}>{article.title}</Text>
+                    <Text style={styles.articleDesc}>{article.description}</Text>
+                    <View style={styles.articleMeta}>
+                      <Text style={styles.articleAuthor}>{article.author}</Text>
+                      <Text style={styles.articleReadTime}>{article.readTime}</Text>
+                    </View>
+                  </View>
+                  <Image 
+                    source={getBlogImageSource(article)} 
+                    style={styles.articleImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
           </>
         )}
 
@@ -436,16 +765,6 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                     <View style={styles.articleContent}>
                       <View style={styles.articleHeader}>
                         <Text style={styles.articleCategory}>{article.category}</Text>
-                        <TouchableOpacity
-                          onPress={() => toggleBookmark(article.id)}
-                          style={styles.articleBookmarkButton}
-                        >
-                          <Icon
-                            name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmarkO"}
-                            size={16}
-                            color={bookmarkedArticles.includes(article.id) ? "#4CAF50" : "#999"}
-                          />
-                        </TouchableOpacity>
                       </View>
                       <Text style={styles.articleTitle}>{article.title}</Text>
                       <Text style={styles.articleDesc}>{article.description}</Text>
@@ -454,7 +773,11 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                         <Text style={styles.articleReadTime}>{article.readTime}</Text>
                       </View>
                     </View>
-                    <Image source={getBlogImageSource(article)} style={styles.articleImage} />
+                    <Image 
+                    source={getBlogImageSource(article)} 
+                    style={styles.articleImage}
+                    resizeMode="cover"
+                  />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -476,16 +799,6 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                   <View style={styles.articleContent}>
                     <View style={styles.articleHeader}>
                     <Text style={styles.articleCategory}>{article.category}</Text>
-                      <TouchableOpacity 
-                        onPress={() => toggleBookmark(article.id)}
-                        style={styles.articleBookmarkButton}
-                      >
-                        <Icon 
-                          name={bookmarkedArticles.includes(article.id) ? "bookmark" : "bookmarkO"} 
-                          size={16} 
-                          color={bookmarkedArticles.includes(article.id) ? "#4CAF50" : "#999"} 
-                        />
-                      </TouchableOpacity>
                     </View>
                     <Text style={styles.articleTitle}>{article.title}</Text>
                     <Text style={styles.articleDesc}>{article.description}</Text>
@@ -494,7 +807,11 @@ export default function Blog({ hideBottomNav, headerContent }: BlogProps) {
                       <Text style={styles.articleReadTime}>{article.readTime}</Text>
                     </View>
                   </View>
-                  <Image source={getBlogImageSource(article)} style={styles.articleImage} />
+                  <Image 
+                    source={getBlogImageSource(article)} 
+                    style={styles.articleImage}
+                    resizeMode="cover"
+                  />
                 </TouchableOpacity>
               ))}
             </View>
@@ -620,17 +937,6 @@ const styles = StyleSheet.create({
     height: 140,
     resizeMode: 'cover',
   },
-  featuredBookmarkButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 20,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   featuredContent: {
     padding: 20,
   },
@@ -704,9 +1010,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  articleBookmarkButton: {
-    padding: 4,
   },
   articleTitle: {
     fontSize: 16,
@@ -789,9 +1092,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-  },
-  bookmarkButton: {
-    padding: 4,
   },
   searchResultTitle: {
     fontSize: 16,

@@ -57,6 +57,12 @@ export default function AppTour({
   // Measure element position when step changes
   useEffect(() => {
     if (!visible || !currentStep) return;
+    
+    // Ensure width and height are valid
+    if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+      console.warn('AppTour: Invalid dimensions, skipping measurement');
+      return;
+    }
 
     const measureElement = () => {
       // For center/welcome/complete steps, don't highlight anything
@@ -75,6 +81,7 @@ export default function AppTour({
             // Auto-scroll to show the element
             if (scrollViewRef?.current) {
               const screenHeight = height;
+              const elementHeight = h || 50;
               const tooltipHeight = currentStep.imagePath ? 350 : 150;
 
               let scrollTo = 0;
@@ -84,35 +91,98 @@ export default function AppTour({
                 // This leaves room for tooltip above
                 scrollTo = Math.max(0, pageY - (screenHeight * 0.6));
               } else if (currentStep.position === 'bottom') {
-                // For bottom tooltips, scroll to show element in upper half
-                scrollTo = Math.max(0, pageY - (screenHeight * 0.3));
+                // For bottom tooltips, show element in upper half so tooltip below fits
+                // But since tooltip will show above if needed, position element in upper-middle
+                scrollTo = Math.max(0, pageY - (screenHeight * 0.35) - elementHeight);
+              } else {
+                // For other positions, center the element on screen
+                scrollTo = Math.max(0, pageY - (screenHeight * 0.5));
               }
 
+              // Special handling for discover-doctors-list: it's below search bar and banner
+              // So we need to scroll further down to show it
+              if (currentStep.target === 'discover-doctors-list') {
+                // Scroll to show the doctors list (which is below ~300px of header/search/banner)
+                scrollTo = Math.max(300, pageY - (screenHeight * 0.3));
+              }
+
+              // Special handling for doctor profile buttons - ensure they're visible
+              if (currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') {
+                // These buttons are typically in the middle of the profile page
+                // Position them in upper-middle of screen so tooltip above fits
+                scrollTo = Math.max(0, pageY - (screenHeight * 0.4) - elementHeight);
+              }
+
+              // Scroll to the calculated position
               scrollViewRef.current.scrollTo({
                 y: scrollTo,
                 animated: true,
               });
 
               // Wait for scroll to complete, then measure in window
+              // Use longer delay to ensure scroll animation completes
+              const delay = currentStep.target === 'discover-doctors-list' ? 800 : 
+                          (currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') ? 600 : 500;
               setTimeout(() => {
                 ref.current?.measureInWindow((winX, winY, winW, winH) => {
+                  // Ensure all values are valid numbers
+                  const safeX = isNaN(winX) ? 0 : Math.max(0, winX);
+                  let safeY = isNaN(winY) ? 0 : Math.max(0, winY);
+                  const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
+                  const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
+                  
+                  // For doctor profile buttons, verify they're on screen
+                  // If they're still too low, adjust scroll
+                  if ((currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') && safeY > height * 0.7) {
+                    // Element is still too low, scroll more
+                    const additionalScroll = safeY - (height * 0.4);
+                    scrollViewRef.current?.scrollTo({
+                      y: scrollTo + additionalScroll,
+                      animated: true,
+                    });
+                    // Remeasure after additional scroll
+                    setTimeout(() => {
+                      ref.current?.measureInWindow((winX2, winY2, winW2, winH2) => {
+                        const safeX2 = isNaN(winX2) ? 0 : Math.max(0, winX2);
+                        const safeY2 = isNaN(winY2) ? 0 : Math.max(0, winY2);
+                        const safeWidth2 = isNaN(winW2) || winW2 <= 0 ? 200 : winW2;
+                        const safeHeight2 = isNaN(winH2) || winH2 <= 0 ? 50 : winH2;
+                        
+                        setHighlightLayout({
+                          x: safeX2,
+                          y: safeY2,
+                          width: safeWidth2,
+                          height: safeHeight2,
+                        });
+                        animateTooltip();
+                      });
+                    }, 400);
+                    return;
+                  }
+                  
                   setHighlightLayout({
-                    x: winX,
-                    y: winY,
-                    width: winW || 200,
-                    height: winH || 50,
+                    x: safeX,
+                    y: safeY,
+                    width: safeWidth,
+                    height: safeHeight,
                   });
                   animateTooltip();
                 });
-              }, 400); // Wait for scroll animation
+              }, delay);
             } else {
               // No scroll view, just measure
               ref.current?.measureInWindow((winX, winY, winW, winH) => {
+                // Ensure all values are valid numbers
+                const safeX = isNaN(winX) ? 0 : Math.max(0, winX);
+                const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
+                const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
+                const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
+                
                 setHighlightLayout({
-                  x: winX,
-                  y: winY,
-                  width: winW || 200,
-                  height: winH || 50,
+                  x: safeX,
+                  y: safeY,
+                  width: safeWidth,
+                  height: safeHeight,
                 });
                 animateTooltip();
               });
@@ -122,19 +192,75 @@ export default function AppTour({
 
         scrollAndMeasure();
       } else {
-        // For bottom navigation tabs, we'll use a fixed position
+        // For bottom navigation tabs, try to measure the actual tab element first
         if (currentStep.target.includes('-tab')) {
+          const tabRef = elementRefs[currentStep.target];
+          if (tabRef?.current) {
+            // Try to measure the actual tab element - use a small delay to ensure it's rendered
+            setTimeout(() => {
+              tabRef.current?.measureInWindow((winX, winY, winW, winH) => {
+                // Ensure all values are valid numbers
+                const safeX = isNaN(winX) ? 0 : Math.max(0, winX);
+                const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
+                const safeWidth = isNaN(winW) || winW <= 0 ? 80 : winW;
+                const safeHeight = isNaN(winH) || winH <= 0 ? 60 : winH;
+                
+                setHighlightLayout({
+                  x: safeX,
+                  y: safeY,
+                  width: safeWidth,
+                  height: safeHeight,
+                });
+                animateTooltip();
+              });
+            }, 100);
+            return;
+          }
+          
+          // Fallback to calculated position if ref is not available
           const tabIndex = getTabIndex(currentStep.target);
           if (tabIndex !== -1) {
             const tabCount = getTabCount();
-            const tabWidth = width / tabCount;
-            // Center the highlight on the tab
-            const tabX = tabIndex * tabWidth;
+            
+            // Calculate bottom nav position accurately based on BottomNavigation styles
+            // Bottom nav is absolutely positioned at bottom: 0
+            const navTopPadding = 16;
+            const tabTopPadding = 10;
+            const iconSize = 20;
+            const labelMarginTop = 6;
+            const labelHeight = 14;
+            const tabBottomPadding = 10;
+            const navBottomPadding = Math.max(insets.bottom || 0, 12);
+            const navHorizontalPadding = 20;
+            
+            // Total height of the bottom navigation bar
+            const navTotalHeight = navTopPadding + tabTopPadding + iconSize + labelMarginTop + labelHeight + tabBottomPadding + navBottomPadding;
+            
+            // Tab content height (the actual clickable/highlightable area)
+            const tabContentHeight = tabTopPadding + iconSize + labelMarginTop + labelHeight + tabBottomPadding;
+            
+            // Since bottom nav is at bottom: 0, calculate Y from top of screen
+            // Tab content starts after navTopPadding
+            const bottomNavTopY = height - navTotalHeight;
+            const tabY = bottomNavTopY + navTopPadding;
+            
+            // Tab X position (accounting for nav paddingHorizontal: 20)
+            // Tabs are evenly distributed across available width
+            const availableWidth = width - (navHorizontalPadding * 2);
+            const tabWidth = availableWidth / tabCount;
+            const tabX = navHorizontalPadding + (tabIndex * tabWidth);
+            
+            // Ensure all values are valid numbers
+            const safeX = isNaN(tabX) ? 0 : Math.max(0, tabX);
+            const safeY = isNaN(tabY) ? Math.max(0, height - 100) : Math.max(0, tabY);
+            const safeWidth = isNaN(tabWidth) ? 80 : Math.max(50, tabWidth);
+            const safeHeight = isNaN(tabContentHeight) ? 60 : Math.max(40, tabContentHeight);
+            
             setHighlightLayout({
-              x: tabX + (tabWidth / 2) - 35, // Center with 70px width
-              y: height - (insets.bottom + 65), // Adjusted for better alignment
-              width: 70, // Slightly narrower for better fit
-              height: 50, // Reduced height to fit tab better
+              x: safeX,
+              y: safeY,
+              width: safeWidth,
+              height: safeHeight,
             });
             animateTooltip();
             return;
@@ -147,7 +273,10 @@ export default function AppTour({
     };
 
     // No delay for center steps, minimal delay for others
-    const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') ? 0 : 50;
+    // Add extra delay for discover-doctors-list to ensure page is ready
+    const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') 
+      ? 0 
+      : (currentStep.target === 'discover-doctors-list' ? 200 : 50);
     const timer = setTimeout(measureElement, delay);
     return () => clearTimeout(timer);
   }, [currentStepIndex, visible, currentStep, elementRefs, insets.bottom]);
@@ -199,6 +328,9 @@ export default function AppTour({
         const tabMap: Record<string, string> = {
           'home-tab': 'home',
           'discover-tab': 'discover',
+          'discover-bookmark': 'discover',
+          'discover-search': 'discover',
+          'discover-doctors-list': 'discover',
           'appointments-tab': 'appointments',
           'messages-tab': 'messages',
           'blogs-tab': 'blogs',
@@ -280,39 +412,65 @@ export default function AppTour({
     }
 
     const { x, y, width: w, height: h } = highlightLayout;
+    
+    // Ensure all values are valid numbers
+    const safeX = isNaN(x) ? 0 : x;
+    const safeY = isNaN(y) ? 0 : y;
+    const safeW = isNaN(w) || w <= 0 ? 200 : w;
+    const safeH = isNaN(h) || h <= 0 ? 50 : h;
+
+    // Check if element is near bottom of screen - if so, show tooltip above
+    const elementBottom = safeY + safeH;
+    const spaceBelow = height - elementBottom;
+    const spaceAbove = safeY;
+    const showAbove = spaceBelow < tooltipHeight + spacing || currentStep.position === 'top';
 
     switch (currentStep.position) {
       case 'top':
         return {
-          top: Math.max(insets.top + 20, y - tooltipHeight - 60), // Increased spacing
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
+          top: Math.max(insets.top + 20, safeY - tooltipHeight - 60), // Increased spacing
+          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
         };
       case 'bottom':
         // For bottom nav tabs, show tooltip well above with extra spacing
         if (currentStep.target.includes('-tab')) {
           return {
-            top: y - tooltipHeight - 80, // Much more spacing to keep nav visible
-            left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
+            top: Math.max(insets.top + 20, safeY - tooltipHeight - 80), // Much more spacing to keep nav visible
+            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
+          };
+        }
+        // For bottom position, check if we should show above instead
+        if (showAbove || spaceBelow < tooltipHeight + 40) {
+          return {
+            top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing - 20),
+            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
           };
         }
         return {
-          top: y + h + spacing,
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
+          top: safeY + safeH + spacing,
+          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
         };
       case 'left':
         return {
-          top: Math.max(insets.top + 20, y + h / 2 - tooltipHeight / 2),
-          left: Math.max(20, x - tooltipWidth - spacing),
+          top: Math.max(insets.top + 20, safeY + safeH / 2 - tooltipHeight / 2),
+          left: Math.max(20, safeX - tooltipWidth - spacing),
         };
       case 'right':
         return {
-          top: Math.max(insets.top + 20, y + h / 2 - tooltipHeight / 2),
-          left: Math.min(width - tooltipWidth - 20, x + w + spacing),
+          top: Math.max(insets.top + 20, safeY + safeH / 2 - tooltipHeight / 2),
+          left: Math.min(width - tooltipWidth - 20, safeX + safeW + spacing),
         };
       default:
+        // Default: show above if element is near bottom, otherwise show above by default
+        if (showAbove || elementBottom > height * 0.7) {
+          return {
+            top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing - 20),
+            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
+          };
+        }
         return {
-          top: Math.max(insets.top + 20, y - tooltipHeight - spacing),
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, x + w / 2 - tooltipWidth / 2)),
+          top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing),
+          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
         };
     }
   };

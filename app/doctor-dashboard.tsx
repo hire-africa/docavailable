@@ -1523,84 +1523,6 @@ export default function DoctorDashboard() {
         </View>
       </View>
 
-      <View style={styles.recentActivity}>
-        <Text style={{
-          fontSize: 20,
-          fontWeight: 'bold',
-          color: '#222',
-          marginBottom: 16,
-          textAlign: 'center'
-        }}>Recent Activity</Text>
-        {activities.length > 0 ? (
-          activities.slice(0, 5).map((activity, index) => (
-            <View key={activity.id} style={{
-              backgroundColor: '#F8F9FA',
-              borderRadius: 16,
-              padding: 16,
-              borderWidth: 1,
-              borderColor: '#E8F5E8',
-              marginBottom: index < 4 ? 12 : 0,
-            }}>
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                marginBottom: 8,
-              }}>
-                <View style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: activity.color + '20',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 12,
-                }}>
-                  <Icon name={activity.icon as any} size={20} color={activity.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{
-                    fontSize: 16,
-                    fontWeight: 'bold',
-                    color: '#222',
-                    marginBottom: 2,
-                  }}>{activity.title}</Text>
-                  <Text style={{
-                    fontSize: 12,
-                    color: '#666',
-                  }}>{formatTimestamp(activity.timestamp)}</Text>
-                </View>
-              </View>
-              <Text style={{
-                fontSize: 14,
-                color: '#666',
-                lineHeight: 20,
-              }}>{activity.description}</Text>
-            </View>
-          ))
-        ) : (
-          <View style={{
-            alignItems: 'center',
-            paddingVertical: 20,
-          }}>
-            <View style={{
-              width: 48,
-              height: 48,
-              borderRadius: 24,
-              backgroundColor: '#F0F0F0',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: 12,
-            }}>
-              <Icon name="clock" size={24} color="#999" />
-            </View>
-            <Text style={{
-              fontSize: 16,
-              color: '#666',
-              textAlign: 'center'
-            }}>No recent activity.</Text>
-          </View>
-        )}
-      </View>
 
 
     </ScrollView>
@@ -2330,6 +2252,8 @@ export default function DoctorDashboard() {
         alignItems: 'center',
         padding: 4,
         backgroundColor: '#FFFFFF',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E0E0E0',
         zIndex: 10,
         marginBottom: 8,
       }}>
