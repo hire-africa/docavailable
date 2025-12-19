@@ -564,11 +564,14 @@ class FileUploadController extends Controller
             ]);
             
             // Get the public URL - use a custom route for better audio streaming
-            $url = url("/api/audio/{$path}");
+            // CRITICAL: Always return FULL URL with domain for frontend to use
+            $baseUrl = config('app.url', request()->getSchemeAndHttpHost());
+            $url = $baseUrl . "/api/audio/{$path}";
             
             \Log::info('Voice message uploaded successfully:', [
                 'path' => $path,
                 'url' => $url,
+                'base_url' => $baseUrl,
                 'folder' => $folder,
                 'appointment_id' => $appointmentId
             ]);
