@@ -109,6 +109,23 @@ export default function DoctorProfilePage() {
     checkTour();
   }, [doctor, loading]);
 
+  // Debug: Log call modal state changes
+  useEffect(() => {
+    console.log('🎤 [DoctorProfile] Audio call modal state:', {
+      showAudioCallModal,
+      directSessionId,
+      willRender: !!directSessionId
+    });
+  }, [showAudioCallModal, directSessionId]);
+
+  useEffect(() => {
+    console.log('📹 [DoctorProfile] Video call modal state:', {
+      showVideoCallModal,
+      directSessionId,
+      willRender: !!(directSessionId && showVideoCallModal)
+    });
+  }, [showVideoCallModal, directSessionId]);
+
   useEffect(() => {
     if (uid) {
       fetchDoctorProfile();
@@ -347,7 +364,12 @@ export default function DoctorProfilePage() {
   };
 
   const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
-    if (!doctor || !userData) return;
+    console.log('🎯 [DoctorProfile] handleDirectBookingConfirm called:', { sessionType, doctor: !!doctor, userData: !!userData });
+    
+    if (!doctor || !userData) {
+      console.log('❌ [DoctorProfile] Missing doctor or userData');
+      return;
+    }
 
     // CRITICAL: Prevent duplicate call initiations
     if (startingSession || callInitiated) {
@@ -361,6 +383,7 @@ export default function DoctorProfilePage() {
       let response;
 
       if (sessionType === 'text') {
+        console.log('📱 [DoctorProfile] Starting text session...');
         // Start text session with reason
         response = await apiService.post('/text-sessions/start', {
           doctor_id: doctor.id,
@@ -369,6 +392,11 @@ export default function DoctorProfilePage() {
       } else if (sessionType === 'audio' || sessionType === 'video') {
         // Generate a direct session ID so both peers can connect to the same signaling room
         const provisionalAppointmentId = `direct_session_${Date.now()}`;
+        console.log(`📞 [DoctorProfile] Starting ${sessionType} call session...`, {
+          appointmentId: provisionalAppointmentId,
+          doctorId: doctor.id
+        });
+        
         // Start call session on backend so it can notify the doctor via push (for background/killed delivery)
         response = await apiService.post('/call-sessions/start', {
           call_type: sessionType === 'audio' ? 'voice' : 'video',
@@ -376,9 +404,12 @@ export default function DoctorProfilePage() {
           doctor_id: doctor.id,
           reason: reason
         });
+        
+        console.log('📞 [DoctorProfile] Call session API response:', response);
       }
 
       if (response && response.success) {
+        console.log('✅ [DoctorProfile] Session started successfully');
         // Close the direct booking modal
         setShowDirectBookingModal(false);
 
@@ -386,29 +417,38 @@ export default function DoctorProfilePage() {
           // For text sessions, navigate to chat using the returned session id
           const sessionData = response.data as any;
           const chatId = `text_session_${sessionData.session_id}`;
+          console.log('📱 [DoctorProfile] Navigating to text chat:', chatId);
           router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
         } else {
           // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
           const sessionData = response.data as any;
           const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
 
+          console.log(`📞 [DoctorProfile] Opening ${sessionType} call modal:`, {
+            appointmentId,
+            sessionData
+          });
+
           // Set session ID and show modal atomically to prevent race conditions
           setDirectSessionId(appointmentId);
           if (sessionType === 'audio') {
+            console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
             setShowAudioCallModal(true);
           } else {
+            console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
             setShowVideoCallModal(true);
           }
 
           console.log('✅ Call modal opened for session:', appointmentId);
         }
       } else {
+        console.error('❌ [DoctorProfile] Session start failed:', response);
         Alert.alert('Error', response?.message || 'Failed to start session');
         // Reset flags on error so user can retry
         setCallInitiated(false);
       }
     } catch (error) {
-      console.error('Error starting session:', error);
+      console.error('❌ [DoctorProfile] Error starting session:', error);
       Alert.alert('Error', 'Failed to start session. Please try again.');
       // Reset flags on error so user can retry
       setCallInitiated(false);
@@ -929,8 +969,16 @@ export default function DoctorProfilePage() {
             patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
             otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
             isIncomingCall={false}
-            onCallTimeout={() => Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.')}
-            onCallRejected={() => Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.')}
+            onCallTimeout={() => {
+              Alert.alert('Call Timeout', 'The doctor did not answer. Please try again later.');
+              setShowAudioCallModal(false);
+              setCallInitiated(false); // Reset flag on timeout
+            }}
+            onCallRejected={() => {
+              Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+              setShowAudioCallModal(false);
+              setCallInitiated(false); // Reset flag on rejection
+            }}
           />
         )
       }

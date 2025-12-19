@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { environment } from '../services/environment';
 import {
   ActivityIndicator,
   Animated,
@@ -3099,9 +3100,21 @@ export default function ChatPage() {
           if (archiveMessages.length > 0) {
             // Clean and preserve all message data including media URLs
             const cleanedMessages = archiveMessages.map((m: any) => {
-              // Preserve all important fields
-              // IMPORTANT: Use server_media_url first (full URL from backend), then fallback to media_url
-              const mediaUrl = m.server_media_url || m.media_url || m.audio_url || m.voice_url || null;
+              // CRITICAL: Preserve FULL URLs for voice/image messages
+              let mediaUrl = m.server_media_url || m.media_url || m.audio_url || m.voice_url || null;
+              
+              // FORCE full URL for voice messages if we have any URL
+              if ((m.message_type === 'voice' || m.message_type === 'audio') && mediaUrl) {
+                // If it's a relative URL, convert to full URL NOW before saving
+                if (!mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://')) {
+                  const path = mediaUrl.replace(/^\/+/, '').replace('api/audio/', '');
+                  mediaUrl = `${environment.LARAVEL_API_URL}/api/audio/${path}`;
+                  console.log('🔧 [End Session] Converted relative voice URL to full:', {
+                    original: m.media_url,
+                    converted: mediaUrl
+                  });
+                }
+              }
               
               const cleaned: any = {
                 id: m.id || m.temp_id || `msg_${Date.now()}_${Math.random()}`,
@@ -3110,25 +3123,14 @@ export default function ChatPage() {
                 sender_name: m.sender_name,
                 created_at: m.created_at || m.timestamp || new Date().toISOString(),
                 message_type: m.message_type || 'text',
-                media_url: mediaUrl, // Use the full URL from backend
+                media_url: mediaUrl, // This is now ALWAYS a full URL for voice messages
                 delivery_status: m.delivery_status || 'sent',
                 reactions: m.reactions || null,
                 replyTo: m.replyTo || null,
               };
               
-              // Preserve temp_id for reference if needed
               if (m.temp_id) {
                 cleaned.temp_id = m.temp_id;
-              }
-              
-              // Log voice messages to debug
-              if ((m.message_type === 'voice' || m.message_type === 'audio') && mediaUrl) {
-                console.log('🎵 [End Session] Saving voice message:', {
-                  id: cleaned.id,
-                  original_media_url: m.media_url,
-                  server_media_url: m.server_media_url,
-                  saved_media_url: cleaned.media_url
-                });
               }
               
               return cleaned;
