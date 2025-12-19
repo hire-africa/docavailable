@@ -237,21 +237,33 @@ export class InstantSessionMessageDetector {
 
     // Normalize sender ID property (handle both senderId and sender_id)
     const senderId = message.senderId || message.sender_id;
-    const messageId = message.id || message.tempId || message.temp_id;
+    // Try multiple possible ID fields - WebRTC might use different field names
+    const messageId = message.id || message.messageId || message.tempId || message.temp_id || message.tempId || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const messageContent = message.content || message.message;
     
     // Check if message has required properties
-    if (messageId === undefined || senderId === undefined) {
-      console.error('❌ [InstantSessionDetector] Message missing required properties:', {
-        hasId: messageId !== undefined,
+    if (senderId === undefined) {
+      console.error('❌ [InstantSessionDetector] Message missing sender ID:', {
         hasSenderId: senderId !== undefined,
-        message: message
+        message: message,
+        availableKeys: Object.keys(message || {})
       });
       return;
+    }
+    
+    // Log if message ID is missing but continue processing (we'll use a generated one)
+    if (!message.id && !message.tempId && !message.temp_id) {
+      console.warn('⚠️ [InstantSessionDetector] Message missing ID, using generated ID:', messageId);
+    }
+
+    // Ensure message has an ID for tracking
+    if (!message.id && !message.tempId && !message.temp_id) {
+      message.id = messageId;
     }
 
     console.log('💬 [InstantSessionDetector] Processing chat message:', {
       id: messageId,
+      messageId: message.id || message.tempId || message.temp_id,
       senderId: senderId,
       content: messageContent?.substring(0, 50) + '...',
       doctorId: this.config.doctorId,

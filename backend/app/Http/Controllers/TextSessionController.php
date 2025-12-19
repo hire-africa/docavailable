@@ -561,6 +561,7 @@ class TextSessionController extends Controller
 
     /**
      * Get active sessions for the authenticated user.
+     * Includes both 'active' and 'waiting_for_doctor' sessions so users can see all their ongoing chats.
      */
     public function activeSessions(Request $request): JsonResponse
     {
@@ -572,7 +573,7 @@ class TextSessionController extends Controller
             $userType = auth()->user()->user_type;
 
             $query = TextSession::with(['patient', 'doctor'])
-                ->where('status', 'active');
+                ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR]);
 
             if ($userType === 'doctor') {
                 $query->where('doctor_id', $userId);
@@ -584,10 +585,16 @@ class TextSessionController extends Controller
 
             // Add remaining time information to each session
             $sessionsWithTime = $sessions->map(function ($session) use ($userType) {
+                // Determine if session is active (for UI display)
+                $isActive = $session->status === TextSession::STATUS_ACTIVE || 
+                           ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR && $session->doctor_response_deadline);
+                
                 $sessionData = [
                     'id' => $session->id,
                     'status' => $session->status,
+                    'isActive' => $isActive, // Add isActive flag for frontend
                     'started_at' => $session->started_at,
+                    'activated_at' => $session->activated_at,
                     'ended_at' => $session->ended_at,
                     'last_activity_at' => $session->last_activity_at,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
