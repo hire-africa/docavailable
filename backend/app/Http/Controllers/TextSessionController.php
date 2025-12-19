@@ -797,7 +797,7 @@ class TextSessionController extends Controller
             if ($user->id === $session->doctor_id && $this->anonymizationService->isAnonymousModeEnabled($session->patient)) {
                 $patientData = $this->anonymizationService->getAnonymizedUserData($session->patient);
                 \Log::info('🔍 [TextSessionController] Anonymizing patient data for doctor', [
-                    'session_id' => $sessionId,
+                    'session_id' => $manualSessionId,
                     'doctor_id' => $user->id,
                     'patient_id' => $session->patient_id,
                     'original_name' => $session->patient->display_name ?? $session->patient->first_name . ' ' . $session->patient->last_name,
@@ -809,13 +809,71 @@ class TextSessionController extends Controller
             if ($user->id === $session->patient_id && $this->anonymizationService->isAnonymousModeEnabled($session->doctor)) {
                 $doctorData = $this->anonymizationService->getAnonymizedUserData($session->doctor);
                 \Log::info('🔍 [TextSessionController] Anonymizing doctor data for patient', [
-                    'session_id' => $sessionId,
+                    'session_id' => $manualSessionId,
                     'patient_id' => $user->id,
                     'doctor_id' => $session->doctor_id,
                     'original_name' => $session->doctor->display_name ?? $session->doctor->first_name . ' ' . $session->doctor->last_name,
                     'anonymized_name' => $doctorData['display_name']
                 ]);
             }
+
+            // Check for messages in cache (not database) to avoid chat_room_id column error
+            $messages = $this->messageStorageService->getMessages($session->id, 'text_session');
+            $hasDoctorResponse = false;
+            $hasPatientMessages = false;
+            
+            foreach ($messages as $message) {
+                if (isset($message['sender_id'])) {
+                    if ($message['sender_id'] == $session->doctor_id) {
+                        $hasDoctorResponse = true;
+                    }
+                    if ($message['sender_id'] == $session->patient_id) {
+                        $hasPatientMessages = true;
+                    }
+                }
+            }
+
+            // Get display names properly - handle both array and object formats
+            $patientDisplayName = 'Patient';
+            if (is_array($patientData)) {
+                $patientDisplayName = $patientData['display_name'] ?? 
+                    (($patientData['first_name'] ?? '') . ' ' . ($patientData['last_name'] ?? '')) ?: 'Patient';
+            } else {
+                $patientDisplayName = $patientData->display_name ?? 
+                    ($patientData->first_name . ' ' . $patientData->last_name) ?: 'Patient';
+            }
+            
+            $doctorDisplayName = 'Doctor';
+            if (is_array($doctorData)) {
+                $doctorDisplayName = $doctorData['display_name'] ?? 
+                    ('Dr. ' . (($doctorData['first_name'] ?? '') . ' ' . ($doctorData['last_name'] ?? ''))) ?: 'Doctor';
+            } else {
+                $doctorDisplayName = $doctorData->display_name ?? 
+                    ('Dr. ' . ($doctorData->first_name . ' ' . $doctorData->last_name)) ?: 'Doctor';
+            }
+
+            // Normalize patient and doctor data to arrays for consistent response
+            $patientResponse = is_array($patientData) ? $patientData : [
+                'id' => $patientData->id,
+                'first_name' => $patientData->first_name ?? '',
+                'last_name' => $patientData->last_name ?? '',
+                'display_name' => $patientDisplayName,
+                'profile_picture_url' => $patientData->profile_picture_url ?? null,
+            ];
+            
+            $doctorResponse = is_array($doctorData) ? $doctorData : [
+                'id' => $doctorData->id,
+                'first_name' => $doctorData->first_name ?? '',
+                'last_name' => $doctorData->last_name ?? '',
+                'display_name' => $doctorDisplayName,
+                'profile_picture_url' => $doctorData->profile_picture_url ?? null,
+            ];
+
+            // Determine other participant name based on current user
+            $otherParticipantName = $user->id === $session->doctor_id ? $patientDisplayName : $doctorDisplayName;
+            $otherParticipantProfilePicture = $user->id === $session->doctor_id ? 
+                ($patientResponse['profile_picture_url'] ?? null) : 
+                ($doctorResponse['profile_picture_url'] ?? null);
 
             return response()->json([
                 'success' => true,
@@ -825,23 +883,19 @@ class TextSessionController extends Controller
                     'started_at' => $session->started_at,
                     'activated_at' => $session->activated_at,
                     'ended_at' => $session->ended_at,
-                    'has_doctor_response' => $session->messages()->where('sender_id', $session->doctor_id)->exists(),
-                    'has_patient_messages' => $session->messages()->where('sender_id', $session->patient_id)->exists(),
+                    'has_doctor_response' => $hasDoctorResponse,
+                    'has_patient_messages' => $hasPatientMessages,
                     'last_activity_at' => $session->last_activity_at,
                     'remaining_time_minutes' => $session->getRemainingTimeMinutes(),
                     'remaining_sessions' => $actualSessionsRemaining, // Use actual subscription balance
                     'elapsed_minutes' => $session->getElapsedMinutes(),
                     'sessions_used' => $session->sessions_used,
                     'sessions_remaining_before_start' => $session->sessions_remaining_before_start,
-                    'patient' => $patientData,
-                    'doctor' => $doctorData,
+                    'patient' => $patientResponse,
+                    'doctor' => $doctorResponse,
                     // Add other_participant_name and other_participant_profile_picture_url for frontend compatibility
-                    'other_participant_name' => $user->id === $session->doctor_id ?
-                        ($patientData['display_name'] ?? 'Patient') :
-                        ($doctorData['display_name'] ?? 'Doctor'),
-                    'other_participant_profile_picture_url' => $user->id === $session->doctor_id ?
-                        ($patientData['profile_picture_url'] ?? null) :
-                        ($doctorData['profile_picture_url'] ?? null),
+                    'other_participant_name' => $otherParticipantName,
+                    'other_participant_profile_picture_url' => $otherParticipantProfilePicture,
                 ]
             ]);
 

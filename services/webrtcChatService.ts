@@ -403,12 +403,20 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       // Store the sent message locally and save to AsyncStorage
       await this.addMessage(chatMessage);
       
-      // Also persist to backend API as fallback in case WebSocket forwarding fails
+      // CRITICAL: Always persist to backend API to ensure timer starts and messages are stored
+      // This is especially important for text sessions where the first patient message must trigger the 90-second timer
       try {
         const authToken = await this.getAuthToken();
         if (authToken) {
           const apiUrl = `${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`;
-          console.log('📤 [WebRTCChat] Persisting message to backend as fallback:', apiUrl);
+          console.log('📤 [WebRTCChat] Persisting message to backend (required for timer):', apiUrl);
+          console.log('📤 [WebRTCChat] Message details:', {
+            appointmentId: this.config.appointmentId,
+            isTextSession: this.config.appointmentId.startsWith('text_session_'),
+            message: message.substring(0, 50),
+            messageId: messageId
+          });
+          
           const resp = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -421,17 +429,35 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               temp_id: messageId,
             }),
           });
+          
           if (!resp.ok) {
-            console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
+            const errorText = await resp.text();
+            console.error('❌ [WebRTCChat] Backend persist failed:', resp.status, errorText);
           } else {
             const json = await resp.json().catch(() => null);
-            console.log('✅ [WebRTCChat] Backend persisted message:', json?.success);
+            if (json?.success) {
+              console.log('✅ [WebRTCChat] Backend persisted message and timer should be started:', json.data?.id);
+              // Update message ID if backend returned a different one
+              if (json.data?.id && json.data.id !== messageId) {
+                chatMessage.id = json.data.id;
+                // Update stored message with real ID
+                const messages = await this.getMessages();
+                const messageIndex = messages.findIndex(m => m.id === messageId || m.temp_id === messageId);
+                if (messageIndex >= 0) {
+                  messages[messageIndex].id = json.data.id;
+                  messages[messageIndex].temp_id = undefined;
+                  await this.saveMessages();
+                }
+              }
+            } else {
+              console.warn('⚠️ [WebRTCChat] Backend persist returned non-success:', json);
+            }
           }
         } else {
-          console.warn('⚠️ [WebRTCChat] No auth token available to persist message to backend');
+          console.error('❌ [WebRTCChat] No auth token available to persist message to backend - timer may not start!');
         }
       } catch (persistErr) {
-        console.warn('⚠️ [WebRTCChat] Failed to persist message to backend:', persistErr);
+        console.error('❌ [WebRTCChat] Failed to persist message to backend - timer may not start!', persistErr);
       }
       
       // Trigger the onMessage event so the sender can see their own message immediately

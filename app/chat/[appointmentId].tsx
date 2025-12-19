@@ -2539,6 +2539,13 @@ export default function ChatPage() {
   // Fallback method to send message via backend API
   const sendMessageViaBackendAPI = async (tempId: string, messageText: string) => {
     try {
+      console.log('📤 [BackendAPI] Sending message via backend API:', {
+        appointmentId,
+        messageText: messageText.substring(0, 50),
+        isTextSession,
+        isInstantSession
+      });
+
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
         message: messageText,
         message_type: 'text'
@@ -2549,6 +2556,19 @@ export default function ChatPage() {
 
         // Update the temp message with real ID
         updateTextMessage(tempId, response.data.id);
+
+        // For instant sessions, check if this is the first patient message
+        if (isInstantSession && !hasPatientSentMessage && isPatient) {
+          console.log('👤 [InstantSession] First patient message sent via backend API - timer should start');
+          // The backend should have started the timer, but we'll trigger detection here too
+          const message = {
+            id: response.data.id,
+            sender_id: currentUserId,
+            message: messageText,
+            created_at: new Date().toISOString()
+          };
+          triggerPatientMessageDetection(message);
+        }
 
         console.log('✅ [ChatComponent] Message status updated:', {
           tempId,

@@ -59,13 +59,14 @@ class TextSession extends Model
 
     /**
      * Get the messages for the text session.
+     * NOTE: Messages are stored in cache via MessageStorageService, not in the database.
+     * This relationship is kept for backwards compatibility but should not be used for queries.
      */
     public function messages(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        // Assuming the TextSession's ID corresponds to the chat_room_id in ChatMessage
-        // OR the TextSession has a 'chat_id' field linking to ChatMessages
-        // Based on TextSessionController line 184 fix: 'chat_room_id' => $textSessionId
-        // It implies chat_room_id in ChatMessage table equals text_session->id
+        // Messages are stored in cache, not database, so this relationship should not be used
+        // Keeping it for backwards compatibility but it will fail if chat_room_id column doesn't exist
+        // Use MessageStorageService::getMessages() instead
         return $this->hasMany(ChatMessage::class, 'chat_room_id');
     }
 
