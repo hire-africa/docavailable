@@ -120,28 +120,11 @@ export default function EndedSessionPage() {
     ? (session.doctor_profile_picture_url || session.doctor_profile_picture)
     : (user?.profile_picture_url || user?.profile_picture);
 
-  // Format messages to match live chat format - use media_url as-is (same as live chat)
+  // Format messages to match live chat format
   const messages: Message[] = (session.messages || []).map((msg: any) => {
-    // IMPORTANT: Use the full URL if available (should be stored when session ends)
-    // The backend returns full URLs, and we now save server_media_url as media_url
     let mediaUrl = msg.media_url || msg.server_media_url || msg.audio_url || msg.voice_url;
     
-    // Log the original format for debugging
-    if (msg.message_type === 'voice' || msg.message_type === 'audio') {
-      console.log('🎵 [EndedSession] Loading voice message from local storage:', {
-        id: msg.id,
-        message_type: msg.message_type,
-        media_url: msg.media_url,
-        server_media_url: msg.server_media_url,
-        audio_url: msg.audio_url,
-        voice_url: msg.voice_url,
-        using_url: mediaUrl,
-        is_full_url: mediaUrl?.startsWith('http')
-      });
-    }
-    
-    // Only fix URLs if they're clearly broken or relative paths
-    // If it's already a full URL, use it as-is (this should be the case for newly saved sessions)
+    // CRITICAL FIX: Always convert to full URL if not already
     if (mediaUrl && !mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://') && !mediaUrl.startsWith('file://')) {
       // It's a relative path - construct full URL based on message type
       if (msg.message_type === 'voice' || msg.message_type === 'audio') {
@@ -178,15 +161,8 @@ export default function EndedSessionPage() {
           }
         }
         
-        // Construct full URL using Laravel API URL (same as backend upload returns)
+        // Construct full URL using Laravel API URL
         mediaUrl = `${environment.LARAVEL_API_URL}/api/audio/${path}`;
-        
-        console.log('🎵 [EndedSession] Fixed voice URL:', {
-          original: msg.media_url,
-          extractedPath: path,
-          fixed: mediaUrl,
-          appointmentId
-        });
       } else if (msg.message_type === 'image') {
         // Images: similar logic
         let path = mediaUrl;
