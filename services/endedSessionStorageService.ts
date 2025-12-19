@@ -24,6 +24,8 @@ export interface EndedSession {
 export interface EndedSessionMetadata {
   appointmentId: number;
   patient_id: number;
+  patient_name?: string; // Added for doctors to see patient names
+  doctor_id?: number; // Added for patients to identify doctors
   doctor_name?: string;
   doctor_profile_picture_url?: string;
   doctor_profile_picture?: string;
@@ -68,6 +70,8 @@ export const endedSessionStorageService = {
       const meta: EndedSessionMetadata = {
         appointmentId: session.appointment_id,
         patient_id: session.patient_id,
+        patient_name: session.patient_name, // Include patient name for doctors
+        doctor_id: session.doctor_id, // Include doctor ID for patients
         doctor_name: session.doctor_name,
         doctor_profile_picture_url: session.doctor_profile_picture_url,
         doctor_profile_picture: session.doctor_profile_picture,
@@ -96,6 +100,8 @@ export const endedSessionStorageService = {
       const meta: EndedSessionMetadata = {
         appointmentId: session.appointment_id,
         patient_id: session.patient_id,
+        patient_name: session.patient_name, // Include patient name for doctors
+        doctor_id: session.doctor_id, // Include doctor ID for patients
         doctor_name: session.doctor_name,
         doctor_profile_picture_url: session.doctor_profile_picture_url,
         doctor_profile_picture: session.doctor_profile_picture,

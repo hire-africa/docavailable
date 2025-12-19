@@ -3026,130 +3026,191 @@ export default function ChatPage() {
       const sessionType = isTextSession ? 'text' : 'appointment';
 
       // IMMEDIATELY update UI state first - don't wait for anything
+      // Do all state updates synchronously in one batch
       setShowEndSessionModal(false);
-      setSessionEnded(true);
       setEndingSession(false);
+      setSessionEnded(true);
+      setShowRatingModal(true); // Show immediately, no setTimeout needed
       
-      // Use setTimeout to ensure UI updates happen in next tick
+      console.log('✅ [End Session] UI updated immediately - rating modal shown');
+
+      // Now do backend call and message retrieval in background (completely non-blocking, fire and forget)
+      // Use a longer delay to ensure UI fully renders first
       setTimeout(() => {
-        setShowRatingModal(true);
-        console.log('✅ [End Session] Rating modal shown');
-      }, 0);
-
-      console.log('✅ [End Session] UI updated immediately - rating modal will show');
-
-      // Now do backend call and message retrieval in background (non-blocking)
-      // Call backend to end session based on type (non-blocking)
-      const backendPromise = (async () => {
-        try {
-          if (isTextSession) {
-            await sessionService.endTextSession(sessionId);
-            console.log('✅ [End Session] Backend call successful');
-          } else {
-            await sessionService.endTextAppointmentSession(sessionId);
-            console.log('✅ [End Session] Backend call successful');
-          }
-        } catch (backendError: any) {
-          // Check if it's an HTML error response
-          const errorMessage = backendError?.message || String(backendError);
-          if (errorMessage.includes('HTML') || errorMessage.includes('<!DOCTYPE')) {
-            console.warn('⚠️ [End Session] Backend returned HTML error (deployment issue), but session is ended in UI');
-          } else {
-            console.warn('⚠️ [End Session] Backend call failed, but continuing with local storage:', backendError);
-          }
-          // Don't throw - we've already updated the UI, so just log and continue
-        }
-      })();
-
-      // Get messages in background (non-blocking)
-      const messagesPromise = (async () => {
-        let archiveMessages = [];
-        try {
-          if (webrtcChatService) {
-            archiveMessages = await webrtcChatService.getMessages();
-            console.log('📦 [End Session] Retrieved messages from WebRTC service:', archiveMessages.length);
-          } else {
-            // Fallback: try to get messages from backend API
-            try {
-              const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
-              if (messagesResponse.success && messagesResponse.data) {
-                archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
-                console.log('📦 [End Session] Retrieved messages from backend API:', archiveMessages.length);
-              }
-            } catch (apiError) {
-              console.warn('⚠️ [End Session] Failed to get messages from API, using empty array:', apiError);
+        // Call backend to end session (fire and forget - don't await anything)
+        // Wrap in Promise.resolve().then() to ensure errors don't escape
+        Promise.resolve().then(async () => {
+          try {
+            if (isTextSession) {
+              await sessionService.endTextSession(sessionId);
+              console.log('✅ [End Session] Backend call successful');
+            } else {
+              await sessionService.endTextAppointmentSession(sessionId);
+              console.log('✅ [End Session] Backend call successful');
+            }
+          } catch (backendError: any) {
+            // Silently catch all errors - UI is already updated, so don't block
+            const errorMessage = backendError?.message || String(backendError);
+            if (errorMessage.includes('HTML') || errorMessage.includes('<!DOCTYPE') || errorMessage.includes('Backend returned HTML')) {
+              console.warn('⚠️ [End Session] Backend returned HTML error (deployment issue), but session is ended in UI');
+            } else {
+              console.warn('⚠️ [End Session] Backend call failed, but continuing:', errorMessage.substring(0, 100));
             }
           }
-        } catch (error) {
-          console.error('❌ [End Session] Error retrieving messages:', error);
-        }
-        return archiveMessages;
-      })();
-
-      // Wait for both to complete, then store session
-      Promise.all([backendPromise, messagesPromise]).then(([_, archiveMessages]) => {
-        const cleanedMessages = (archiveMessages || []).map((m: any) => {
-          const { temp_id, ...rest } = m;
-          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+        }).catch(() => {
+          // Double catch to ensure nothing escapes and blocks UI
+          console.warn('⚠️ [End Session] Background operation failed silently');
         });
-        
-        console.log('📦 [End Session] Cleaned messages count:', cleanedMessages.length);
 
-        // Determine patient and doctor info based on current user
-        const isPatient = user?.user_type === 'patient';
-        const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
-        const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
-        
-        // Get names - if current user is patient, other participant is doctor, and vice versa
-        const patientName = isPatient 
-          ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
-          : (textSessionInfo?.patient?.display_name || 
-             `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
-             chatInfo?.other_participant_name || 'Patient');
-        
-        const doctorName = isPatient
-          ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
-             `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
-          : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+        // Save chat asynchronously for offline access (fire and forget)
+        // Use current messages state - guaranteed to be complete and available
+        (async () => {
+          // Use current messages from state (most reliable - already loaded and complete)
+          let archiveMessages: ExtendedChatMessage[] = [...messages];
+          
+          // Fallback: Try to get additional messages from WebRTC/API if available
+          // But prioritize current state messages
+          try {
+            if (webrtcChatService && archiveMessages.length === 0) {
+              const webrtcMessages = await webrtcChatService.getMessages();
+              if (webrtcMessages && webrtcMessages.length > 0) {
+                archiveMessages = webrtcMessages;
+                console.log('📦 [End Session] Retrieved messages from WebRTC service:', archiveMessages.length);
+              }
+            }
+            
+            // If still no messages, try API as last resort
+            if (archiveMessages.length === 0) {
+              try {
+                const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
+                if (messagesResponse.success && messagesResponse.data) {
+                  archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
+                  console.log('📦 [End Session] Retrieved messages from backend API:', archiveMessages.length);
+                }
+              } catch (apiError) {
+                console.warn('⚠️ [End Session] Failed to get messages from API:', apiError);
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ [End Session] Error retrieving additional messages (using current state):', error);
+          }
 
-        const endedSession: EndedSession = {
-          appointment_id: getNumericAppointmentId(),
-          doctor_id: doctorId,
-          doctor_name: doctorName,
-          doctor_profile_picture_url: isPatient 
-            ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
-            : (user?.profile_picture_url || user?.profile_picture),
-          doctor_profile_picture: isPatient
-            ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
-            : (user?.profile_picture || user?.profile_picture_url),
-          patient_id: patientId,
-          patient_name: patientName,
-          appointment_date: chatInfo?.appointment_date,
-          appointment_time: chatInfo?.appointment_time,
-          ended_at: new Date().toISOString(),
-          session_duration: undefined,
-          session_summary: undefined,
-          reason: textSessionInfo?.reason || 'General Checkup',
-          messages: cleanedMessages,
-          message_count: cleanedMessages.length,
-        };
+          // Store session with current messages (non-blocking, works offline)
+          if (archiveMessages.length > 0) {
+            // Clean and preserve all message data including media URLs
+            const cleanedMessages = archiveMessages.map((m: any) => {
+              // Preserve all important fields
+              // IMPORTANT: Use server_media_url first (full URL from backend), then fallback to media_url
+              const mediaUrl = m.server_media_url || m.media_url || m.audio_url || m.voice_url || null;
+              
+              const cleaned: any = {
+                id: m.id || m.temp_id || `msg_${Date.now()}_${Math.random()}`,
+                message: m.message || '',
+                sender_id: m.sender_id,
+                sender_name: m.sender_name,
+                created_at: m.created_at || m.timestamp || new Date().toISOString(),
+                message_type: m.message_type || 'text',
+                media_url: mediaUrl, // Use the full URL from backend
+                delivery_status: m.delivery_status || 'sent',
+                reactions: m.reactions || null,
+                replyTo: m.replyTo || null,
+              };
+              
+              // Preserve temp_id for reference if needed
+              if (m.temp_id) {
+                cleaned.temp_id = m.temp_id;
+              }
+              
+              // Log voice messages to debug
+              if ((m.message_type === 'voice' || m.message_type === 'audio') && mediaUrl) {
+                console.log('🎵 [End Session] Saving voice message:', {
+                  id: cleaned.id,
+                  original_media_url: m.media_url,
+                  server_media_url: m.server_media_url,
+                  saved_media_url: cleaned.media_url
+                });
+              }
+              
+              return cleaned;
+            });
+            
+            console.log('📦 [End Session] Saving chat locally for offline access:', {
+              messageCount: cleanedMessages.length,
+              hasMediaMessages: cleanedMessages.filter(m => m.media_url).length,
+              appointmentId: getNumericAppointmentId()
+            });
 
-        // Store session in background
-        endedSessionStorageService.storeEndedSessionForBoth(endedSession)
-          .then(() => {
-            console.log('✅ [End Session] Session stored successfully locally');
-          })
-          .catch((e: any) => {
-            console.error('❌ [End Session] Failed to store ended session locally:', e);
-            // Try again after a short delay
-            setTimeout(() => {
-              endedSessionStorageService.storeEndedSessionForBoth(endedSession)
-                .then(() => console.log('✅ [End Session] Retry: Session stored successfully'))
-                .catch((retryError: any) => console.error('❌ [End Session] Retry also failed:', retryError));
-            }, 1000);
-          });
-      }).catch((error) => {
-        console.error('❌ [End Session] Error in background processing:', error);
+            // Determine patient and doctor info based on current user
+            const isPatientUser = user?.user_type === 'patient';
+            const patientId = isPatientUser ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
+            const doctorId = isPatientUser ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
+            
+            // Get names - if current user is patient, other participant is doctor, and vice versa
+            const patientName = isPatientUser 
+              ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+              : (textSessionInfo?.patient?.display_name || 
+                 `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+                 chatInfo?.other_participant_name || 'Patient');
+            
+            const doctorName = isPatientUser
+              ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
+                 `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+              : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+
+            const endedSession: EndedSession = {
+              appointment_id: getNumericAppointmentId(),
+              doctor_id: doctorId,
+              doctor_name: doctorName,
+              doctor_profile_picture_url: isPatientUser 
+                ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
+                : (user?.profile_picture_url || user?.profile_picture),
+              doctor_profile_picture: isPatientUser
+                ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
+                : (user?.profile_picture || user?.profile_picture_url),
+              patient_id: patientId,
+              patient_name: patientName,
+              appointment_date: chatInfo?.appointment_date,
+              appointment_time: chatInfo?.appointment_time,
+              ended_at: new Date().toISOString(),
+              session_duration: undefined,
+              session_summary: undefined,
+              reason: textSessionInfo?.reason || 'General Checkup',
+              messages: cleanedMessages,
+              message_count: cleanedMessages.length,
+            };
+
+            // Store session locally for offline access (non-blocking, with retry)
+            // This ensures chat is available even if server files are deleted
+            const storeSession = async (retryCount = 0) => {
+              try {
+                await endedSessionStorageService.storeEndedSessionForBoth(endedSession);
+                console.log('✅ [End Session] Chat saved locally for offline access:', {
+                  appointmentId: endedSession.appointment_id,
+                  messageCount: endedSession.message_count,
+                  retryCount
+                });
+              } catch (e: any) {
+                console.error('❌ [End Session] Failed to store chat locally:', e);
+                
+                // Retry up to 3 times with exponential backoff
+                if (retryCount < 3) {
+                  const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+                  console.log(`🔄 [End Session] Retrying local storage in ${delay}ms (attempt ${retryCount + 1}/3)`);
+                  setTimeout(() => {
+                    storeSession(retryCount + 1);
+                  }, delay);
+                } else {
+                  console.error('❌ [End Session] Failed to store chat after 3 retries - may not be available offline');
+                }
+              }
+            };
+            
+            // Start storing (non-blocking)
+            storeSession();
+          } else {
+            console.warn('⚠️ [End Session] No messages to save - chat may not be available offline');
+          }
+        })();
       });
 
       // Clear messages in background (non-blocking) - but don't try to refresh status
@@ -3174,15 +3235,13 @@ export default function ChatPage() {
       console.error('❌ [End Session] Error in session end process:', error);
 
       // IMMEDIATELY update UI state first - don't wait for anything
-        setShowEndSessionModal(false);
-        setSessionEnded(true);
-        setEndingSession(false);
+      // Do all state updates synchronously in one batch
+      setShowEndSessionModal(false);
+      setEndingSession(false);
+      setSessionEnded(true);
+      setShowRatingModal(true); // Show immediately, no setTimeout needed
       
-      // Use setTimeout to ensure UI updates happen in next tick
-      setTimeout(() => {
-        setShowRatingModal(true);
-        console.log('✅ [End Session] Rating modal shown despite error');
-      }, 0);
+      console.log('✅ [End Session] UI updated despite error - rating modal shown');
 
       // Even if there's an error, try to store the session locally in background
       // This ensures the user can still rate the session even if something went wrong

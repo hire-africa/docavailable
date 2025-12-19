@@ -1,38 +1,46 @@
-import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     ScrollView,
     StatusBar,
-    StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
-    View
+  View,
 } from 'react-native';
-import DoctorProfilePicture from '../../components/DoctorProfilePicture';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
+import { environment } from '../../config/environment';
+import ImageMessage from '../../components/ImageMessage';
+import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
+import { SwipeableMessage } from '../../components/SwipeableMessage';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
+import { withDoctorPrefix } from '../../utils/name';
 
 interface Message {
-  id: number;
+  id: string | number;
   message: string;
   sender_id: number;
-  sender_name: string;
+  sender_name?: string;
   created_at: string;
   message_type?: string;
   media_url?: string;
+  delivery_status?: string;
+  reactions?: any[];
+  replyTo?: any;
 }
 
 export default function EndedSessionPage() {
   const { appointmentId } = useLocalSearchParams<{ appointmentId: string }>();
+  const { user } = useAuth();
   const [session, setSession] = useState<EndedSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadEndedSession();
@@ -64,44 +72,6 @@ export default function EndedSessionPage() {
     }
   };
 
-  const formatDuration = (minutes: number | undefined): string => {
-    if (!minutes) return 'Unknown duration';
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours > 0) {
-      return `${hours}h ${mins}m`;
-    }
-    return `${mins}m`;
-  };
-
-  const formatDate = (dateString: string | undefined): string => {
-    if (!dateString) return 'Unknown date';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View style={[
-      styles.messageItem,
-      item.sender_id === session?.patient_id ? styles.myMessage : styles.otherMessage
-    ]}>
-      <Text style={styles.messageText}>{item.message}</Text>
-      <Text style={styles.messageTime}>
-        {new Date(item.created_at).toLocaleTimeString()}
-      </Text>
-      {item.media_url && (
-        <View style={styles.mediaContainer}>
-          <Text style={styles.mediaText}>📎 Attachment</Text>
-        </View>
-      )}
-    </View>
-  );
-
   const handleBackPress = () => {
     router.back();
   };
@@ -123,7 +93,7 @@ export default function EndedSessionPage() {
       <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
         <StatusBar barStyle="dark-content" />
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <FontAwesome name="exclamation-triangle" size={48} color="#FF6B6B" />
+          <Ionicons name="alert-circle" size={48} color="#FF6B6B" />
           <Text style={{ marginTop: 16, fontSize: 16, color: '#666', textAlign: 'center' }}>
             {error || 'Session not found'}
           </Text>
@@ -138,9 +108,149 @@ export default function EndedSessionPage() {
     );
   }
 
+  // Determine if current user is patient or doctor
+  const isPatient = user?.user_type === 'patient';
+  const currentUserId = user?.id || 0;
+  
+  // Determine other participant info
+  const otherParticipantName = isPatient 
+    ? (session.doctor_name || 'Doctor')
+    : (session.patient_name || 'Patient');
+  const otherParticipantProfilePicture = isPatient
+    ? (session.doctor_profile_picture_url || session.doctor_profile_picture)
+    : (user?.profile_picture_url || user?.profile_picture);
+
+  // Format messages to match live chat format - use media_url as-is (same as live chat)
+  const messages: Message[] = (session.messages || []).map((msg: any) => {
+    // IMPORTANT: Use the full URL if available (should be stored when session ends)
+    // The backend returns full URLs, and we now save server_media_url as media_url
+    let mediaUrl = msg.media_url || msg.server_media_url || msg.audio_url || msg.voice_url;
+    
+    // Log the original format for debugging
+    if (msg.message_type === 'voice' || msg.message_type === 'audio') {
+      console.log('🎵 [EndedSession] Loading voice message from local storage:', {
+        id: msg.id,
+        message_type: msg.message_type,
+        media_url: msg.media_url,
+        server_media_url: msg.server_media_url,
+        audio_url: msg.audio_url,
+        voice_url: msg.voice_url,
+        using_url: mediaUrl,
+        is_full_url: mediaUrl?.startsWith('http')
+      });
+    }
+    
+    // Only fix URLs if they're clearly broken or relative paths
+    // If it's already a full URL, use it as-is (this should be the case for newly saved sessions)
+    if (mediaUrl && !mediaUrl.startsWith('http://') && !mediaUrl.startsWith('https://') && !mediaUrl.startsWith('file://')) {
+      // It's a relative path - construct full URL based on message type
+      if (msg.message_type === 'voice' || msg.message_type === 'audio') {
+        // Voice messages: path format is chat_voice_messages/{appointmentId}/voice_xxx.m4a
+        let path = mediaUrl;
+        
+        // Extract path if it contains /api/audio/ (remove the /api/audio/ prefix)
+        if (path.includes('/api/audio/')) {
+          path = path.split('/api/audio/')[1];
+        } else if (path.startsWith('/api/audio/')) {
+          // Handle case where path starts with /api/audio/
+          path = path.replace('/api/audio/', '');
+        } else if (path.startsWith('api/audio/')) {
+          // Handle case where path starts with api/audio/ (no leading slash)
+          path = path.replace('api/audio/', '');
+        }
+        
+        // Remove any leading slashes
+        path = path.replace(/^\/+/, '');
+        
+        // Ensure path starts with chat_voice_messages/
+        if (!path.startsWith('chat_voice_messages/')) {
+          const sessionId = parseInt(appointmentId, 10);
+          if (sessionId && !isNaN(sessionId)) {
+            // If path is just a filename, prepend the folder structure
+            if (!path.includes('/')) {
+              path = `chat_voice_messages/${sessionId}/${path}`;
+            } else {
+              // Path might be missing the chat_voice_messages prefix
+              path = `chat_voice_messages/${sessionId}/${path.split('/').pop()}`;
+            }
+          } else {
+            path = `chat_voice_messages/${path}`;
+          }
+        }
+        
+        // Construct full URL using Laravel API URL (same as backend upload returns)
+        mediaUrl = `${environment.LARAVEL_API_URL}/api/audio/${path}`;
+        
+        console.log('🎵 [EndedSession] Fixed voice URL:', {
+          original: msg.media_url,
+          extractedPath: path,
+          fixed: mediaUrl,
+          appointmentId
+        });
+      } else if (msg.message_type === 'image') {
+        // Images: similar logic
+        let path = mediaUrl;
+        if (path.includes('/api/images/')) {
+          path = path.split('/api/images/')[1];
+        }
+        if (!path.startsWith('chat_images/')) {
+          const sessionId = parseInt(appointmentId, 10);
+          if (sessionId && !isNaN(sessionId)) {
+            path = `chat_images/${sessionId}/${path}`;
+          } else {
+            path = `chat_images/${path}`;
+          }
+        }
+        mediaUrl = `${environment.LARAVEL_API_URL}/api/images/${path}`;
+      } else if (mediaUrl.startsWith('/api/')) {
+        // Absolute path starting with /api/
+        mediaUrl = `${environment.LARAVEL_API_URL}${mediaUrl}`;
+      } else if (mediaUrl.startsWith('/')) {
+        // Absolute path starting with /
+        mediaUrl = `${environment.LARAVEL_API_URL}/api${mediaUrl}`;
+      }
+    }
+    // If it's already a full URL (http/https), use it as-is (same as live chat)
+
+    return {
+      id: msg.id || msg.temp_id || `msg_${Date.now()}_${Math.random()}`,
+      message: msg.message || '',
+      sender_id: msg.sender_id,
+      sender_name: msg.sender_name,
+      created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
+      message_type: msg.message_type || 'text',
+      media_url: mediaUrl,
+      delivery_status: msg.delivery_status || 'sent',
+      reactions: msg.reactions,
+      replyTo: msg.replyTo,
+    };
+  });
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
+
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: 'transparent' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        {/* Background Wallpaper */}
+        <Image
+          source={require('../chat/white_wallpaper.jpg')}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            opacity: 0.8,
+            zIndex: -1,
+          }}
+          resizeMode="cover"
+        />
       
       {/* Header */}
       <View style={{
@@ -149,51 +259,76 @@ export default function EndedSessionPage() {
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E5E5',
+          borderBottomColor: '#E0E0E0',
         backgroundColor: '#fff',
       }}>
         <TouchableOpacity onPress={handleBackPress} style={{ marginRight: 12 }}>
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         
-        {/* Profile Picture */}
-        <View style={{ marginRight: 12 }}>
-          {session.doctor_profile_picture_url ? (
+          {/* Profile Picture and Name */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {otherParticipantProfilePicture ? (
             <Image 
-              source={{ uri: session.doctor_profile_picture_url }} 
-              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
-            />
-          ) : session.doctor_profile_picture ? (
-            <Image 
-              source={{ uri: session.doctor_profile_picture }} 
-              style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: '#4CAF50' }}
+                source={{ uri: otherParticipantProfilePicture }}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  marginRight: 10,
+                  borderWidth: 1,
+                  borderColor: '#E5E5E5',
+                }}
+                resizeMode="cover"
             />
           ) : (
-            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
-              <Ionicons name="person" size={20} color="#4CAF50" />
+              <View style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: '#4CAF50',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginRight: 10,
+                borderWidth: 1,
+                borderColor: '#E5E5E5',
+              }}>
+                <Ionicons name="person" size={18} color="#fff" />
             </View>
           )}
-        </View>
-        
-        {/* Name */}
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 18, fontWeight: '600', color: '#333' }}>
-            {session.doctor_name || 'Doctor'}
+            <View style={{ flex: 1, justifyContent: 'center', minWidth: 0 }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: '600',
+                  color: '#333',
+                  flexShrink: 1,
+                }}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {isPatient ? withDoctorPrefix(otherParticipantName) : otherParticipantName}
           </Text>
-          <Text style={{ fontSize: 14, color: '#666' }}>
+              <Text style={{
+                fontSize: 12,
+                color: '#999',
+                marginTop: 2,
+              }}>
             Session ended
           </Text>
+            </View>
         </View>
       </View>
 
       {/* Messages */}
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
         <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 16 }}
+          ref={scrollViewRef}
+          style={{ flex: 1, backgroundColor: 'transparent' }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 0,
+          }}
           showsVerticalScrollIndicator={false}
         >
                      {/* End-to-End Encryption Message */}
@@ -203,97 +338,144 @@ export default function EndedSessionPage() {
              padding: 16,
              marginBottom: 16,
              flexDirection: 'row',
-             alignItems: 'flex-start',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
            }}>
              <Ionicons 
                name="shield-checkmark" 
                size={18} 
                color="#4CAF50" 
-               style={{ marginRight: 8, marginTop: 2, flexShrink: 0 }}
+              style={{ marginRight: 8, marginTop: 1 }}
              />
              <Text style={{
-               fontSize: 14,
+              fontSize: 12,
                color: '#4CAF50',
                fontWeight: '500',
                flex: 1,
-               flexWrap: 'wrap',
+              lineHeight: 16,
              }}>
-               End-to-end encrypted • Messages are secure
+              Messages are end-to-end encrypted, only people in this chat can read, listen or share them.
              </Text>
            </View>
 
           {/* Messages */}
-          {session.messages && session.messages.length > 0 ? (
-            session.messages.map((message) => (
-              <View key={message.id} style={[
-                styles.messageItem,
-                message.sender_id === session.patient_id ? styles.myMessage : styles.otherMessage
-              ]}>
-                <Text style={styles.messageText}>{message.message}</Text>
-                <Text style={styles.messageTime}>
-                  {new Date(message.created_at).toLocaleTimeString()}
+          {messages.length > 0 ? (
+            messages.map((message, index) => {
+              const uniqueKey = message.id ? `msg_${message.id}` : `fallback_${index}_${message.created_at}`;
+
+              return (
+                <SwipeableMessage
+                  key={uniqueKey}
+                  isSentByCurrentUser={message.sender_id === currentUserId}
+                >
+                  <View
+                    style={{
+                      alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
+                      marginBottom: 12,
+                      maxWidth: '80%',
+                    }}
+                  >
+                    {/* Reply reference */}
+                    {message.replyTo && (
+                      <View style={{
+                        backgroundColor: message.sender_id === currentUserId ? '#3D9B5C' : '#E5E5E5',
+                        paddingHorizontal: 12,
+                        paddingTop: 8,
+                        paddingBottom: 4,
+                        borderTopLeftRadius: 8,
+                        borderTopRightRadius: 8,
+                        borderLeftWidth: 4,
+                        borderLeftColor: message.sender_id === currentUserId ? '#2E7D47' : '#4CAF50',
+                      }}>
+                        <Text style={{
+                          fontSize: 12,
+                          fontWeight: '600',
+                          color: message.sender_id === currentUserId ? '#FFFFFF' : '#4CAF50',
+                          marginBottom: 2,
+                        }}>
+                          {message.replyTo.senderName || 'User'}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.9)' : '#666',
+                          }}
+                          numberOfLines={2}
+                        >
+                          {message.replyTo.message}
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Voice Message */}
+                    {message.message_type === 'voice' && message.media_url ? (
+                      <VoiceMessagePlayer
+                        audioUri={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (otherParticipantProfilePicture || undefined)
+                        }
+                      />
+                    ) : message.message_type === 'image' && message.media_url ? (
+                      /* Image Message */
+                      <ImageMessage
+                        imageUrl={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        deliveryStatus={message.delivery_status}
+                        appointmentId={appointmentId}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (otherParticipantProfilePicture || undefined)
+                        }
+                      />
+                    ) : (
+                      /* Text Message */
+                      <View
+                        style={{
+                          backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderRadius: message.replyTo ? 0 : 20,
+                          borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                          borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                          borderTopLeftRadius: message.replyTo ? 0 : 20,
+                          borderTopRightRadius: message.replyTo ? 0 : 20,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: message.sender_id === currentUserId ? '#fff' : '#333',
+                            fontSize: 16,
+                          }}
+                        >
+                          {message.message}
+                        </Text>
+                        <Text style={{
+                          fontSize: 11,
+                          color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.7)' : '#999',
+                          marginTop: 4,
+                          alignSelf: 'flex-end',
+                        }}>
+                          {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
-                {message.media_url && (
-                  <View style={styles.mediaContainer}>
-                    <Text style={styles.mediaText}>📎 Attachment</Text>
                   </View>
                 )}
               </View>
-            ))
+                </SwipeableMessage>
+              );
+            })
           ) : (
-            <View style={styles.emptyMessages}>
-              <FontAwesome name="comments" size={48} color="#CCC" />
-              <Text style={styles.emptyText}>No messages found</Text>
+            <View style={{ alignItems: 'center', padding: 40 }}>
+              <Ionicons name="chatbubbles-outline" size={48} color="#CCC" />
+              <Text style={{ marginTop: 16, fontSize: 16, color: '#999' }}>No messages found</Text>
             </View>
           )}
-
-          {/* Session Info Card at the bottom */}
-          <View style={styles.sessionInfoCard}>
-            <View style={styles.doctorInfo}>
-              <DoctorProfilePicture
-                profilePictureUrl={session.doctor_profile_picture_url}
-                profilePicture={session.doctor_profile_picture}
-                size={50}
-                name={session.doctor_name || 'Doctor'}
-              />
-              <View style={styles.doctorDetails}>
-                <Text style={styles.doctorName}>{session.doctor_name}</Text>
-                <Text style={styles.sessionReason}>{session.reason || 'General Checkup'}</Text>
-              </View>
-            </View>
-
-            <View style={styles.sessionDetails}>
-              <View style={styles.detailRow}>
-                <FontAwesome name="calendar" size={16} color="#666" />
-                <Text style={styles.detailText}>
-                  {formatDate(session.appointment_date)}
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <FontAwesome name="clock-o" size={16} color="#666" />
-                <Text style={styles.detailText}>
-                  Duration: {formatDuration(session.session_duration)}
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <FontAwesome name="comments" size={16} color="#666" />
-                <Text style={styles.detailText}>
-                  {session.message_count} messages
-                </Text>
-              </View>
-              
-              <View style={styles.detailRow}>
-                <FontAwesome name="calendar-check-o" size={16} color="#666" />
-                <Text style={styles.detailText}>
-                  Ended: {formatDate(session.ended_at)}
-                </Text>
-              </View>
-            </View>
-          </View>
         </ScrollView>
-      </KeyboardAvoidingView>
 
       {/* Disabled Input Area */}
       <View style={{
@@ -301,11 +483,11 @@ export default function EndedSessionPage() {
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 12, // Extra padding for iOS home indicator
         borderTopWidth: 1,
         borderTopColor: '#E5E5E5',
         backgroundColor: '#fff',
       }}>
-        {/* Image Button - Disabled */}
         <TouchableOpacity
           disabled={true}
           style={{
@@ -317,7 +499,6 @@ export default function EndedSessionPage() {
           <Ionicons name="image" size={24} color="#999" />
         </TouchableOpacity>
         
-        {/* Camera Button - Disabled */}
         <TouchableOpacity
           disabled={true}
           style={{
@@ -329,25 +510,24 @@ export default function EndedSessionPage() {
           <Ionicons name="camera" size={24} color="#999" />
         </TouchableOpacity>
         
-                 {/* Text Input - Allows typing but can't send */}
-         <TextInput
-           placeholder="Session ended - messages disabled"
-           style={{
+          <View style={{
              flex: 1,
              borderWidth: 1,
              borderColor: '#E5E5E5',
              borderRadius: 20,
              paddingHorizontal: 16,
              paddingVertical: 12,
+            marginRight: 8,
+            backgroundColor: '#F5F5F5',
+          }}>
+            <Text style={{
+              color: '#999',
              fontSize: 16,
-             marginRight: 8,
-             backgroundColor: '#fff',
-           }}
-           multiline
-           editable={true}
-         />
-        
-        {/* Send Button - Disabled */}
+            }}>
+              Session ended
+            </Text>
+          </View>
+          
         <TouchableOpacity
           disabled={true}
           style={{
@@ -359,99 +539,10 @@ export default function EndedSessionPage() {
             opacity: 0.3,
           }}
         >
-          <Ionicons name="mic" size={20} color="#999" />
+            <Ionicons name="send" size={20} color="#999" />
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  messageItem: {
-    marginBottom: 16,
-    padding: 12,
-    borderRadius: 12,
-    maxWidth: '80%',
-  },
-  myMessage: {
-    backgroundColor: '#4CAF50',
-    alignSelf: 'flex-end',
-  },
-  otherMessage: {
-    backgroundColor: '#E0E0E0',
-    alignSelf: 'flex-start',
-  },
-  messageText: {
-    fontSize: 14,
-    color: '#333',
-    lineHeight: 20,
-  },
-  messageTime: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 4,
-  },
-  mediaContainer: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: 8,
-  },
-  mediaText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  emptyMessages: {
-    alignItems: 'center',
-    padding: 40,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#999',
-  },
-  sessionInfoCard: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 20,
-    marginBottom: 24,
-  },
-  doctorInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  doctorDetails: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  doctorName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 4,
-  },
-  sessionReason: {
-    fontSize: 16,
-    color: '#4CAF50',
-    fontWeight: '600',
-  },
-  sessionDetails: {
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-    paddingTop: 16,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 12,
-  },
-});

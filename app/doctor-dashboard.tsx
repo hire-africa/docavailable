@@ -27,11 +27,13 @@ import AppTour from '../components/AppTour';
 import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
 import OnboardingOverlay from '../components/OnboardingOverlay';
+import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 import appTourService from '../services/appTourService';
 import customAlertService from '../services/customAlertService';
 import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
 import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { getMissingFields } from '../utils/profileUtils';
+import { withDoctorPrefix, stripDoctorPrefix } from '../utils/name';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
@@ -111,6 +113,9 @@ export default function DoctorDashboard() {
   const [bookingRequests, setBookingRequests] = useState<any[]>([]);
   const [confirmedAppointments, setConfirmedAppointments] = useState<any[]>([]);
   const [activeTextSessions, setActiveTextSessions] = useState<any[]>([]);
+  const [endedSessions, setEndedSessions] = useState<EndedSessionMetadata[]>([]);
+  const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
+  const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
   const [ratings, setRatings] = useState<any[]>([]);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
@@ -274,8 +279,46 @@ export default function DoctorDashboard() {
     if (user && activeTab === 'messages') {
       fetchConfirmedAppointments();
       fetchActiveTextSessions();
+      loadEndedSessions();
     }
   }, [user, activeTab]);
+
+  // Load ended sessions for the messages tab
+  const loadEndedSessions = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoadingEndedSessions(true);
+      const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+      setEndedSessions(sessions || []);
+    } catch (error) {
+      console.error('Error loading ended sessions:', error);
+      setEndedSessions([]);
+    } finally {
+      setLoadingEndedSessions(false);
+    }
+  };
+
+  const handleDeleteEndedSession = async (appointmentId: number) => {
+    try {
+      await endedSessionStorageService.deleteEndedSession(appointmentId);
+      setEndedSessions(prev => prev.filter(session => session.appointmentId !== appointmentId));
+      setShowEndedSessionMenu(null);
+    } catch (error) {
+      console.error('Error deleting ended session:', error);
+    }
+  };
+
+  const handleExportEndedSession = async (appointmentId: number) => {
+    try {
+      const exportData = await endedSessionStorageService.exportEndedSession(appointmentId);
+      // Handle export (could show share dialog, etc.)
+      console.log('Exported session data:', exportData);
+      setShowEndedSessionMenu(null);
+    } catch (error) {
+      console.error('Error exporting ended session:', error);
+    }
+  };
 
   // Fetch ratings immediately when user logs in
   useEffect(() => {
@@ -1839,8 +1882,18 @@ export default function DoctorDashboard() {
             isActive: false
           }));
 
+          // Get ended sessions
+          const filteredEndedSessions = endedSessions
+            .filter(session => session && session.patient_id)
+            .map(session => ({
+              ...session,
+              type: 'ended',
+              sortDate: session.ended_at ? new Date(session.ended_at).getTime() : 0,
+              isActive: false
+            }));
+
           // Combine all items and sort by date (most recent first)
-          const allItems = [...activeTextSessionItems, ...confirmedAppointmentItems]
+          const allItems = [...activeTextSessionItems, ...confirmedAppointmentItems, ...filteredEndedSessions]
             .sort((a, b) => b.sortDate - a.sortDate);
 
           if (loadingConfirmed || loadingTextSessions) {
@@ -1852,7 +1905,19 @@ export default function DoctorDashboard() {
             );
           }
 
-          if (allItems.length === 0) {
+          const formatDuration = (minutes: number): string => {
+            if (!minutes || minutes === 0) return '0m';
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            if (hours > 0) {
+              return `${hours}h ${mins}m`;
+            }
+            return `${mins}m`;
+          };
+
+          const hasEndedSessions = filteredEndedSessions.length > 0;
+
+          if (allItems.length === 0 && !loadingEndedSessions) {
             return (
               <View style={styles.emptyState}>
                 <View style={styles.emptyStateIcon}>
@@ -1873,7 +1938,114 @@ export default function DoctorDashboard() {
           return allItems.map((item, index) => {
             const isLastItem = index === allItems.length - 1;
 
-            if (item.type === 'active_text') {
+            if (item.type === 'ended') {
+              // Render ended session as card
+              return (
+                <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 12,
+                      marginHorizontal: 20,
+                      marginBottom: 12,
+                      padding: 16,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 3
+                    }}
+                    onPress={() => {
+                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: '#E0E0E0',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16
+                      }}>
+                        <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                          {item.patient_name?.charAt(0) || 'P'}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                          {item.patient_name || 'Patient'}
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                          {item.reason || 'General Checkup'}
+                        </Text>
+                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                          Session ended • {formatDuration(item.session_duration || 0)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
+                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
+                        </Text>
+                        <TouchableOpacity
+                          style={{
+                            padding: 4,
+                          }}
+                          onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
+                        >
+                          <Icon name="more" size={16} color="#999" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Menu dropdown */}
+                  {showEndedSessionMenu === item.appointmentId && (
+                    <View style={{
+                      position: 'absolute',
+                      right: 20,
+                      top: 60,
+                      backgroundColor: '#fff',
+                      borderRadius: 8,
+                      paddingVertical: 4,
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.25,
+                      shadowRadius: 4,
+                      elevation: 5,
+                      zIndex: 2,
+                      minWidth: 120,
+                    }}>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                        }}
+                        onPress={() => handleExportEndedSession(item.appointmentId)}
+                      >
+                        <Icon name="export" size={20} color="#666" />
+                        <Text style={{ fontSize: 14, color: '#222' }}>Export</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                        }}
+                        onPress={() => handleDeleteEndedSession(item.appointmentId)}
+                      >
+                        <Icon name="delete" size={20} color="#666" />
+                        <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            } else if (item.type === 'active_text') {
               // Render active text session as card
               return (
                 <TouchableOpacity

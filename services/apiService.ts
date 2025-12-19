@@ -41,19 +41,53 @@ class ApiService {
       // Merge custom headers with auth headers
       const finalHeaders = { ...headers, ...options.headers };
       
-      const response = await fetch(`${baseURL}${endpoint}`, {
-        method: 'POST',
-        headers: finalHeaders,
-        body: JSON.stringify(data),
-      });
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        const response = await fetch(`${baseURL}${endpoint}`, {
+          method: 'POST',
+          headers: finalHeaders,
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
+        clearTimeout(timeoutId);
+
+        // Check content type before parsing
+        const contentType = response.headers.get('content-type') || '';
+        const responseText = await response.text();
+
+        // If response is HTML, throw a specific error
+        if (contentType.includes('text/html') || responseText.includes('<!DOCTYPE') || responseText.includes('<html')) {
+          console.error('❌ [ApiService] Backend returned HTML instead of JSON:', {
+            endpoint,
+            status: response.status,
+            preview: responseText.substring(0, 200)
+          });
+          throw new Error('Backend returned HTML error page instead of JSON');
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}, body: ${responseText.substring(0, 200)}`);
+        }
+
+        // Parse as JSON only if not HTML
+        try {
+          const responseData = JSON.parse(responseText);
+          return responseData;
+        } catch (parseError) {
+          console.error('❌ [ApiService] Failed to parse response as JSON:', parseError);
+          throw new Error('Invalid JSON response from server');
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timeout - backend took too long to respond');
+        }
+        throw fetchError;
       }
-
-      const responseData = await response.json();
-      return responseData;
     } catch (error) {
       console.error('ApiService POST error:', error);
       throw error;

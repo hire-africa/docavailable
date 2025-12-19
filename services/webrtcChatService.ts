@@ -579,10 +579,16 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         sender_name: this.config.userName,
         message: '🎤 Voice message',
         message_type: 'voice',
-        media_url: mediaUrl,
+        media_url: mediaUrl, // This is the FULL URL from backend upload
         created_at: new Date().toISOString(),
         delivery_status: 'sending'
       };
+      
+      console.log('✅ [WebRTCChat] Voice message prepared for storage:', {
+        id: messageId,
+        media_url: mediaUrl,
+        is_full_url: mediaUrl?.startsWith('http')
+      });
       
       await this.addMessage(chatMessage);
       this.events.onMessage(chatMessage);

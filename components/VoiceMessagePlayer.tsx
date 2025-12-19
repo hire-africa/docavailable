@@ -89,28 +89,41 @@ export default function VoiceMessagePlayer({
       console.log('🎵 Loading audio URL:', audioUrl);
       console.log('🎵 Original audioUri:', audioUri);
       
-      // First, check if the file exists by making a HEAD request for HTTP URLs
+      // Try to check if the file exists, but don't fail if HEAD request fails
+      // Some servers don't support HEAD requests properly, so we'll try loading anyway
       if (audioUrl.startsWith('http')) {
         try {
-          const headResponse = await fetch(audioUrl, { method: 'HEAD' });
+          // Create a timeout promise
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('HEAD request timeout')), 3000);
+          });
+          
+          const headResponse = await Promise.race([
+            fetch(audioUrl, { method: 'HEAD' }),
+            timeoutPromise
+          ]) as Response;
           if (!headResponse.ok) {
             if (headResponse.status === 404) {
-              console.warn('🎵 Audio file not found (404):', audioUrl);
-              setLoadError('Voice message file not found - server configuration issue');
-              setIsLoading(false);
-              return;
+              // File not found - expected for old sessions, don't log as warning
+              // Don't return early - some servers don't support HEAD but GET works
+              // We'll let the actual audio load attempt determine if file exists
             } else if (headResponse.status === 403) {
               console.warn('🎵 Audio file access denied (403):', audioUrl);
               setLoadError('Voice message is not accessible');
               setIsLoading(false);
               return;
             } else {
-              console.warn('🎵 Audio file check failed:', headResponse.status, headResponse.statusText);
+              console.warn('🎵 Audio file HEAD check failed:', headResponse.status, headResponse.statusText);
+              // Continue with loading attempt anyway
             }
+          } else {
+            console.log('🎵 Audio file HEAD check passed:', audioUrl);
           }
-        } catch (headError) {
-          console.warn('🎵 Could not check audio file availability:', headError);
-          // Continue with loading attempt anyway
+        } catch (headError: any) {
+          // HEAD request failed (timeout, network error, etc.) - continue anyway
+          // Some servers don't support HEAD requests but GET works fine
+          console.warn('🎵 Could not check audio file availability (will try loading anyway):', headError?.message || headError);
+          // Continue with loading attempt - don't fail based on HEAD check
         }
       }
       
@@ -121,10 +134,25 @@ export default function VoiceMessagePlayer({
       
       setSound(newSound);
       
-      // Get duration
+      // Get duration and verify load status
       const status = await newSound.getStatusAsync();
+      console.log('🎵 Audio loaded - Status:', {
+        isLoaded: status.isLoaded,
+        duration: status.durationMillis,
+        error: (status as any).error,
+        uri: audioUrl
+      });
+      
       if (status.isLoaded) {
         setDuration(status.durationMillis || 0);
+        console.log('🎵 Audio duration set:', status.durationMillis, 'ms');
+      } else {
+        console.warn('🎵 Audio loaded but status.isLoaded is false');
+        const errorStatus = status as any;
+        if (errorStatus.error) {
+          console.error('🎵 Audio load error:', errorStatus.error);
+          setLoadError(`Failed to load audio: ${errorStatus.error}`);
+        }
       }
       
       // Set up status update
@@ -132,21 +160,51 @@ export default function VoiceMessagePlayer({
         if (status.isLoaded) {
           setIsPlaying(status.isPlaying);
           setPosition(status.positionMillis || 0);
+          
+          // Log playback completion
+          if (status.didJustFinish) {
+            console.log('🎵 Audio playback completed');
+            setIsPlaying(false);
+          }
+        } else {
+          // Log any errors during playback
+          const errorStatus = status as any;
+          if (errorStatus.error) {
+            console.error('🎵 Playback error:', errorStatus.error);
+            setLoadError(`Playback error: ${errorStatus.error}`);
+          }
         }
       });
       
-    } catch (error) {
-      console.error('Error loading audio:', error);
-      
+    } catch (error: any) {
       // Provide more specific error messages
-      if (error.message?.includes('404') || error.message?.includes('not found')) {
-        setLoadError('Voice message file not found');
-      } else if (error.message?.includes('network') || error.message?.includes('timeout')) {
-        setLoadError('Network error loading voice message');
-      } else if (error.message?.includes('format') || error.message?.includes('invalid')) {
-        setLoadError('Invalid audio format');
+      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      
+      // Check if it's a 404 error (file not found)
+      const is404Error = errorMessage.includes('404') || 
+                        errorMessage.includes('not found') || 
+                        errorMessage.includes('InvalidResponseCodeException') ||
+                        error?.code === 404;
+      
+      if (is404Error) {
+        // File not found - this is expected for old sessions where files may have been deleted
+        // Don't log as error, just set the error state for UI
+        setLoadError('Voice message unavailable - file not found');
+        // Only log as warning, not error, since this is expected behavior
+        console.log('ℹ️ [VoiceMessage] File not found (404) - this is normal for old sessions:', audioUrl);
       } else {
-        setLoadError(`Failed to load audio: ${error.message || 'Unknown error'}`);
+        // Other errors - log them
+        console.error('🎵 Error loading audio:', error);
+        console.error('🎵 Audio URL that failed:', audioUrl);
+        console.error('🎵 Original audioUri:', audioUri);
+        
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('Network')) {
+          setLoadError('Network error loading voice message');
+        } else if (errorMessage.includes('format') || errorMessage.includes('invalid')) {
+          setLoadError('Invalid audio format');
+        } else {
+          setLoadError(`Failed to load audio: ${errorMessage}`);
+        }
       }
       
       // For iOS, try alternative URL format if first attempt fails
@@ -186,20 +244,49 @@ export default function VoiceMessagePlayer({
   };
 
   const playPause = async () => {
-    if (!sound) return;
+    if (!sound) {
+      console.warn('🎵 Cannot play: sound object is null');
+      return;
+    }
     
     try {
+      // Check sound status before playing
+      const status = await sound.getStatusAsync();
+      console.log('🎵 Play/Pause - Sound status:', {
+        isLoaded: status.isLoaded,
+        isPlaying: status.isPlaying,
+        duration: status.durationMillis,
+        position: status.positionMillis,
+        error: (status as any).error
+      });
+      
+      if (!status.isLoaded) {
+        console.error('🎵 Cannot play: sound is not loaded');
+        setLoadError('Audio file not loaded properly');
+        return;
+      }
+      
       if (isPlaying) {
+        console.log('🎵 Pausing audio...');
         await sound.pauseAsync();
       } else {
+        console.log('🎵 Playing audio...');
         // If audio has finished, restart from beginning
         if (position >= duration && duration > 0) {
+          console.log('🎵 Restarting audio from beginning');
           await sound.setPositionAsync(0);
         }
         await sound.playAsync();
+        console.log('🎵 Play command sent');
       }
-    } catch (error) {
-      console.error('Error playing/pausing audio:', error);
+    } catch (error: any) {
+      console.error('🎵 Error playing/pausing audio:', error);
+      console.error('🎵 Error details:', {
+        message: error?.message,
+        code: error?.code,
+        stack: error?.stack
+      });
+      setLoadError(`Playback error: ${error?.message || 'Unknown error'}`);
     }
   };
 
@@ -241,7 +328,8 @@ export default function VoiceMessagePlayer({
     );
   }
 
-  if (loadError) {
+  // Show error if load failed OR if sound is null after loading completes
+  if (loadError || (!sound && !isLoading)) {
     return (
       <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
         <View style={styles.profilePictureContainer}>

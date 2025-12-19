@@ -547,10 +547,21 @@ class FileUploadController extends Controller
         ]);
         
         try {
-            // Generate unique filename for voice message
+            // Generate unique filename for voice message with timestamp
             $filename = 'voice_' . time() . '_' . Str::random(10) . '.' . $extension;
-            $folder = 'chat_voice_messages/' . $appointmentId;
+            
+            // CRITICAL FIX: For text sessions, include timestamp in folder name to prevent file conflicts
+            // Text sessions can reuse the same appointment ID, so we need unique folders per session instance
+            // Format: chat_voice_messages/{appointmentId}_{timestamp}/
+            $folderTimestamp = time();
+            $folder = 'chat_voice_messages/' . $appointmentId . '_' . $folderTimestamp;
             $path = $file->storeAs($folder, $filename, 'public');
+            
+            \Log::info('Voice message folder created:', [
+                'folder' => $folder,
+                'appointment_id' => $appointmentId,
+                'timestamp' => $folderTimestamp
+            ]);
             
             // Get the public URL - use a custom route for better audio streaming
             $url = url("/api/audio/{$path}");
@@ -600,7 +611,10 @@ class FileUploadController extends Controller
             ]);
             
             // Validate the path to prevent directory traversal
-            if (str_contains($path, '..') || !str_starts_with($path, 'chat_voice_messages/')) {
+            // Accept both old format (chat_voice_messages/{id}/) and new format (chat_voice_messages/{id}_{timestamp}/)
+            $isValidPath = str_starts_with($path, 'chat_voice_messages/') && !str_contains($path, '..');
+            
+            if (!$isValidPath) {
                 \Log::warning('Audio file path validation failed:', [
                     'path' => $path,
                     'contains_dots' => str_contains($path, '..'),

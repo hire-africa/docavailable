@@ -50,7 +50,7 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
     <Animated.View
       style={{
         transform: [{ translateY: slideAnim }],
-        backgroundColor: '#128C7E',
+        backgroundColor: '#294936',
         paddingHorizontal: 16,
         paddingVertical: 14,
         flexDirection: 'row',
