@@ -164,10 +164,15 @@ class BackgroundBillingManager {
 
   /**
    * Process billing cycle
+   * CRITICAL: Only processes billing if call is actually connected (has connected_at timestamp)
    */
   private async processBillingCycle(appointmentId: string, config: BillingConfig): Promise<void> {
     const session = this.sessions.get(appointmentId);
     if (!session || !session.isActive) return;
+
+    // CRITICAL: Verify call is connected in backend before billing
+    // The backend will check connected_at timestamp and only bill if it exists
+    // This ensures we never bill for calls that never connected
 
     session.cyclesCompleted++;
     session.lastBillingTime = Date.now();
@@ -183,6 +188,7 @@ class BackgroundBillingManager {
     }
 
     // Process billing using existing endpoint (handles both deduction and doctor payment)
+    // Backend will verify connected_at exists before processing
     await this.processBillingDeduction(appointmentId);
 
     // Schedule next cycle

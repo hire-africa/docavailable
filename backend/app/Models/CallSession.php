@@ -31,6 +31,7 @@ class CallSession extends Model
         'declined_at',
         'declined_by',
         'decline_reason',
+        'connected_at',
     ];
 
     protected $casts = [
@@ -39,6 +40,7 @@ class CallSession extends Model
         'last_activity_at' => 'datetime',
         'answered_at' => 'datetime',
         'declined_at' => 'datetime',
+        'connected_at' => 'datetime',
         'is_connected' => 'boolean',
         'call_duration' => 'integer',
     ];
@@ -127,12 +129,14 @@ class CallSession extends Model
 
     /**
      * Mark session as connected.
+     * CRITICAL: Only call this when WebRTC peer connection state becomes 'connected'
      */
     public function markAsConnected(): void
     {
         $this->update([
             'status' => self::STATUS_ACTIVE,
             'is_connected' => true,
+            'connected_at' => now(),
         ]);
     }
 }

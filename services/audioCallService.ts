@@ -1703,7 +1703,11 @@ class AudioCallService {
 
   /**
    * Idempotently mark the call as connected and start timer once
-n   */
+   * CRITICAL: This is called when WebRTC peer connection state becomes 'connected'
+   * It updates the backend DB to set status='active', is_connected=true, and connected_at timestamp
+   * 
+   * IMPORTANT: Backend call is fire-and-forget to avoid blocking connection flow
+   */
   private markConnectedOnce(): void {
     try {
       if (!this.didConnect) {
@@ -1712,8 +1716,20 @@ n   */
         if (!this.state.isConnected || this.state.connectionState !== 'connected') {
           this.updateState({ isConnected: true, connectionState: 'connected' });
         }
+        
+        // Start timer immediately (don't wait for backend)
         if (!this.callTimer) {
           this.startCallTimer();
+        }
+        
+        // CRITICAL: Update backend DB when WebRTC becomes connected (fire-and-forget)
+        // This is the ONLY place where connected_at timestamp is set
+        // Do NOT await - connection flow must proceed immediately
+        if (this.appointmentId) {
+          this.markConnectedInBackend().catch((error) => {
+            console.error('❌ [AudioCallService] Background mark-connected API call failed:', error);
+            // Don't throw - connection should proceed even if backend update fails
+          });
         }
         
         // Audio routing is already configured for earpiece by default
@@ -1721,6 +1737,49 @@ n   */
       }
     } catch (e) {
       console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);
+    }
+  }
+
+  /**
+   * Mark call as connected in backend (fire-and-forget)
+   * Separate method to avoid blocking the connection flow
+   */
+  private async markConnectedInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      return;
+    }
+
+    try {
+      const authToken = await this.getAuthToken();
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
+      
+      console.log('🔗 [AudioCallService] Marking call as connected in backend:', {
+        appointmentId: this.appointmentId,
+        callType: 'voice'
+      });
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          call_type: 'voice'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [AudioCallService] Call marked as connected in backend:', data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ [AudioCallService] Failed to mark call as connected:', response.status, errorText);
+      }
+    } catch (apiError) {
+      console.error('❌ [AudioCallService] Error calling mark-connected API:', apiError);
+      throw apiError; // Re-throw so caller can handle it
     }
   }
 

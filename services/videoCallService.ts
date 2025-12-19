@@ -591,6 +591,11 @@ class VideoCallService {
           console.log('🔗 Video WebRTC connected - updating call state');
           this.clearReofferLoop();
           this.updateState({ isConnected: true, connectionState: 'connected' });
+          
+          // CRITICAL: Update backend DB when WebRTC becomes connected
+          // This is the ONLY place where connected_at timestamp is set
+          this.markConnectedInBackend();
+          
           this.startCallTimer();
           // Broadcast current media state to peer on connect
           this.sendSignalingMessage({
@@ -1391,6 +1396,50 @@ class VideoCallService {
   /**
    * Update call session in backend when call ends
    */
+  /**
+   * Mark call as connected in backend (called when WebRTC peer connection state becomes 'connected')
+   * CRITICAL: This is the ONLY place where connected_at timestamp is set in the backend
+   */
+  private async markConnectedInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [VideoCallService] Cannot mark connected: no appointmentId');
+      return;
+    }
+
+    try {
+      const authToken = await this.getAuthToken();
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
+      
+      console.log('🔗 [VideoCallService] Marking call as connected in backend:', {
+        appointmentId: this.appointmentId,
+        callType: 'video'
+      });
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          call_type: 'video'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [VideoCallService] Call marked as connected in backend:', data);
+      } else {
+        const errorText = await response.text();
+        console.error('❌ [VideoCallService] Failed to mark call as connected:', response.status, errorText);
+      }
+    } catch (error) {
+      console.error('❌ [VideoCallService] Error calling mark-connected API:', error);
+      // Don't throw - continue with local state update
+    }
+  }
+
   private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
     try {
       console.log('📞 Updating call session in backend...');

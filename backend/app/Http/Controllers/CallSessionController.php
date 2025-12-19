@@ -377,23 +377,60 @@ class CallSessionController extends Controller
                     ], 404);
                 }
 
-                // Calculate sessions to deduct based on duration and connection
+                // CRITICAL: Calculate billing ONLY from connected_at timestamp (not started_at)
+                // Billing should only happen for actual connected time
+                if (!$callSession->connected_at) {
+                    // Call never connected - no billing
+                    Log::info("Call ended without connection - no billing", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId
+                    ]);
+                    
+                    $callSession->update([
+                        'status' => CallSession::STATUS_ENDED,
+                        'ended_at' => now(),
+                        'last_activity_at' => now(),
+                        'is_connected' => false,
+                        'call_duration' => 0,
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Call session ended (never connected - no billing)',
+                        'session_duration' => 0,
+                        'was_connected' => false,
+                        'sessions_deducted' => 0,
+                        'deduction_result' => [
+                            'doctor_payment_success' => false,
+                            'patient_deduction_success' => false,
+                            'doctor_payment_amount' => 0,
+                            'patient_sessions_deducted' => 0,
+                            'auto_deductions' => 0,
+                            'manual_deduction' => 0,
+                            'errors' => []
+                        ]
+                    ]);
+                }
+
+                // Calculate duration from connected_at (not started_at)
+                // This is the actual billable time
+                $connectedDuration = $callSession->connected_at->diffInSeconds(now());
                 
-                // SECURITY FIX: Validate session_duration against server-side elapsed time
+                // SECURITY FIX: Validate session_duration against server-side connected time
                 // Allow a small buffer (e.g., 60 seconds) for network latency/clock drift
-                $serverElapsedSeconds = $callSession->started_at->diffInSeconds(now());
-                $maxAllowedDuration = $serverElapsedSeconds + 60;
+                $maxAllowedDuration = $connectedDuration + 60;
                 
                 if ($sessionDuration > $maxAllowedDuration) {
                     Log::warning("Suspicious session duration detected", [
                         'session_id' => $callSession->id,
                         'reported_duration' => $sessionDuration,
-                        'server_elapsed' => $serverElapsedSeconds,
+                        'server_connected_duration' => $connectedDuration,
                         'capped_at' => $maxAllowedDuration
                     ]);
                     $sessionDuration = $maxAllowedDuration;
                 }
 
+                // Use the validated duration for billing calculations
                 // Convert session duration from seconds to minutes
                 $elapsedMinutes = floor($sessionDuration / 60);
                 $autoDeductions = floor($elapsedMinutes / 10); // Every 10 minutes
@@ -402,7 +439,9 @@ class CallSessionController extends Controller
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $remainingAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
                 
-                $manualDeduction = $wasConnected ? 1 : 0; // Only deduct on hangup if connected
+                // CRITICAL: Always add +1 session on manual hang up (if call was connected)
+                // This is in addition to auto-deductions
+                $manualDeduction = $wasConnected ? 1 : 0;
                 $totalSessionsToDeduct = $remainingAutoDeductions + $manualDeduction;
 
                 // Log billing calculation for debugging
@@ -565,7 +604,33 @@ class CallSessionController extends Controller
                     ], 404);
                 }
 
+                // CRITICAL: Only process billing if call is actually connected
+                if (!$callSession->connected_at) {
+                    Log::warning("Deduction attempted for unconnected call", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Call is not connected - cannot process billing'
+                    ], 400);
+                }
+
                 // Calculate auto-deductions for every 10 minutes
+                // Use connected_at as the billing start time
+                $connectedDuration = $callSession->connected_at->diffInSeconds(now());
+                $maxAllowedDuration = $connectedDuration + 60;
+                
+                if ($sessionDuration > $maxAllowedDuration) {
+                    Log::warning("Suspicious session duration in deduction", [
+                        'session_id' => $callSession->id,
+                        'reported_duration' => $sessionDuration,
+                        'server_connected_duration' => $connectedDuration,
+                        'capped_at' => $maxAllowedDuration
+                    ]);
+                    $sessionDuration = $maxAllowedDuration;
+                }
+
                 // Convert session duration from seconds to minutes
                 $elapsedMinutes = floor($sessionDuration / 60);
                 $autoDeductions = floor($elapsedMinutes / 10);
@@ -742,6 +807,104 @@ class CallSessionController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to answer call'
+            ], 500);
+        }
+    }
+
+    /**
+     * Mark call as connected (called when WebRTC peer connection state becomes 'connected')
+     * CRITICAL: This is the ONLY place where status should transition to 'active' and connected_at is set
+     */
+    public function markConnected(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $callType = $request->input('call_type');
+
+            if (!$appointmentId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment ID is required'
+                ], 400);
+            }
+
+            return DB::transaction(function () use ($user, $appointmentId, $callType) {
+                // Find the call session - must be in connecting or answered state
+                $callSession = CallSession::where('appointment_id', $appointmentId)
+                    ->where(function ($query) use ($user) {
+                        $query->where('patient_id', $user->id)
+                              ->orWhere('doctor_id', $user->id);
+                    })
+                    ->whereIn('status', [CallSession::STATUS_CONNECTING, CallSession::STATUS_ANSWERED])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$callSession) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Call session not found or already connected'
+                    ], 404);
+                }
+
+                // CRITICAL: Only update if not already connected (idempotent)
+                if ($callSession->is_connected && $callSession->connected_at) {
+                    Log::info("Call already marked as connected", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId,
+                        'connected_at' => $callSession->connected_at
+                    ]);
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Call already connected',
+                        'data' => [
+                            'call_session_id' => $callSession->id,
+                            'connected_at' => $callSession->connected_at->toISOString()
+                        ]
+                    ]);
+                }
+
+                // Update call session to connected state
+                $callSession->markAsConnected();
+
+                Log::info("Call marked as connected via WebRTC", [
+                    'user_id' => $user->id,
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'call_type' => $callType,
+                    'connected_at' => $callSession->connected_at
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Call marked as connected',
+                    'data' => [
+                        'call_session_id' => $callSession->id,
+                        'status' => $callSession->status,
+                        'is_connected' => $callSession->is_connected,
+                        'connected_at' => $callSession->connected_at->toISOString()
+                    ]
+                ]);
+            });
+
+        } catch (\Exception $e) {
+            Log::error("Error marking call as connected", [
+                'user_id' => Auth::id(),
+                'appointment_id' => $request->input('appointment_id'),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to mark call as connected'
             ], 500);
         }
     }
