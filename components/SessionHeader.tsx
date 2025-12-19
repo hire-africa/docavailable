@@ -6,12 +6,14 @@ interface SessionHeaderProps {
   isActive: boolean;
   elapsedSeconds: number;
   onEndSession: () => void;
+  isDoctor?: boolean; // Hide end session button for doctors
 }
 
 export const SessionHeader: React.FC<SessionHeaderProps> = ({
   isActive,
   elapsedSeconds,
   onEndSession,
+  isDoctor = false,
 }) => {
   const slideAnim = useRef(new Animated.Value(-80)).current;
 
@@ -88,21 +90,23 @@ export const SessionHeader: React.FC<SessionHeaderProps> = ({
         </Text>
       </View>
 
-      {/* End Session Button */}
-      <TouchableOpacity
-        onPress={onEndSession}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        style={{
-          backgroundColor: '#F75555',
-          borderRadius: 18,
-          width: 36,
-          height: 36,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        <Ionicons name="close" size={22} color="#fff" />
-      </TouchableOpacity>
+      {/* End Session Button - Only show for patients */}
+      {!isDoctor && (
+        <TouchableOpacity
+          onPress={onEndSession}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            backgroundColor: '#F75555',
+            borderRadius: 18,
+            width: 36,
+            height: 36,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <Ionicons name="close" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 };

@@ -3731,6 +3731,7 @@ export default function ChatPage() {
             isActive={isSessionActive}
             elapsedSeconds={sessionElapsedSeconds}
             onEndSession={handleEndSessionFromHeader}
+            isDoctor={user?.user_type === 'doctor'}
           />
         </View>
       )}
