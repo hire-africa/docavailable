@@ -972,26 +972,28 @@ class CallSessionController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Call answered successfully',
+                'call_session_id' => $callSession->id,
                 'data' => [
                     'call_session_id' => $callSession->id,
-                    'status' => 'answered',
-                    'answered_at' => $callSession->answered_at,
-                    'will_promote_to_connected_in_seconds' => 5
+                    'answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : null
                 ]
             ]);
 
         } catch (\Exception $e) {
-            Log::error("Error answering call", [
+            Log::error("Call answer endpoint exception", [
+                'appointment_id' => $appointmentId ?? null,
+                'call_session_id' => $callSessionId ?? null,
                 'user_id' => Auth::id(),
-                'appointment_id' => $request->input('appointment_id'),
-                'caller_id' => $request->input('caller_id'),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'exception_message' => $e->getMessage(),
+                'exception_trace' => $e->getTraceAsString(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to answer call'
+                'message' => 'Failed to answer call: ' . $e->getMessage(),
+                'call_session_id' => $callSessionId ?? null
             ], 500);
         }
     }
