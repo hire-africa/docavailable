@@ -157,8 +157,17 @@ class PromoteMissedCallConnections extends Command
                 if ($session->ended_at) {
                     $session->update(['status' => CallSession::STATUS_ENDED]);
                 }
-            } else if ($session->status === CallSession::STATUS_ANSWERED) {
-                // Normal promotion
+            } else if ($session->answered_at) {
+                // Normal promotion - if answered_at exists, promote to connected
+                // Also fix status if it's stuck in 'connecting'
+                if ($session->status === CallSession::STATUS_CONNECTING) {
+                    Log::warning("PromoteMissedCallConnections: Status stuck in 'connecting' but answered_at exists - fixing", [
+                        'call_session_id' => $session->id,
+                        'answered_at' => $session->answered_at->toISOString()
+                    ]);
+                    // First set status to answered, then promote
+                    $session->update(['status' => CallSession::STATUS_ANSWERED]);
+                }
                 $session->markAsConnected();
             }
         });

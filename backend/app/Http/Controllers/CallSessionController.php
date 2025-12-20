@@ -799,22 +799,23 @@ class CallSessionController extends Controller
             }
 
             $appointmentId = $request->input('appointment_id');
-            $callerId = $request->input('caller_id');
+            $callerId = $request->input('caller_id'); // Patient ID (the caller)
             $sessionId = $request->input('session_id');
 
-            if (!$appointmentId || !$callerId) {
+            if (!$appointmentId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Missing required parameters'
+                    'message' => 'Missing required parameters: appointment_id'
                 ], 400);
             }
 
             // CRITICAL: Find the latest call session by appointment_id that is NOT ended
+            // The current user ($user) is the doctor answering the call
             // Do NOT restrict by status - connecting is a transport state, not a lifecycle state
             // Lifecycle states: ringing (unanswered) → answered → ended
-            // Transport states: connecting, connecting, etc. (should never block transitions)
+            // Transport states: connecting, etc. (should never block transitions)
             $callSession = CallSession::where('appointment_id', $appointmentId)
-                ->where('doctor_id', $callerId)
+                ->where('doctor_id', $user->id) // Current user is the doctor answering
                 ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
                 ->orderBy('created_at', 'desc') // Get latest if multiple exist
                 ->first();
@@ -1070,21 +1071,22 @@ class CallSessionController extends Controller
             }
 
             $appointmentId = $request->input('appointment_id');
-            $callerId = $request->input('caller_id');
+            $callerId = $request->input('caller_id'); // Patient ID (the caller)
             $sessionId = $request->input('session_id');
             $reason = $request->input('reason', 'declined_by_user');
 
-            if (!$appointmentId || !$callerId) {
+            if (!$appointmentId) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Missing required parameters'
+                    'message' => 'Missing required parameters: appointment_id'
                 ], 400);
             }
 
             // CRITICAL: Find the latest call session by appointment_id that is NOT ended
+            // The current user ($user) is the doctor declining the call
             // Do NOT restrict by status - connecting is a transport state, not a lifecycle state
             $callSession = CallSession::where('appointment_id', $appointmentId)
-                ->where('doctor_id', $callerId)
+                ->where('doctor_id', $user->id) // Current user is the doctor declining
                 ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
                 ->orderBy('created_at', 'desc') // Get latest if multiple exist
                 ->first();
