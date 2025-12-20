@@ -957,7 +957,12 @@ class CallSessionController extends Controller
             // Refresh to get updated values
             $callSession->refresh();
             
-            Log::info("Call answered - status transitioned", [
+            // Write to file
+            $logFile = storage_path('logs/answer_debug.log');
+            file_put_contents($logFile, date('Y-m-d H:i:s') . " - answered_at updated successfully\n", FILE_APPEND);
+            file_put_contents($logFile, "  answered_at: " . ($callSession->answered_at ? $callSession->answered_at->toISOString() : 'NULL') . "\n", FILE_APPEND);
+            
+            Log::info("Call answer: answered_at updated successfully", [
                 'call_session_id' => $callSession->id,
                 'appointment_id' => $appointmentId,
                 'previous_status' => $previousStatus,
