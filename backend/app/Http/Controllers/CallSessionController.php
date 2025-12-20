@@ -887,18 +887,33 @@ class CallSessionController extends Controller
             // This is a lifecycle transition - transport state (connecting) must not block it
             // If status is 'connecting', we still answer it - connecting is not a valid lifecycle state
             $previousStatus = $callSession->status;
+            
+            Log::info("Call answer: About to update call session", [
+                'call_session_id' => $callSession->id,
+                'appointment_id' => $appointmentId,
+                'previous_status' => $previousStatus,
+                'doctor_id' => $callSession->doctor_id,
+                'patient_id' => $callSession->patient_id,
+                'user_id' => $user->id,
+                'current_answered_at' => $callSession->answered_at
+            ]);
+            
             $callSession->update([
                 'status' => CallSession::STATUS_ANSWERED, // Always set to answered
                 'answered_at' => now(),
                 'answered_by' => $user->id
             ]);
             
+            // Refresh to get updated values
+            $callSession->refresh();
+            
             Log::info("Call answered - status transitioned", [
                 'call_session_id' => $callSession->id,
                 'appointment_id' => $appointmentId,
                 'previous_status' => $previousStatus,
-                'new_status' => CallSession::STATUS_ANSWERED,
-                'answered_at' => $callSession->answered_at->toISOString()
+                'new_status' => $callSession->status,
+                'answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : 'NULL',
+                'answered_by' => $callSession->answered_by
             ]);
 
             // CRITICAL: Server-owned lifecycle - automatically promote to connected after grace period
