@@ -1013,8 +1013,9 @@ class CallSessionController extends Controller
             // CRITICAL: Dispatch PromoteCallToConnected safely, so it never blocks the DB update
             // Status transitions (answered → connected) should be handled by the server-owned job, not the answer endpoint
             // This happens independently of WebRTC events and must never rollback answered_at
+            // ABSOLUTELY CRITICAL: Use fully qualified name to avoid autoload issues
             try {
-                PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
+                \App\Jobs\PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
                     ->delay(now()->addSeconds(5));
                     
                 Log::info("PromoteCallToConnected job dispatched successfully", [
@@ -1024,10 +1025,11 @@ class CallSessionController extends Controller
             } catch (\Throwable $e) {
                 // Job dispatch failed - log but don't block answering or rollback answered_at
                 // Scheduled command will handle promotion as fallback
-                Log::error('Job dispatch failed', [
+                Log::error('PromoteCallToConnected dispatch failed', [
                     'call_session_id' => $callSession->id,
                     'appointment_id' => $appointmentId,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
                 ]);
             }
 
