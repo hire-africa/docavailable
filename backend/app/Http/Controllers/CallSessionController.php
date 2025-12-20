@@ -151,8 +151,14 @@ class CallSessionController extends Controller
 
             // Get subscription for remaining sessions count
             $subscription = Subscription::where('user_id', $user->id)->first();
+            if (!$subscription) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No subscription found. Please subscribe to make calls.'
+                ], 400);
+            }
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-            $sessionsRemainingBeforeStart = $subscription->$callTypeField;
+            $sessionsRemainingBeforeStart = $subscription->$callTypeField ?? 0;
 
             // For direct sessions, we need to find a doctor
             $doctorId = null;
@@ -312,7 +318,7 @@ class CallSessionController extends Controller
                     'appointment_id' => $appointmentId,
                     'call_type' => $callType,
                     'status' => $callSession->status,
-                    'started_at' => $callSession->started_at->toISOString(),
+                    'started_at' => $callSession->started_at ? $callSession->started_at->toISOString() : now()->toISOString(),
                     'notified' => $notified ?? false,
                     'tokens' => $tokensCount ?? 0,
                     'last_notified_at' => now()->toISOString(),
@@ -322,18 +328,21 @@ class CallSessionController extends Controller
                 'appointment_id' => $appointmentId
             ]);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error("Error starting call session", [
                 'user_id' => Auth::id(),
                 'call_type' => $request->input('call_type'),
                 'appointment_id' => $request->input('appointment_id'),
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => config('app.debug') ? $e->getTraceAsString() : 'hidden'
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to start call session. Please try again.'
+                'message' => 'Failed to start call session. Please try again.',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
             ], 500);
         }
     }

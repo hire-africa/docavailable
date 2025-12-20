@@ -1773,15 +1773,19 @@ class AudioCallService {
    */
   private async markCallAsAnsweredInBackend(): Promise<void> {
     // #region agent log
-    const logData = {location:'audioCallService.ts:1764',message:'markCallAsAnsweredInBackend ENTRY',data:{appointmentId:this.appointmentId,userId:this.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
-    console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-    fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+    {
+      const logData = {location:'audioCallService.ts:1764',message:'markCallAsAnsweredInBackend ENTRY',data:{appointmentId:this.appointmentId,userId:this.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+    }
     // #endregion
     if (!this.appointmentId) {
       // #region agent log
-      const logData = {location:'audioCallService.ts:1766',message:'markCallAsAnsweredInBackend NO APPOINTMENT_ID',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
-      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      {
+        const logData = {location:'audioCallService.ts:1766',message:'markCallAsAnsweredInBackend NO APPOINTMENT_ID',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'};
+        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      }
       // #endregion
       console.warn('⚠️ [AudioCallService] Cannot mark answered: no appointmentId');
       return;
@@ -1789,15 +1793,19 @@ class AudioCallService {
     try {
       const authToken = await this.getAuthToken();
       // #region agent log
-      const logData = {location:'audioCallService.ts:1770',message:'markCallAsAnsweredInBackend AUTH_TOKEN_CHECK',data:{hasAuthToken:!!authToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      {
+        const logData = {location:'audioCallService.ts:1770',message:'markCallAsAnsweredInBackend AUTH_TOKEN_CHECK',data:{hasAuthToken:!!authToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      }
       // #endregion
       if (!authToken) {
         // #region agent log
-        const logData = {location:'audioCallService.ts:1772',message:'markCallAsAnsweredInBackend NO AUTH_TOKEN',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
-        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        {
+          const logData = {location:'audioCallService.ts:1772',message:'markCallAsAnsweredInBackend NO AUTH_TOKEN',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'};
+          console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+          fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        }
         // #endregion
         console.error('❌ [AudioCallService] Cannot mark answered: no auth token');
         return;
@@ -1809,9 +1817,11 @@ class AudioCallService {
         action: 'answered'
       };
       // #region agent log
-      const logData = {location:'audioCallService.ts:1775',message:'markCallAsAnsweredInBackend BEFORE_FETCH',data:{apiUrl,requestBody},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      {
+        const logData = {location:'audioCallService.ts:1775',message:'markCallAsAnsweredInBackend BEFORE_FETCH',data:{apiUrl,requestBody},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      }
       // #endregion
       console.log('🔗 [AudioCallService] Marking call as answered in backend:', {
         appointmentId: this.appointmentId,
@@ -1825,16 +1835,20 @@ class AudioCallService {
       });
       const fetchEndTime = Date.now();
       // #region agent log
-      const logData = {location:'audioCallService.ts:1789',message:'markCallAsAnsweredInBackend FETCH_RESPONSE',data:{status:response.status,statusText:response.statusText,ok:response.ok,fetchDuration:fetchEndTime-fetchStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      {
+        const logData = {location:'audioCallService.ts:1789',message:'markCallAsAnsweredInBackend FETCH_RESPONSE',data:{status:response.status,statusText:response.statusText,ok:response.ok,fetchDuration:fetchEndTime-fetchStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      }
       // #endregion
       if (response.ok) {
         const data = await response.json();
         // #region agent log
-        const logData = {location:'audioCallService.ts:1791',message:'markCallAsAnsweredInBackend SUCCESS',data:{responseData:data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        {
+          const logData = {location:'audioCallService.ts:1791',message:'markCallAsAnsweredInBackend SUCCESS',data:{responseData:data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+          console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+          fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        }
         // #endregion
         console.log('✅ [AudioCallService] Call marked as answered in backend:', data);
       } else {
@@ -1842,9 +1856,11 @@ class AudioCallService {
         let errorData;
         try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
         // #region agent log
-        const logData = {location:'audioCallService.ts:1796',message:'markCallAsAnsweredInBackend API_ERROR',data:{status:response.status,statusText:response.statusText,error:errorData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        {
+          const logData = {location:'audioCallService.ts:1796',message:'markCallAsAnsweredInBackend API_ERROR',data:{status:response.status,statusText:response.statusText,error:errorData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+          console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+          fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+        }
         // #endregion
         console.error('❌ [AudioCallService] Failed to mark call as answered:', {
           status: response.status, 
@@ -1855,9 +1871,11 @@ class AudioCallService {
       }
     } catch (apiError) {
       // #region agent log
-      const logData = {location:'audioCallService.ts:1804',message:'markCallAsAnsweredInBackend EXCEPTION',data:{error:apiError?.toString(),errorMessage:apiError instanceof Error?apiError.message:'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
-      console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
-      fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      {
+        const logData = {location:'audioCallService.ts:1804',message:'markCallAsAnsweredInBackend EXCEPTION',data:{error:apiError?.toString(),errorMessage:apiError instanceof Error?apiError.message:'unknown'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'};
+        console.log('🔍 [DEBUG LOG]', JSON.stringify(logData, null, 2));
+        fetch('http://127.0.0.1:7243/ingest/9f2d0b5f-9d71-4304-8d2a-3da6b2b8681a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logData)}).catch(()=>{});
+      }
       // #endregion
       console.error('❌ [AudioCallService] Error calling answer API:', apiError);
       throw apiError;
