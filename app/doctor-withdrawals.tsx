@@ -16,7 +16,9 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import AppTour from '../components/AppTour';
 import { useAuth } from '../contexts/AuthContext';
+import appTourService, { DOCTOR_WALLET_TOUR_STEPS } from '../services/appTourService';
 import customAlertService from '../services/customAlertService';
 
 const { width } = Dimensions.get('window');
@@ -63,6 +65,9 @@ function DoctorWithdrawalsContent() {
   const [mobileMoneyProvider, setMobileMoneyProvider] = useState('airtel');
   const [submitting, setSubmitting] = useState(false);
   
+  // Wallet tour state
+  const [showWalletTour, setShowWalletTour] = useState(false);
+  
   // Bank fields
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
@@ -94,6 +99,19 @@ function DoctorWithdrawalsContent() {
     }
     loadWalletData();
   }, [user]);
+
+  // Check wallet tour status
+  useEffect(() => {
+    const checkWalletTour = async () => {
+      if (!loading && user) {
+        const completed = await appTourService.hasCompletedWalletTour();
+        if (!completed) {
+          setTimeout(() => setShowWalletTour(true), 1000);
+        }
+      }
+    };
+    checkWalletTour();
+  }, [loading, user]);
 
   const loadWalletData = async () => {
     try {
@@ -615,6 +633,21 @@ function DoctorWithdrawalsContent() {
           </View>
         </ScrollView>
       </View>
+
+      {/* Wallet Tour */}
+      <AppTour
+        visible={showWalletTour}
+        userType="doctor"
+        steps={DOCTOR_WALLET_TOUR_STEPS}
+        onComplete={() => {
+          setShowWalletTour(false);
+          appTourService.markWalletTourCompleted();
+        }}
+        onSkip={() => {
+          setShowWalletTour(false);
+          appTourService.markWalletTourCompleted();
+        }}
+      />
     </SafeAreaView>
   );
 }

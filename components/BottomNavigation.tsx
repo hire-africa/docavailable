@@ -31,12 +31,24 @@ export default function BottomNavigation({ tabs, style, animatedStyle, tabRefs }
       ]}
     >
       {tabs.map((tab, index) => {
-        // Map tab index to ref key (for patient: home=0, discover=1, messages=2, blogs=3, docbot=4)
-        const refKey = index === 0 ? 'home-tab' : 
-                       index === 1 ? 'discover-tab' :
-                       index === 2 ? 'messages-tab' :
-                       index === 3 ? 'blogs-tab' :
-                       index === 4 ? 'docbot-tab' : `tab-${index}`;
+        // Map tab index to ref key
+        // For patient: home=0, discover=1, messages=2, blogs=3, docbot=4
+        // For doctor: home=0, appointments=1, messages=2, working-hours=3
+        let refKey = `tab-${index}`;
+        if (index === 0) {
+          refKey = 'home-tab';
+        } else if (tabs.length === 4) {
+          // Doctor tabs
+          if (index === 1) refKey = 'appointments-tab';
+          else if (index === 2) refKey = 'messages-tab';
+          else if (index === 3) refKey = 'working-hours-tab';
+        } else if (tabs.length === 5) {
+          // Patient tabs
+          if (index === 1) refKey = 'discover-tab';
+          else if (index === 2) refKey = 'messages-tab';
+          else if (index === 3) refKey = 'blogs-tab';
+          else if (index === 4) refKey = 'docbot-tab';
+        }
         const tabRef = tabRefs?.[refKey];
         
         return (

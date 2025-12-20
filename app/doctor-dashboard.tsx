@@ -142,6 +142,23 @@ export default function DoctorDashboard() {
   // App Tour state
   const [showAppTour, setShowAppTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+  const appointmentsRequestsTabRef = React.createRef<View>();
+  const appointmentsAcceptedTabRef = React.createRef<View>();
+  
+  // Initialize refs for tour elements
+  useEffect(() => {
+    // Initialize bottom navigation tab refs for doctors
+    const tabKeys = ['home-tab', 'appointments-tab', 'messages-tab', 'working-hours-tab'];
+    tabKeys.forEach(key => {
+      if (!tourTabRefs.current[key]) {
+        tourTabRefs.current[key] = React.createRef<View>();
+      }
+    });
+    
+    // Initialize refs for appointments sub-tabs
+    tourTabRefs.current['appointments-requests-tab'] = appointmentsRequestsTabRef;
+    tourTabRefs.current['appointments-accepted-tab'] = appointmentsAcceptedTabRef;
+  }, []);
 
   // Check if app tour should be shown
   useEffect(() => {
@@ -1594,30 +1611,34 @@ export default function DoctorDashboard() {
 
       {/* Sub-tab button group */}
       <View style={{ flexDirection: 'row', marginBottom: 24, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 4, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
-        <TouchableOpacity
-          style={{
-            backgroundColor: appointmentsTab === 'requests' ? '#4CAF50' : 'transparent',
-            borderRadius: 12,
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            marginRight: 4,
-          }}
-          onPress={() => setAppointmentsTab('requests')}
-        >
-          <Text style={{ color: appointmentsTab === 'requests' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Booking Requests</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            backgroundColor: appointmentsTab === 'accepted' ? '#4CAF50' : 'transparent',
-            borderRadius: 12,
-            paddingVertical: 10,
-            paddingHorizontal: 20,
-            marginLeft: 4,
-          }}
-          onPress={() => setAppointmentsTab('accepted')}
-        >
-          <Text style={{ color: appointmentsTab === 'accepted' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Accepted Requests</Text>
-        </TouchableOpacity>
+        <View ref={appointmentsRequestsTabRef}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: appointmentsTab === 'requests' ? '#4CAF50' : 'transparent',
+              borderRadius: 12,
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              marginRight: 4,
+            }}
+            onPress={() => setAppointmentsTab('requests')}
+          >
+            <Text style={{ color: appointmentsTab === 'requests' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Booking Requests</Text>
+          </TouchableOpacity>
+        </View>
+        <View ref={appointmentsAcceptedTabRef}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: appointmentsTab === 'accepted' ? '#4CAF50' : 'transparent',
+              borderRadius: 12,
+              paddingVertical: 10,
+              paddingHorizontal: 20,
+              marginLeft: 4,
+            }}
+            onPress={() => setAppointmentsTab('accepted')}
+          >
+            <Text style={{ color: appointmentsTab === 'accepted' ? '#fff' : '#7CB18F', fontWeight: 'bold', fontSize: 15 }}>Accepted Requests</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       {/* Booking Requests Tab */}
       {appointmentsTab === 'requests' && (
@@ -2511,6 +2532,7 @@ export default function DoctorDashboard() {
       </View>
 
       <BottomNavigation
+        tabRefs={tourTabRefs.current}
         tabs={[
           {
             icon: "home",
@@ -2702,6 +2724,11 @@ export default function DoctorDashboard() {
         elementRefs={tourTabRefs.current}
         onTabChange={(tab) => {
           setActiveTab(tab);
+        }}
+        onAction={(action, data) => {
+          if (action === 'setAppointmentsTab') {
+            setAppointmentsTab(data);
+          }
         }}
       />
 

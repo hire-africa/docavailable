@@ -5,6 +5,7 @@ const PATIENT_TOUR_COMPLETED_KEY = 'patient_tour_completed';
 const DOCTOR_TOUR_COMPLETED_KEY = 'doctor_tour_completed';
 const DOCTOR_PROFILE_TOUR_COMPLETED_KEY = 'doctor_profile_tour_completed';
 const CHAT_TOUR_COMPLETED_KEY = 'chat_tour_completed';
+const DOCTOR_WALLET_TOUR_COMPLETED_KEY = 'doctor_wallet_tour_completed';
 
 export interface TourStep {
   id: string;
@@ -64,7 +65,7 @@ export const PATIENT_TOUR_STEPS: TourStep[] = [
     title: 'Browse Doctor Profiles',
     description: 'Scroll through the list of available doctors. Tap on any doctor card to view their full profile, read reviews, and book an appointment.',
     target: 'discover-doctors-list',
-    position: 'top',
+    position: 'center',
   },
   {
     id: 'messages-tab',
@@ -129,13 +130,6 @@ export const DOCTOR_PROFILE_TOUR_STEPS: TourStep[] = [
     position: 'bottom',
   },
   {
-    id: 'reviews',
-    title: 'Patient Reviews',
-    description: 'See what other patients are saying. Read verified reviews to make an informed choice.',
-    target: 'reviews-section',
-    position: 'bottom', // Changed to bottom to keep tooltip on screen
-  },
-  {
     id: 'profile-complete',
     title: 'Start Your Journey!',
     description: 'You now know how to connect with doctors. Go ahead and start your first consultation!',
@@ -195,31 +189,86 @@ export const DOCTOR_TOUR_STEPS: TourStep[] = [
   },
   {
     id: 'appointments-tab',
-    title: 'Manage Appointments 📅',
-    description: 'Review and respond to booking requests, manage your confirmed appointments, and handle reschedules.',
+    title: 'Appointments Tab 📅',
+    description: 'This is where all your appointment requests will show up. You can review and respond to booking requests from patients here.',
     target: 'appointments-tab',
     position: 'top',
   },
   {
+    id: 'appointments-requests',
+    title: 'Booking Requests',
+    description: 'When patients book appointments with you, they\'ll appear here as pending requests. You can review patient details and accept or reject each request.',
+    target: 'appointments-requests-tab',
+    position: 'top',
+  },
+  {
+    id: 'appointments-accepted',
+    title: 'Accepted Appointments',
+    description: 'Once you accept a booking request, it moves here. This is where all your confirmed appointments will be displayed for easy management.',
+    target: 'appointments-accepted-tab',
+    position: 'bottom',
+  },
+  {
     id: 'messages-tab',
     title: 'Patient Messages 💬',
-    description: 'Communicate with your patients through secure messaging. View active sessions and chat history.',
+    description: 'Communicate with your patients through secure messaging. View active sessions, chat history, and manage all your patient conversations here.',
     target: 'messages-tab',
     position: 'top',
   },
   {
     id: 'working-hours-tab',
-    title: 'Working Hours ⏰',
-    description: 'Set your availability schedule so patients can book appointments during your preferred times.',
+    title: 'Working Hours & Availability ⏰',
+    description: 'Set your online status to be visible as "on duty" for instant sessions. You can also configure your working days and time slots so patients know when you\'re available.',
     target: 'working-hours-tab',
     position: 'top',
   },
   {
     id: 'complete',
     title: 'You\'re All Set! 🎉',
-    description: 'You\'re ready to start receiving appointments! Make sure to set your working hours so patients can book with you.',
+    description: 'You\'re ready to start receiving appointments! Make sure to set your working hours and online status so patients can book with you.',
     target: 'complete',
     position: 'center',
+  },
+];
+
+// Doctor Wallet Tour Steps (no highlighters, just informational)
+export const DOCTOR_WALLET_TOUR_STEPS: TourStep[] = [
+  {
+    id: 'wallet-welcome',
+    title: 'Welcome to Your Wallet! 💰',
+    description: 'Let\'s show you how to manage your earnings and withdrawals.',
+    target: 'wallet-welcome',
+    position: 'center',
+    imagePath: require('../assets/images/ai-doc.png'),
+  },
+  {
+    id: 'wallet-balance',
+    title: 'Your Total Balance',
+    description: 'This is your available balance - the total amount you can withdraw right now. This amount grows as you complete consultations with patients.',
+    target: 'wallet-balance',
+    position: 'center',
+  },
+  {
+    id: 'wallet-withdraw-methods',
+    title: 'Withdrawal Methods',
+    description: 'Choose how you want to receive your payments. You can withdraw via Bank Transfer, Mobile Money (for Malawian users), or Mzunguko. Select your preferred method and enter the required details.',
+    target: 'wallet-withdraw-methods',
+    position: 'center',
+  },
+  {
+    id: 'wallet-transactions',
+    title: 'Transaction History',
+    description: 'View all your earnings and withdrawals here. You can see when payments were received from patients and track your withdrawal requests. Transactions show as credits (earnings) or debits (withdrawals).',
+    target: 'wallet-transactions',
+    position: 'center',
+  },
+  {
+    id: 'wallet-complete',
+    title: 'You\'re All Set! 🎉',
+    description: 'You now know how to manage your earnings. Start earning by completing consultations, and withdraw your funds whenever you\'re ready!',
+    target: 'wallet-complete',
+    position: 'center',
+    imagePath: require('../assets/images/ai-doc2.png'),
   },
 ];
 
@@ -301,6 +350,30 @@ class AppTourService {
   }
 
   /**
+   * Check if the user has completed the doctor wallet tour
+   */
+  async hasCompletedWalletTour(): Promise<boolean> {
+    try {
+      const completed = await AsyncStorage.getItem(DOCTOR_WALLET_TOUR_COMPLETED_KEY);
+      return completed === 'true';
+    } catch (error) {
+      console.error('Error checking doctor wallet tour completion:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Mark the doctor wallet tour as completed
+   */
+  async markWalletTourCompleted(): Promise<void> {
+    try {
+      await AsyncStorage.setItem(DOCTOR_WALLET_TOUR_COMPLETED_KEY, 'true');
+    } catch (error) {
+      console.error('Error marking doctor wallet tour as completed:', error);
+    }
+  }
+
+  /**
    * Reset tour completion (useful for testing or if user wants to see it again)
    */
   async resetTour(userType: 'patient' | 'doctor'): Promise<void> {
@@ -309,6 +382,7 @@ class AppTourService {
       await AsyncStorage.removeItem(key);
       await AsyncStorage.removeItem(DOCTOR_PROFILE_TOUR_COMPLETED_KEY);
       await AsyncStorage.removeItem(CHAT_TOUR_COMPLETED_KEY);
+      await AsyncStorage.removeItem(DOCTOR_WALLET_TOUR_COMPLETED_KEY);
     } catch (error) {
       console.error('Error resetting tour:', error);
     }

@@ -337,7 +337,6 @@ export default function CallScreen() {
             onCallTimeout={handleCallTimeout}
             onCallRejected={handleCallRejected}
             isIncomingCall={isIncomingCall}
-            answeredFromCallKeep={isFromCallKeep}
           />
         )}
 
@@ -366,7 +365,6 @@ export default function CallScreen() {
             console.log('📹 Video call answered');
           }}
           isIncomingCall={isIncomingCall}
-          answeredFromCallKeep={isFromCallKeep}
           onAcceptCall={() => {
             console.log('📹 Video call accepted');
           }}

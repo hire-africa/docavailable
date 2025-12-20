@@ -25,6 +25,7 @@ interface AppTourProps {
   onSkip?: () => void;
   elementRefs?: Record<string, React.RefObject<View>>; // Refs to elements to highlight
   onTabChange?: (tab: string) => void; // Callback to switch tabs during tour
+  onAction?: (action: string, data?: any) => void; // Callback for custom actions (e.g., sub-tab changes)
   steps?: TourStep[]; // Optional custom steps
   scrollViewRef?: React.RefObject<ScrollView>; // Ref to ScrollView for auto-scrolling
 }
@@ -36,6 +37,7 @@ export default function AppTour({
   onSkip,
   elementRefs = {},
   onTabChange,
+  onAction,
   steps: customSteps,
   scrollViewRef,
 }: AppTourProps) {
@@ -74,6 +76,54 @@ export default function AppTour({
 
       const ref = elementRefs[currentStep.target];
       if (ref?.current) {
+        // Special handling for appointments sub-tabs - no scrolling needed, measure directly
+        if (currentStep.target === 'appointments-requests-tab' || currentStep.target === 'appointments-accepted-tab') {
+          // These are sub-tabs within appointments, no scrolling needed
+          // Use a longer delay to ensure the tab switch and UI update have completed
+          setTimeout(() => {
+            if (ref.current) {
+              ref.current.measureInWindow((winX, winY, winW, winH) => {
+                const safeX = isNaN(winX) ? 0 : Math.max(0, winX);
+                const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
+                const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
+                const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
+                
+                console.log(`🎯 [AppTour] Measured ${currentStep.target}:`, { safeX, safeY, safeWidth, safeHeight });
+                
+                setHighlightLayout({
+                  x: safeX,
+                  y: safeY,
+                  width: safeWidth,
+                  height: safeHeight,
+                });
+                animateTooltip();
+              });
+            } else {
+              console.warn(`🎯 [AppTour] Ref not available for ${currentStep.target}`);
+              // Fallback: try again after a longer delay
+              setTimeout(() => {
+                if (ref.current) {
+                  ref.current.measureInWindow((winX, winY, winW, winH) => {
+                    const safeX = isNaN(winX) ? 0 : Math.max(0, winX);
+                    const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
+                    const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
+                    const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
+                    
+                    setHighlightLayout({
+                      x: safeX,
+                      y: safeY,
+                      width: safeWidth,
+                      height: safeHeight,
+                    });
+                    animateTooltip();
+                  });
+                }
+              }, 300);
+            }
+          }, 500); // Increased delay to ensure tab switch completes
+          return;
+        }
+        
         // First scroll to the element, then measure
         const scrollAndMeasure = () => {
           // Get initial position to calculate scroll
@@ -273,10 +323,11 @@ export default function AppTour({
     };
 
     // No delay for center steps, minimal delay for others
-    // Add extra delay for discover-doctors-list to ensure page is ready
+    // Add extra delay for discover-doctors-list and appointments sub-tabs to ensure page is ready
     const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') 
       ? 0 
-      : (currentStep.target === 'discover-doctors-list' ? 200 : 50);
+      : (currentStep.target === 'discover-doctors-list' ? 200 : 
+         (currentStep.target === 'appointments-requests-tab' || currentStep.target === 'appointments-accepted-tab') ? 400 : 50);
     const timer = setTimeout(measureElement, delay);
     return () => clearTimeout(timer);
   }, [currentStepIndex, visible, currentStep, elementRefs, insets.bottom]);
@@ -332,6 +383,8 @@ export default function AppTour({
           'discover-search': 'discover',
           'discover-doctors-list': 'discover',
           'appointments-tab': 'appointments',
+          'appointments-requests-tab': 'appointments',
+          'appointments-accepted-tab': 'appointments',
           'messages-tab': 'messages',
           'blogs-tab': 'blogs',
           'docbot-tab': 'docbot',
@@ -343,6 +396,16 @@ export default function AppTour({
           // Use requestAnimationFrame for non-blocking tab change
           requestAnimationFrame(() => {
             onTabChange(tab);
+            // Also handle sub-tab changes for appointments
+            if (onAction && nextStep.target === 'appointments-requests-tab') {
+              setTimeout(() => {
+                onAction('setAppointmentsTab', 'requests');
+              }, 300); // Small delay to ensure tab switch completes
+            } else if (onAction && nextStep.target === 'appointments-accepted-tab') {
+              setTimeout(() => {
+                onAction('setAppointmentsTab', 'accepted');
+              }, 300); // Small delay to ensure tab switch completes
+            }
           });
         }
       }
@@ -433,19 +496,15 @@ export default function AppTour({
         };
       case 'bottom':
         // For bottom nav tabs, show tooltip well above with extra spacing
-        if (currentStep.target.includes('-tab')) {
+        if (currentStep.target.includes('-tab') && !currentStep.target.includes('appointments-')) {
+          // This is a bottom navigation tab, show tooltip above
           return {
             top: Math.max(insets.top + 20, safeY - tooltipHeight - 80), // Much more spacing to keep nav visible
             left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
           };
         }
-        // For bottom position, check if we should show above instead
-        if (showAbove || spaceBelow < tooltipHeight + 40) {
-          return {
-            top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing - 20),
-            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-          };
-        }
+        // For bottom position (like appointments sub-tabs), always show tooltip below the element
+        // The user wants the card on the bottom to show the button up top
         return {
           top: safeY + safeH + spacing,
           left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
