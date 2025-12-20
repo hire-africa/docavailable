@@ -809,7 +809,10 @@ class VideoCallService {
       // FIX: Do NOT deduct immediately - deductions happen after 10 minutes and on hangup
       // this.deductCallSession();
       
-      this.events?.onCallAnswered();
+      // Safely call onCallAnswered if it exists
+      if (this.events?.onCallAnswered && typeof this.events.onCallAnswered === 'function') {
+        this.events.onCallAnswered();
+      }
       
       // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
       setTimeout(() => {
