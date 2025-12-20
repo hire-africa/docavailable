@@ -923,11 +923,10 @@ class CallSessionController extends Controller
                 'current_answered_at' => $callSession->answered_at
             ]);
             
-            $callSession->update([
-                'status' => CallSession::STATUS_ANSWERED, // Always set to answered
-                'answered_at' => now(),
-                'answered_by' => $user->id
-            ]);
+            // TEMPORARY: Update only answered_at (no status change)
+            $callSession->answered_at = now();
+            $callSession->answered_by = $user->id;
+            $callSession->save();
             
             // Refresh to get updated values
             $callSession->refresh();
