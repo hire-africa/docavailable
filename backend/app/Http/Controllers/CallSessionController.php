@@ -379,38 +379,64 @@ class CallSessionController extends Controller
 
                 // CRITICAL: Calculate billing ONLY from connected_at timestamp (not started_at)
                 // Billing should only happen for actual connected time
+                // RACE-CONDITION SAFETY: If call was answered but connected_at is missing, fix it now
                 if (!$callSession->connected_at) {
-                    // Call never connected - no billing
-                    Log::info("Call ended without connection - no billing", [
-                        'call_session_id' => $callSession->id,
-                        'appointment_id' => $appointmentId
-                    ]);
-                    
-                    $callSession->update([
-                        'status' => CallSession::STATUS_ENDED,
-                        'ended_at' => now(),
-                        'last_activity_at' => now(),
-                        'is_connected' => false,
-                        'call_duration' => 0,
-                    ]);
+                    // Check if call was answered (race condition - promotion job may have failed)
+                    if ($callSession->answered_at) {
+                        Log::warning("RACE CONDITION: Call ended but connected_at missing despite being answered - fixing now", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId,
+                            'answered_at' => $callSession->answered_at->toISOString(),
+                            'status' => $callSession->status
+                        ]);
+                        
+                        // Fix race condition: use answered_at as connected_at for billing correctness
+                        $callSession->update([
+                            'is_connected' => true,
+                            'connected_at' => $callSession->answered_at,
+                            'status' => CallSession::STATUS_ACTIVE, // Set to active first
+                        ]);
+                        
+                        Log::info("RACE CONDITION FIXED: Set connected_at to answered_at for billing correctness", [
+                            'call_session_id' => $callSession->id,
+                            'connected_at' => $callSession->connected_at->toISOString()
+                        ]);
+                    } else {
+                        // Call never answered - no billing
+                        Log::info("Call ended without connection - no billing", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId
+                        ]);
+                        
+                        $callSession->update([
+                            'status' => CallSession::STATUS_ENDED,
+                            'ended_at' => now(),
+                            'last_activity_at' => now(),
+                            'is_connected' => false,
+                            'call_duration' => 0,
+                        ]);
 
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Call session ended (never connected - no billing)',
-                        'session_duration' => 0,
-                        'was_connected' => false,
-                        'sessions_deducted' => 0,
-                        'deduction_result' => [
-                            'doctor_payment_success' => false,
-                            'patient_deduction_success' => false,
-                            'doctor_payment_amount' => 0,
-                            'patient_sessions_deducted' => 0,
-                            'auto_deductions' => 0,
-                            'manual_deduction' => 0,
-                            'errors' => []
-                        ]
-                    ]);
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Call session ended (never connected - no billing)',
+                            'session_duration' => 0,
+                            'was_connected' => false,
+                            'sessions_deducted' => 0,
+                            'deduction_result' => [
+                                'doctor_payment_success' => false,
+                                'patient_deduction_success' => false,
+                                'doctor_payment_amount' => 0,
+                                'patient_sessions_deducted' => 0,
+                                'auto_deductions' => 0,
+                                'manual_deduction' => 0,
+                                'errors' => []
+                            ]
+                        ]);
+                    }
                 }
+                
+                // Refresh call session to get updated connected_at
+                $callSession->refresh();
 
                 // Calculate duration from connected_at (not started_at)
                 // This is the actual billable time
@@ -605,15 +631,40 @@ class CallSessionController extends Controller
                 }
 
                 // CRITICAL: Only process billing if call is actually connected
+                // RACE-CONDITION SAFETY: If answered but connected_at missing, fix it now
                 if (!$callSession->connected_at) {
-                    Log::warning("Deduction attempted for unconnected call", [
-                        'call_session_id' => $callSession->id,
-                        'appointment_id' => $appointmentId
-                    ]);
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Call is not connected - cannot process billing'
-                    ], 400);
+                    if ($callSession->answered_at) {
+                        // Race condition: promotion job may have failed
+                        Log::warning("RACE CONDITION: Deduction attempted but connected_at missing despite answered - fixing now", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId,
+                            'answered_at' => $callSession->answered_at->toISOString()
+                        ]);
+                        
+                        // Fix race condition: use answered_at as connected_at
+                        $callSession->update([
+                            'is_connected' => true,
+                            'connected_at' => $callSession->answered_at,
+                            'status' => CallSession::STATUS_ACTIVE,
+                        ]);
+                        
+                        $callSession->refresh();
+                        
+                        Log::info("RACE CONDITION FIXED in deduction: Set connected_at to answered_at", [
+                            'call_session_id' => $callSession->id,
+                            'connected_at' => $callSession->connected_at->toISOString()
+                        ]);
+                    } else {
+                        // Call never answered - cannot bill
+                        Log::warning("Deduction attempted for unconnected call", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId
+                        ]);
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Call is not connected - cannot process billing'
+                        ], 400);
+                    }
                 }
 
                 // Calculate auto-deductions for every 10 minutes
@@ -757,10 +808,10 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
-            // Find the call session
+            // Find the call session - accept pending or connecting status
             $callSession = CallSession::where('appointment_id', $appointmentId)
                 ->where('doctor_id', $callerId)
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', CallSession::STATUS_CONNECTING])
                 ->first();
 
             if (!$callSession) {
@@ -770,19 +821,40 @@ class CallSessionController extends Controller
                 ], 404);
             }
 
-            // Update call session status
+            // Update call session status to answered
             $callSession->update([
                 'status' => 'answered',
                 'answered_at' => now(),
                 'answered_by' => $user->id
             ]);
 
-            Log::info("Call answered", [
+            // CRITICAL: Server-owned lifecycle - automatically promote to connected after grace period
+            // This happens independently of WebRTC events
+            // PRODUCTION-SAFE: Try queue first, fallback to direct promotion if queue fails
+            try {
+                PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
+                    ->delay(now()->addSeconds(5));
+                    
+                Log::info("PromoteCallToConnected job dispatched successfully", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId
+                ]);
+            } catch (\Exception $e) {
+                // Queue may be down - log and rely on scheduled command fallback
+                Log::warning("Failed to dispatch PromoteCallToConnected job - scheduled command will handle", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
+            Log::info("Call answered - server will promote to connected after grace period", [
                 'user_id' => $user->id,
                 'appointment_id' => $appointmentId,
                 'caller_id' => $callerId,
                 'session_id' => $sessionId,
-                'call_session_id' => $callSession->id
+                'call_session_id' => $callSession->id,
+                'promotion_scheduled_in_seconds' => 5
             ]);
 
             return response()->json([
@@ -791,7 +863,8 @@ class CallSessionController extends Controller
                 'data' => [
                     'call_session_id' => $callSession->id,
                     'status' => 'answered',
-                    'answered_at' => $callSession->answered_at
+                    'answered_at' => $callSession->answered_at,
+                    'will_promote_to_connected_in_seconds' => 5
                 ]
             ]);
 
@@ -812,8 +885,10 @@ class CallSessionController extends Controller
     }
 
     /**
-     * Mark call as connected (called when WebRTC peer connection state becomes 'connected')
-     * CRITICAL: This is the ONLY place where status should transition to 'active' and connected_at is set
+     * Mark call as connected (optional confirmation from WebRTC events)
+     * NOTE: This is now OPTIONAL - server automatically promotes answered -> connected after grace period
+     * WebRTC events are treated as confirmation signals, not the source of truth
+     * The backend job PromoteCallToConnected is the source of truth
      */
     public function markConnected(Request $request): JsonResponse
     {
@@ -837,20 +912,44 @@ class CallSessionController extends Controller
             }
 
             return DB::transaction(function () use ($user, $appointmentId, $callType) {
-                // Find the call session - must be in connecting or answered state
+                // Find the call session - accept connecting, answered, or active (in case status was set elsewhere)
                 $callSession = CallSession::where('appointment_id', $appointmentId)
                     ->where(function ($query) use ($user) {
                         $query->where('patient_id', $user->id)
                               ->orWhere('doctor_id', $user->id);
                     })
-                    ->whereIn('status', [CallSession::STATUS_CONNECTING, CallSession::STATUS_ANSWERED])
+                    ->whereIn('status', [
+                        CallSession::STATUS_CONNECTING, 
+                        CallSession::STATUS_ANSWERED,
+                        CallSession::STATUS_ACTIVE // Also accept active in case status was set but connected_at is missing
+                    ])
+                    ->where('status', '!=', CallSession::STATUS_ENDED) // Exclude ended calls
                     ->lockForUpdate()
                     ->first();
 
                 if (!$callSession) {
+                    // Log for debugging
+                    $existingCall = CallSession::where('appointment_id', $appointmentId)
+                        ->where(function ($query) use ($user) {
+                            $query->where('patient_id', $user->id)
+                                  ->orWhere('doctor_id', $user->id);
+                        })
+                        ->first();
+                    
+                    Log::warning("Call session not found for mark-connected", [
+                        'appointment_id' => $appointmentId,
+                        'user_id' => $user->id,
+                        'existing_call_status' => $existingCall ? $existingCall->status : 'not found',
+                        'existing_call_connected_at' => $existingCall && $existingCall->connected_at ? $existingCall->connected_at->toISOString() : 'null'
+                    ]);
+                    
                     return response()->json([
                         'success' => false,
-                        'message' => 'Call session not found or already connected'
+                        'message' => 'Call session not found or in invalid state for connection',
+                        'debug' => [
+                            'existing_status' => $existingCall ? $existingCall->status : null,
+                            'existing_connected_at' => $existingCall && $existingCall->connected_at ? $existingCall->connected_at->toISOString() : null
+                        ]
                     ], 404);
                 }
 
@@ -868,6 +967,14 @@ class CallSessionController extends Controller
                             'call_session_id' => $callSession->id,
                             'connected_at' => $callSession->connected_at->toISOString()
                         ]
+                    ]);
+                }
+                
+                // Handle case where status is 'active' but connected_at is missing (fix inconsistent state)
+                if ($callSession->status === CallSession::STATUS_ACTIVE && !$callSession->connected_at) {
+                    Log::warning("Call status is active but connected_at is missing - fixing", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId
                     ]);
                 }
 

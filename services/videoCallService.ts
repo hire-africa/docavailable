@@ -592,9 +592,12 @@ class VideoCallService {
           this.clearReofferLoop();
           this.updateState({ isConnected: true, connectionState: 'connected' });
           
-          // CRITICAL: Update backend DB when WebRTC becomes connected
-          // This is the ONLY place where connected_at timestamp is set
-          this.markConnectedInBackend();
+          // OPTIONAL: Send WebRTC confirmation to backend (fire-and-forget)
+          // NOTE: Backend automatically promotes answered -> connected after grace period
+          // This is just a confirmation signal, not the source of truth
+          this.markConnectedInBackend().catch(() => {
+            // Silently fail - server will promote automatically
+          });
           
           this.startCallTimer();
           // Broadcast current media state to peer on connect
@@ -1397,8 +1400,9 @@ class VideoCallService {
    * Update call session in backend when call ends
    */
   /**
-   * Mark call as connected in backend (called when WebRTC peer connection state becomes 'connected')
-   * CRITICAL: This is the ONLY place where connected_at timestamp is set in the backend
+   * Mark call as connected in backend (optional confirmation)
+   * NOTE: This is now OPTIONAL - server automatically promotes answered -> connected
+   * WebRTC events are confirmation signals, server-owned lifecycle is source of truth
    */
   private async markConnectedInBackend(): Promise<void> {
     if (!this.appointmentId) {
@@ -1410,7 +1414,7 @@ class VideoCallService {
       const authToken = await this.getAuthToken();
       const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
       
-      console.log('🔗 [VideoCallService] Marking call as connected in backend:', {
+      console.log('🔗 [VideoCallService] Sending WebRTC confirmation (optional - server auto-promotes):', {
         appointmentId: this.appointmentId,
         callType: 'video'
       });
@@ -1429,14 +1433,14 @@ class VideoCallService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [VideoCallService] Call marked as connected in backend:', data);
+        console.log('✅ [VideoCallService] WebRTC confirmation sent (server will handle promotion):', data);
       } else {
-        const errorText = await response.text();
-        console.error('❌ [VideoCallService] Failed to mark call as connected:', response.status, errorText);
+        // Silently handle - server will auto-promote anyway
+        console.log('ℹ️ [VideoCallService] WebRTC confirmation failed (non-critical - server auto-promotes)');
       }
     } catch (error) {
-      console.error('❌ [VideoCallService] Error calling mark-connected API:', error);
-      // Don't throw - continue with local state update
+      // Silently handle - server will auto-promote anyway
+      console.log('ℹ️ [VideoCallService] WebRTC confirmation error (non-critical - server auto-promotes)');
     }
   }
 

@@ -129,14 +129,25 @@ class CallSession extends Model
 
     /**
      * Mark session as connected.
-     * CRITICAL: Only call this when WebRTC peer connection state becomes 'connected'
+     * CRITICAL: Uses answered_at as connected_at (not now()) to ensure billing correctness
+     * This ensures connected_at is set to when the call was actually answered, not when promotion happened
+     * INVARIANT: connected_at is written ONLY ONCE and never overwritten
      */
     public function markAsConnected(): void
     {
+        // CRITICAL: Only set if not already set (idempotent)
+        if ($this->connected_at) {
+            return;
+        }
+        
+        // Use answered_at as connected_at (not now()) for billing correctness
+        // This ensures billing duration is calculated from when call was answered, not when promotion job ran
+        $connectedAt = $this->answered_at ?? now();
+        
         $this->update([
             'status' => self::STATUS_ACTIVE,
             'is_connected' => true,
-            'connected_at' => now(),
+            'connected_at' => $connectedAt,
         ]);
     }
 }

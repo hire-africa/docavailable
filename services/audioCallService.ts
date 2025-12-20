@@ -1722,13 +1722,14 @@ class AudioCallService {
           this.startCallTimer();
         }
         
-        // CRITICAL: Update backend DB when WebRTC becomes connected (fire-and-forget)
-        // This is the ONLY place where connected_at timestamp is set
-        // Do NOT await - connection flow must proceed immediately
+        // OPTIONAL: Send WebRTC confirmation to backend (fire-and-forget)
+        // NOTE: Backend automatically promotes answered -> connected after grace period
+        // This is just a confirmation signal, not the source of truth
+        // Server-owned lifecycle is the source of truth
         if (this.appointmentId) {
           this.markConnectedInBackend().catch((error) => {
-            console.error('❌ [AudioCallService] Background mark-connected API call failed:', error);
-            // Don't throw - connection should proceed even if backend update fails
+            // Silently fail - server will promote automatically
+            console.log('ℹ️ [AudioCallService] WebRTC confirmation sent (optional - server will auto-promote)');
           });
         }
         
@@ -1741,19 +1742,26 @@ class AudioCallService {
   }
 
   /**
-   * Mark call as connected in backend (fire-and-forget)
-   * Separate method to avoid blocking the connection flow
+   * Mark call as connected in backend (optional confirmation)
+   * NOTE: This is now OPTIONAL - server automatically promotes answered -> connected
+   * WebRTC events are confirmation signals, server-owned lifecycle is source of truth
    */
   private async markConnectedInBackend(): Promise<void> {
     if (!this.appointmentId) {
+      console.warn('⚠️ [AudioCallService] Cannot mark connected: no appointmentId');
       return;
     }
 
     try {
       const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [AudioCallService] Cannot mark connected: no auth token');
+        return;
+      }
+
       const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
       
-      console.log('🔗 [AudioCallService] Marking call as connected in backend:', {
+      console.log('🔗 [AudioCallService] Sending WebRTC confirmation (optional - server auto-promotes):', {
         appointmentId: this.appointmentId,
         callType: 'voice'
       });
@@ -1772,14 +1780,14 @@ class AudioCallService {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ [AudioCallService] Call marked as connected in backend:', data);
+        console.log('✅ [AudioCallService] WebRTC confirmation sent (server will handle promotion):', data);
       } else {
-        const errorText = await response.text();
-        console.error('❌ [AudioCallService] Failed to mark call as connected:', response.status, errorText);
+        // Silently handle - server will auto-promote anyway
+        console.log('ℹ️ [AudioCallService] WebRTC confirmation failed (non-critical - server auto-promotes)');
       }
-    } catch (apiError) {
-      console.error('❌ [AudioCallService] Error calling mark-connected API:', apiError);
-      throw apiError; // Re-throw so caller can handle it
+    } catch (apiError: any) {
+      // Silently handle - server will auto-promote anyway
+      console.log('ℹ️ [AudioCallService] WebRTC confirmation error (non-critical - server auto-promotes)');
     }
   }
 
@@ -1867,6 +1875,20 @@ class AudioCallService {
       // Calculate session duration
       const sessionDuration = this.state.callDuration;
       const wasConnected = this.state.isConnected && this.isCallAnswered;
+      
+      // CRITICAL: Log if call is ending without being connected
+      if (!wasConnected) {
+        console.warn('⚠️ [AudioCallService] Call ending without being connected:', {
+          appointmentId: this.appointmentId,
+          connectionState: this.state.connectionState,
+          isConnected: this.state.isConnected,
+          isCallAnswered: this.isCallAnswered,
+          peerConnectionState: this.peerConnection?.connectionState,
+          didConnect: this.didConnect
+        });
+        console.warn('⚠️ [AudioCallService] This call will skip connected state and go directly to ended');
+        console.warn('⚠️ [AudioCallService] Check if WebRTC connection state reached "connected" before call ended');
+      }
       
       // Clear call timeout
       this.clearCallTimeout();

@@ -32,6 +32,13 @@ Schedule::command('calls:cleanup-stale-connections')
     ->withoutOverlapping()
     ->runInBackground();
 
+// PRODUCTION-SAFE: Promote missed call connections (fallback for queue reliability)
+// Catches calls that missed the queue job due to queue being down
+Schedule::command('calls:promote-missed-connections')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Enhanced: Expire appointments every 30 minutes
 Schedule::command('appointments:expire')
     ->everyThirtyMinutes()
