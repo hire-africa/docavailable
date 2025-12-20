@@ -32,6 +32,7 @@ interface VideoCallModalProps {
   onCallRejected?: () => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
+  answeredFromCallKeep?: boolean;
   onAcceptCall?: () => void;
   onRejectCall?: () => void;
 }
@@ -51,6 +52,7 @@ export default function VideoCallModal({
   onCallRejected,
   onCallAnswered,
   isIncomingCall = false,
+  answeredFromCallKeep = false,
   onAcceptCall,
   onRejectCall,
 }: VideoCallModalProps) {
@@ -170,6 +172,50 @@ export default function VideoCallModal({
       } else {
         console.log('📞 VideoCallModal: Initializing for incoming call');
         await initializeIncomingCall();
+        
+        // CRITICAL FIX: If answered from CallKeep, automatically accept the call
+        // This ensures markCallAsAnsweredInBackend() is called even if user doesn't press Accept
+        if (answeredFromCallKeep) {
+          console.log('✅ [VideoCallModal] Call answered from CallKeep - auto-accepting incoming call');
+          console.log('🔍 [VideoCallModal] DEBUG - About to auto-call acceptIncomingCall()');
+          try {
+            // Stop ringtone if it was started
+            try {
+              await ringtoneService.stop();
+            } catch (e) {
+              // Ignore ringtone stop errors
+            }
+            
+            // Immediately update UI state
+            setIsRinging(false);
+            setCallAccepted(true);
+            setIsProcessingAnswer(true);
+            
+            // Start background billing immediately
+            console.log('💰 [VideoCallModal] Starting background billing on auto-answer');
+            backgroundBillingManager.startBilling(appointmentId, 'video', {
+              intervalMinutes: 10,
+              warningBeforeMinutes: 1,
+              maxCycles: 6
+            });
+            
+            // Accept the call - this will call markCallAsAnsweredInBackend()
+            if (videoCallService.current) {
+              await videoCallService.current.acceptIncomingCall();
+              console.log('✅ [VideoCallModal] Auto-accepted incoming call successfully');
+            }
+            
+            // Reset processing state
+            setIsProcessingAnswer(false);
+            
+            // Trigger callback
+            onCallAnswered?.();
+          } catch (error) {
+            console.error('❌ [VideoCallModal] Failed to auto-accept incoming call:', error);
+            setIsProcessingAnswer(false);
+            // Don't block - let user manually accept if auto-accept fails
+          }
+        }
       }
     };
 

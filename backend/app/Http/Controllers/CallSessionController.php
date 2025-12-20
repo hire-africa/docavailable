@@ -821,6 +821,21 @@ class CallSessionController extends Controller
                 // Silently fail - logging shouldn't break the endpoint
             }
             
+            // #region agent log
+            $logFile = '/Users/sales_r_us4/Desktop/Work/docavailable-main/.cursor/debug.log';
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:824','message'=>'ANSWER_ENDPOINT_CALLED','data'=>['user_id'=>$user->id,'appointment_id'=>$appointmentId,'caller_id'=>$callerId,'session_id'=>$sessionId,'request_data'=>$request->all()],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
+            
+            // CRITICAL DEBUG: Log to Laravel log file as well
+            \Log::info("🔍 [DEBUG] Call answer endpoint called", [
+                'user_id' => $user->id,
+                'appointment_id' => $appointmentId,
+                'caller_id' => $callerId,
+                'session_id' => $sessionId,
+                'request_data' => $request->all(),
+                'timestamp' => now()->toISOString()
+            ]);
+            
             Log::info("Call answer endpoint called", [
                 'user_id' => $user->id,
                 'appointment_id' => $appointmentId,
@@ -900,6 +915,20 @@ class CallSessionController extends Controller
                 // Silently fail
             }
 
+            // #region agent log
+            $logFile = '/Users/sales_r_us4/Desktop/Work/docavailable-main/.cursor/debug.log';
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:903','message'=>'SESSION_LOOKUP_RESULT','data'=>['appointment_id'=>$appointmentId,'user_id'=>$user->id,'session_found'=>$sessionFound,'call_session_id'=>$callSessionId],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
+            
+            // CRITICAL DEBUG: Log to Laravel log file as well
+            \Log::info("🔍 [DEBUG] Call answer: Session lookup result", [
+                'appointment_id' => $appointmentId,
+                'user_id' => $user->id,
+                'session_found' => $sessionFound,
+                'call_session_id' => $callSessionId,
+                'timestamp' => now()->toISOString()
+            ]);
+            
             Log::info("Call answer: Session lookup result", [
                 'appointment_id' => $appointmentId,
                 'user_id' => $user->id,
@@ -908,6 +937,9 @@ class CallSessionController extends Controller
             ]);
 
             if (!$callSession) {
+                // #region agent log
+                @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:911','message'=>'NO_SESSION_FOUND','data'=>['appointment_id'=>$appointmentId,'user_id'=>$user->id,'caller_id'=>$callerId],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'})."\n", FILE_APPEND);
+                // #endregion
                 Log::warning("Call answer: No non-ended call session found", [
                     'appointment_id' => $appointmentId,
                     'user_id' => $user->id,
@@ -954,6 +986,21 @@ class CallSessionController extends Controller
             // If status is 'connecting', we still answer it - connecting is not a valid lifecycle state
             $previousStatus = $callSession->status;
             
+            // #region agent log
+            $logFile = '/Users/sales_r_us4/Desktop/Work/docavailable-main/.cursor/debug.log';
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:957','message'=>'BEFORE_UPDATE','data'=>['call_session_id'=>$callSession->id,'appointment_id'=>$appointmentId,'previous_status'=>$previousStatus,'current_answered_at'=>$callSession->answered_at?$callSession->answered_at->toISOString():null,'user_id'=>$user->id],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
+            
+            // CRITICAL DEBUG: Log to Laravel log file as well
+            \Log::info("🔍 [DEBUG] Call answer: BEFORE_UPDATE", [
+                'call_session_id' => $callSession->id,
+                'appointment_id' => $appointmentId,
+                'previous_status' => $previousStatus,
+                'current_answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : null,
+                'user_id' => $user->id,
+                'timestamp' => now()->toISOString()
+            ]);
+            
             Log::info("Call answer: About to update call session", [
                 'call_session_id' => $callSession->id,
                 'appointment_id' => $appointmentId,
@@ -967,13 +1014,24 @@ class CallSessionController extends Controller
             // CRITICAL: Always update lifecycle fields directly, independent of status
             // connecting is a transport state, not a lifecycle state - it must never block answered_at
             // answered_at must be set every time the answer endpoint is called
-            $updateResult = $callSession->update([
+            $updateData = [
                 'answered_at' => now(),
                 'answered_by' => $user->id,
                 'status' => CallSession::STATUS_ANSWERED,
-            ]);
+            ];
+            // #region agent log
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:970','message'=>'UPDATE_DATA','data'=>['updateData'=>$updateData],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
+            $updateResult = $callSession->update($updateData);
+            
+            // #region agent log
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:976','message'=>'UPDATE_RESULT','data'=>['updateResult'=>$updateResult,'call_session_id'=>$callSession->id],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
             
             if (!$updateResult) {
+                // #region agent log
+                @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:977','message'=>'UPDATE_FAILED','data'=>['call_session_id'=>$callSession->id,'appointment_id'=>$appointmentId],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'})."\n", FILE_APPEND);
+                // #endregion
                 Log::error("Call answer: FAILED to update call session", [
                     'call_session_id' => $callSession->id,
                     'appointment_id' => $appointmentId,
@@ -983,7 +1041,29 @@ class CallSessionController extends Controller
             
             // Refresh to get updated values and verify persistence
             $callSession->refresh();
+            // #region agent log
+            @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:985','message'=>'AFTER_REFRESH','data'=>['call_session_id'=>$callSession->id,'answered_at'=>$callSession->answered_at?$callSession->answered_at->toISOString():null,'status'=>$callSession->status],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'])."\n", FILE_APPEND);
+            // #endregion
+            
+            // CRITICAL DEBUG: Log to Laravel log file as well
+            \Log::info("🔍 [DEBUG] Call answer: AFTER_REFRESH", [
+                'call_session_id' => $callSession->id,
+                'answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : null,
+                'status' => $callSession->status,
+                'timestamp' => now()->toISOString()
+            ]);
+            
             if (!$callSession->answered_at) {
+                // #region agent log
+                @file_put_contents($logFile, json_encode(['id'=>'log_'.time().'_'.uniqid(),'timestamp'=>time()*1000,'location'=>'CallSessionController.php:986','message'=>'ANSWERED_AT_NULL_AFTER_UPDATE','data'=>['call_session_id'=>$callSession->id,'appointment_id'=>$appointmentId],'sessionId'=>'debug-session','runId'=>'run1','hypothesisId'=>'D'})."\n", FILE_APPEND);
+                // #endregion
+                
+                // CRITICAL DEBUG: Log to Laravel log file as well
+                \Log::error("🔍 [DEBUG] ❌❌❌ ANSWERED_AT_NULL_AFTER_UPDATE ❌❌❌", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'timestamp' => now()->toISOString()
+                ]);
                 Log::error("Call answer: answered_at NOT persisted after update", [
                     'call_session_id' => $callSession->id,
                     'appointment_id' => $appointmentId,

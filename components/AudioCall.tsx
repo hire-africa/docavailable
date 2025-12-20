@@ -30,6 +30,7 @@ interface AudioCallProps {
   onCallRejected?: () => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
+  answeredFromCallKeep?: boolean;
 }
 
 export default function AudioCall({
@@ -44,7 +45,8 @@ export default function AudioCall({
   onCallTimeout,
   onCallRejected,
   onCallAnswered,
-  isIncomingCall = false
+  isIncomingCall = false,
+  answeredFromCallKeep = false
 }: AudioCallProps) {
   const [callState, setCallState] = useState<AudioCallState>({
     isConnected: false,
@@ -109,15 +111,56 @@ export default function AudioCall({
         await initializeCall();
       } else {
         console.log('📞 AudioCall: Initializing for incoming call');
-        // Start system ringtone for incoming calls
-        try {
-          await ringtoneService.start();
-          console.log('🔔 System ringtone started for incoming call');
-        } catch (error) {
-          console.error('❌ Failed to start ringtone:', error);
+        // Start system ringtone for incoming calls (unless already answered from CallKeep)
+        if (!answeredFromCallKeep) {
+          try {
+            await ringtoneService.start();
+            console.log('🔔 System ringtone started for incoming call');
+          } catch (error) {
+            console.error('❌ Failed to start ringtone:', error);
+          }
+        } else {
+          console.log('✅ [AudioCall] Call already answered from CallKeep - skipping ringtone');
         }
         // For incoming calls, initialize the service and set up event listeners
         await initializeIncomingCall();
+        
+        // CRITICAL FIX: If answered from CallKeep, automatically process the call
+        // This ensures markCallAsAnsweredInBackend() is called even if user doesn't press Accept
+        if (answeredFromCallKeep) {
+          console.log('✅ [AudioCall] Call answered from CallKeep - auto-processing incoming call');
+          console.log('🔍 [AudioCall] DEBUG - About to auto-call processIncomingCall()');
+          try {
+            // Stop ringtone if it was started
+            try {
+              await ringtoneService.stop();
+            } catch (e) {
+              // Ignore ringtone stop errors
+            }
+            
+            // Immediately update UI state
+            setIsRinging(false);
+            setCallAccepted(true);
+            
+            // Start background billing immediately
+            console.log('💰 [AudioCall] Starting background billing on auto-answer');
+            backgroundBillingManager.startBilling(appointmentId, 'voice', {
+              intervalMinutes: 10,
+              warningBeforeMinutes: 1,
+              maxCycles: 6
+            });
+            
+            // Process the call - this will call markCallAsAnsweredInBackend()
+            await AudioCallService.getInstance().processIncomingCall();
+            console.log('✅ [AudioCall] Auto-processed incoming call successfully');
+            
+            // Trigger callback
+            onCallAnswered?.();
+          } catch (error) {
+            console.error('❌ [AudioCall] Failed to auto-process incoming call:', error);
+            // Don't block - let user manually accept if auto-process fails
+          }
+        }
       }
     };
 
