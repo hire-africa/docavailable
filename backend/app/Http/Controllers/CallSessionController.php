@@ -988,9 +988,26 @@ class CallSessionController extends Controller
                 'answered_by' => $callSession->answered_by
             ]);
 
-            // TEMPORARY: Skip promotion job - focus on getting answered_at set first
-            // PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
-            //     ->delay(now()->addSeconds(5));
+            // CRITICAL: Server-owned lifecycle - automatically promote to connected after grace period
+            // This happens independently of WebRTC events
+            // PRODUCTION-SAFE: Wrapped so job dispatch failure never blocks answering
+            try {
+                PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
+                    ->delay(now()->addSeconds(5));
+                    
+                Log::info("PromoteCallToConnected job dispatched successfully", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId
+                ]);
+            } catch (\Throwable $e) {
+                // Job dispatch failed - log but don't block answering
+                // Scheduled command will handle promotion as fallback
+                Log::error('Failed to dispatch PromoteCallToConnected', [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'error' => $e->getMessage()
+                ]);
+            }
 
             Log::info("Call answered - server will promote to connected after grace period", [
                 'user_id' => $user->id,
