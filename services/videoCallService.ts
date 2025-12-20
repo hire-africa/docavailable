@@ -545,6 +545,18 @@ class VideoCallService {
         console.log('ℹ️ [VideoCallService] Incoming call already accepted');
         return;
       }
+      
+      // CRITICAL: Call answer endpoint to update database (answered_at)
+      // This must happen when doctor accepts call
+      if (this.appointmentId) {
+        try {
+          console.log('🔗 [VideoCallService] acceptIncomingCall - marking as answered in backend');
+          await this.markCallAsAnsweredInBackend();
+        } catch (error) {
+          console.error('❌ [VideoCallService] Failed to mark call as answered in backend:', error);
+          // Continue with WebRTC processing even if backend call fails
+        }
+      }
       this.hasAccepted = true;
 
       // Prepare media and audio routing
