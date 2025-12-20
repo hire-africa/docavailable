@@ -789,6 +789,9 @@ class CallSessionController extends Controller
      */
     public function answer(Request $request): JsonResponse
     {
+        $appointmentId = null;
+        $callSessionId = null;
+        
         try {
             $user = Auth::user();
             if (!$user) {
@@ -798,59 +801,81 @@ class CallSessionController extends Controller
                 ], 401);
             }
             
+            $appointmentId = $request->input('appointment_id');
+            $callerId = $request->input('caller_id');
+            $sessionId = $request->input('session_id');
+
             Log::info("Call answer endpoint called", [
                 'user_id' => $user->id,
+                'appointment_id' => $appointmentId,
+                'caller_id' => $callerId,
+                'session_id' => $sessionId,
                 'request_data' => $request->all()
             ]);
 
-            $appointmentId = $request->input('appointment_id');
-            $callerId = $request->input('caller_id'); // Patient ID (the caller)
-            $sessionId = $request->input('session_id');
-
             if (!$appointmentId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Missing required parameters: appointment_id'
-                ], 400);
-            }
-
-            // CRITICAL: Find the latest call session by appointment_id that is NOT ended
-            // The current user ($user) could be either the doctor OR patient answering
-            // Do NOT restrict by status - connecting is a transport state, not a lifecycle state
-            // Lifecycle states: ringing (unanswered) → answered → ended
-            // Transport states: connecting, etc. (should never block transitions)
-            $callSession = CallSession::where('appointment_id', $appointmentId)
-                ->where(function ($query) use ($user) {
-                    // User could be doctor answering OR patient answering (for direct sessions)
-                    $query->where('doctor_id', $user->id)
-                          ->orWhere('patient_id', $user->id);
-                })
-                ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
-                ->orderBy('created_at', 'desc') // Get latest if multiple exist
-                ->first();
-
-            if (!$callSession) {
-                // Log all calls with this appointment_id for debugging
-                $allCalls = CallSession::where('appointment_id', $appointmentId)->get();
-                Log::warning("Call answer: No non-ended call session found", [
-                    'appointment_id' => $appointmentId,
-                    'caller_id' => $callerId,
+                Log::warning("Call answer: Missing appointment_id", [
                     'user_id' => $user->id,
-                    'all_calls_with_appointment_id' => $allCalls->map(function ($call) use ($user) {
-                        return [
-                            'id' => $call->id,
-                            'doctor_id' => $call->doctor_id,
-                            'patient_id' => $call->patient_id,
-                            'status' => $call->status,
-                            'answered_at' => $call->answered_at,
-                            'user_matches_doctor' => $call->doctor_id == $user->id,
-                            'user_matches_patient' => $call->patient_id == $user->id
-                        ];
-                    })
+                    'request_data' => $request->all()
                 ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Call session not found or already ended'
+                    'message' => 'Missing required parameters: appointment_id',
+                    'call_session_id' => null
+                ], 400);
+            }
+
+            // Log all CallSessions matching appointment_id
+            $allCalls = CallSession::where('appointment_id', $appointmentId)->get();
+            Log::info("Call answer: All CallSessions with appointment_id", [
+                'appointment_id' => $appointmentId,
+                'total_calls' => $allCalls->count(),
+                'calls' => $allCalls->map(function ($call) use ($user) {
+                    return [
+                        'id' => $call->id,
+                        'doctor_id' => $call->doctor_id,
+                        'patient_id' => $call->patient_id,
+                        'status' => $call->status,
+                        'answered_at' => $call->answered_at,
+                        'ended_at' => $call->ended_at,
+                        'user_id' => $user->id,
+                        'user_matches_doctor' => $call->doctor_id == $user->id,
+                        'user_matches_patient' => $call->patient_id == $user->id,
+                        'is_ended' => $call->status === CallSession::STATUS_ENDED
+                    ];
+                })->toArray()
+            ]);
+
+            // Find the latest call session by appointment_id that is NOT ended
+            $callSession = CallSession::where('appointment_id', $appointmentId)
+                ->where(function ($query) use ($user) {
+                    $query->where('doctor_id', $user->id)
+                          ->orWhere('patient_id', $user->id);
+                })
+                ->where('status', '!=', CallSession::STATUS_ENDED)
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            $sessionFound = $callSession !== null;
+            $callSessionId = $callSession ? $callSession->id : null;
+
+            Log::info("Call answer: Session lookup result", [
+                'appointment_id' => $appointmentId,
+                'user_id' => $user->id,
+                'session_found' => $sessionFound,
+                'call_session_id' => $callSessionId
+            ]);
+
+            if (!$callSession) {
+                Log::warning("Call answer: No non-ended call session found", [
+                    'appointment_id' => $appointmentId,
+                    'user_id' => $user->id,
+                    'caller_id' => $callerId
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call session not found or already ended',
+                    'call_session_id' => null
                 ], 404);
             }
             
