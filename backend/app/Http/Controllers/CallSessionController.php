@@ -962,9 +962,11 @@ class CallSessionController extends Controller
                 'current_answered_at' => $callSession->answered_at
             ]);
             
-            // TEMPORARY: Update only answered_at (no status change)
+            // Update answered_at and status to 'answered' immediately
+            // The PromoteCallToConnected job will later promote to 'active' after grace period
             $callSession->answered_at = now();
             $callSession->answered_by = $user->id;
+            $callSession->status = CallSession::STATUS_ANSWERED;
             $callSession->save();
             
             // Refresh to get updated values
