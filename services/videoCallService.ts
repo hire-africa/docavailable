@@ -645,6 +645,17 @@ class VideoCallService {
     try {
       console.log('📞 [VideoCallService] Processing incoming call after user acceptance...');
       
+      // CRITICAL: Call answer endpoint to update database (answered_at)
+      // This must happen BEFORE WebRTC processing to ensure lifecycle correctness
+      if (this.appointmentId) {
+        try {
+          await this.markCallAsAnsweredInBackend();
+        } catch (error) {
+          console.error('❌ [VideoCallService] Failed to mark call as answered in backend:', error);
+          // Continue with WebRTC processing even if backend call fails
+        }
+      }
+      
       // Clear any pending disconnect grace timer since we're actively answering
       if (this.disconnectGraceTimer) {
         console.log('📞 [VideoCallService] Clearing disconnect grace timer - call is being answered');
@@ -1404,6 +1415,55 @@ class VideoCallService {
    * NOTE: This is now OPTIONAL - server automatically promotes answered -> connected
    * WebRTC events are confirmation signals, server-owned lifecycle is source of truth
    */
+  /**
+   * Mark call as answered in backend (sets answered_at)
+   * CRITICAL: This must be called when doctor accepts call from call screen
+   */
+  private async markCallAsAnsweredInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [VideoCallService] Cannot mark answered: no appointmentId');
+      return;
+    }
+    try {
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [VideoCallService] Cannot mark answered: no auth token');
+        return;
+      }
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/answer`;
+      console.log('🔗 [VideoCallService] Marking call as answered in backend:', {
+        appointmentId: this.appointmentId,
+        apiUrl: apiUrl
+      });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ 
+          appointment_id: this.appointmentId, 
+          caller_id: this.userId, // Current user (doctor or patient)
+          action: 'answered'
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [VideoCallService] Call marked as answered in backend:', data);
+      } else {
+        const errorText = await response.text();
+        let errorData;
+        try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
+        console.error('❌ [VideoCallService] Failed to mark call as answered:', {
+          status: response.status, 
+          statusText: response.statusText, 
+          error: errorData, 
+          appointmentId: this.appointmentId
+        });
+      }
+    } catch (apiError) {
+      console.error('❌ [VideoCallService] Error calling answer API:', apiError);
+      throw apiError;
+    }
+  }
+
   private async markConnectedInBackend(): Promise<void> {
     if (!this.appointmentId) {
       console.warn('⚠️ [VideoCallService] Cannot mark connected: no appointmentId');
