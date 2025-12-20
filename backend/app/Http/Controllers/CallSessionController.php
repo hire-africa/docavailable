@@ -875,14 +875,16 @@ class CallSessionController extends Controller
                 })->toArray()
             ]);
 
-            // Find the latest call session by appointment_id that is NOT ended
+            // CRITICAL: Find call session by appointment_id only, ignoring status (except ended)
+            // Status is a transport state (connecting) or lifecycle state - must not block answered_at
+            // Only exclude ended calls - all other statuses (connecting, waiting_for_doctor, etc.) are valid
             $callSession = CallSession::where('appointment_id', $appointmentId)
                 ->where(function ($query) use ($user) {
                     $query->where('doctor_id', $user->id)
                           ->orWhere('patient_id', $user->id);
                 })
                 ->where('status', '!=', CallSession::STATUS_ENDED)
-                ->orderBy('created_at', 'desc')
+                ->latest()
                 ->first();
 
             $sessionFound = $callSession !== null;
@@ -962,9 +964,9 @@ class CallSessionController extends Controller
                 'current_answered_at' => $callSession->answered_at
             ]);
             
-            // Update answered_at and status to 'answered' immediately
-            // The PromoteCallToConnected job will later promote to 'active' after grace period
-            // CRITICAL: Use update() instead of save() to ensure it persists
+            // CRITICAL: Always update lifecycle fields directly, independent of status
+            // connecting is a transport state, not a lifecycle state - it must never block answered_at
+            // answered_at must be set every time the answer endpoint is called
             $updateResult = $callSession->update([
                 'answered_at' => now(),
                 'answered_by' => $user->id,
@@ -1008,9 +1010,9 @@ class CallSessionController extends Controller
                 'answered_by' => $callSession->answered_by
             ]);
 
-            // CRITICAL: Server-owned lifecycle - automatically promote to connected after grace period
-            // This happens independently of WebRTC events
-            // PRODUCTION-SAFE: Wrapped so job dispatch failure never blocks answering
+            // CRITICAL: Dispatch PromoteCallToConnected safely, so it never blocks the DB update
+            // Status transitions (answered → connected) should be handled by the server-owned job, not the answer endpoint
+            // This happens independently of WebRTC events and must never rollback answered_at
             try {
                 PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
                     ->delay(now()->addSeconds(5));
@@ -1020,9 +1022,9 @@ class CallSessionController extends Controller
                     'appointment_id' => $appointmentId
                 ]);
             } catch (\Throwable $e) {
-                // Job dispatch failed - log but don't block answering
+                // Job dispatch failed - log but don't block answering or rollback answered_at
                 // Scheduled command will handle promotion as fallback
-                Log::error('Failed to dispatch PromoteCallToConnected', [
+                Log::error('Job dispatch failed', [
                     'call_session_id' => $callSession->id,
                     'appointment_id' => $appointmentId,
                     'error' => $e->getMessage()
