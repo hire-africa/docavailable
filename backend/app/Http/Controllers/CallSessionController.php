@@ -805,16 +805,20 @@ class CallSessionController extends Controller
             $callerId = $request->input('caller_id');
             $sessionId = $request->input('session_id');
 
-            // Write to file for immediate visibility
-            $logFile = storage_path('logs/answer_debug.log');
-            $logDir = dirname($logFile);
-            if (!is_dir($logDir)) {
-                mkdir($logDir, 0755, true);
+            // Write to file for immediate visibility (non-blocking)
+            try {
+                $logFile = storage_path('logs/answer_debug.log');
+                $logDir = dirname($logFile);
+                if (!is_dir($logDir)) {
+                    @mkdir($logDir, 0755, true);
+                }
+                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - Call answer endpoint called\n", FILE_APPEND);
+                @file_put_contents($logFile, "  user_id: {$user->id}\n", FILE_APPEND);
+                @file_put_contents($logFile, "  appointment_id: {$appointmentId}\n", FILE_APPEND);
+                @file_put_contents($logFile, "  request_data: " . json_encode($request->all()) . "\n", FILE_APPEND);
+            } catch (\Exception $logError) {
+                // Silently fail - logging shouldn't break the endpoint
             }
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " - Call answer endpoint called\n", FILE_APPEND);
-            file_put_contents($logFile, "  user_id: {$user->id}\n", FILE_APPEND);
-            file_put_contents($logFile, "  appointment_id: {$appointmentId}\n", FILE_APPEND);
-            file_put_contents($logFile, "  request_data: " . json_encode($request->all()) . "\n", FILE_APPEND);
             
             Log::info("Call answer endpoint called", [
                 'user_id' => $user->id,
@@ -839,12 +843,16 @@ class CallSessionController extends Controller
             // Log all CallSessions matching appointment_id
             $allCalls = CallSession::where('appointment_id', $appointmentId)->get();
             
-            // Write to file
-            $logFile = storage_path('logs/answer_debug.log');
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " - All CallSessions with appointment_id: {$appointmentId}\n", FILE_APPEND);
-            file_put_contents($logFile, "  Total calls: " . $allCalls->count() . "\n", FILE_APPEND);
-            foreach ($allCalls as $call) {
-                file_put_contents($logFile, "  Call ID: {$call->id}, doctor_id: {$call->doctor_id}, patient_id: {$call->patient_id}, status: {$call->status}, answered_at: " . ($call->answered_at ? $call->answered_at->toISOString() : 'NULL') . "\n", FILE_APPEND);
+            // Write to file (non-blocking)
+            try {
+                $logFile = storage_path('logs/answer_debug.log');
+                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - All CallSessions with appointment_id: {$appointmentId}\n", FILE_APPEND);
+                @file_put_contents($logFile, "  Total calls: " . $allCalls->count() . "\n", FILE_APPEND);
+                foreach ($allCalls as $call) {
+                    @file_put_contents($logFile, "  Call ID: {$call->id}, doctor_id: {$call->doctor_id}, patient_id: {$call->patient_id}, status: {$call->status}, answered_at: " . ($call->answered_at ? $call->answered_at->toISOString() : 'NULL') . "\n", FILE_APPEND);
+                }
+            } catch (\Exception $logError) {
+                // Silently fail
             }
             
             Log::info("Call answer: All CallSessions with appointment_id", [
@@ -879,11 +887,15 @@ class CallSessionController extends Controller
             $sessionFound = $callSession !== null;
             $callSessionId = $callSession ? $callSession->id : null;
 
-            // Write to file
-            $logFile = storage_path('logs/answer_debug.log');
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " - Session lookup result\n", FILE_APPEND);
-            file_put_contents($logFile, "  session_found: " . ($sessionFound ? 'true' : 'false') . "\n", FILE_APPEND);
-            file_put_contents($logFile, "  call_session_id: " . ($callSessionId ?? 'null') . "\n", FILE_APPEND);
+            // Write to file (non-blocking)
+            try {
+                $logFile = storage_path('logs/answer_debug.log');
+                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - Session lookup result\n", FILE_APPEND);
+                @file_put_contents($logFile, "  session_found: " . ($sessionFound ? 'true' : 'false') . "\n", FILE_APPEND);
+                @file_put_contents($logFile, "  call_session_id: " . ($callSessionId ?? 'null') . "\n", FILE_APPEND);
+            } catch (\Exception $logError) {
+                // Silently fail
+            }
 
             Log::info("Call answer: Session lookup result", [
                 'appointment_id' => $appointmentId,
@@ -957,10 +969,14 @@ class CallSessionController extends Controller
             // Refresh to get updated values
             $callSession->refresh();
             
-            // Write to file
-            $logFile = storage_path('logs/answer_debug.log');
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " - answered_at updated successfully\n", FILE_APPEND);
-            file_put_contents($logFile, "  answered_at: " . ($callSession->answered_at ? $callSession->answered_at->toISOString() : 'NULL') . "\n", FILE_APPEND);
+            // Write to file (non-blocking)
+            try {
+                $logFile = storage_path('logs/answer_debug.log');
+                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - answered_at updated successfully\n", FILE_APPEND);
+                @file_put_contents($logFile, "  answered_at: " . ($callSession->answered_at ? $callSession->answered_at->toISOString() : 'NULL') . "\n", FILE_APPEND);
+            } catch (\Exception $logError) {
+                // Silently fail
+            }
             
             Log::info("Call answer: answered_at updated successfully", [
                 'call_session_id' => $callSession->id,
@@ -1011,16 +1027,20 @@ class CallSessionController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            // Write exception to file
-            $logFile = storage_path('logs/answer_debug.log');
-            $logDir = dirname($logFile);
-            if (!is_dir($logDir)) {
-                mkdir($logDir, 0755, true);
+            // Write exception to file (non-blocking)
+            try {
+                $logFile = storage_path('logs/answer_debug.log');
+                $logDir = dirname($logFile);
+                if (!is_dir($logDir)) {
+                    @mkdir($logDir, 0755, true);
+                }
+                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - EXCEPTION\n", FILE_APPEND);
+                @file_put_contents($logFile, "  message: " . $e->getMessage() . "\n", FILE_APPEND);
+                @file_put_contents($logFile, "  file: " . $e->getFile() . ":" . $e->getLine() . "\n", FILE_APPEND);
+                @file_put_contents($logFile, "  trace: " . $e->getTraceAsString() . "\n", FILE_APPEND);
+            } catch (\Exception $logError) {
+                // Silently fail
             }
-            file_put_contents($logFile, date('Y-m-d H:i:s') . " - EXCEPTION\n", FILE_APPEND);
-            file_put_contents($logFile, "  message: " . $e->getMessage() . "\n", FILE_APPEND);
-            file_put_contents($logFile, "  file: " . $e->getFile() . ":" . $e->getLine() . "\n", FILE_APPEND);
-            file_put_contents($logFile, "  trace: " . $e->getTraceAsString() . "\n", FILE_APPEND);
             
             Log::error("Call answer endpoint exception", [
                 'appointment_id' => $appointmentId ?? null,
