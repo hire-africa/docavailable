@@ -127,34 +127,6 @@ class CallSession extends Model
         ]);
     }
 
-    /**
-     * Boot the model.
-     * Ensures status is updated when answered_at is set.
-     */
-    protected static function boot()
-    {
-        parent::boot();
-
-        // CRITICAL: Ensure status is updated when answered_at is set
-        // This is a safeguard to prevent answered_at being set while status remains 'connecting'
-        // INVARIANT: If answered_at is set, status must be at least 'answered' (not 'connecting')
-        static::saving(function ($callSession) {
-            // If answered_at is set (or being set) and status is still 'connecting' or 'waiting_for_doctor',
-            // automatically update status to 'answered'
-            // This ensures the invariant: answered_at exists → status is at least 'answered'
-            if ($callSession->answered_at) {
-                $invalidStatuses = [
-                    self::STATUS_CONNECTING,
-                    self::STATUS_WAITING_FOR_DOCTOR,
-                    self::STATUS_PENDING,
-                ];
-                
-                if (in_array($callSession->status, $invalidStatuses)) {
-                    $callSession->status = self::STATUS_ANSWERED;
-                }
-            }
-        });
-    }
 
     /**
      * Mark session as connected.
