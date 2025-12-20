@@ -1010,6 +1010,11 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
     Route::post('/call-sessions/re-notify', [App\Http\Controllers\CallSessionController::class, 'reNotify']);
     Route::post('/call-sessions/answer', [App\Http\Controllers\CallSessionController::class, 'answer']);
+    
+    // TEMPORARY DEBUG ENDPOINT
+    Route::get('/debug-call/{appointmentId}', function ($appointmentId) {
+        return \App\Models\CallSession::where('appointment_id', $appointmentId)->get();
+    });
     Route::post('/call-sessions/decline', [App\Http\Controllers\CallSessionController::class, 'decline']);
 
     // Debug: Tail laravel.log (last 200 lines)

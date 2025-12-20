@@ -1026,36 +1026,16 @@ class CallSessionController extends Controller
                 ]
             ]);
 
-        } catch (\Exception $e) {
-            // Write exception to file (non-blocking)
-            try {
-                $logFile = storage_path('logs/answer_debug.log');
-                $logDir = dirname($logFile);
-                if (!is_dir($logDir)) {
-                    @mkdir($logDir, 0755, true);
-                }
-                @file_put_contents($logFile, date('Y-m-d H:i:s') . " - EXCEPTION\n", FILE_APPEND);
-                @file_put_contents($logFile, "  message: " . $e->getMessage() . "\n", FILE_APPEND);
-                @file_put_contents($logFile, "  file: " . $e->getFile() . ":" . $e->getLine() . "\n", FILE_APPEND);
-                @file_put_contents($logFile, "  trace: " . $e->getTraceAsString() . "\n", FILE_APPEND);
-            } catch (\Exception $logError) {
-                // Silently fail
-            }
-            
-            Log::error("Call answer endpoint exception", [
-                'appointment_id' => $appointmentId ?? null,
-                'call_session_id' => $callSessionId ?? null,
-                'user_id' => Auth::id(),
-                'exception_message' => $e->getMessage(),
-                'exception_trace' => $e->getTraceAsString(),
-                'exception_file' => $e->getFile(),
-                'exception_line' => $e->getLine()
-            ]);
-
+        } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to answer call: ' . $e->getMessage(),
-                'call_session_id' => $callSessionId ?? null
+                'message' => 'ANSWER ENDPOINT CRASHED',
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'appointment_id' => $appointmentId ?? null,
+                'call_session_id' => $callSessionId ?? null,
             ], 500);
         }
     }
