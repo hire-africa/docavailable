@@ -799,6 +799,8 @@ class CallSessionController extends Controller
         $callSession->update([
             'answered_at' => now(),
             'answered_by' => auth()->id(),
+            'connected_at' => now(), // TEMP: immediate
+            'is_connected' => true,
         ]);
 
         $callSession->refresh();
@@ -806,7 +808,8 @@ class CallSessionController extends Controller
         return response()->json([
             'success' => true,
             'answered_at' => $callSession->answered_at,
-            'answered_by' => $callSession->answered_by,
+            'connected_at' => $callSession->connected_at,
+            'is_connected' => $callSession->is_connected,
         ]);
     }
 
