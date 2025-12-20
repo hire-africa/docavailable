@@ -109,23 +109,37 @@ class PromoteCallToConnected implements ShouldQueue
                 return;
             }
 
-            // Normal flow: Only promote if call is still in answered state and not ended
-            if ($callSession->status !== CallSession::STATUS_ANSWERED) {
-                Log::info("PromoteCallToConnected: Call already in different state", [
+            // CRITICAL: Promote if answered_at exists, regardless of current status
+            // Status might be 'connecting' (transport state) but if answered_at exists, we must promote
+            // Lifecycle: answered_at exists → must have connected_at for billing
+            if (!$callSession->answered_at) {
+                Log::info("PromoteCallToConnected: Call not answered yet, skipping", [
                     'call_session_id' => $this->callSessionId,
                     'current_status' => $callSession->status,
-                    'appointment_id' => $this->appointmentId,
-                    'has_connected_at' => $callSession->connected_at !== null
+                    'appointment_id' => $this->appointmentId
                 ]);
-                
-                // If already connected, log success
-                if ($callSession->connected_at) {
-                    Log::info("PromoteCallToConnected: Call already has connected_at - promotion already completed", [
-                        'call_session_id' => $this->callSessionId,
-                        'connected_at' => $callSession->connected_at->toISOString()
-                    ]);
-                }
                 return;
+            }
+            
+            // If already has connected_at, log success (idempotent)
+            if ($callSession->connected_at) {
+                Log::info("PromoteCallToConnected: Call already has connected_at - promotion already completed", [
+                    'call_session_id' => $this->callSessionId,
+                    'connected_at' => $callSession->connected_at->toISOString(),
+                    'current_status' => $callSession->status
+                ]);
+                return;
+            }
+            
+            // If status is not answered but answered_at exists, log warning but still promote
+            // This handles cases where status is stuck in 'connecting' but call was answered
+            if ($callSession->status !== CallSession::STATUS_ANSWERED && $callSession->status !== CallSession::STATUS_ACTIVE) {
+                Log::warning("PromoteCallToConnected: Status is '{$callSession->status}' but answered_at exists - promoting anyway", [
+                    'call_session_id' => $this->callSessionId,
+                    'current_status' => $callSession->status,
+                    'answered_at' => $callSession->answered_at->toISOString(),
+                    'appointment_id' => $this->appointmentId
+                ]);
             }
 
             // Check if call was ended before grace period expired (but no race condition)

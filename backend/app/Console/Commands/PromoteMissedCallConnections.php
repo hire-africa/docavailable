@@ -34,11 +34,12 @@ class PromoteMissedCallConnections extends Command
         // 2. Are ended but missing connected_at (race condition fix)
         $now = now();
         
-        // Case 1: Answered calls without connected_at (grace period expired)
-        $answeredWithoutConnected = CallSession::where('status', CallSession::STATUS_ANSWERED)
-            ->whereNotNull('answered_at')
+        // Case 1: Calls with answered_at but missing connected_at (grace period expired)
+        // Do NOT restrict by status - status might be 'connecting' but answered_at exists
+        $answeredWithoutConnected = CallSession::whereNotNull('answered_at')
             ->whereNull('connected_at')
             ->where('answered_at', '<=', $now->copy()->subSeconds(5))
+            ->where('status', '!=', CallSession::STATUS_ENDED) // Exclude ended (handled separately)
             ->get();
             
         // Case 2: Ended calls without connected_at (race condition - billing correctness)

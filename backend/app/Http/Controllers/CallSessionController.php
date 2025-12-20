@@ -616,10 +616,11 @@ class CallSessionController extends Controller
             $sessionDuration = $request->input('session_duration', 0);
 
             return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionDuration) {
-                // Find the active call session with lock
+                // Find the call session - must have connected_at for billing
+                // Do NOT restrict by status - status might be 'connecting' but call is actually connected
                 $callSession = CallSession::where('appointment_id', $appointmentId)
                     ->where('patient_id', $user->id)
-                    ->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_CONNECTING])
+                    ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
                     ->lockForUpdate()
                     ->first();
 
@@ -808,24 +809,62 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
-            // Find the call session - accept pending or connecting status
+            // CRITICAL: Find the latest call session by appointment_id that is NOT ended
+            // Do NOT restrict by status - connecting is a transport state, not a lifecycle state
+            // Lifecycle states: ringing (unanswered) → answered → ended
+            // Transport states: connecting, connecting, etc. (should never block transitions)
             $callSession = CallSession::where('appointment_id', $appointmentId)
                 ->where('doctor_id', $callerId)
-                ->whereIn('status', ['pending', CallSession::STATUS_CONNECTING])
+                ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
+                ->orderBy('created_at', 'desc') // Get latest if multiple exist
                 ->first();
 
             if (!$callSession) {
+                Log::warning("Call answer: No non-ended call session found", [
+                    'appointment_id' => $appointmentId,
+                    'caller_id' => $callerId,
+                    'user_id' => $user->id
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Call session not found or already answered'
+                    'message' => 'Call session not found or already ended'
                 ], 404);
             }
+            
+            // If already answered, return success (idempotent)
+            if ($callSession->answered_at) {
+                Log::info("Call already answered - returning success", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'answered_at' => $callSession->answered_at->toISOString()
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Call already answered',
+                    'data' => [
+                        'call_session_id' => $callSession->id,
+                        'status' => $callSession->status,
+                        'answered_at' => $callSession->answered_at->toISOString()
+                    ]
+                ]);
+            }
 
-            // Update call session status to answered
+            // CRITICAL: ALWAYS transition to answered and set answered_at
+            // This is a lifecycle transition - transport state (connecting) must not block it
+            // If status is 'connecting', we still answer it - connecting is not a valid lifecycle state
+            $previousStatus = $callSession->status;
             $callSession->update([
-                'status' => 'answered',
+                'status' => CallSession::STATUS_ANSWERED, // Always set to answered
                 'answered_at' => now(),
                 'answered_by' => $user->id
+            ]);
+            
+            Log::info("Call answered - status transitioned", [
+                'call_session_id' => $callSession->id,
+                'appointment_id' => $appointmentId,
+                'previous_status' => $previousStatus,
+                'new_status' => CallSession::STATUS_ANSWERED,
+                'answered_at' => $callSession->answered_at->toISOString()
             ]);
 
             // CRITICAL: Server-owned lifecycle - automatically promote to connected after grace period
@@ -1042,17 +1081,42 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
-            // Find the call session
+            // CRITICAL: Find the latest call session by appointment_id that is NOT ended
+            // Do NOT restrict by status - connecting is a transport state, not a lifecycle state
             $callSession = CallSession::where('appointment_id', $appointmentId)
                 ->where('doctor_id', $callerId)
-                ->where('status', 'pending')
+                ->where('status', '!=', CallSession::STATUS_ENDED) // Only exclude ended
+                ->orderBy('created_at', 'desc') // Get latest if multiple exist
                 ->first();
 
             if (!$callSession) {
+                Log::warning("Call decline: No non-ended call session found", [
+                    'appointment_id' => $appointmentId,
+                    'caller_id' => $callerId,
+                    'user_id' => $user->id
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Call session not found or already handled'
+                    'message' => 'Call session not found or already ended'
                 ], 404);
+            }
+            
+            // If already declined, return success (idempotent)
+            if ($callSession->declined_at) {
+                Log::info("Call already declined - returning success", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'declined_at' => $callSession->declined_at->toISOString()
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Call already declined',
+                    'data' => [
+                        'call_session_id' => $callSession->id,
+                        'status' => $callSession->status,
+                        'declined_at' => $callSession->declined_at->toISOString()
+                    ]
+                ]);
             }
 
             // Update call session status
