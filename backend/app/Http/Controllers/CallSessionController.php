@@ -964,13 +964,31 @@ class CallSessionController extends Controller
             
             // Update answered_at and status to 'answered' immediately
             // The PromoteCallToConnected job will later promote to 'active' after grace period
-            $callSession->answered_at = now();
-            $callSession->answered_by = $user->id;
-            $callSession->status = CallSession::STATUS_ANSWERED;
-            $callSession->save();
+            // CRITICAL: Use update() instead of save() to ensure it persists
+            $updateResult = $callSession->update([
+                'answered_at' => now(),
+                'answered_by' => $user->id,
+                'status' => CallSession::STATUS_ANSWERED,
+            ]);
             
-            // Refresh to get updated values
+            if (!$updateResult) {
+                Log::error("Call answer: FAILED to update call session", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                ]);
+                throw new \Exception("Failed to update call session - update() returned false");
+            }
+            
+            // Refresh to get updated values and verify persistence
             $callSession->refresh();
+            if (!$callSession->answered_at) {
+                Log::error("Call answer: answered_at NOT persisted after update", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'answered_at_after_refresh' => $callSession->answered_at ? 'SET' : 'NULL'
+                ]);
+                throw new \Exception("answered_at was not persisted after update");
+            }
             
             // Write to file (non-blocking)
             try {
