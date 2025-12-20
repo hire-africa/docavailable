@@ -790,9 +790,16 @@ class CallSessionController extends Controller
      */
     public function answer(Request $request): JsonResponse
     {
+        $appointmentId = $request->input('appointment_id');
+        
+        $callSession = CallSession::where('appointment_id', $appointmentId)
+            ->latest()
+            ->first();
+
         return response()->json([
             'success' => true,
-            'message' => 'Answer endpoint hit successfully'
+            'found' => (bool) $callSession,
+            'call_session' => $callSession,
         ]);
     }
 

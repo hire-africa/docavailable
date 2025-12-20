@@ -1,4 +1,5 @@
 import { Notifications } from 'expo-notifications';
+import { Alert } from 'react-native';
 import apiService from '../app/services/apiService';
 import ringtoneService from './ringtoneService';
 
@@ -125,13 +126,14 @@ export class CallNotificationService {
       await this.dismissCallNotification();
 
       // Send answer signal to backend
-      await apiService.post('/api/call-sessions/answer', {
+      const res = await apiService.post('/api/call-sessions/answer', {
         appointment_id: callData.appointmentId,
         caller_id: callData.callerId,
         session_id: callData.sessionId,
         action: 'answered'
       });
 
+      Alert.alert('Answer Endpoint Response', JSON.stringify(res, null, 2));
       console.log('Call answered successfully');
     } catch (error) {
       console.error('Failed to answer call:', error);
