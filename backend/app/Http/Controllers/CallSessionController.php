@@ -796,10 +796,17 @@ class CallSessionController extends Controller
             ->latest()
             ->first();
 
+        $callSession->update([
+            'answered_at' => now(),
+            'answered_by' => auth()->id(),
+        ]);
+
+        $callSession->refresh();
+
         return response()->json([
             'success' => true,
-            'found' => (bool) $callSession,
-            'call_session' => $callSession,
+            'answered_at' => $callSession->answered_at,
+            'answered_by' => $callSession->answered_by,
         ]);
     }
 
