@@ -141,24 +141,37 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
-            // Check availability first
-            $availabilityResponse = $this->checkAvailability($request);
-            $availabilityData = $availabilityResponse->getData(true);
-            
-            if (!$availabilityData['success'] || !$availabilityData['can_make_call']) {
-                return $availabilityResponse;
-            }
-
-            // Get subscription for remaining sessions count
+            // Get subscription and check availability
             $subscription = Subscription::where('user_id', $user->id)->first();
             if (!$subscription) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No subscription found. Please subscribe to make calls.'
+                    'message' => 'No subscription found. Please subscribe to make calls.',
+                    'can_make_call' => false,
+                    'remaining_calls' => 0
                 ], 400);
             }
+            
+            if (!$subscription->is_active) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your subscription is not active. Please renew to make calls.',
+                    'can_make_call' => false,
+                    'remaining_calls' => 0
+                ], 400);
+            }
+            
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
             $sessionsRemainingBeforeStart = $subscription->$callTypeField ?? 0;
+            
+            if ($sessionsRemainingBeforeStart <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "No remaining {$callType} calls in your subscription. Please upgrade or wait for renewal.",
+                    'can_make_call' => false,
+                    'remaining_calls' => $sessionsRemainingBeforeStart
+                ], 400);
+            }
 
             // For direct sessions, we need to find a doctor
             $doctorId = null;
@@ -1396,3 +1409,4 @@ class CallSessionController extends Controller
         }
     }
 }
+
