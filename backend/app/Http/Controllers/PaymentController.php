@@ -844,6 +844,28 @@ class PaymentController extends Controller
                     'plan_id' => $planId
                 ]);
                 
+                // Send subscription activated notification
+                try {
+                    $notificationService = new \App\Services\NotificationService();
+                    $notificationService->createNotification(
+                        $userId,
+                        'Subscription Activated',
+                        'Your subscription plan has been activated successfully.',
+                        'subscription',
+                        [
+                            'subscription_id' => $existingSubscription->id,
+                            'plan_name' => $plan->name,
+                        ]
+                    );
+                } catch (\Exception $notificationError) {
+                    // Log but don't fail the subscription activation if notification fails
+                    Log::warning("Failed to send subscription activated notification", [
+                        'subscription_id' => $existingSubscription->id,
+                        'user_id' => $userId,
+                        'error' => $notificationError->getMessage()
+                    ]);
+                }
+                
                 return $existingSubscription;
             } else {
                 // Create new subscription - Handle potential constraint issues
@@ -882,6 +904,28 @@ class PaymentController extends Controller
                         'user_id' => $userId,
                         'plan_id' => $planId
                     ]);
+                    
+                    // Send subscription activated notification
+                    try {
+                        $notificationService = new \App\Services\NotificationService();
+                        $notificationService->createNotification(
+                            $userId,
+                            'Subscription Activated',
+                            'Your subscription plan has been activated successfully.',
+                            'subscription',
+                            [
+                                'subscription_id' => $subscription->id,
+                                'plan_name' => $plan->name,
+                            ]
+                        );
+                    } catch (\Exception $notificationError) {
+                        // Log but don't fail the subscription activation if notification fails
+                        Log::warning("Failed to send subscription activated notification", [
+                            'subscription_id' => $subscription->id,
+                            'user_id' => $userId,
+                            'error' => $notificationError->getMessage()
+                        ]);
+                    }
                     
                     return $subscription;
                 } catch (\Illuminate\Database\QueryException $e) {

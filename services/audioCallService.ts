@@ -15,7 +15,7 @@ export interface AudioCallState {
   isConnected: boolean;
   isAudioEnabled: boolean;
   callDuration: number;
-  connectionState: 'connecting' | 'connected' | 'disconnected' | 'failed';
+  connectionState: 'connecting' | 'connected' | 'disconnected' | 'failed' | 'reconnecting';
 }
 
 export interface AudioCallEvents {
@@ -60,6 +60,10 @@ class AudioCallService {
   private didEmitAnswered: boolean = false;
   // Graceful disconnect guard
   private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Reconnection state
+  private isReconnecting: boolean = false;
+  private reconnectionTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectionAttempts: number = 0;
   // Queue for signaling messages before WebSocket opens
   private messageQueue: any[] = [];
   private signalingFlushTimer: ReturnType<typeof setInterval> | null = null;
@@ -506,28 +510,46 @@ class AudioCallService {
             clearTimeout(this.disconnectGraceTimer);
             this.disconnectGraceTimer = null;
           }
+          // Clear reconnection state if reconnecting
+          if (this.isReconnecting) {
+            console.log('🔄 Reconnection successful');
+            this.isReconnecting = false;
+            if (this.reconnectionTimer) {
+              clearTimeout(this.reconnectionTimer);
+              this.reconnectionTimer = null;
+            }
+            this.reconnectionAttempts = 0;
+          }
           this.markConnectedOnce();
         } else if (connectionState === 'connecting') {
-          // Never downgrade UI back to connecting once connected
-          console.log('🔄 WebRTC connection in progress (ignored if already connected)');
-          // No state change here to avoid UI regressions
-        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
-          console.log('❌ WebRTC connection lost (grace period):', connectionState);
-          // Start a short grace period before ending the call to absorb brief drops
-          if (this.disconnectGraceTimer) {
-            clearTimeout(this.disconnectGraceTimer);
-            this.disconnectGraceTimer = null;
+          // Never downgrade UI back to connecting once connected (unless reconnecting)
+          if (!this.isReconnecting) {
+            console.log('🔄 WebRTC connection in progress (ignored if already connected)');
+            // No state change here to avoid UI regressions
           }
-          this.disconnectGraceTimer = setTimeout(() => {
-            const cs = this.peerConnection?.connectionState;
-            if (cs === 'disconnected' || cs === 'failed') {
-              this.updateState({ 
-                isConnected: false, 
-                connectionState: 'disconnected' 
-              });
-              this.endCall();
+        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
+          // If call is already answered/connected, trigger reconnection
+          if (this.isCallAnswered && !this.hasEnded && !this.isReconnecting) {
+            console.log('🔄 WebRTC disconnected/failed during active call - starting reconnection');
+            this.attemptReconnection();
+          } else {
+            console.log('❌ WebRTC connection lost (grace period):', connectionState);
+            // Start a short grace period before ending the call to absorb brief drops
+            if (this.disconnectGraceTimer) {
+              clearTimeout(this.disconnectGraceTimer);
+              this.disconnectGraceTimer = null;
             }
-          }, 2500);
+            this.disconnectGraceTimer = setTimeout(() => {
+              const cs = this.peerConnection?.connectionState;
+              if (cs === 'disconnected' || cs === 'failed') {
+                this.updateState({ 
+                  isConnected: false, 
+                  connectionState: 'disconnected' 
+                });
+                this.endCall();
+              }
+            }, 2500);
+          }
         }
       });
       try {
@@ -799,10 +821,24 @@ class AudioCallService {
           clearTimeout(this.disconnectGraceTimer);
           this.disconnectGraceTimer = null;
         }
+        // Clear reconnection state if reconnecting
+        if (this.isReconnecting) {
+          console.log('🔄 Reconnection successful');
+          this.isReconnecting = false;
+          if (this.reconnectionTimer) {
+            clearTimeout(this.reconnectionTimer);
+            this.reconnectionTimer = null;
+          }
+          this.reconnectionAttempts = 0;
+        }
         this.markConnectedOnce();
       } else if (state === 'disconnected' || state === 'failed') {
-        // Only start grace timer if call is not being answered and not already ended
-        if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
+        // If call is already answered/connected, trigger reconnection
+        if (this.isCallAnswered && !this.hasEnded && !this.isReconnecting) {
+          console.log('🔄 WebRTC disconnected/failed during active call - starting reconnection');
+          this.attemptReconnection();
+        } else if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
+          // Only start grace timer if call is not being answered and not already ended
           console.log('🔗 WebRTC disconnected/failed - starting grace timer');
           if (this.disconnectGraceTimer) {
             clearTimeout(this.disconnectGraceTimer);
@@ -826,6 +862,90 @@ class AudioCallService {
         }
       }
     });
+  }
+
+  /**
+   * Attempt to reconnect after disconnection during active call
+   * Frontend-only transport recovery (WhatsApp-style)
+   */
+  private async attemptReconnection(): Promise<void> {
+    if (this.isReconnecting || !this.appointmentId || !this.userId || this.hasEnded) {
+      console.log('🔄 Reconnection already in progress or call ended - skipping');
+      return;
+    }
+
+    console.log('🔄 Starting reconnection attempt...');
+    this.isReconnecting = true;
+    this.reconnectionAttempts++;
+    
+    // Update UI to show reconnecting state
+    this.updateState({ connectionState: 'reconnecting' });
+
+    // Set 30s timeout - if reconnection fails, end call normally
+    if (this.reconnectionTimer) {
+      clearTimeout(this.reconnectionTimer);
+    }
+    this.reconnectionTimer = setTimeout(() => {
+      if (this.isReconnecting) {
+        console.log('🔄 Reconnection timeout (30s) - ending call');
+        this.isReconnecting = false;
+        this.endCall();
+      }
+    }, 30000);
+
+    try {
+      // Close old peer connection
+      if (this.peerConnection) {
+        console.log('🔄 Closing old peer connection...');
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
+
+      // Recreate peer connection
+      console.log('🔄 Recreating peer connection...');
+      await this.initializePeerConnection();
+
+      // Ensure signaling connection is still active
+      if (!this.isConnectedToSignaling()) {
+        console.log('🔄 Signaling connection lost - reconnecting...');
+        if (this.appointmentId && this.userId) {
+          await this.connectSignaling(this.appointmentId, this.userId);
+        }
+      }
+
+      // Ensure we have local stream
+      if (!this.localStream) {
+        console.log('🔄 Recreating local audio stream...');
+        this.localStream = await mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        
+        // Add local audio track to peer connection
+        this.localStream.getAudioTracks().forEach(track => {
+          this.peerConnection?.addTrack(track, this.localStream!);
+        });
+      }
+
+      // Renegotiate based on call direction
+      if (this.isIncoming) {
+        // For incoming calls, wait for new offer from caller
+        console.log('🔄 Waiting for new offer from caller...');
+        // The signaling server will handle re-offer
+      } else {
+        // For outgoing calls, create new offer
+        console.log('🔄 Creating new offer for reconnection...');
+        this.offerCreated = false; // Reset flag to allow new offer
+        this.creatingOffer = false; // Reset flag
+        await this.createOffer();
+      }
+
+      console.log('🔄 Reconnection attempt initiated');
+    } catch (error) {
+      console.error('🔄 Reconnection error:', error);
+      // If reconnection fails, end call after timeout
+      // The timeout will handle ending the call
+    }
   }
 
   /**
@@ -1927,6 +2047,15 @@ class AudioCallService {
       }
       
       this.hasEnded = true;
+      
+      // Clean up reconnection timers
+      if (this.reconnectionTimer) {
+        clearTimeout(this.reconnectionTimer);
+        this.reconnectionTimer = null;
+      }
+      this.isReconnecting = false;
+      this.reconnectionAttempts = 0;
+      
       console.log('📞 Ending audio call...');
       console.log('📞 Call state when ending:', {
         connectionState: this.state.connectionState,

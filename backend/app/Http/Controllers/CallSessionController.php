@@ -483,6 +483,31 @@ class CallSessionController extends Controller
                                         'payment_amount' => $paymentAmount,
                                     ]
                                 );
+                                
+                                // Send payment received notification to doctor
+                                try {
+                                    $notificationService = new \App\Services\NotificationService();
+                                    $patientName = $patient->first_name . ' ' . $patient->last_name;
+                                    $notificationService->createNotification(
+                                        $doctor->id,
+                                        'Payment Received',
+                                        "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
+                                        'payment',
+                                        [
+                                            'amount' => $paymentAmount,
+                                            'currency' => $currency,
+                                            'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
+                                            'patient_name' => $patientName,
+                                        ]
+                                    );
+                                } catch (\Exception $notificationError) {
+                                    // Log but don't fail the payment if notification fails
+                                    Log::warning("Failed to send payment received notification (manual deduction)", [
+                                        'call_session_id' => $callSession->id,
+                                        'doctor_id' => $doctor->id,
+                                        'error' => $notificationError->getMessage()
+                                    ]);
+                                }
                             }
                             
                             // Mark manual deduction as applied
@@ -582,6 +607,31 @@ class CallSessionController extends Controller
                                     ]
                                 );
                                 
+                                // Send payment received notification to doctor
+                                try {
+                                    $notificationService = new \App\Services\NotificationService();
+                                    $patientName = $patient->first_name . ' ' . $patient->last_name;
+                                    $notificationService->createNotification(
+                                        $doctor->id,
+                                        'Payment Received',
+                                        "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
+                                        'payment',
+                                        [
+                                            'amount' => $paymentAmount,
+                                            'currency' => $currency,
+                                            'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
+                                            'patient_name' => $patientName,
+                                        ]
+                                    );
+                                } catch (\Exception $notificationError) {
+                                    // Log but don't fail the payment if notification fails
+                                    Log::warning("Failed to send payment received notification (auto deduction)", [
+                                        'call_session_id' => $callSession->id,
+                                        'doctor_id' => $doctor->id,
+                                        'error' => $notificationError->getMessage()
+                                    ]);
+                                }
+                                
                                 $deductionResult['doctor_payment_success'] = true;
                                 $deductionResult['doctor_payment_amount'] = $paymentAmount;
                             }
@@ -604,6 +654,63 @@ class CallSessionController extends Controller
                     'manual_deduction_applied' => $manualDeductionApplied,
                     'deduction_result' => $deductionResult
                 ]);
+
+                // Send session ended notifications to both patient and doctor (only if session was connected)
+                if ($callSession->connected_at) {
+                    try {
+                        $notificationService = new \App\Services\NotificationService();
+                        $patient = $callSession->patient;
+                        $doctor = $callSession->doctor;
+                        
+                        // Determine session type for display
+                        $sessionType = $callType === 'voice' ? 'audio' : ($callType === 'video' ? 'video' : 'text');
+                        
+                        // Format duration
+                        $durationMinutes = floor($duration / 60);
+                        $durationSeconds = $duration % 60;
+                        $durationFormatted = $durationMinutes > 0 
+                            ? "{$durationMinutes} minute" . ($durationMinutes > 1 ? 's' : '') . ($durationSeconds > 0 ? " {$durationSeconds} second" . ($durationSeconds > 1 ? 's' : '') : '')
+                            : "{$durationSeconds} second" . ($durationSeconds > 1 ? 's' : '');
+                        
+                        if ($patient) {
+                            $doctorName = $doctor ? ($doctor->first_name . ' ' . $doctor->last_name) : 'Doctor';
+                            $notificationService->createNotification(
+                                $patient->id,
+                                'Session Ended',
+                                "Your {$sessionType} session with Dr. {$doctorName} has ended. Duration: {$durationFormatted}.",
+                                'session',
+                                [
+                                    'duration' => $durationFormatted,
+                                    'session_type' => $sessionType,
+                                    'doctor_name' => $doctorName,
+                                    'patient_name' => $patient->first_name . ' ' . $patient->last_name,
+                                ]
+                            );
+                        }
+                        
+                        if ($doctor) {
+                            $patientName = $patient ? ($patient->first_name . ' ' . $patient->last_name) : 'Patient';
+                            $notificationService->createNotification(
+                                $doctor->id,
+                                'Session Ended',
+                                "Your {$sessionType} session with {$patientName} has ended. Duration: {$durationFormatted}.",
+                                'session',
+                                [
+                                    'duration' => $durationFormatted,
+                                    'session_type' => $sessionType,
+                                    'doctor_name' => $doctor->first_name . ' ' . $doctor->last_name,
+                                    'patient_name' => $patientName,
+                                ]
+                            );
+                        }
+                    } catch (\Exception $notificationError) {
+                        // Log but don't fail the request if notification fails
+                        Log::warning("Failed to send session ended notification", [
+                            'call_session_id' => $callSession->id,
+                            'error' => $notificationError->getMessage()
+                        ]);
+                    }
+                }
 
                 return response()->json([
                     'success' => true,

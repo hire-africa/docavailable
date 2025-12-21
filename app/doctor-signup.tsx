@@ -22,11 +22,13 @@ import LocationPicker from '../components/LocationPicker';
 import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
+import CountryCodeSelector from '../components/CountryCodeSelector';
 import { navigateToLogin } from '../utils/navigationUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 import SignUpErrorHandler from '../utils/errorHandler';
 import ValidationUtils from '../utils/validationUtils';
 import EnhancedValidation from '../utils/enhancedValidation';
+import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -45,8 +47,14 @@ interface Step1Props {
     setDob: (dob: string) => void;
     gender: string | null;
     setGender: (gender: string) => void;
+    authMode: 'email' | 'phone';
+    setAuthMode: (mode: 'email' | 'phone') => void;
     email: string;
     setEmail: (email: string) => void;
+    phone: string;
+    setPhone: (phone: string) => void;
+    countryCode: CountryCode;
+    setCountryCode: (code: CountryCode) => void;
     password: string;
     setPassword: (password: string) => void;
     yearsOfExperience: string;
@@ -94,7 +102,9 @@ const Step1: React.FC<Step1Props> = ({
     firstName, setFirstName, surname, setSurname,
     profilePicture, setProfilePicture,
     dob, setDob, gender, setGender,
-    email, setEmail, password, setPassword, yearsOfExperience, setYearsOfExperience,
+    authMode, setAuthMode,
+    email, setEmail, phone, setPhone, countryCode, setCountryCode,
+    password, setPassword, yearsOfExperience, setYearsOfExperience,
     specializations, setSpecializations,
     professionalBio, setProfessionalBio, country, setCountry, city, setCity,
     languagesSpoken, setLanguagesSpoken, acceptPolicies, setAcceptPolicies, errors, fieldRefs,
@@ -223,18 +233,79 @@ const Step1: React.FC<Step1Props> = ({
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Account Details</Text>
                 
-                <Text style={styles.inputLabel}>Email Address</Text>
-                <TextInput
-                    ref={fieldRefs.email}
-                    style={[styles.input, errors.email && styles.inputError]}
-                    placeholder="Enter your email address"
-                    placeholderTextColor="#999"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    value={email}
-                    onChangeText={setEmail}
-                />
-                {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+                {/* Auth Mode Toggle */}
+                <View style={styles.authModeToggle}>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
+                        onPress={() => setAuthMode('email')}
+                    >
+                        <FontAwesome 
+                            name="envelope" 
+                            size={14} 
+                            color={authMode === 'email' ? '#FFFFFF' : '#666'} 
+                            style={styles.toggleIcon}
+                        />
+                        <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
+                            Email
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
+                        onPress={() => setAuthMode('phone')}
+                    >
+                        <FontAwesome 
+                            name="phone" 
+                            size={14} 
+                            color={authMode === 'phone' ? '#FFFFFF' : '#666'} 
+                            style={styles.toggleIcon}
+                        />
+                        <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
+                            Phone
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Email Input (shown when email mode) */}
+                {authMode === 'email' && (
+                    <>
+                        <Text style={styles.inputLabel}>Email Address</Text>
+                        <TextInput
+                            ref={fieldRefs.email}
+                            style={[styles.input, errors.email && styles.inputError]}
+                            placeholder="Enter your email address"
+                            placeholderTextColor="#999"
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                            value={email}
+                            onChangeText={setEmail}
+                        />
+                        {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+                    </>
+                )}
+
+                {/* Phone Input (shown when phone mode) */}
+                {authMode === 'phone' && (
+                    <>
+                        <Text style={styles.inputLabel}>Phone Number</Text>
+                        <View style={[styles.phoneInputContainer, errors.phone && styles.inputError]}>
+                            <CountryCodeSelector
+                                selectedCountry={countryCode}
+                                onSelect={setCountryCode}
+                            />
+                            <TextInput
+                                ref={fieldRefs.phone}
+                                style={[styles.input, styles.phoneInput]}
+                                placeholder="Enter your phone number"
+                                placeholderTextColor="#999"
+                                keyboardType="phone-pad"
+                                autoCapitalize="none"
+                                value={phone}
+                                onChangeText={setPhone}
+                            />
+                        </View>
+                        {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+                    </>
+                )}
                 
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
@@ -701,7 +772,10 @@ export default function DoctorSignUp() {
     const [surname, setSurname] = useState('');
     const [dob, setDob] = useState('');
     const [gender, setGender] = useState<string | null>(null);
+    const [authMode, setAuthMode] = useState<'email' | 'phone'>('email');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
+    const [countryCode, setCountryCode] = useState<CountryCode>(getDefaultCountryCode());
     const [password, setPassword] = useState('');
     const [yearsOfExperience, setYearsOfExperience] = useState('');
     const [specializations, setSpecializations] = useState<string[]>([]);
@@ -728,10 +802,9 @@ export default function DoctorSignUp() {
     const [errors, setErrors] = useState<any>({});
 
     const validateStep1 = () => {
-        const formData = {
+        const formData: any = {
             firstName,
             surname,
-            email,
             password,
             dateOfBirth: dob,
             gender,
@@ -744,8 +817,22 @@ export default function DoctorSignUp() {
             acceptPolicies
         };
 
+        // Add email or phone based on auth mode
+        if (authMode === 'email') {
+            formData.email = email;
+        } else {
+            // For phone mode, we'll validate phone separately
+            // Backend will enforce its own validation rules
+            formData.phone = phone;
+        }
+
         const rules = ValidationUtils.getSignUpRules('doctor');
         const newErrors = ValidationUtils.validateFields(formData, rules);
+        
+        // Additional phone validation in phone mode (basic frontend check)
+        if (authMode === 'phone' && !phone) {
+            newErrors.phone = 'Phone number is required';
+        }
 
         // Additional validation for profile picture
         if (profilePicture) {
@@ -927,7 +1014,14 @@ export default function DoctorSignUp() {
             const formData = new FormData();
             formData.append('first_name', firstName);
             formData.append('surname', surname);
-            formData.append('email', email);
+            // Send email or phone based on auth mode
+            if (authMode === 'email') {
+                formData.append('email', email);
+            } else {
+                // Normalize phone to E.164 format before sending
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                formData.append('phone', normalizedPhone);
+            }
             formData.append('password', password);
             formData.append('password_confirmation', password);
             formData.append('dob', dob);
@@ -1094,8 +1188,14 @@ export default function DoctorSignUp() {
                         setDob={setDob}
                         gender={gender}
                         setGender={setGender}
+                        authMode={authMode}
+                        setAuthMode={setAuthMode}
                         email={email}
                         setEmail={setEmail}
+                        phone={phone}
+                        setPhone={setPhone}
+                        countryCode={countryCode}
+                        setCountryCode={setCountryCode}
                         password={password}
                         setPassword={setPassword}
                         yearsOfExperience={yearsOfExperience}
@@ -1253,6 +1353,57 @@ export default function DoctorSignUp() {
 
 // Update the styles object
 const styles = StyleSheet.create({
+    authModeToggle: {
+        flexDirection: 'row',
+        backgroundColor: '#F8F9FA',
+        borderRadius: 25,
+        padding: 4,
+        marginBottom: 16,
+    },
+    toggleButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+    },
+    toggleButtonActive: {
+        backgroundColor: '#4CAF50',
+    },
+    toggleIcon: {
+        marginRight: 6,
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+    },
+    toggleTextActive: {
+        color: '#FFFFFF',
+    },
+    phoneInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8F9FA',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    phoneInput: {
+        flex: 1,
+        paddingVertical: 14,
+        paddingLeft: 8,
+        fontSize: 16,
+        color: '#333',
+        ...Platform.select({
+            android: {
+                textAlignVertical: 'center',
+            },
+        }),
+    },
     safeArea: {
         flex: 1,
         backgroundColor: '#F8FAFC',

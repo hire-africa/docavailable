@@ -284,6 +284,33 @@ class AppointmentController extends Controller
             // Dispatch notification job
             \App\Jobs\SendAppointmentNotification::dispatch($appointment, 'appointment_created');
 
+            // Send in-app notification to doctor about new appointment request
+            try {
+                $notificationService = new \App\Services\NotificationService();
+                $patient = $appointment->patient;
+                $doctor = $appointment->doctor;
+                
+                if ($doctor && $patient) {
+                    $patientName = $patient->first_name . ' ' . $patient->last_name;
+                    $notificationService->createNotification(
+                        $doctor->id,
+                        'New Appointment Request',
+                        "You have a new appointment request from {$patientName}.",
+                        'appointment',
+                        [
+                            'appointment_id' => $appointment->id,
+                            'patient_name' => $patientName,
+                        ]
+                    );
+                }
+            } catch (\Exception $notificationError) {
+                // Log but don't fail the request if notification fails
+                \Log::warning("Failed to send appointment request notification", [
+                    'appointment_id' => $appointment->id,
+                    'error' => $notificationError->getMessage()
+                ]);
+            }
+
             \Log::info('✅ [AppointmentController] Cache cleared and notification dispatched');
 
             return $this->success($appointment->load('doctor'), 'Appointment created successfully', 201);

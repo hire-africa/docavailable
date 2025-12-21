@@ -167,6 +167,31 @@ class DoctorPaymentService
                 "You received {$paymentAmount} {$currency} for completing the {$sessionType} appointment"
             );
 
+            // Send in-app notification to doctor about payment received
+            try {
+                $patient = $appointment->patient;
+                $patientName = $patient ? ($patient->first_name . ' ' . $patient->last_name) : 'Patient';
+                $notificationService->createNotification(
+                    $appointment->doctor_id,
+                    'Payment Received',
+                    "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
+                    'payment',
+                    [
+                        'amount' => $paymentAmount,
+                        'currency' => $currency,
+                        'payment_id' => $wallet->transactions()->latest()->first()->id ?? null,
+                        'patient_name' => $patientName,
+                    ]
+                );
+            } catch (\Exception $notificationError) {
+                // Log but don't fail the payment if notification fails
+                \Log::warning("Failed to send payment received notification", [
+                    'appointment_id' => $appointment->id,
+                    'doctor_id' => $appointment->doctor_id,
+                    'error' => $notificationError->getMessage()
+                ]);
+            }
+
             return true;
         } catch (\Exception $e) {
             \Log::error('Failed to process appointment payment: ' . $e->getMessage(), [

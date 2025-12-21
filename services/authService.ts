@@ -346,11 +346,22 @@ class AuthService {
     return this.register(formData);
   }
 
-  async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
+  async login(credentials: { email?: string; phone?: string; password: string }): Promise<AuthResponse> {
     try {
-      console.log('AuthService: Attempting login with credentials:', { email: credentials.email, password: '***' });
+      // Prepare payload based on whether email or phone is provided
+      const payload: any = { password: credentials.password };
       
-      const response = await this.api.post('/login', credentials);
+      if (credentials.phone) {
+        payload.phone = credentials.phone;
+        console.log('AuthService: Attempting login with phone:', { phone: credentials.phone, password: '***' });
+      } else if (credentials.email) {
+        payload.email = credentials.email;
+        console.log('AuthService: Attempting login with email:', { email: credentials.email, password: '***' });
+      } else {
+        throw new Error('Either email or phone must be provided');
+      }
+      
+      const response = await this.api.post('/login', payload);
       
       console.log('AuthService: Login response received:', {
         status: response.status,

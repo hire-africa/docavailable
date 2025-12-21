@@ -16,6 +16,8 @@ import authService from '../services/authService';
 import customAlertService from '../services/customAlertService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
 import NativeGoogleSignIn from './NativeGoogleSignIn';
+import CountryCodeSelector from './CountryCodeSelector';
+import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -23,22 +25,45 @@ const INPUT_WIDTH_MOBILE = width * 0.8;
 const INPUT_WIDTH_WEB = 320;
 
 export default function LoginPage() {
+    const [authMode, setAuthMode] = useState<'email' | 'phone'>('email');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
+    const [countryCode, setCountryCode] = useState<CountryCode>(getDefaultCountryCode());
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showGoogleAuth, setShowGoogleAuth] = useState(false);
     const { userType } = useLocalSearchParams<{ userType?: string }>();
 
     const handleLogin = async () => {
-        if (!email || !password) {
-            customAlertService.error('Error', 'Please fill in all fields');
-            return;
+        // Validate based on auth mode
+        if (authMode === 'email') {
+            if (!email || !password) {
+                customAlertService.error('Error', 'Please fill in all fields');
+                return;
+            }
+        } else {
+            if (!phone || !password) {
+                customAlertService.error('Error', 'Please fill in all fields');
+                return;
+            }
         }
 
         setLoading(true);
         try {
-            console.log('LoginPage: Attempting login with:', { email, password: '***' });
-            const authState = await authService.signIn(email, password);
+            let credentials: { email?: string; phone?: string; password: string };
+            
+            if (authMode === 'email') {
+                credentials = { email, password };
+                console.log('LoginPage: Attempting login with email:', { email, password: '***' });
+            } else {
+                // Normalize phone to E.164 format
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                credentials = { phone: normalizedPhone, password };
+                console.log('LoginPage: Attempting login with phone:', { phone: normalizedPhone, password: '***' });
+            }
+            
+            // Use login method directly to support both email and phone
+            const authState = await authService.login(credentials as any);
             console.log('LoginPage: Login response:', authState);
             
             if (authState.data && authState.data.user) {
@@ -249,24 +274,87 @@ export default function LoginPage() {
                 )}
 
                 <View style={styles.form}>
-                    <View style={styles.inputContainer}>
-                        <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
-                        <TextInput
-                            style={[
-                                styles.input,
-                                Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
-                            ]}
-                            placeholder="Email"
-                            placeholderTextColor="#666"
-                            value={email}
-                            onChangeText={setEmail}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            cursorColor="#4CAF50"
-                            caretHidden={false}
-                            selectionColor="#4CAF50"
-                        />
+                    {/* Auth Mode Toggle */}
+                    <View style={styles.authModeToggle}>
+                        <TouchableOpacity
+                            style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
+                            onPress={() => setAuthMode('email')}
+                        >
+                            <FontAwesome 
+                                name="envelope" 
+                                size={16} 
+                                color={authMode === 'email' ? '#FFFFFF' : '#666'} 
+                                style={styles.toggleIcon}
+                            />
+                            <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
+                                Email
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
+                            onPress={() => setAuthMode('phone')}
+                        >
+                            <FontAwesome 
+                                name="phone" 
+                                size={16} 
+                                color={authMode === 'phone' ? '#FFFFFF' : '#666'} 
+                                style={styles.toggleIcon}
+                            />
+                            <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
+                                Phone
+                            </Text>
+                        </TouchableOpacity>
                     </View>
+
+                    {/* Email Input (shown when email mode) */}
+                    {authMode === 'email' && (
+                        <View style={styles.inputContainer}>
+                            <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                                ]}
+                                placeholder="Email"
+                                placeholderTextColor="#666"
+                                value={email}
+                                onChangeText={setEmail}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="email-address"
+                                cursorColor="#4CAF50"
+                                caretHidden={false}
+                                selectionColor="#4CAF50"
+                            />
+                        </View>
+                    )}
+
+                    {/* Phone Input (shown when phone mode) */}
+                    {authMode === 'phone' && (
+                        <View style={styles.inputContainer}>
+                            <CountryCodeSelector
+                                selectedCountry={countryCode}
+                                onSelect={setCountryCode}
+                            />
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    styles.phoneInput,
+                                    Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                                ]}
+                                placeholder="Phone number"
+                                placeholderTextColor="#666"
+                                value={phone}
+                                onChangeText={setPhone}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                keyboardType="phone-pad"
+                                cursorColor="#4CAF50"
+                                caretHidden={false}
+                                selectionColor="#4CAF50"
+                            />
+                        </View>
+                    )}
 
                     <View style={styles.inputContainer}>
                         <FontAwesome name="lock" size={20} color="#666" style={styles.inputIcon} />
@@ -535,5 +623,46 @@ const styles = StyleSheet.create({
         color: '#4CAF50',
         fontSize: 16,
         fontWeight: 'bold',
+    },
+    authModeToggle: {
+        flexDirection: 'row',
+        backgroundColor: '#F8F9FA',
+        borderRadius: 25,
+        padding: 4,
+        marginBottom: 20,
+        ...Platform.select({
+            web: {
+                width: INPUT_WIDTH_WEB,
+            },
+            default: {
+                width: INPUT_WIDTH_MOBILE,
+            }
+        }),
+    },
+    toggleButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+    },
+    toggleButtonActive: {
+        backgroundColor: '#4CAF50',
+    },
+    toggleIcon: {
+        marginRight: 6,
+    },
+    toggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#666',
+    },
+    toggleTextActive: {
+        color: '#FFFFFF',
+    },
+    phoneInput: {
+        flex: 1,
     },
 }); 

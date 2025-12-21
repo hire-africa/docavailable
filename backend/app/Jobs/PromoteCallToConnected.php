@@ -109,6 +109,54 @@ class PromoteCallToConnected implements ShouldQueue
                 'is_connected' => $callSession->is_connected
             ]);
 
+            // Send session started notifications to both patient and doctor
+            try {
+                $notificationService = new \App\Services\NotificationService();
+                $patient = $callSession->patient;
+                $doctor = $callSession->doctor;
+                
+                // Determine session type for display
+                $sessionType = $callSession->call_type === 'voice' ? 'audio' : ($callSession->call_type === 'video' ? 'video' : 'text');
+                
+                if ($patient) {
+                    $doctorName = $doctor ? ($doctor->first_name . ' ' . $doctor->last_name) : 'Doctor';
+                    $notificationService->createNotification(
+                        $patient->id,
+                        'Session Started',
+                        "Your {$sessionType} session with Dr. {$doctorName} has started.",
+                        'session',
+                        [
+                            'session_type' => $sessionType,
+                            'doctor_name' => $doctorName,
+                            'patient_name' => $patient->first_name . ' ' . $patient->last_name,
+                            'session_id' => $callSession->id,
+                        ]
+                    );
+                }
+                
+                if ($doctor) {
+                    $patientName = $patient ? ($patient->first_name . ' ' . $patient->last_name) : 'Patient';
+                    $notificationService->createNotification(
+                        $doctor->id,
+                        'Session Started',
+                        "Your {$sessionType} session with {$patientName} has started.",
+                        'session',
+                        [
+                            'session_type' => $sessionType,
+                            'doctor_name' => $doctor->first_name . ' ' . $doctor->last_name,
+                            'patient_name' => $patientName,
+                            'session_id' => $callSession->id,
+                        ]
+                    );
+                }
+            } catch (\Exception $notificationError) {
+                // Log but don't fail the job if notification fails
+                Log::warning("Failed to send session started notification", [
+                    'call_session_id' => $this->callSessionId,
+                    'error' => $notificationError->getMessage()
+                ]);
+            }
+
         } catch (\Exception $e) {
             Log::error("PromoteCallToConnected: ERROR - Exception during promotion", [
                 'call_session_id' => $this->callSessionId,

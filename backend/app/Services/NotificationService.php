@@ -274,4 +274,55 @@ class NotificationService
             'notifications_by_type' => $notificationsByType,
         ];
     }
+
+    /**
+     * Create a database notification for a user
+     * This is a centralized helper function for creating in-app notifications
+     * 
+     * @param int $userId The user ID to send the notification to
+     * @param string $title The notification title
+     * @param string $message The notification message
+     * @param string $type The notification type (session, appointment, payment, subscription, system)
+     * @param array $metadata Additional metadata to store with the notification
+     * @return void
+     */
+    public function createNotification(int $userId, string $title, string $message, string $type, array $metadata = []): void
+    {
+        try {
+            $user = User::find($userId);
+            if (!$user) {
+                Log::warning("Cannot create notification: User not found", [
+                    'user_id' => $userId,
+                    'type' => $type,
+                    'title' => $title
+                ]);
+                return;
+            }
+
+            // Prepare notification data
+            $notificationData = array_merge([
+                'title' => $title,
+                'message' => $message,
+                'type' => $type,
+            ], $metadata);
+
+            // Create notification using CustomNotification class
+            $notification = new \App\Notifications\CustomNotification($title, $message, $notificationData);
+            $user->notify($notification);
+
+            Log::info("In-app notification created", [
+                'user_id' => $userId,
+                'type' => $type,
+                'title' => $title
+            ]);
+        } catch (\Exception $e) {
+            // Log error but don't throw - notifications should be non-blocking
+            Log::error("Failed to create notification: " . $e->getMessage(), [
+                'user_id' => $userId,
+                'type' => $type,
+                'title' => $title,
+                'trace' => $e->getTraceAsString()
+            ]);
+        }
+    }
 } 

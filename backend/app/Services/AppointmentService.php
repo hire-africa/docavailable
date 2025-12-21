@@ -180,6 +180,59 @@ class AppointmentService
                 $pushNotificationService = new \App\Services\PushNotificationService();
                 $pushNotificationService->sendAppointmentNotification($appointment, $notificationType);
                 
+                // Send in-app notifications for accepted/rejected appointments
+                if ($numericStatus === Appointment::STATUS_CONFIRMED) {
+                    // Appointment accepted
+                    try {
+                        $patient = $appointment->patient;
+                        $doctor = $appointment->doctor;
+                        
+                        if ($patient && $doctor) {
+                            $doctorName = 'Dr. ' . $doctor->first_name . ' ' . $doctor->last_name;
+                            $notificationService->createNotification(
+                                $patient->id,
+                                'Appointment Accepted',
+                                "{$doctorName} accepted your appointment request.",
+                                'appointment',
+                                [
+                                    'appointment_id' => $appointment->id,
+                                    'doctor_name' => $doctorName,
+                                ]
+                            );
+                        }
+                    } catch (\Exception $notificationError) {
+                        \Log::warning("Failed to send appointment accepted notification", [
+                            'appointment_id' => $appointment->id,
+                            'error' => $notificationError->getMessage()
+                        ]);
+                    }
+                } elseif ($numericStatus === Appointment::STATUS_CANCELLED) {
+                    // Appointment rejected
+                    try {
+                        $patient = $appointment->patient;
+                        $doctor = $appointment->doctor;
+                        
+                        if ($patient && $doctor) {
+                            $doctorName = 'Dr. ' . $doctor->first_name . ' ' . $doctor->last_name;
+                            $notificationService->createNotification(
+                                $patient->id,
+                                'Appointment Rejected',
+                                "{$doctorName} rejected your appointment request.",
+                                'appointment',
+                                [
+                                    'appointment_id' => $appointment->id,
+                                    'doctor_name' => $doctorName,
+                                ]
+                            );
+                        }
+                    } catch (\Exception $notificationError) {
+                        \Log::warning("Failed to send appointment rejected notification", [
+                            'appointment_id' => $appointment->id,
+                            'error' => $notificationError->getMessage()
+                        ]);
+                    }
+                }
+                
                 \Log::info('✅ [AppointmentService] Notifications sent successfully', [
                     'appointment_id' => $appointment->id,
                     'notification_type' => $notificationType

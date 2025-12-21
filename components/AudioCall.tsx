@@ -431,7 +431,8 @@ export default function AudioCall({
 
   const getStatusText = () => {
     if (shouldShowIncomingUI) return 'Incoming Call';
-    if (isEffectivelyConnected) return 'Connected';
+    if (callState.connectionState === 'reconnecting') return 'Reconnecting...';
+    if (isEffectivelyConnected && callState.connectionState !== 'reconnecting') return 'Connected';
     if (isIncomingCall && isProcessingAnswer) return 'Answering...';
 
     switch (callState.connectionState) {
@@ -439,6 +440,8 @@ export default function AudioCall({
         return isIncomingCall ? 'Connecting...' : 'Calling...';
       case 'connected':
         return 'Connected';
+      case 'reconnecting':
+        return 'Reconnecting...';
       case 'disconnected':
         return 'Call Ended';
       case 'failed':
@@ -449,12 +452,15 @@ export default function AudioCall({
   };
 
   const getConnectionIndicatorColor = () => {
-    if (isEffectivelyConnected) return '#4CAF50';
+    if (callState.connectionState === 'reconnecting') return '#FF9800';
+    if (isEffectivelyConnected && callState.connectionState !== 'reconnecting') return '#4CAF50';
     switch (callState.connectionState) {
       case 'connecting':
         return '#FF9800';
       case 'connected':
         return '#4CAF50';
+      case 'reconnecting':
+        return '#FF9800';
       case 'disconnected':
         return '#9E9E9E';
       case 'failed':
@@ -470,6 +476,8 @@ export default function AudioCall({
         return isRinging ? '#FF6B6B' : '#FF9800';
       case 'connected':
         return '#4CAF50';
+      case 'reconnecting':
+        return '#FF9800';
       case 'disconnected':
         return '#9E9E9E';
       case 'failed':

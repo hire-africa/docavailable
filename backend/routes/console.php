@@ -45,6 +45,13 @@ Schedule::command('appointments:expire')
     ->withoutOverlapping()
     ->runInBackground();
 
+// Process subscription expirations and apply 30-day plan roll-over rules
+// Runs daily to check and update subscription statuses
+Schedule::command('subscriptions:process-expirations')
+    ->daily()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // Note: Auto-ending for text sessions is handled by the existing ProcessExpiredTextSessions command
 // This provides reliable session ending without queue complexity
 

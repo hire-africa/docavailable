@@ -1,5 +1,4 @@
-import React from 'react';
-import { Alert, Linking, Platform } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import comprehensivePermissionManager from '../services/comprehensivePermissionManager';
 
 interface PermissionPromptProps {
