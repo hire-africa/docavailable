@@ -32,6 +32,7 @@ class CallSession extends Model
         'declined_by',
         'decline_reason',
         'connected_at',
+        'manual_deduction_applied',
     ];
 
     protected $casts = [

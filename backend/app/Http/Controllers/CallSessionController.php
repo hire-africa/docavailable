@@ -439,6 +439,68 @@ class CallSessionController extends Controller
                 // Refresh call session to get updated connected_at
                 $callSession->refresh();
 
+                // Set ended_at first
+                $callSession->update([
+                    'status' => CallSession::STATUS_ENDED,
+                    'ended_at' => now(),
+                    'last_activity_at' => now(),
+                    'is_connected' => (bool) $callSession->connected_at,
+                ]);
+                $callSession->refresh();
+
+                // Manual hangup deduction (ONCE, idempotent)
+                // Deduct +1 session immediately if call was connected, regardless of duration
+                $manualDeductionApplied = false;
+                if ($callSession->connected_at && !$callSession->manual_deduction_applied) {
+                    $patient = $user;
+                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    
+                    if ($subscription) {
+                        $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
+                        
+                        if ($subscription->$callTypeField >= 1) {
+                            // Deduct 1 session from patient
+                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - 1);
+                            $subscription->save();
+                            
+                            // Pay the doctor
+                            $doctor = User::find($callSession->doctor_id);
+                            if ($doctor) {
+                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor);
+                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                                
+                                $doctorWallet->credit(
+                                    $paymentAmount,
+                                    "Manual hangup payment for 1 {$callType} call session with " . $patient->first_name . " " . $patient->last_name,
+                                    $callType,
+                                    $callSession->id,
+                                    'call_sessions_manual',
+                                    [
+                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                        'sessions_used' => 1,
+                                        'currency' => $currency,
+                                        'payment_amount' => $paymentAmount,
+                                    ]
+                                );
+                            }
+                            
+                            // Mark manual deduction as applied
+                            $callSession->update([
+                                'manual_deduction_applied' => true,
+                                'sessions_used' => ($callSession->sessions_used ?? 0) + 1,
+                            ]);
+                            $manualDeductionApplied = true;
+                            
+                            Log::info("Manual hangup deduction applied", [
+                                'call_session_id' => $callSession->id,
+                                'appointment_id' => $appointmentId,
+                                'sessions_deducted' => 1,
+                            ]);
+                        }
+                    }
+                }
+
                 // Calculate duration from timestamps only
                 $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
                 
@@ -447,10 +509,13 @@ class CallSessionController extends Controller
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $remainingAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
                 
-                // Manual deduction: +1 on manual hangup (if call was connected)
-                // Use timestamp to determine if connected
-                $manualDeduction = $callSession->connected_at ? 1 : 0;
-                $totalSessionsToDeduct = $remainingAutoDeductions + $manualDeduction;
+                $totalSessionsToDeduct = $remainingAutoDeductions;
+
+                // Update call duration
+                $callSession->update([
+                    'call_duration' => $duration,
+                    'auto_deductions_processed' => $autoDeductions
+                ]);
 
                 // Log billing calculation for debugging
                 Log::info("Call session billing calculation", [
@@ -458,34 +523,21 @@ class CallSessionController extends Controller
                     'auto_deductions' => $autoDeductions,
                     'already_processed' => $alreadyProcessed,
                     'remaining_auto_deductions' => $remainingAutoDeductions,
-                    'manual_deduction' => $manualDeduction,
-                    'total_sessions_to_deduct' => $totalSessionsToDeduct,
-                    'was_connected' => $wasConnected
+                    'manual_deduction_applied' => $manualDeductionApplied,
                 ]);
 
-                // Update the call session status
-                $callSession->update([
-                    'status' => CallSession::STATUS_ENDED,
-                    'ended_at' => now(),
-                    'last_activity_at' => now(),
-                    'is_connected' => (bool) $callSession->connected_at,
-                    'call_duration' => $duration,
-                    'sessions_used' => ($callSession->sessions_used ?? 0) + $totalSessionsToDeduct,
-                    'auto_deductions_processed' => $autoDeductions // Update to full count
-                ]);
-
-                // Process deductions and doctor payments if there are sessions to deduct
+                // Process auto-deductions separately (if any)
                 $deductionResult = [
                     'doctor_payment_success' => false,
                     'patient_deduction_success' => false,
                     'doctor_payment_amount' => 0,
                     'patient_sessions_deducted' => 0,
                     'auto_deductions' => $autoDeductions,
-                    'manual_deduction' => $manualDeduction,
+                    'manual_deduction_applied' => $manualDeductionApplied,
                     'errors' => []
                 ];
 
-                if ($totalSessionsToDeduct > 0 && $wasConnected) {
+                if ($remainingAutoDeductions > 0) {
                     // Get patient subscription with lock
                     $patient = $user;
                     $subscription = $patient->subscription()->lockForUpdate()->first();
@@ -495,32 +547,36 @@ class CallSessionController extends Controller
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
                         
                         // Check if patient has enough sessions
-                        if ($subscription->$callTypeField >= $totalSessionsToDeduct) {
+                        if ($subscription->$callTypeField >= $remainingAutoDeductions) {
                             // Deduct from patient subscription
-                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $totalSessionsToDeduct);
+                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $remainingAutoDeductions);
                             $subscription->save();
                             $deductionResult['patient_deduction_success'] = true;
-                            $deductionResult['patient_sessions_deducted'] = $totalSessionsToDeduct;
+                            $deductionResult['patient_sessions_deducted'] = $remainingAutoDeductions;
+
+                            // Update call session
+                            $callSession->auto_deductions_processed = $autoDeductions;
+                            $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $remainingAutoDeductions;
+                            $callSession->save();
 
                             // Pay the doctor
                             $doctor = User::find($callSession->doctor_id);
                             if ($doctor) {
                                 $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $totalSessionsToDeduct;
+                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $remainingAutoDeductions;
                                 $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
                                 
                                 $doctorWallet->credit(
                                     $paymentAmount,
-                                    "Payment for {$totalSessionsToDeduct} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
+                                    "Auto-deduction payment for {$remainingAutoDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
                                     $callType,
                                     $callSession->id,
-                                    'call_sessions',
+                                    'call_sessions_auto',
                                     [
                                         'patient_name' => $patient->first_name . " " . $patient->last_name,
                                         'session_duration' => $duration,
-                                        'sessions_used' => $totalSessionsToDeduct,
-                                        'auto_deductions' => $autoDeductions,
-                                        'manual_deduction' => $manualDeduction,
+                                        'sessions_used' => $remainingAutoDeductions,
+                                        'auto_deductions' => $remainingAutoDeductions,
                                         'currency' => $currency,
                                         'payment_amount' => $paymentAmount,
                                     ]
@@ -544,9 +600,8 @@ class CallSessionController extends Controller
                     'appointment_id' => $appointmentId,
                     'duration_seconds' => $duration,
                     'was_connected' => (bool) $callSession->connected_at,
-                    'sessions_deducted' => $totalSessionsToDeduct,
-                    'auto_deductions' => $autoDeductions,
-                    'manual_deduction' => $manualDeduction,
+                    'auto_deductions' => $remainingAutoDeductions,
+                    'manual_deduction_applied' => $manualDeductionApplied,
                     'deduction_result' => $deductionResult
                 ]);
 
@@ -555,7 +610,8 @@ class CallSessionController extends Controller
                     'message' => 'Call session ended successfully',
                     'duration_seconds' => $duration,
                     'was_connected' => (bool) $callSession->connected_at,
-                    'sessions_deducted' => $totalSessionsToDeduct,
+                    'auto_deductions' => $remainingAutoDeductions,
+                    'manual_deduction_applied' => $manualDeductionApplied,
                     'deduction_result' => $deductionResult
                 ]);
             });
