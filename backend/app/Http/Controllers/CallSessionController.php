@@ -439,42 +439,22 @@ class CallSessionController extends Controller
                 // Refresh call session to get updated connected_at
                 $callSession->refresh();
 
-                // Calculate duration from connected_at (not started_at)
-                // This is the actual billable time
-                $connectedDuration = $callSession->connected_at->diffInSeconds(now());
+                // Calculate duration from timestamps only
+                $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
                 
-                // SECURITY FIX: Validate session_duration against server-side connected time
-                // Allow a small buffer (e.g., 60 seconds) for network latency/clock drift
-                $maxAllowedDuration = $connectedDuration + 60;
-                
-                if ($sessionDuration > $maxAllowedDuration) {
-                    Log::warning("Suspicious session duration detected", [
-                        'session_id' => $callSession->id,
-                        'reported_duration' => $sessionDuration,
-                        'server_connected_duration' => $connectedDuration,
-                        'capped_at' => $maxAllowedDuration
-                    ]);
-                    $sessionDuration = $maxAllowedDuration;
-                }
-
-                // Use the validated duration for billing calculations
-                // Convert session duration from seconds to minutes
-                $elapsedMinutes = floor($sessionDuration / 60);
-                $autoDeductions = floor($elapsedMinutes / 10); // Every 10 minutes
-                
-                // FIX: Account for already processed auto-deductions
+                // Calculate auto-deductions: every 10 minutes (600 seconds)
+                $autoDeductions = floor($duration / 600);
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $remainingAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
                 
-                // CRITICAL: Always add +1 session on manual hang up (if call was connected)
-                // This is in addition to auto-deductions
-                $manualDeduction = $wasConnected ? 1 : 0;
+                // Manual deduction: +1 on manual hangup (if call was connected)
+                // Use timestamp to determine if connected
+                $manualDeduction = $callSession->connected_at ? 1 : 0;
                 $totalSessionsToDeduct = $remainingAutoDeductions + $manualDeduction;
 
                 // Log billing calculation for debugging
                 Log::info("Call session billing calculation", [
-                    'session_duration_seconds' => $sessionDuration,
-                    'elapsed_minutes' => $elapsedMinutes,
+                    'duration_seconds' => $duration,
                     'auto_deductions' => $autoDeductions,
                     'already_processed' => $alreadyProcessed,
                     'remaining_auto_deductions' => $remainingAutoDeductions,
@@ -488,8 +468,8 @@ class CallSessionController extends Controller
                     'status' => CallSession::STATUS_ENDED,
                     'ended_at' => now(),
                     'last_activity_at' => now(),
-                    'is_connected' => $wasConnected,
-                    'call_duration' => $sessionDuration,
+                    'is_connected' => (bool) $callSession->connected_at,
+                    'call_duration' => $duration,
                     'sessions_used' => ($callSession->sessions_used ?? 0) + $totalSessionsToDeduct,
                     'auto_deductions_processed' => $autoDeductions // Update to full count
                 ]);
@@ -537,7 +517,7 @@ class CallSessionController extends Controller
                                     'call_sessions',
                                     [
                                         'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                        'session_duration' => $sessionDuration,
+                                        'session_duration' => $duration,
                                         'sessions_used' => $totalSessionsToDeduct,
                                         'auto_deductions' => $autoDeductions,
                                         'manual_deduction' => $manualDeduction,
@@ -562,8 +542,8 @@ class CallSessionController extends Controller
                     'call_session_id' => $callSession->id,
                     'call_type' => $callType,
                     'appointment_id' => $appointmentId,
-                    'session_duration' => $sessionDuration,
-                    'was_connected' => $wasConnected,
+                    'duration_seconds' => $duration,
+                    'was_connected' => (bool) $callSession->connected_at,
                     'sessions_deducted' => $totalSessionsToDeduct,
                     'auto_deductions' => $autoDeductions,
                     'manual_deduction' => $manualDeduction,
@@ -573,8 +553,8 @@ class CallSessionController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'Call session ended successfully',
-                    'session_duration' => $sessionDuration,
-                    'was_connected' => $wasConnected,
+                    'duration_seconds' => $duration,
+                    'was_connected' => (bool) $callSession->connected_at,
                     'sessions_deducted' => $totalSessionsToDeduct,
                     'deduction_result' => $deductionResult
                 ]);
@@ -669,32 +649,23 @@ class CallSessionController extends Controller
                     }
                 }
 
-                // Calculate auto-deductions for every 10 minutes
-                // Use connected_at as the billing start time
-                $connectedDuration = $callSession->connected_at->diffInSeconds(now());
-                $maxAllowedDuration = $connectedDuration + 60;
+                // Calculate duration from timestamps only
+                $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
                 
-                if ($sessionDuration > $maxAllowedDuration) {
-                    Log::warning("Suspicious session duration in deduction", [
-                        'session_id' => $callSession->id,
-                        'reported_duration' => $sessionDuration,
-                        'server_connected_duration' => $connectedDuration,
-                        'capped_at' => $maxAllowedDuration
-                    ]);
-                    $sessionDuration = $maxAllowedDuration;
-                }
-
-                // Convert session duration from seconds to minutes
-                $elapsedMinutes = floor($sessionDuration / 60);
-                $autoDeductions = floor($elapsedMinutes / 10);
+                // Calculate auto-deductions: every 10 minutes (600 seconds)
+                $autoDeductions = floor($duration / 600);
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $newDeductions = max(0, $autoDeductions - $alreadyProcessed);
+                
+                // Manual deduction: +1 on manual hangup
+                $manualDeduction = $callSession->ended_at ? 1 : 0;
 
                 $deductionResult = [
                     'deductions_processed' => 0,
                     'remaining_calls' => 0,
                     'auto_deductions' => $autoDeductions,
                     'new_deductions' => $newDeductions,
+                    'manual_deduction' => $manualDeduction,
                     'errors' => []
                 ];
 
@@ -733,7 +704,7 @@ class CallSessionController extends Controller
                                     'call_sessions_auto',
                                     [
                                         'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                        'session_duration' => $sessionDuration,
+                                        'session_duration' => $duration,
                                         'sessions_used' => $newDeductions,
                                         'auto_deductions' => $newDeductions,
                                         'currency' => $currency,
@@ -756,9 +727,10 @@ class CallSessionController extends Controller
                     'user_id' => $user->id,
                     'call_type' => $callType,
                     'appointment_id' => $appointmentId,
-                    'session_duration' => $sessionDuration,
+                    'duration_seconds' => $duration,
                     'auto_deductions' => $autoDeductions,
                     'new_deductions' => $newDeductions,
+                    'manual_deduction' => $manualDeduction,
                     'deduction_result' => $deductionResult
                 ]);
 
@@ -799,17 +771,18 @@ class CallSessionController extends Controller
         $callSession->update([
             'answered_at' => now(),
             'answered_by' => auth()->id(),
-            'connected_at' => now(), // TEMP: immediate
-            'is_connected' => true,
         ]);
 
         $callSession->refresh();
 
+        // Dispatch job to promote to connected after 5 seconds
+        PromoteCallToConnected::dispatch($callSession->id, $appointmentId)
+            ->delay(now()->addSeconds(5));
+
         return response()->json([
             'success' => true,
             'answered_at' => $callSession->answered_at,
-            'connected_at' => $callSession->connected_at,
-            'is_connected' => $callSession->is_connected,
+            'answered_by' => $callSession->answered_by,
         ]);
     }
 

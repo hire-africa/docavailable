@@ -75,92 +75,37 @@ class PromoteCallToConnected implements ShouldQueue
                 'is_connected' => $callSession->is_connected
             ]);
 
-            // RACE-CONDITION SAFETY: If call ended but connected_at was never set, still promote it
-            // This ensures billing correctness - billing depends ONLY on timestamps
-            if ($callSession->ended_at && !$callSession->connected_at && $callSession->answered_at) {
-                Log::warning("PromoteCallToConnected: RACE CONDITION DETECTED - Call ended but connected_at missing", [
-                    'call_session_id' => $this->callSessionId,
-                    'appointment_id' => $this->appointmentId,
-                    'answered_at' => $callSession->answered_at->toISOString(),
-                    'ended_at' => $callSession->ended_at->toISOString(),
-                    'status' => $callSession->status
-                ]);
-                
-                // Still promote for billing correctness - use answered_at as connected_at
-                // This ensures billing can calculate duration correctly
-                $callSession->update([
-                    'status' => CallSession::STATUS_ACTIVE, // Set to active first
-                    'is_connected' => true,
-                    'connected_at' => $callSession->answered_at, // Use answered_at as connected_at
-                ]);
-                
-                // If call was ended, set status back to ended but keep connected_at
-                if ($callSession->ended_at) {
-                    $callSession->update(['status' => CallSession::STATUS_ENDED]);
-                }
-
-                Log::info("PromoteCallToConnected: RACE CONDITION FIXED - Call promoted with answered_at as connected_at", [
-                    'call_session_id' => $this->callSessionId,
-                    'appointment_id' => $this->appointmentId,
-                    'connected_at' => $callSession->connected_at->toISOString(),
-                    'answered_at' => $callSession->answered_at->toISOString(),
-                    'ended_at' => $callSession->ended_at->toISOString()
-                ]);
-                return;
-            }
-
-            // CRITICAL: Promote if answered_at exists, regardless of current status
-            // Status might be 'connecting' (transport state) but if answered_at exists, we must promote
-            // Lifecycle: answered_at exists → must have connected_at for billing
-            if (!$callSession->answered_at) {
-                Log::info("PromoteCallToConnected: Call not answered yet, skipping", [
-                    'call_session_id' => $this->callSessionId,
-                    'current_status' => $callSession->status,
-                    'appointment_id' => $this->appointmentId
-                ]);
-                return;
-            }
-            
-            // If already has connected_at, log success (idempotent)
+            // Idempotent: Skip if already has connected_at
             if ($callSession->connected_at) {
                 Log::info("PromoteCallToConnected: Call already has connected_at - promotion already completed", [
                     'call_session_id' => $this->callSessionId,
                     'connected_at' => $callSession->connected_at->toISOString(),
-                    'current_status' => $callSession->status
                 ]);
                 return;
             }
-            
-            // If status is not answered but answered_at exists, log warning but still promote
-            // This handles cases where status is stuck in 'connecting' but call was answered
-            if ($callSession->status !== CallSession::STATUS_ANSWERED && $callSession->status !== CallSession::STATUS_ACTIVE) {
-                Log::warning("PromoteCallToConnected: Status is '{$callSession->status}' but answered_at exists - promoting anyway", [
-                    'call_session_id' => $this->callSessionId,
-                    'current_status' => $callSession->status,
-                    'answered_at' => $callSession->answered_at->toISOString(),
-                    'appointment_id' => $this->appointmentId
-                ]);
-            }
 
-            // Check if call was ended before grace period expired (but no race condition)
-            if ($callSession->ended_at && !$callSession->answered_at) {
-                Log::info("PromoteCallToConnected: Call ended before being answered, skipping promotion", [
+            // Only promote if answered_at exists
+            if (!$callSession->answered_at) {
+                Log::info("PromoteCallToConnected: Call not answered yet, skipping", [
                     'call_session_id' => $this->callSessionId,
                     'appointment_id' => $this->appointmentId
                 ]);
                 return;
             }
 
-            // Promote to connected state
-            // CRITICAL: markAsConnected() uses answered_at (not now()) and checks if already set
-            $callSession->markAsConnected();
+            // Set connected_at and is_connected
+            $callSession->update([
+                'connected_at' => now(),
+                'is_connected' => true,
+            ]);
 
-            Log::info("PromoteCallToConnected: SUCCESS - Call promoted to connected (server-owned lifecycle)", [
+            $callSession->refresh();
+
+            Log::info("PromoteCallToConnected: SUCCESS - Call promoted to connected", [
                 'call_session_id' => $this->callSessionId,
                 'appointment_id' => $this->appointmentId,
                 'connected_at' => $callSession->connected_at->toISOString(),
                 'answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : null,
-                'status' => $callSession->status,
                 'is_connected' => $callSession->is_connected
             ]);
 
