@@ -646,6 +646,7 @@ export default function VideoCallModal({
   };
 
   const handleRejectCall = async () => {
+    // Unified reject handler - works identically for caller and receiver
     Vibration.vibrate(50);
 
     // Stop ringtone when rejecting call
@@ -655,9 +656,10 @@ export default function VideoCallModal({
       console.error('❌ Failed to stop ringtone:', e);
     }
 
+    // Use endCall for both incoming and outgoing to ensure both sides close properly
+    // This ensures both sides close WebRTC connection and dismiss modal
     if (videoCallService.current) {
-      // For incoming, send a rejection signal so the caller stops
-      videoCallService.current.rejectIncomingCall?.('declined');
+      await videoCallService.current.endCall();
     }
     onRejectCall?.();
   };

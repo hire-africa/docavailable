@@ -372,7 +372,6 @@ export default function ChatPage() {
   const [showAudioCall, setShowAudioCall] = useState(false);
   const [incomingCallerName, setIncomingCallerName] = useState<string>('');
   const [incomingCallerProfilePicture, setIncomingCallerProfilePicture] = useState<string | null>(null);
-  const [showDoctorUnavailableModal, setShowDoctorUnavailableModal] = useState(false);
 
   // Video call modal state
   const [showVideoCallModal, setShowVideoCallModal] = useState(false);
@@ -5405,109 +5404,11 @@ export default function ChatPage() {
         otherParticipantProfilePictureUrl={chatInfo?.other_participant_profile_picture_url}
         isIncomingCall={!!(global as any).isIncomingCall}
         onCallTimeout={() => {
-          // Only show "Doctor Unavailable" modal to patients (callers)
-          if (isPatient) {
-            setShowDoctorUnavailableModal(true);
-          }
         }}
         onCallRejected={() => {
-          // Only show "Doctor Unavailable" modal to patients (callers)
-          if (isPatient) {
-            setShowDoctorUnavailableModal(true);
-          }
         }}
       />
 
-      {/* Doctor Unavailable Modal */}
-      <Modal
-        visible={showDoctorUnavailableModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDoctorUnavailableModal(false)}
-      >
-        <View style={{
-          flex: 1,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 20
-        }}>
-          <View style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 16,
-            padding: 32,
-            alignItems: 'center',
-            minWidth: 320,
-            maxWidth: 400,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.25,
-            shadowRadius: 16,
-            elevation: 16
-          }}>
-            <View style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: '#FFF3E0',
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginBottom: 24
-            }}>
-              <Ionicons name="call" size={40} color="#FF9800" />
-            </View>
-
-            <Text style={{
-              fontSize: 24,
-              fontWeight: '700',
-              color: '#11181C',
-              marginBottom: 12,
-              textAlign: 'center'
-            }}>
-              Doctor Unavailable
-            </Text>
-
-            <Text style={{
-              fontSize: 16,
-              color: '#687076',
-              textAlign: 'center',
-              lineHeight: 24,
-              marginBottom: 32
-            }}>
-              The doctor is currently unavailable. They might be attending another patient. Please try again later or send a message.
-            </Text>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#4CAF50',
-                paddingHorizontal: 32,
-                paddingVertical: 16,
-                borderRadius: 12,
-                minWidth: 140,
-                shadowColor: '#4CAF50',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 8
-              }}
-              onPress={() => {
-                setShowDoctorUnavailableModal(false);
-                setShowAudioCallModal(false);
-                // Optionally navigate back or stay in chat
-              }}
-            >
-              <Text style={{
-                color: '#FFFFFF',
-                fontSize: 16,
-                fontWeight: '600',
-                textAlign: 'center'
-              }}>
-                OK
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Video Call Modal */}
       {showVideoCallModal && (
@@ -5536,18 +5437,10 @@ export default function ChatPage() {
             onCallTimeout={() => {
               setShowVideoCallModal(false);
               setShowVideoCall(false);
-              // Only show "Doctor Unavailable" modal to patients (callers)
-              if (isPatient) {
-                setShowDoctorUnavailableModal(true);
-              }
             }}
             onCallRejected={() => {
               setShowVideoCallModal(false);
               setShowVideoCall(false);
-              // Only show "Doctor Unavailable" modal to patients (callers)
-              if (isPatient) {
-                setShowDoctorUnavailableModal(true);
-              }
             }}
             onCallAnswered={() => {
               console.log('Video call answered');
@@ -5587,20 +5480,12 @@ export default function ChatPage() {
               setShowVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when call times out
               callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
-              // Only show "Doctor Unavailable" modal to patients (callers)
-              if (isPatient) {
-                setShowDoctorUnavailableModal(true);
-              }
             }}
             onCallRejected={() => {
               setShowIncomingVideoCall(false);
               setShowVideoCall(false);
               incomingCallShownRef.current = false; // Reset flag when call is rejected
               callDeduplicationService.clearCall(appointmentId, 'video'); // Clear from deduplication service
-              // Only show "Doctor Unavailable" modal to patients (callers)
-              if (isPatient) {
-                setShowDoctorUnavailableModal(true);
-              }
             }}
             onCallAnswered={() => {
               // Clear from deduplication service

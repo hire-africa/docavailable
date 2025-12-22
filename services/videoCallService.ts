@@ -1,6 +1,5 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
-import { Alert } from 'react-native';
 import {
     mediaDevices,
     MediaStream,
@@ -1463,7 +1462,6 @@ class VideoCallService {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ [VideoCallService] Call marked as answered in backend:', data);
-        Alert.alert('Answer Endpoint Response', JSON.stringify(data, null, 2));
       } else {
         const errorText = await response.text();
         let errorData;

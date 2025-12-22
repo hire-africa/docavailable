@@ -1,5 +1,4 @@
 import { Notifications } from 'expo-notifications';
-import { Alert } from 'react-native';
 import apiService from '../app/services/apiService';
 import ringtoneService from './ringtoneService';
 
@@ -133,7 +132,6 @@ export class CallNotificationService {
         action: 'answered'
       });
 
-      Alert.alert('Answer Endpoint Response', JSON.stringify(res, null, 2));
       console.log('Call answered successfully');
     } catch (error) {
       console.error('Failed to answer call:', error);

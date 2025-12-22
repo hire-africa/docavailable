@@ -585,6 +585,7 @@ export default function AudioCall({
           <TouchableOpacity
             style={[styles.controlButton, styles.declineButton]}
             onPress={async () => {
+              // Unified reject handler - works identically for caller and receiver
               Vibration.vibrate(50);
               // Stop ringtone immediately when declining call
               try {
@@ -593,7 +594,13 @@ export default function AudioCall({
               } catch (e) {
                 console.error('❌ Failed to stop ringtone on decline:', e);
               }
-              try { await AudioCallService.getInstance().rejectIncomingCall?.('declined'); } catch { }
+              // Use endCall for both incoming and outgoing to ensure both sides close properly
+              // This ensures both sides close WebRTC connection and dismiss modal
+              try {
+                await AudioCallService.getInstance().endCall();
+              } catch (e) {
+                console.error('❌ Failed to end call on reject:', e);
+              }
               onCallRejected?.();
             }}
             activeOpacity={0.8}

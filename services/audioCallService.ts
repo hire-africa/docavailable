@@ -1,6 +1,5 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
-import { Alert } from 'react-native';
 import {
     mediaDevices,
     MediaStream,
@@ -148,6 +147,39 @@ class AudioCallService {
       this.userId = userId;
       this.isCallAnswered = false;
       
+      
+      // After hot reload, ensure stale state is cleared
+      // If we have a stale peer connection or stream from a previous session, reset them
+      if (this.peerConnection && (this.state.connectionState === 'disconnected' || this.state.connectionState === 'failed')) {
+        console.log('🧹 [AudioCallService] Clearing stale peer connection after hot reload');
+        try {
+          this.peerConnection.close();
+        } catch (e) {}
+        this.peerConnection = null;
+      }
+      if (this.localStream && (this.state.connectionState === 'disconnected' || this.state.connectionState === 'failed')) {
+        console.log('🧹 [AudioCallService] Clearing stale local stream after hot reload');
+        try {
+          this.localStream.getTracks().forEach(track => track.stop());
+        } catch (e) {}
+        this.localStream = null;
+      }
+      // ALWAYS reset hasAccepted for a new incoming call (critical after hot reload)
+      // This ensures stale state from previous sessions doesn't interfere
+      this.hasAccepted = false;
+      
+      // Reset stale flags that might persist after hot reload
+      if (this.state.connectionState !== 'connected' && this.state.connectionState !== 'disconnected') {
+        console.log('🧹 [AudioCallService] Resetting stale connection state after hot reload');
+        this.updateState({ connectionState: 'disconnected' });
+      }
+      
+      // Restore pending offer from global to instance (survives reset() calls)
+      if ((global as any).pendingOffer && !this.pendingOffer) {
+        this.pendingOffer = (global as any).pendingOffer;
+        console.log('📞 [AudioCallService] Restored pending offer from global to instance');
+      }
+      
       // Update state after events are set
       this.updateState({ connectionState: 'connecting' });
       
@@ -156,7 +188,6 @@ class AudioCallService {
 
       // Incoming mode gating: do not get media or create PC until accept
       this.isIncomingMode = true;
-      this.hasAccepted = false;
       this.pendingCandidates = [];
       this.hasEnded = false;
 
@@ -164,7 +195,10 @@ class AudioCallService {
       await this.connectSignaling(appointmentId, userId);
       console.log('📞 Signaling connected for incoming call - waiting for user to accept');
 
-      const pendingOffer = (global as any).pendingOffer;
+      // Check both global and instance - instance survives reset() calls
+      const globalPendingOffer = (global as any).pendingOffer;
+      const instancePendingOffer = this.pendingOffer;
+      const pendingOffer = instancePendingOffer || globalPendingOffer;
       if (pendingOffer) {
         console.log('📞 Pending offer found - waiting for user acceptance');
       } else {
@@ -632,7 +666,45 @@ class AudioCallService {
                     // Always store offers for incoming calls, regardless of mode
                     if (this.isIncoming || this.isIncomingMode) {
                       (global as any).pendingOffer = message.offer;
-                      console.log('📞 [AudioCallService] Stored pending offer for incoming call; awaiting user acceptance');
+                      this.pendingOffer = message.offer; // Also store in instance to prevent loss during reset
+                      
+                      // If user has already accepted, process the offer immediately
+                      // BUT only if we're actually in incoming mode and have an appointmentId (not stale state)
+                      if (this.hasAccepted && this.isIncomingMode && this.appointmentId) {
+                        console.log('📞 [AudioCallService] Received offer after user accepted - processing immediately');
+                        // Ensure media and PC are ready
+                        if (!this.localStream) {
+                          this.localStream = await mediaDevices.getUserMedia({ 
+                            video: false, 
+                            audio: {
+                              echoCancellation: true,
+                              noiseSuppression: true,
+                              autoGainControl: true,
+                              sampleRate: 44100,
+                              channelCount: 1,
+                            }
+                          });
+                          await this.configureAudioRouting();
+                        }
+                        if (!this.peerConnection) {
+                          await this.initializePeerConnection();
+                        }
+                        // Process the offer immediately
+                        await this.handleOffer(message.offer);
+                        // Drain queued ICE candidates
+                        if (this.peerConnection && this.pendingCandidates.length > 0) {
+                          for (const c of this.pendingCandidates) {
+                            try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+                          }
+                          this.pendingCandidates = [];
+                        }
+                        // Clear pending offer after processing
+                        (global as any).pendingOffer = null;
+                        this.pendingOffer = null;
+                        return; // Don't continue with normal offer handling
+                      } else {
+                        console.log('📞 [AudioCallService] Stored pending offer for incoming call; awaiting user acceptance');
+                      }
                     } else if (!this.hasAccepted) {
                       // For outgoing calls, handle offer immediately
                       await this.handleOffer(message.offer);
@@ -724,7 +796,10 @@ class AudioCallService {
    * Process offer when user accepts incoming call
    */
   async processIncomingOffer(): Promise<void> {
-    const pendingOffer = (global as any).pendingOffer;
+    // Check both global and instance - instance survives reset() calls
+    const globalPendingOffer = (global as any).pendingOffer;
+    const instancePendingOffer = this.pendingOffer;
+    const pendingOffer = instancePendingOffer || globalPendingOffer;
     if (pendingOffer) {
       console.log('📞 Processing pending offer for incoming call');
       console.log('📞 Pending offer details:', {
@@ -760,8 +835,9 @@ class AudioCallService {
       await this.handleOffer(pendingOffer);
       console.log('📞 Offer handled successfully');
       
-      // Clear the pending offer after successful processing
+      // Clear the pending offer after successful processing (both global and instance)
       (global as any).pendingOffer = null;
+      this.pendingOffer = null;
     } else {
       console.log('📞 No pending offer found');
     }
@@ -1023,10 +1099,16 @@ class AudioCallService {
       return;
     }
     
-    // Prevent duplicate offer handling
-    if (this.hasAccepted) {
-      console.warn('⚠️ [handleOffer] Call already accepted - ignoring duplicate offer');
+    // Prevent duplicate offer handling, BUT allow re-offers if remote description isn't set yet
+    // This handles the case where the original offer was lost and a re-offer arrives after hasAccepted=true
+    if (this.hasAccepted && this.peerConnection?.remoteDescription) {
+      console.warn('⚠️ [handleOffer] Call already accepted and remote description set - ignoring duplicate offer');
       return;
+    }
+    
+    // If hasAccepted is true but no remote description, this is a re-offer that needs processing
+    if (this.hasAccepted && !this.peerConnection?.remoteDescription) {
+      console.log('📞 [handleOffer] Processing re-offer after hasAccepted=true (original offer was lost)');
     }
     
     try {
@@ -1330,6 +1412,13 @@ class AudioCallService {
     try {
       console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
       
+      // Ensure we're not in a stale state from hot reload
+      // If hasAccepted is true but we're not connected, something went wrong - reset it
+      if (this.hasAccepted && this.state.connectionState !== 'connected' && !this.state.isConnected) {
+        console.log('🧹 [AudioCallService] Resetting stale hasAccepted state - call not actually connected');
+        this.hasAccepted = false;
+      }
+      
       // CRITICAL: Call answer endpoint to update database (answered_at)
       // This must happen BEFORE WebRTC processing to ensure lifecycle correctness
       if (this.appointmentId) {
@@ -1348,8 +1437,14 @@ class AudioCallService {
         this.disconnectGraceTimer = null;
       }
       
-      const pendingOffer = (global as any).pendingOffer;
+      // Check both global and instance - instance survives reset() calls
+      const globalPendingOffer = (global as any).pendingOffer;
+      const instancePendingOffer = this.pendingOffer;
+      const pendingOffer = instancePendingOffer || globalPendingOffer;
+      
       console.log('📞 [AudioCallService] Checking for pending offer:', {
+        hasGlobalOffer: !!globalPendingOffer,
+        hasInstanceOffer: !!instancePendingOffer,
         hasPendingOffer: !!pendingOffer,
         offerType: pendingOffer?.type,
         offerSdpLength: pendingOffer?.sdp?.length
@@ -1407,8 +1502,9 @@ class AudioCallService {
       await this.handleOffer(pendingOffer);
       
       console.log('📞 [AudioCallService] Offer processed successfully, clearing pending offer');
-      // Clear the pending offer after processing
+      // Clear the pending offer after processing (both global and instance)
       (global as any).pendingOffer = null;
+      this.pendingOffer = null;
       
       // Drain queued ICE candidates now that remoteDescription is set
       if (this.peerConnection && this.pendingCandidates.length > 0) {
@@ -1418,8 +1514,9 @@ class AudioCallService {
         this.pendingCandidates = [];
       }
 
-      // Clear the pending offer
+      // Clear the pending offer (both global and instance)
       (global as any).pendingOffer = null;
+      this.pendingOffer = null;
       this.hasAccepted = true;
       
       // Clear any existing disconnect grace timer since we're actively answering
@@ -1910,7 +2007,6 @@ class AudioCallService {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ [AudioCallService] Call marked as answered in backend:', data);
-        Alert.alert('Answer Endpoint Response', JSON.stringify(data, null, 2));
       } else {
         const errorText = await response.text();
         let errorData;
@@ -2231,8 +2327,13 @@ class AudioCallService {
     this.callStartAttempted = false;
     this.didEmitAnswered = false;
     
-    // Clear global pending offer
-    (global as any).pendingOffer = null;
+    // Only clear global pending offer if we're not in the middle of an incoming call
+    // This prevents losing the offer if reset() is called during initialization
+    if (!this.isIncomingMode && !this.isIncoming) {
+      (global as any).pendingOffer = null;
+    }
+    // Always clear instance pending offer on reset (it will be restored from global if needed)
+    this.pendingOffer = null;
     
     console.log('✅ AudioCallService state reset complete');
     (global as any).activeAudioCall = false;
