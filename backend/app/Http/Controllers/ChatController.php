@@ -327,113 +327,84 @@ class ChatController extends Controller
         if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
             $sessionId = str_replace('text_session_', '', $appointmentId);
             
-            try {
-                // Use transaction with lockForUpdate() for atomic operations
-                $session = DB::transaction(function () use ($sessionId, $user, $request, $appointmentId) {
-                    // Lock the session row for update to prevent race conditions
-                    $session = \App\Models\TextSession::where('id', $sessionId)
-                        ->lockForUpdate()
-                        ->first();
+            // Use transaction with lockForUpdate() for atomic operations
+            $session = DB::transaction(function () use ($sessionId, $user, $request, $appointmentId) {
+                // Lock the session row for update to prevent race conditions
+                $session = \App\Models\TextSession::where('id', $sessionId)
+                    ->lockForUpdate()
+                    ->first();
 
-                    if (!$session) {
-                        Log::error("Text session not found", [
-                            'session_id' => $sessionId,
-                            'appointment_id' => $appointmentId,
-                            'user_id' => $user->id
-                        ]);
-                        throw new \Exception("Session not found");
-                    }
-
-                    Log::info("Text session message received", [
-                        'appointment_id' => $appointmentId,
+                if (!$session) {
+                    Log::error("Text session not found", [
                         'session_id' => $sessionId,
-                        'user_id' => $user->id,
-                        'user_type' => $user->user_type,
-                        'session_status' => $session->status,
-                        'doctor_response_deadline' => $session->doctor_response_deadline,
-                        'message_type' => $request->message_type ?? 'text',
+                        'appointment_id' => $appointmentId,
+                        'user_id' => $user->id
                     ]);
+                    abort(404, 'Session not found');
+                }
 
-                    // REJECT messages if session is expired or ended
-                    if (in_array($session->status, [\App\Models\TextSession::STATUS_EXPIRED, \App\Models\TextSession::STATUS_ENDED])) {
-                        Log::warning("Message rejected - session is expired or ended", [
-                            'session_id' => $sessionId,
-                            'status' => $session->status,
-                            'user_id' => $user->id
-                        ]);
-                        throw new \Exception("Session is {$session->status}. Messages are not allowed.");
-                    }
-
-                    // Handle doctor's FIRST message - enforce 90-second deadline
-                    if (in_array($session->status, [\App\Models\TextSession::STATUS_PENDING, \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR]) 
-                        && $user->id === $session->doctor_id) {
-                        
-                        $now = now();
-                        $deadline = $session->doctor_response_deadline;
-
-                        if (!$deadline) {
-                            // Should not happen if session was created correctly, but handle gracefully
-                            Log::warning("Doctor response deadline not set, setting it now", [
-                                'session_id' => $sessionId
-                            ]);
-                            $deadline = $session->created_at->addSeconds(90);
-                        }
-
-                        // Check if deadline has passed
-                        if ($now->gt($deadline)) {
-                            // Expire the session
-                            $session->update([
-                                'status' => \App\Models\TextSession::STATUS_EXPIRED,
-                                'ended_at' => $now,
-                                'reason' => 'Doctor did not respond within 90 seconds'
-                            ]);
-
-                            Log::info("Session expired - doctor response deadline passed", [
-                                'session_id' => $sessionId,
-                                'deadline' => $deadline,
-                                'current_time' => $now,
-                                'seconds_past_deadline' => $now->diffInSeconds($deadline)
-                            ]);
-
-                            throw new \Exception("Session expired. Doctor did not respond within 90 seconds.");
-                        }
-
-                        // Deadline not passed - activate the session
-                        $session->update([
-                            'status' => \App\Models\TextSession::STATUS_ACTIVE,
-                            'activated_at' => $now,
-                            'started_at' => $now,
-                            'last_activity_at' => $now
-                        ]);
-
-                        Log::info("Session activated by doctor's first message", [
-                            'session_id' => $sessionId,
-                            'activated_at' => $now,
-                            'deadline' => $deadline,
-                            'seconds_remaining' => $deadline->diffInSeconds($now)
-                        ]);
-                    }
-
-                    // Update last_activity_at on every message (for active sessions)
-                    if ($session->status === \App\Models\TextSession::STATUS_ACTIVE) {
-                        $session->update(['last_activity_at' => now()]);
-                    }
-
-                    return $session;
-                });
-            } catch (\Exception $e) {
-                // Return error response if session is expired, ended, or not found
-                Log::error("Text session message handling failed", [
+                Log::info("Text session message received", [
+                    'appointment_id' => $appointmentId,
                     'session_id' => $sessionId,
-                    'error' => $e->getMessage(),
-                    'user_id' => $user->id
+                    'user_id' => $user->id,
+                    'user_type' => $user->user_type,
+                    'session_status' => $session->status,
+                    'doctor_response_deadline' => $session->doctor_response_deadline,
+                    'message_type' => $request->message_type ?? 'text',
                 ]);
 
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 400);
-            }
+                // FINAL BACKEND RULES: Reject messages if session is expired, ended, or cancelled
+                if (in_array($session->status, ['expired', 'ended', 'cancelled'])) {
+                    Log::warning("Message rejected - session is not active", [
+                        'session_id' => $sessionId,
+                        'status' => $session->status,
+                        'user_id' => $user->id
+                    ]);
+                    abort(403, 'Session is not active');
+                }
+
+                // FINAL BACKEND RULES: Handle waiting_for_doctor status (or pending)
+                // Only check deadline if this is the doctor's message
+                if (in_array($session->status, ['waiting_for_doctor', 'pending']) && $user->id === $session->doctor_id) {
+                    if (now()->gt($session->doctor_response_deadline)) {
+                        $session->update([
+                            'status' => 'expired',
+                            'ended_at' => now(),
+                            'reason' => 'Doctor did not respond within 90 seconds',
+                        ]);
+
+                        Log::info("Session expired - doctor response deadline passed", [
+                            'session_id' => $sessionId,
+                            'deadline' => $session->doctor_response_deadline,
+                            'current_time' => now(),
+                            'seconds_past_deadline' => now()->diffInSeconds($session->doctor_response_deadline)
+                        ]);
+
+                        abort(403, 'Session expired');
+                    }
+
+                    // Deadline not passed - activate the session
+                    $session->update([
+                        'status' => 'active',
+                        'activated_at' => now(),
+                        'started_at' => now(),
+                    ]);
+
+                    Log::info("Session activated by doctor's first message", [
+                        'session_id' => $sessionId,
+                        'activated_at' => now(),
+                        'deadline' => $session->doctor_response_deadline,
+                        'seconds_remaining' => $session->doctor_response_deadline->diffInSeconds(now())
+                    ]);
+                }
+
+                // Update last_activity_at on every message (for active sessions)
+                if ($session->status === 'active') {
+                    $session->update(['last_activity_at' => now()]);
+                }
+
+                return $session;
+            });
         }
 
         // Prepare message data
