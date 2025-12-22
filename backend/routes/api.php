@@ -286,6 +286,11 @@ Route::prefix('auth')->group(function () {
     Route::post('/google-login', [AuthenticationController::class, 'googleLogin'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
     Route::post('/send-verification-code', [AuthenticationController::class, 'sendVerificationCode']);
     Route::post('/verify-email', [AuthenticationController::class, 'verifyEmail']);
+
+    // Phone Authentication
+    Route::post('/send-otp', [\App\Http\Controllers\Auth\PhoneAuthController::class, 'sendOtp']);
+    Route::post('/verify-otp', [\App\Http\Controllers\Auth\PhoneAuthController::class, 'verifyOtp']);
+
 });
 
 // Simple user check endpoint
@@ -1010,7 +1015,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
     Route::post('/call-sessions/re-notify', [App\Http\Controllers\CallSessionController::class, 'reNotify']);
     Route::post('/call-sessions/answer', [App\Http\Controllers\CallSessionController::class, 'answer']);
-    
+
     // TEMPORARY DEBUG ENDPOINT
     Route::get('/debug-call/{appointmentId}', function ($appointmentId) {
         return \App\Models\CallSession::where('appointment_id', $appointmentId)->get();

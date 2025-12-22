@@ -20,6 +20,7 @@ class User extends Authenticatable implements JWTSubject
      */
     protected $fillable = [
         'email',
+        'phone',
         'password',
         'first_name',
         'last_name',
@@ -131,12 +132,12 @@ class User extends Authenticatable implements JWTSubject
         if (is_null($value)) {
             return null;
         }
-        
+
         if (is_string($value)) {
             $decoded = json_decode($value, true);
             return is_array($decoded) ? $decoded : null;
         }
-        
+
         return $value;
     }
 
@@ -274,8 +275,8 @@ class User extends Authenticatable implements JWTSubject
     public function chatRooms()
     {
         return $this->belongsToMany(ChatRoom::class, 'chat_room_participants', 'user_id', 'chat_room_id')
-                    ->withPivot('role')
-                    ->withTimestamps();
+            ->withPivot('role')
+            ->withTimestamps();
     }
 
     /**
@@ -342,12 +343,12 @@ class User extends Authenticatable implements JWTSubject
         if (!$this->subscription) {
             return false;
         }
-        
+
         // Check if subscription is active using the accessor logic
         if (!$this->subscription->isActive) {
             return false;
         }
-        
+
         return $this->subscription->text_sessions_remaining > 0;
     }
 
@@ -359,7 +360,7 @@ class User extends Authenticatable implements JWTSubject
         if (!$this->subscription || !$this->subscription->isActive) {
             return 0;
         }
-        
+
         return $this->subscription->text_sessions_remaining;
     }
 
@@ -371,7 +372,7 @@ class User extends Authenticatable implements JWTSubject
         if (!$this->isDoctor()) {
             return false;
         }
-        
+
         return $this->is_online_for_instant_sessions && $this->is_active;
     }
 
