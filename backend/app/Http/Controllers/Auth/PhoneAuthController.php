@@ -43,10 +43,26 @@ class PhoneAuthController extends Controller
         }
 
         // Find or create user
-        $user = User::firstOrCreate(
-            ['phone' => $request->phone],
-            ['name' => 'User'] // default name, adjust as needed based on your User model
-        );
+        // We will attempt to find by phone.
+        // If not found, we create, but we need names since they are not nullable.
+        // We'll trust the request or default to placeholders if necessary, though for a real signup flow the frontend should provide these.
+
+        $user = User::where('phone', $request->phone)->first();
+
+        if (!$user) {
+            // New user registration
+            $request->validate([
+                'first_name' => 'required|string',
+                'last_name' => 'required|string',
+            ]);
+
+            $user = User::create([
+                'phone' => $request->phone,
+                'first_name' => $request->first_name,
+                'last_name' => $request->last_name,
+                // email and password are nullable
+            ]);
+        }
 
         // Check if createToken method exists (Sanctum)
         if (method_exists($user, 'createToken')) {
