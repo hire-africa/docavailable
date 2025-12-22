@@ -40,6 +40,7 @@ class TextSession extends Model
     const STATUS_ENDED = 'ended';
     const STATUS_EXPIRED = 'expired';
     const STATUS_WAITING_FOR_DOCTOR = 'waiting_for_doctor';
+    const STATUS_PENDING = 'pending';
 
     /**
      * Get the patient that owns the text session.

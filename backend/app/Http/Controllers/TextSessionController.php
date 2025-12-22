@@ -111,12 +111,13 @@ class TextSessionController extends Controller
                 $textSession = TextSession::create([
                     'patient_id' => $patientId,
                     'doctor_id' => $doctorId,
-                    'status' => TextSession::STATUS_WAITING_FOR_DOCTOR,
+                    'status' => TextSession::STATUS_PENDING,
                     'started_at' => now(),
                     'last_activity_at' => now(),
                     'sessions_used' => 0,
                     'sessions_remaining_before_start' => $sessionsRemaining,
                     'reason' => $reason,
+                    'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
                 ]);
 
                 // Create chat room
@@ -1317,9 +1318,10 @@ class TextSessionController extends Controller
                 'appointment_id' => $appointmentId,
                 'doctor_id' => $doctorId,
                 'patient_id' => $patientId,
-                'status' => 'waiting_for_doctor',
+                'status' => TextSession::STATUS_PENDING,
                 'reason' => $reason ?: $appointment->reason,
                 'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
+                'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
