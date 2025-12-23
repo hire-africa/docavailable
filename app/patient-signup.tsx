@@ -1,8 +1,6 @@
 import authService from '@/services/authService';
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
@@ -18,21 +16,20 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import customAlertService from '../services/customAlertService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CountryCodeSelector from '../components/CountryCodeSelector';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import CountryCodeSelector from '../components/CountryCodeSelector';
-import { navigateToLogin } from '../utils/navigationUtils';
-import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
-import SignUpErrorHandler from '../utils/errorHandler';
-import ValidationUtils from '../utils/validationUtils';
-import SignupProgressUtils from '../utils/signupProgressUtils';
-import AuthErrorHandler from '../utils/authErrorHandler';
 import ProgressIndicator from '../components/ProgressIndicator';
+import customAlertService from '../services/customAlertService';
+import { efasheService } from '../services/efasheService';
 import EnhancedValidation from '../utils/enhancedValidation';
-import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
+import SignUpErrorHandler from '../utils/errorHandler';
+import { navigateToLogin } from '../utils/navigationUtils';
+import { CountryCode, getMalawiCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
+import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
+import ValidationUtils from '../utils/validationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -77,6 +74,8 @@ interface Step1Props {
 
 interface Step3Props {
     email: string;
+    phone: string;
+    authMode: 'email' | 'phone';
     verificationCode: string;
     setVerificationCode: (code: string) => void;
     isVerifying: boolean;
@@ -216,10 +215,10 @@ const Step1: React.FC<Step1Props> = ({
                     size={120}
                 />
             </View>
-            
+
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Basic Details</Text>
-                
+
                 <View style={styles.row}>
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>First Name</Text>
@@ -232,7 +231,7 @@ const Step1: React.FC<Step1Props> = ({
                             onChangeText={setFirstName}
                             numberOfLines={1}
                         />
-                                                    {errors?.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
+                        {errors?.firstName && <Text style={styles.errorText}>{errors.firstName}</Text>}
                     </View>
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>Surname</Text>
@@ -280,17 +279,17 @@ const Step1: React.FC<Step1Props> = ({
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Account Details</Text>
-                
+
                 {/* Auth Mode Toggle */}
                 <View style={styles.authModeToggle}>
                     <TouchableOpacity
                         style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
                         onPress={() => setAuthMode('email')}
                     >
-                        <FontAwesome 
-                            name="envelope" 
-                            size={14} 
-                            color={authMode === 'email' ? '#FFFFFF' : '#666'} 
+                        <FontAwesome
+                            name="envelope"
+                            size={14}
+                            color={authMode === 'email' ? '#FFFFFF' : '#666'}
                             style={styles.toggleIcon}
                         />
                         <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
@@ -301,10 +300,10 @@ const Step1: React.FC<Step1Props> = ({
                         style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
                         onPress={() => setAuthMode('phone')}
                     >
-                        <FontAwesome 
-                            name="phone" 
-                            size={14} 
-                            color={authMode === 'phone' ? '#FFFFFF' : '#666'} 
+                        <FontAwesome
+                            name="phone"
+                            size={14}
+                            color={authMode === 'phone' ? '#FFFFFF' : '#666'}
                             style={styles.toggleIcon}
                         />
                         <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
@@ -339,6 +338,7 @@ const Step1: React.FC<Step1Props> = ({
                             <CountryCodeSelector
                                 selectedCountry={countryCode}
                                 onSelect={setCountryCode}
+                                disabled={true}
                             />
                             <TextInput
                                 ref={fieldRefs.phone}
@@ -354,7 +354,7 @@ const Step1: React.FC<Step1Props> = ({
                         {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
                     </>
                 )}
-                
+
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
                     ref={fieldRefs.password}
@@ -385,11 +385,11 @@ const Step1: React.FC<Step1Props> = ({
                 <Text style={styles.sectionLabel}>Identity Verification (Optional)</Text>
                 <Text style={styles.uploadDescription}>
                     Verify your identity for enhanced security. This step is optional and can be completed later.
-                        </Text>
-                
+                </Text>
+
                 <Text style={styles.inputLabel}>Choose ID Type</Text>
                 <View ref={fieldRefs.idType} style={styles.idOptionsContainer}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={[styles.idOption, idType === 'drivers' && styles.idOptionActive]}
                         onPress={() => {
                             console.log('Selected ID type: drivers');
@@ -403,8 +403,8 @@ const Step1: React.FC<Step1Props> = ({
                             Driver&apos;s License
                         </Text>
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity 
+
+                    <TouchableOpacity
                         style={[styles.idOption, idType === 'passport' && styles.idOptionActive]}
                         onPress={() => {
                             console.log('Selected ID type: passport');
@@ -418,8 +418,8 @@ const Step1: React.FC<Step1Props> = ({
                             Passport
                         </Text>
                     </TouchableOpacity>
-                    
-                    <TouchableOpacity 
+
+                    <TouchableOpacity
                         style={[styles.idOption, idType === 'national' && styles.idOptionActive]}
                         onPress={() => {
                             console.log('Selected ID type: national');
@@ -433,12 +433,12 @@ const Step1: React.FC<Step1Props> = ({
                             National ID
                         </Text>
                     </TouchableOpacity>
-            </View>
+                </View>
 
                 {idType && (
                     <View style={styles.modernUploadSection}>
                         <Text style={styles.modernUploadTitle}>Upload Your {idType === 'drivers' ? 'Driver\'s License' : idType === 'passport' ? 'Passport' : 'National ID'}</Text>
-                        
+
                         {idDocument ? (
                             <View style={styles.modernUploadedContainer}>
                                 <View style={styles.modernUploadedImageContainer}>
@@ -455,12 +455,12 @@ const Step1: React.FC<Step1Props> = ({
                             </View>
                         ) : (
                             <View style={styles.modernUploadOptions}>
-                <TouchableOpacity 
-                                    style={styles.modernUploadButton} 
+                                <TouchableOpacity
+                                    style={styles.modernUploadButton}
                                     onPress={handleTakePhoto}
-                    disabled={isUploading}
-                >
-                    {isUploading ? (
+                                    disabled={isUploading}
+                                >
+                                    {isUploading ? (
                                         <ActivityIndicator size="small" color="#FFFFFF" />
                                     ) : (
                                         <>
@@ -469,30 +469,30 @@ const Step1: React.FC<Step1Props> = ({
                                         </>
                                     )}
                                 </TouchableOpacity>
-                                
-                                <TouchableOpacity 
-                                    style={styles.modernUploadButtonSecondary} 
+
+                                <TouchableOpacity
+                                    style={styles.modernUploadButtonSecondary}
                                     onPress={handleIdUpload}
                                     disabled={isUploading}
                                 >
                                     {isUploading ? (
                                         <ActivityIndicator size="small" color="#4CAF50" />
-                    ) : (
-                        <>
+                                    ) : (
+                                        <>
                                             <FontAwesome name="upload" size={20} color="#4CAF50" />
                                             <Text style={styles.modernUploadButtonSecondaryText}>Choose from Gallery</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
                             </View>
                         )}
 
-                {idDocument && (
-                    <View style={styles.uploadSuccessNote}>
-                        <FontAwesome name="check-circle" size={16} color="#4CAF50" />
-                        <Text style={styles.uploadSuccessText}>
-                            ID document uploaded successfully. This step is optional.
-                        </Text>
+                        {idDocument && (
+                            <View style={styles.uploadSuccessNote}>
+                                <FontAwesome name="check-circle" size={16} color="#4CAF50" />
+                                <Text style={styles.uploadSuccessText}>
+                                    ID document uploaded successfully. This step is optional.
+                                </Text>
                             </View>
                         )}
                     </View>
@@ -541,6 +541,8 @@ const Step1: React.FC<Step1Props> = ({
 // Step 3 Component: Email Verification
 const Step3: React.FC<Step3Props> = ({
     email,
+    phone,
+    authMode,
     verificationCode,
     setVerificationCode,
     isVerifying,
@@ -551,28 +553,28 @@ const Step3: React.FC<Step3Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="envelope" size={32} color="#4CAF50" />
-                <Text style={styles.stepTitle}>Email Verification</Text>
-                <Text style={styles.stepSubtitle}>Verify your email address to complete registration</Text>
+                <FontAwesome name={authMode === 'email' ? "envelope" : "mobile-phone"} size={32} color="#4CAF50" />
+                <Text style={styles.stepTitle}>{authMode === 'email' ? 'Email' : 'Phone'} Verification</Text>
+                <Text style={styles.stepSubtitle}>Verify your {authMode === 'email' ? 'email address' : 'phone number'} to complete registration</Text>
             </View>
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Verification Code</Text>
                 <Text style={styles.verificationDescription}>
                     We've sent a verification code to{' '}
-                    <Text style={styles.emailHighlight}>{email}</Text>
+                    <Text style={styles.emailHighlight}>{authMode === 'email' ? email : phone}</Text>
                 </Text>
-                
-                <Text style={styles.inputLabel}>Enter Verification Code</Text>
+
+                <Text style={styles.inputLabel}>Enter {authMode === 'email' ? 'Email' : 'SMS'} Verification Code</Text>
                 <TextInput
                     ref={fieldRefs.verificationCode}
                     style={[styles.input, errors.verificationCode && styles.inputError]}
-                    placeholder="Enter 6-digit code"
+                    placeholder="Enter code"
                     placeholderTextColor="#999"
                     value={verificationCode}
                     onChangeText={setVerificationCode}
                     keyboardType="numeric"
-                    maxLength={6}
+                    maxLength={null}
                     autoFocus
                 />
                 {errors.verificationCode && <Text style={styles.errorText}>{errors.verificationCode}</Text>}
@@ -605,7 +607,7 @@ export default function PatientSignUp() {
         userType?: string;
         source?: string;
     }>();
-    
+
     const [step, setStep] = useState(1);
     const [authMode, setAuthMode] = useState<'email' | 'phone'>('email');
     const [firstName, setFirstName] = useState('');
@@ -615,23 +617,23 @@ export default function PatientSignUp() {
     const [gender, setGender] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
-    const [countryCode, setCountryCode] = useState<CountryCode>(getDefaultCountryCode());
+    const [countryCode, setCountryCode] = useState<CountryCode>(getMalawiCountryCode());
     const [password, setPassword] = useState('');
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');
     const [acceptPolicies, setAcceptPolicies] = useState(false);
     const [loading, setLoading] = useState(false);
-    
+
     // Create refs for scrolling to errors
     const scrollViewRef = useRef<ScrollView>(null);
-    
+
     // Pre-fill form with Google data if available and check if user exists
     useEffect(() => {
         if (googleData && source === 'google') {
             try {
                 const parsedGoogleData = JSON.parse(googleData);
                 console.log('🔐 Patient Signup: Pre-filling form with Google data:', parsedGoogleData);
-                
+
                 // Pre-fill form fields with Google data
                 if (parsedGoogleData.name) {
                     const nameParts = parsedGoogleData.name.split(' ');
@@ -644,90 +646,37 @@ export default function PatientSignUp() {
                 if (parsedGoogleData.profile_picture) {
                     setProfilePicture(parsedGoogleData.profile_picture);
                 }
-                
+
                 console.log('🔐 Patient Signup: Form pre-filled successfully');
-                
+
                 // Check if user already exists
                 checkIfUserExists(parsedGoogleData.email);
-                
+
             } catch (error) {
                 console.error('🔐 Patient Signup: Error parsing Google data:', error);
             }
         }
     }, [googleData, source]);
 
-    // Restore progress on component mount
+    // Only check if user already exists if coming from Google OAuth
     useEffect(() => {
-        const restoreProgress = async () => {
+        if (googleData && source === 'google') {
             try {
-                const result = await SignupProgressUtils.restoreProgress();
-                
-                if (result.hasProgress && result.progress && result.progress.userType === 'patient') {
-                    const { progress } = result;
-                    const summary = SignupProgressUtils.createProgressSummary(progress);
-                    
-                    customAlertService.confirm(
-                        'Continue Previous Registration?',
-                        `You have an incomplete ${summary.title} (${summary.percentage}% complete). Would you like to continue where you left off?`,
-                        () => {
-                            console.log('🔐 Patient Signup: User chose to continue previous registration');
-                            loadProgressData(result.progress);
-                            setStep(result.progress.currentStep);
-                            setLoading(false);
-                        },
-                        () => {
-                            console.log('🔐 Patient Signup: User chose to start fresh');
-                            SignupProgressUtils.clearProgress();
-                            setStep(1);
-                            setLoading(false);
-                        },
-                        'Continue',
-                        'Start Fresh'
-                    );
-                } else if (result.isExpired) {
-                    console.log('⏰ Previous signup progress expired');
-                }
+                const parsedGoogleData = JSON.parse(googleData);
+                checkIfUserExists(parsedGoogleData.email);
             } catch (error) {
-                console.error('❌ Failed to restore progress:', error);
+                console.error('🔐 Patient Signup: Error parsing Google data for email check:', error);
             }
-        };
-
-        // Only restore if not coming from Google OAuth
-        if (!googleData) {
-            restoreProgress();
         }
-    }, []);
+    }, [googleData, source]);
 
-    // Save progress whenever form data changes
-    useEffect(() => {
-        const saveProgress = async () => {
-            if (step > 1 && (firstName || email)) { // Only save if user has started filling the form
-                const formData = {
-                    firstName,
-                    surname,
-                    email,
-                    password,
-                    dob,
-                    gender,
-                    country,
-                    city,
-                    profilePicture,
-                    acceptPolicies
-                };
-                
-                await SignupProgressUtils.saveProgress(step, 'patient', formData);
-            }
-        };
 
-        const timeoutId = setTimeout(saveProgress, 1000); // Debounce saves
-        return () => clearTimeout(timeoutId);
-    }, [step, firstName, surname, email, password, dob, gender, country, city, profilePicture, acceptPolicies]);
 
     // Check if user already exists using proper endpoint
     const checkIfUserExists = async (email: string) => {
         try {
             console.log('🔐 Patient Signup: Checking if user exists for email:', email);
-            
+
             // Use dedicated endpoint to check email existence
             const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/check-email', {
                 method: 'POST',
@@ -743,7 +692,7 @@ export default function PatientSignUp() {
 
             if (data.exists) {
                 console.log('🔐 Patient Signup: User already exists, showing login option');
-                
+
                 customAlertService.confirm(
                     'Account Already Exists',
                     'An account with this email already exists. Would you like to log in instead?',
@@ -764,20 +713,20 @@ export default function PatientSignUp() {
         }
     };
     const fieldRefs = createFieldRefs([
-        'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
+        'firstName', 'surname', 'dob', 'gender', 'email', 'password',
         'country', 'city', 'acceptPolicies', 'verificationCode', 'idType', 'profilePicture'
     ]);
-    
+
     // ID verification state (formerly Step 2)
     const [idType, setIdType] = useState<string | null>(null);
     const [idDocument, setIdDocument] = useState<string | null>(null);
-    
+
     // Step 2 state (now email verification)
     const [verificationCode, setVerificationCode] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
     const [isResending, setIsResending] = useState(false);
     const [isSendingVerification, setIsSendingVerification] = useState(false);
-    
+
     const [errors, setErrors] = useState({
         firstName: null,
         surname: null,
@@ -796,7 +745,7 @@ export default function PatientSignUp() {
         const loadGoogleUserData = async () => {
             try {
                 let googleUserData = null;
-                
+
                 if (Platform.OS === 'web' && typeof window !== 'undefined') {
                     const stored = sessionStorage.getItem('google_user_data');
                     if (stored) {
@@ -812,18 +761,18 @@ export default function PatientSignUp() {
                         await AsyncStorage.removeItem('google_user_data');
                     }
                 }
-                
+
                 if (googleUserData) {
                     console.log('Pre-filling form with Google user data:', googleUserData);
                     setFirstName(googleUserData.first_name || '');
                     setSurname(googleUserData.last_name || '');
                     setEmail(googleUserData.email || '');
-                    
+
                     // Set profile picture if available
                     if (googleUserData.picture) {
                         setProfilePicture(googleUserData.picture);
                     }
-                    
+
                     // Show a message to the user
                     customAlertService.info(
                         'Google Account Detected',
@@ -834,7 +783,7 @@ export default function PatientSignUp() {
                 console.warn('Could not load Google user data:', error);
             }
         };
-        
+
         loadGoogleUserData();
     }, []);
 
@@ -859,9 +808,17 @@ export default function PatientSignUp() {
             formData.phone = phone;
         }
 
-        const rules = ValidationUtils.getSignUpRules('patient');
+        const rules = { ...ValidationUtils.getSignUpRules('patient') };
+
+        // Adjust rules based on auth mode
+        if (authMode === 'phone') {
+            delete rules.email;
+        } else {
+            // Email mode: Ensure email is required (already in default rules, but good to be explicit if needed)
+        }
+
         const newErrors = ValidationUtils.validateFields(formData, rules);
-        
+
         // Additional phone validation in phone mode (basic frontend check)
         if (authMode === 'phone' && !phone) {
             newErrors.phone = 'Phone number is required';
@@ -880,13 +837,13 @@ export default function PatientSignUp() {
         }
 
         setErrors(newErrors as any);
-        
+
         // Use enhanced validation for better scrolling
         const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
             showAlert: false,
             scrollDelay: 100
         });
-        
+
         return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
@@ -895,21 +852,32 @@ export default function PatientSignUp() {
         const newErrors = verificationError ? { verificationCode: verificationError } : {};
 
         setErrors(newErrors as any);
-        
+
         // Use enhanced validation for better scrolling
         const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
             showAlert: false,
             scrollDelay: 100
         });
-        
+
         return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const sendVerificationCode = async () => {
         try {
             setIsResending(true);
-            const response = await authService.sendVerificationCode(email);
-            
+            let response;
+
+            if (authMode === 'email') {
+                response = await authService.sendVerificationCode(email);
+            } else {
+                // Phone mode: use Efashe service
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                console.log('Sending OTP to:', normalizedPhone);
+                const result = await efasheService.sendOtp(normalizedPhone);
+                response = { success: true, message: 'OTP sent' }; // Efashe result adapter
+                if (!result) throw new Error('Failed to send OTP');
+            }
+
             if (response.success) {
                 // No modal - just proceed silently
                 console.log('Verification code sent successfully');
@@ -927,24 +895,31 @@ export default function PatientSignUp() {
         }
     };
 
-    const verifyEmail = async () => {
+    const verifyCode = async () => {
         try {
             setIsVerifying(true);
-            
-            console.log('PatientSignup: Verifying email with code:', {
+
+            console.log('PatientSignup: Verifying code:', {
+                mode: authMode,
                 email: email,
-                verificationCode: verificationCode,
-                codeLength: verificationCode.length,
-                codeType: typeof verificationCode,
-                codeTrimmed: verificationCode.trim(),
-                codeTrimmedLength: verificationCode.trim().length
+                phone: phone,
+                verificationCode: verificationCode
             });
-            
+
             // Add a small delay to prevent rapid successive calls
             await new Promise(resolve => setTimeout(resolve, 200));
-            
-            const response = await authService.verifyEmail(email, verificationCode);
-            
+
+            let response;
+            if (authMode === 'email') {
+                response = await authService.verifyEmail(email, verificationCode);
+            } else {
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                const result = await efasheService.verifyOtp(normalizedPhone, verificationCode);
+                // Efashe service verifyOtp returns { success: boolean, token?: string, user?: any }
+                // We map it to { success, message } style if needed, but the main check is success
+                response = result;
+            }
+
             if (response.success) {
                 return true;
             } else {
@@ -964,12 +939,12 @@ export default function PatientSignUp() {
     const handleSignUp = async () => {
         setLoading(true);
         let registrationSuccessful = false;
-        
+
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
             formData.append('surname', surname);
-            
+
             // Send email or phone based on auth mode
             if (authMode === 'email') {
                 formData.append('email', email);
@@ -978,7 +953,7 @@ export default function PatientSignUp() {
                 const normalizedPhone = normalizePhoneToE164(phone, countryCode);
                 formData.append('phone', normalizedPhone);
             }
-            
+
             formData.append('password', password);
             formData.append('password_confirmation', password);
             formData.append('date_of_birth', dob);
@@ -1003,7 +978,7 @@ export default function PatientSignUp() {
                             };
                             reader.readAsDataURL(blob);
                         }),
-                        new Promise<string>((_, reject) => 
+                        new Promise<string>((_, reject) =>
                             setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
                         )
                     ]);
@@ -1032,22 +1007,22 @@ export default function PatientSignUp() {
             console.log('Profile Picture:', profilePicture ? 'Yes' : 'No');
 
             const authState = await authService.signUp(formData);
-            
+
             if (authState.data && authState.data.user) {
                 // console.log('PatientSignup: Signup successful, user:', authState.data.user);
                 registrationSuccessful = true;
-                
+
                 // Store user type immediately after successful signup for routing
                 if (Platform.OS === 'web' && typeof window !== 'undefined') {
-                  try {
-                    sessionStorage.setItem('lastSignupUserType', 'patient');
-                    sessionStorage.setItem('lastSignupUID', authState.data.user.id.toString());
-                    // console.log('PatientSignup: Stored user type and UID for routing');
-                  } catch (error) {
-                    console.warn('PatientSignup: Could not store user type:', error);
-                  }
+                    try {
+                        sessionStorage.setItem('lastSignupUserType', 'patient');
+                        sessionStorage.setItem('lastSignupUID', authState.data.user.id.toString());
+                        // console.log('PatientSignup: Stored user type and UID for routing');
+                    } catch (error) {
+                        console.warn('PatientSignup: Could not store user type:', error);
+                    }
                 }
-                
+
                 // Redirect directly to patient dashboard without alert
                 // console.log('PatientSignup: Signup successful, redirecting to patient dashboard');
                 router.replace('/patient-dashboard');
@@ -1080,20 +1055,20 @@ export default function PatientSignUp() {
         if (step === 1) {
             if (validateStep1()) {
                 // Send verification code when moving to step 2 (formerly step 3)
-            try {
-                setIsSendingVerification(true);
-                await sendVerificationCode();
+                try {
+                    setIsSendingVerification(true);
+                    await sendVerificationCode();
                     setStep(2);
-            } catch (error) {
-                console.error('Failed to send verification code:', error);
+                } catch (error) {
+                    console.error('Failed to send verification code:', error);
                     // Don't move to step 2 if email sending fails
-            } finally {
-                setIsSendingVerification(false);
-            }
+                } finally {
+                    setIsSendingVerification(false);
+                }
             }
         } else if (step === 2) {
             if (validateStep3()) {
-                const isVerified = await verifyEmail();
+                const isVerified = await verifyCode();
                 if (isVerified) {
                     handleSignUp();
                 }
@@ -1145,6 +1120,8 @@ export default function PatientSignUp() {
                 return (
                     <Step3
                         email={email}
+                        phone={phone}
+                        authMode={authMode}
                         verificationCode={verificationCode}
                         setVerificationCode={setVerificationCode}
                         isVerifying={isVerifying}
@@ -1207,7 +1184,7 @@ export default function PatientSignUp() {
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.modernBackButton}
                             onPress={() => navigateToLogin({ userType: 'patient' })}
                         >
@@ -1216,7 +1193,7 @@ export default function PatientSignUp() {
                             </View>
                             <Text style={styles.modernBackText}>Back to Login</Text>
                         </TouchableOpacity>
-                        
+
                         <View style={styles.headerTitleContainer}>
                             <View style={styles.titleIconContainer}>
                                 <FontAwesome name="user-plus" size={24} color="#FFFFFF" />
@@ -1225,7 +1202,7 @@ export default function PatientSignUp() {
                         </View>
                     </View>
                 </View>
-                
+
                 <View style={styles.container}>
                     <View style={styles.modernProgressContainer}>
                         <View style={styles.modernProgressWrapper}>
@@ -1252,20 +1229,20 @@ export default function PatientSignUp() {
                     <ProgressIndicator
                         steps={[
                             { id: 1, title: 'Personal Information', completed: step > 1, current: step === 1 },
-                            { id: 2, title: 'Email Verification', completed: step > 2, current: step === 2 }
+                            { id: 2, title: authMode === 'email' ? 'Email Verification' : 'Phone Verification', completed: step > 2, current: step === 2 }
                         ]}
                         currentStep={step}
                         totalSteps={2}
                         compact={true}
                         style={{ marginVertical: 10 }}
                     />
-                
+
                     {renderStep()}
-                    
+
                     <View style={styles.buttonContainer}>
                         {step > 1 && (
-                            <TouchableOpacity 
-                                style={styles.backButton} 
+                            <TouchableOpacity
+                                style={styles.backButton}
                                 onPress={() => setStep(step - 1)}
                                 disabled={loading}
                             >
@@ -1273,8 +1250,8 @@ export default function PatientSignUp() {
                                 <Text style={styles.backButtonText}>Back</Text>
                             </TouchableOpacity>
                         )}
-                        <TouchableOpacity 
-                            style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]} 
+                        <TouchableOpacity
+                            style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]}
                             onPress={handleContinue}
                             disabled={loading || isSendingVerification}
                         >

@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     FlatList,
     Modal,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 
 // Complete list of all countries in the world
-const countryList = [
+const allCountries = [
     'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
     'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
     'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia',
@@ -32,7 +32,10 @@ const countryList = [
     'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey',
     'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu',
     'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
-].sort();
+];
+
+// Malawi is the primary country, so we put it at the top
+const countryList = ['Malawi', ...allCountries.filter(c => c !== 'Malawi').sort()];
 
 interface LocationPickerProps {
     country: string;
@@ -63,7 +66,7 @@ export default function LocationPicker({ country, setCountry, city, setCity, err
     return (
         <View style={styles.container}>
             <Text style={styles.sectionLabel}>Location</Text>
-            
+
             <View style={styles.row}>
                 <View style={styles.halfInput}>
                     <Text style={styles.inputLabel}>Country</Text>
