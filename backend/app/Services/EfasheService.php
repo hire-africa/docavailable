@@ -10,14 +10,18 @@ class EfasheService
 {
     protected $baseUrl;
     protected $apiKey;
+    protected $apiSecret;
     protected $senderId;
+    protected $dlrUrl;
 
     public function __construct()
     {
-        // Efashe Sandbox API
-        $this->baseUrl = env('EFASHE_BASE_URL', 'https://sb-vapi.efashe.com/mw');
+        // Efashe Messaging API (Production)
+        $this->baseUrl = env('EFASHE_MESSAGING_BASE_URL', 'https://messaging.efashe.com/mw');
         $this->apiKey = env('EFASHE_API_KEY', '');
-        $this->senderId = env('EFASHE_SENDER_ID', 'EFASHE'); // Default sender ID
+        $this->apiSecret = env('EFASHE_API_SECRET', '');
+        $this->senderId = env('EFASHE_SENDER_ID', '');
+        $this->dlrUrl = env('EFASHE_DLR_URL', '');
     }
 
     /**
@@ -36,18 +40,37 @@ class EfasheService
             // Format phone number (remove + if present for Efashe)
             $formattedPhone = ltrim($phone, '+');
 
-            // Send SMS via Efashe API
+            // Send SMS via Efashe Messaging API
             $message = "Your DocAvailable verification code is: {$otp}. Valid for 10 minutes.";
 
+            // Build request payload with API credentials
+            $payload = [
+                'api_key' => $this->apiKey,
+                'api_secret' => $this->apiSecret,
+                'phone' => $formattedPhone,
+                'message' => $message,
+            ];
+
+            // Add optional sender_id if configured
+            if (!empty($this->senderId)) {
+                $payload['sender_id'] = $this->senderId;
+            }
+
+            // Add optional DLR callback URL if configured
+            if (!empty($this->dlrUrl)) {
+                $payload['dlr_url'] = $this->dlrUrl;
+            }
+
+            Log::info('Efashe SMS Request', [
+                'url' => "{$this->baseUrl}/sms/send",
+                'phone' => $formattedPhone,
+                'otp' => $otp,
+            ]);
+
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->apiKey,
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
-            ])->post("{$this->baseUrl}/sms/send", [
-                        'sender_id' => $this->senderId,
-                        'phone' => $formattedPhone,
-                        'message' => $message,
-                    ]);
+            ])->post("{$this->baseUrl}/sms/send", $payload);
 
             Log::info('Efashe SMS API Response', [
                 'phone' => $phone,
