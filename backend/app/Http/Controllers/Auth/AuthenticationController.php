@@ -43,22 +43,36 @@ class AuthenticationController extends Controller
                 'has_surname' => !empty($request->surname),
                 'request_data' => $request->all()
             ]);
-            
+
             // Normalize common alternate/camelCase field names
             $normalized = [];
-            if ($request->has('firstName')) { $normalized['first_name'] = $request->input('firstName'); }
-            if ($request->has('lastName')) { $normalized['last_name'] = $request->input('lastName'); }
-            if ($request->has('userType')) { $normalized['user_type'] = $request->input('userType'); }
-            if ($request->has('dateOfBirth')) { $normalized['date_of_birth'] = $request->input('dateOfBirth'); }
-            if ($request->has('subSpecialization')) { $normalized['sub_specialization'] = $request->input('subSpecialization'); }
-            if ($request->has('specializationsJson')) { $normalized['specializations'] = $request->input('specializationsJson'); }
-            if (!empty($normalized)) { $request->merge($normalized); }
+            if ($request->has('firstName')) {
+                $normalized['first_name'] = $request->input('firstName');
+            }
+            if ($request->has('lastName')) {
+                $normalized['last_name'] = $request->input('lastName');
+            }
+            if ($request->has('userType')) {
+                $normalized['user_type'] = $request->input('userType');
+            }
+            if ($request->has('dateOfBirth')) {
+                $normalized['date_of_birth'] = $request->input('dateOfBirth');
+            }
+            if ($request->has('subSpecialization')) {
+                $normalized['sub_specialization'] = $request->input('subSpecialization');
+            }
+            if ($request->has('specializationsJson')) {
+                $normalized['specializations'] = $request->input('specializationsJson');
+            }
+            if (!empty($normalized)) {
+                $request->merge($normalized);
+            }
 
             // Provide password_confirmation fallback when not provided by clients
             if ($request->filled('password') && !$request->has('password_confirmation')) {
                 $request->merge(['password_confirmation' => $request->input('password')]);
             }
-            
+
             // Check if email already exists
             if ($request->filled('email')) {
                 $existingUser = User::where('email', $request->email)->first();
@@ -71,8 +85,21 @@ class AuthenticationController extends Controller
                 }
             }
 
+            // Check if phone already exists
+            if ($request->filled('phone')) {
+                $existingUser = User::where('phone', $request->phone)->first();
+                if ($existingUser) {
+                    Log::warning('Registration attempted with existing phone', [
+                        'phone' => $request->phone,
+                        'existing_user_id' => $existingUser->id,
+                        'existing_user_type' => $existingUser->user_type
+                    ]);
+                }
+            }
+
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email|unique:users,email',
+                'email' => 'nullable|email|unique:users,email',
+                'phone' => 'nullable|string|unique:users,phone|regex:/^\+[1-9]\d{1,14}$/', // E.164 format
                 'password' => 'required|string|min:8|confirmed',
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'nullable|string|max:255',
@@ -97,10 +124,17 @@ class AuthenticationController extends Controller
                 'specialist_certificate' => 'nullable|string', // Base64 encoded
             ]);
 
-            // Add custom validation rule to require either last_name or surname
+            // Add custom validation rules
             $validator->after(function ($validator) use ($request) {
+                // Require either last_name or surname
                 if (!$request->last_name && !$request->surname) {
                     $validator->errors()->add('surname', 'The last name field is required.');
+                }
+
+                // Require either email or phone
+                if (!$request->filled('email') && !$request->filled('phone')) {
+                    $validator->errors()->add('email', 'Either email or phone number is required.');
+                    $validator->errors()->add('phone', 'Either email or phone number is required.');
                 }
             });
 
@@ -114,7 +148,7 @@ class AuthenticationController extends Controller
                     'errors' => $validator->errors()->toArray(),
                     'request_data' => $request->all()
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -129,23 +163,23 @@ class AuthenticationController extends Controller
                 if (filter_var($request->profile_picture, FILTER_VALIDATE_URL)) {
                     // It's a URL - download and process the image
                     \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', ['url' => $request->profile_picture]);
-                    
+
                     try {
                         $imageContent = file_get_contents($request->profile_picture);
                         if ($imageContent && strlen($imageContent) > 100) {
                             // Compress image before storing
                             $compressedImage = $this->compressImage($imageContent);
-                            
+
                             $filename = \Illuminate\Support\Str::uuid() . '.jpg';
                             $path = 'profile_pictures/' . $filename;
-                            
+
                             // Store compressed image in DigitalOcean Spaces
                             \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
-                            
+
                             // Get the public URL from DigitalOcean Spaces
                             $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
                             $profilePicturePath = $publicUrl;
-                            
+
                             \Illuminate\Support\Facades\Log::info('Google profile picture uploaded successfully', [
                                 'original_url' => $request->profile_picture,
                                 'stored_path' => $path,
@@ -160,30 +194,30 @@ class AuthenticationController extends Controller
                     }
                 } else {
                     // It's base64 data - process as before
-                $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
-                $image = base64_decode($image);
-                
-                // Debug logging
-                \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
-                    'original_length' => strlen($request->profile_picture),
-                    'decoded_length' => $image ? strlen($image) : 0,
-                    'is_valid' => $image && strlen($image) > 100
-                ]);
-                
-                // Validate that the decoded data is not empty and is actually an image
-                if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
-                    // Compress image before storing
-                    $compressedImage = $this->compressImage($image);
-                    
-                    $filename = \Illuminate\Support\Str::uuid() . '.jpg';
-                    $path = 'profile_pictures/' . $filename;
-                    
-                    // Store compressed image in DigitalOcean Spaces
-                    \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
-                    
-                    // Get the public URL from DigitalOcean Spaces
-                    $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
-                    $profilePicturePath = $publicUrl;
+                    $image = preg_replace('/^data:image\/\w+;base64,/', '', $request->profile_picture);
+                    $image = base64_decode($image);
+
+                    // Debug logging
+                    \Illuminate\Support\Facades\Log::info('Profile picture upload debug', [
+                        'original_length' => strlen($request->profile_picture),
+                        'decoded_length' => $image ? strlen($image) : 0,
+                        'is_valid' => $image && strlen($image) > 100
+                    ]);
+
+                    // Validate that the decoded data is not empty and is actually an image
+                    if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
+                        // Compress image before storing
+                        $compressedImage = $this->compressImage($image);
+
+                        $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+                        $path = 'profile_pictures/' . $filename;
+
+                        // Store compressed image in DigitalOcean Spaces
+                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+
+                        // Get the public URL from DigitalOcean Spaces
+                        $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                        $profilePicturePath = $publicUrl;
                     }
                 }
             }
@@ -199,7 +233,7 @@ class AuthenticationController extends Controller
                 if ($nationalIdData) {
                     $image = preg_replace('/^data:image\/\w+;base64,/', '', $nationalIdData);
                     $image = base64_decode($image);
-                    
+
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_national_id.jpg';
                         $path = 'private_documents/' . $filename;
@@ -213,7 +247,7 @@ class AuthenticationController extends Controller
                 if ($medicalDegreeData) {
                     $image = preg_replace('/^data:image\/\w+;base64,/', '', $medicalDegreeData);
                     $image = base64_decode($image);
-                    
+
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_degree.jpg';
                         $path = 'private_documents/' . $filename;
@@ -227,7 +261,7 @@ class AuthenticationController extends Controller
                 if ($medicalLicenceData) {
                     $image = preg_replace('/^data:image\/\w+;base64,/', '', $medicalLicenceData);
                     $image = base64_decode($image);
-                    
+
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_licence.jpg';
                         $path = 'private_documents/' . $filename;
@@ -240,6 +274,7 @@ class AuthenticationController extends Controller
             // Create user
             $user = User::create([
                 'email' => $request->email,
+                'phone' => $request->phone,
                 'password' => Hash::make($request->password),
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name ?? $request->surname,
@@ -308,30 +343,44 @@ class AuthenticationController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'email' => 'required|email',
+                'email' => 'nullable|email',
+                'phone' => 'nullable|string',
                 'password' => 'required|string',
             ]);
+
+            // Add custom validation to require either email or phone
+            $validator->after(function ($validator) use ($request) {
+                if (!$request->filled('email') && !$request->filled('phone')) {
+                    $validator->errors()->add('email', 'Either email or phone number is required.');
+                    $validator->errors()->add('phone', 'Either email or phone number is required.');
+                }
+            });
 
             if ($validator->fails()) {
                 $errors = $validator->errors();
                 $errorMessages = [];
                 $detailedMessage = 'Please check your input and try again.';
-                
-                if ($errors->has('email')) {
-                    $errorMessages['email'] = 'Please enter a valid email address.';
-                    $detailedMessage = 'Please enter a valid email address in the format: example@domain.com';
+
+                if ($errors->has('email') && !$request->filled('phone')) {
+                    $errorMessages['email'] = 'Please enter a valid email address or phone number.';
+                    $detailedMessage = 'Please enter a valid email address or phone number.';
                 }
-                
+
+                if ($errors->has('phone') && !$request->filled('email')) {
+                    $errorMessages['phone'] = 'Please enter a valid phone number or email address.';
+                    $detailedMessage = 'Please enter a valid phone number or email address.';
+                }
+
                 if ($errors->has('password')) {
                     $errorMessages['password'] = 'Password is required.';
                     $detailedMessage = 'Password field cannot be empty. Please enter your password.';
                 }
-                
-                // If both fields have errors
-                if ($errors->has('email') && $errors->has('password')) {
-                    $detailedMessage = 'Please enter a valid email address and password.';
+
+                // If both identifier fields have errors
+                if ($errors->has('email') && $errors->has('phone')) {
+                    $detailedMessage = 'Please enter either an email address or phone number, and your password.';
                 }
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => $detailedMessage,
@@ -340,17 +389,37 @@ class AuthenticationController extends Controller
                 ], 422);
             }
 
-            $credentials = $request->only('email', 'password');
+            // Build credentials based on what was provided
+            $credentials = ['password' => $request->password];
+
+            if ($request->filled('email')) {
+                $credentials['email'] = $request->email;
+                $identifier = $request->email;
+                $identifierType = 'email';
+            } else {
+                $credentials['phone'] = $request->phone;
+                $identifier = $request->phone;
+                $identifierType = 'phone';
+            }
 
             if (!$token = auth('api')->attempt($credentials)) {
                 // Check if user exists to provide more specific error message
-                $user = \App\Models\User::where('email', $credentials['email'])->first();
-                
+                $user = null;
+                if ($identifierType === 'email') {
+                    $user = \App\Models\User::where('email', $identifier)->first();
+                } else {
+                    $user = \App\Models\User::where('phone', $identifier)->first();
+                }
+
                 if (!$user) {
+                    $notFoundMessage = $identifierType === 'email'
+                        ? 'Email address not found. Please check your email or create a new account.'
+                        : 'Phone number not found. Please check your phone number or create a new account.';
+
                     return response()->json([
                         'success' => false,
-                        'message' => 'Email address not found. Please check your email or create a new account.',
-                        'error_type' => 'email_not_found',
+                        'message' => $notFoundMessage,
+                        'error_type' => $identifierType . '_not_found',
                         'suggestion' => 'If you don\'t have an account, please register first.'
                     ], 401);
                 } else {
@@ -359,7 +428,7 @@ class AuthenticationController extends Controller
                     if ($statusCheck !== null) {
                         return $statusCheck;
                     }
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Invalid password. Please check your password and try again.',
@@ -480,17 +549,17 @@ class AuthenticationController extends Controller
                 $errors = $validator->errors();
                 $errorMessages = [];
                 $detailedMessage = 'Please provide a valid Google ID token.';
-                
+
                 if ($errors->has('id_token')) {
                     $errorMessages['id_token'] = 'Google ID token is required.';
                     $detailedMessage = 'Google authentication token is missing or invalid.';
                 }
-                
+
                 Log::warning('Google login validation failed', [
                     'errors' => $errors->toArray(),
                     'request_data' => $request->all()
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => $detailedMessage,
@@ -510,9 +579,9 @@ class AuthenticationController extends Controller
                 'token_length' => strlen($idToken),
                 'token_preview' => substr($idToken, 0, 50) . '...'
             ]);
-            
+
             $verifiedIdToken = $this->verifyGoogleIdToken($idToken);
-            
+
             Log::info('🔍 DEBUG: Google token verification result', [
                 'verified' => $verifiedIdToken ? 'SUCCESS' : 'FAILED',
                 'token_data' => $verifiedIdToken ? [
@@ -521,7 +590,7 @@ class AuthenticationController extends Controller
                     'name' => $verifiedIdToken['name'] ?? 'missing'
                 ] : 'No token data'
             ]);
-            
+
             if (!$verifiedIdToken) {
                 Log::error('🔍 DEBUG: Google token verification failed, returning 401');
                 return response()->json([
@@ -592,7 +661,7 @@ class AuthenticationController extends Controller
                         'suggestion' => 'Contact our support team to reactivate your account.'
                     ], 403);
                 }
-                
+
                 // Check if account is pending approval (for doctors)
                 if ($user->user_type === 'doctor' && $user->status === 'pending') {
                     return response()->json([
@@ -701,14 +770,14 @@ class AuthenticationController extends Controller
 
             // Decode the payload (middle part)
             $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
-            
+
             Log::info('🔍 DEBUG: JWT payload decoded', [
                 'payload' => $payload ? 'SUCCESS' : 'FAILED',
                 'payload_keys' => $payload ? array_keys($payload) : 'No payload',
                 'email' => $payload['email'] ?? 'missing',
                 'sub' => $payload['sub'] ?? 'missing'
             ]);
-            
+
             if (!$payload) {
                 Log::error('Failed to decode JWT payload');
                 return false;
@@ -733,13 +802,13 @@ class AuthenticationController extends Controller
                 'email_verified' => $payload['email_verified'] ?? false,
                 'picture' => $payload['picture'] ?? null
             ];
-            
+
             // Fetch additional data from Google People API if access token is available
             $additionalData = $this->fetchGooglePeopleData($idToken);
             if ($additionalData) {
                 $googleUser = array_merge($googleUser, $additionalData);
             }
-            
+
             // Validate required fields
             if (empty($googleUser['email']) || empty($googleUser['sub'])) {
                 Log::error('Google token verification failed - missing required fields', [
@@ -782,15 +851,15 @@ class AuthenticationController extends Controller
             // For now, we'll extract what we can from the ID token
             // In a full implementation, you would exchange the ID token for an access token
             // and then call the Google People API
-            
+
             // The ID token doesn't contain birthday and gender by default
             // You would need to implement OAuth flow to get access token for People API
             // For now, return empty array - the frontend will handle the OAuth flow
-            
+
             Log::info('Google People API data fetch - using ID token only', [
                 'note' => 'Birthday and gender will be fetched via OAuth flow in frontend'
             ]);
-            
+
             return [];
         } catch (\Exception $e) {
             Log::error('Failed to fetch Google People API data', [
@@ -828,7 +897,7 @@ class AuthenticationController extends Controller
                         'message' => 'Your account has been suspended. Please contact support for assistance.'
                     ], 403);
                 }
-                
+
                 // Check if account is pending approval (for doctors)
                 if ($user->user_type === 'doctor' && $user->status === 'pending') {
                     return response()->json([
@@ -839,7 +908,7 @@ class AuthenticationController extends Controller
 
                 // Generate full URLs for images if they exist
                 $userData = $this->generateImageUrls($user);
-                
+
                 return response()->json([
                     'success' => true,
                     'user' => $userData
@@ -888,7 +957,7 @@ class AuthenticationController extends Controller
             if ($user) {
                 // Generate full URLs for images if they exist
                 $userData = $this->generateImageUrls($user);
-                
+
                 return response()->json([
                     'success' => true,
                     'exists' => true,
@@ -923,7 +992,7 @@ class AuthenticationController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -959,7 +1028,7 @@ class AuthenticationController extends Controller
     {
         try {
             Auth::logout();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Logged out successfully'
@@ -986,7 +1055,7 @@ class AuthenticationController extends Controller
         try {
             // Get the current token from the request
             $token = $request->bearerToken();
-            
+
             if (!$token) {
                 return response()->json([
                     'success' => false,
@@ -997,10 +1066,10 @@ class AuthenticationController extends Controller
             // Try to refresh the token
             $newToken = auth('api')->refresh();
             $user = auth('api')->user();
-            
+
             // Generate full URLs for images if they exist
             $userData = $this->generateImageUrls($user);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Token refreshed successfully',
@@ -1111,7 +1180,7 @@ class AuthenticationController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $validator = Validator::make($request->all(), [
                 'first_name' => 'sometimes|string|max:255',
                 'last_name' => 'sometimes|string|max:255',
@@ -1138,16 +1207,25 @@ class AuthenticationController extends Controller
 
             // Prepare update data
             $updateData = $request->only([
-                'first_name', 'last_name', 'date_of_birth', 'gender',
-                'country', 'city', 'years_of_experience', 'occupation',
-                'bio', 'health_history', 'specialization', 'sub_specialization'
+                'first_name',
+                'last_name',
+                'date_of_birth',
+                'gender',
+                'country',
+                'city',
+                'years_of_experience',
+                'occupation',
+                'bio',
+                'health_history',
+                'specialization',
+                'sub_specialization'
             ]);
-            
+
             // Handle languages_spoken if provided
             if ($request->has('languages_spoken')) {
                 $updateData['languages_spoken'] = $request->languages_spoken ? json_decode($request->languages_spoken, true) : null;
             }
-            
+
             $user->update($updateData);
 
             // Update display name if first or last name changed
@@ -1235,14 +1313,14 @@ class AuthenticationController extends Controller
         try {
             $user = $request->user();
             $documentType = $request->input('type'); // 'national_id', 'medical_degree', 'medical_licence'
-            
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized'
                 ], 401);
             }
-            
+
             // Get the document path from user
             $documentPath = null;
             switch ($documentType) {
@@ -1261,26 +1339,26 @@ class AuthenticationController extends Controller
                         'message' => 'Invalid document type'
                     ], 400);
             }
-            
+
             if (!$documentPath) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Document not found'
                 ], 404);
             }
-            
+
             // Generate a temporary signed URL (valid for 1 hour)
             $url = \Illuminate\Support\Facades\Storage::disk('spaces_private')->temporaryUrl(
-                $documentPath, 
+                $documentPath,
                 now()->addHour()
             );
-            
+
             return response()->json([
                 'success' => true,
                 'url' => $url,
                 'expires_at' => now()->addHour()->toISOString()
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error generating private document URL: ' . $e->getMessage());
             return response()->json([
@@ -1306,10 +1384,10 @@ class AuthenticationController extends Controller
             }
 
             $email = $request->email;
-            
+
             // Generate a 6-digit verification code
             $code = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            
+
             // Debug logging for code generation
             Log::info('Email verification code generated', [
                 'email' => $email,
@@ -1317,30 +1395,30 @@ class AuthenticationController extends Controller
                 'code_length' => strlen($code),
                 'code_type' => gettype($code)
             ]);
-            
+
             // Store the code in cache with 10 minutes expiration
             $cacheKey = 'email_verification_' . $email;
             \Illuminate\Support\Facades\Cache::put($cacheKey, $code, now()->addMinutes(10));
-            
+
             // Verify the code was stored correctly with retry mechanism
             $storedCode = null;
             $maxRetries = 3;
             $retryDelay = 100; // milliseconds
-            
+
             for ($i = 0; $i < $maxRetries; $i++) {
                 $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
-                
+
                 if ($storedCode) {
                     break; // Code found, exit retry loop
                 }
-                
+
                 if ($i < $maxRetries - 1) {
                     // Wait before retrying (only if not the last attempt)
                     usleep($retryDelay * 1000); // Convert to microseconds
                     $retryDelay *= 2; // Exponential backoff
                 }
             }
-            
+
             Log::info('Email verification code storage verification', [
                 'email' => $email,
                 'cache_key' => $cacheKey,
@@ -1351,7 +1429,7 @@ class AuthenticationController extends Controller
                 'stored_code_type' => gettype($storedCode),
                 'stored_code_length' => strlen($storedCode ?? '')
             ]);
-            
+
             if ($storedCode !== $code) {
                 Log::error('Email verification code storage failed after retries', [
                     'email' => $email,
@@ -1359,13 +1437,13 @@ class AuthenticationController extends Controller
                     'stored_code' => $storedCode,
                     'retry_attempts' => $maxRetries
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to store verification code. Please try again.'
                 ], 500);
             }
-            
+
             // Send email with verification code
             try {
                 // Log before sending
@@ -1381,9 +1459,9 @@ class AuthenticationController extends Controller
                         'from_name' => config('mail.from.name'),
                     ]
                 ]);
-                
+
                 Mail::to($email)->send(new VerificationCodeMail($code, $email));
-                
+
                 Log::info('Email verification code sent successfully', [
                     'email' => $email,
                     'code' => $code
@@ -1402,7 +1480,7 @@ class AuthenticationController extends Controller
                         'from_name' => config('mail.from.name'),
                     ]
                 ]);
-                
+
                 // Return error to frontend instead of success
                 return response()->json([
                     'success' => false,
@@ -1410,7 +1488,7 @@ class AuthenticationController extends Controller
                     'error' => $e->getMessage()
                 ], 500);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Verification code sent successfully'
@@ -1454,7 +1532,7 @@ class AuthenticationController extends Controller
                     'email' => $request->email ?? 'not_provided',
                     'errors' => $validator->errors()->toArray()
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Validation failed',
@@ -1464,7 +1542,7 @@ class AuthenticationController extends Controller
 
             $email = trim($request->email);
             $code = trim($request->code);
-            
+
             // Additional validation for code format
             if (!preg_match('/^\d{6}$/', $code)) {
                 Log::warning('Email verification code format invalid', [
@@ -1474,33 +1552,33 @@ class AuthenticationController extends Controller
                     'code_is_numeric' => is_numeric($code),
                     'code_has_whitespace' => $code !== trim($code)
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid verification code format. Please enter a 6-digit number.'
                 ], 400);
             }
-            
+
             // Get the stored code from cache with retry mechanism
             $cacheKey = 'email_verification_' . $email;
             $storedCode = null;
             $maxRetries = 3;
             $retryDelay = 100; // milliseconds
-            
+
             for ($i = 0; $i < $maxRetries; $i++) {
                 $storedCode = \Illuminate\Support\Facades\Cache::get($cacheKey);
-                
+
                 if ($storedCode) {
                     break; // Code found, exit retry loop
                 }
-                
+
                 if ($i < $maxRetries - 1) {
                     // Wait before retrying (only if not the last attempt)
                     usleep($retryDelay * 1000); // Convert to microseconds
                     $retryDelay *= 2; // Exponential backoff
                 }
             }
-            
+
             Log::info('Email verification cache check', [
                 'email' => $email,
                 'cache_key' => $cacheKey,
@@ -1515,24 +1593,24 @@ class AuthenticationController extends Controller
                 'codes_equal_strict' => $code === $storedCode,
                 'retry_attempts' => $i + 1
             ]);
-            
+
             if (!$storedCode) {
                 Log::warning('Email verification code not found in cache after retries', [
                     'email' => $email,
                     'cache_key' => $cacheKey,
                     'retry_attempts' => $maxRetries
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Verification code has expired or not found. Please request a new code.'
                 ], 400);
             }
-            
+
             // Ensure both codes are strings and properly formatted for comparison
             $normalizedCode = (string) $code;
             $normalizedStoredCode = (string) $storedCode;
-            
+
             if ($normalizedCode !== $normalizedStoredCode) {
                 Log::warning('Email verification code mismatch', [
                     'email' => $email,
@@ -1544,21 +1622,21 @@ class AuthenticationController extends Controller
                     'provided_code_type' => gettype($code),
                     'stored_code_type' => gettype($storedCode)
                 ]);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Invalid verification code'
                 ], 400);
             }
-            
+
             // Code is valid, remove it from cache
             \Illuminate\Support\Facades\Cache::forget($cacheKey);
-            
+
             Log::info('Email verification successful', [
                 'email' => $email,
                 'code' => $code
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Email verified successfully'
@@ -1596,7 +1674,7 @@ class AuthenticationController extends Controller
                 'suggestion' => 'Contact our support team to reactivate your account.'
             ], 403);
         }
-        
+
         // Check if account is pending approval (for doctors)
         if ($user->user_type === 'doctor' && $user->status === 'pending') {
             return response()->json([
@@ -1619,7 +1697,7 @@ class AuthenticationController extends Controller
             // If Intervention Image is available, use it for compression
             if (class_exists('Intervention\Image\Facades\Image')) {
                 $image = \Intervention\Image\Facades\Image::make($imageData);
-                
+
                 // Resize if too large
                 if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
                     $image->resize($maxWidth, $maxHeight, function ($constraint) {
@@ -1627,7 +1705,7 @@ class AuthenticationController extends Controller
                         $constraint->upsize();
                     });
                 }
-                
+
                 // Compress and return as JPEG
                 return $image->encode('jpg', $quality);
             } else {
@@ -1636,45 +1714,45 @@ class AuthenticationController extends Controller
                     \Log::warning('GD extension not available, returning original image data');
                     return $imageData; // Return original if GD is not available
                 }
-                
+
                 $sourceImage = imagecreatefromstring($imageData);
                 if (!$sourceImage) {
                     return $imageData; // Return original if GD fails
                 }
-                
+
                 $width = imagesx($sourceImage);
                 $height = imagesy($sourceImage);
-                
+
                 // Calculate new dimensions maintaining aspect ratio
                 $ratio = min($maxWidth / $width, $maxHeight / $height);
                 if ($ratio < 1) {
-                    $newWidth = (int)($width * $ratio);
-                    $newHeight = (int)($height * $ratio);
+                    $newWidth = (int) ($width * $ratio);
+                    $newHeight = (int) ($height * $ratio);
                 } else {
                     $newWidth = $width;
                     $newHeight = $height;
                 }
-                
+
                 // Create new image
                 $compressedImage = imagecreatetruecolor($newWidth, $newHeight);
-                
+
                 // Preserve transparency for PNG
                 imagealphablending($compressedImage, false);
                 imagesavealpha($compressedImage, true);
-                
+
                 // Resize
                 imagecopyresampled($compressedImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-                
+
                 // Output as JPEG with compression
                 ob_start();
                 imagejpeg($compressedImage, null, $quality);
                 $compressedData = ob_get_contents();
                 ob_end_clean();
-                
+
                 // Clean up
                 imagedestroy($sourceImage);
                 imagedestroy($compressedImage);
-                
+
                 return $compressedData;
             }
         } catch (\Exception $e) {
@@ -1689,14 +1767,14 @@ class AuthenticationController extends Controller
     private function getMissingRequiredFields($googleUserData, $userType)
     {
         $missingFields = [];
-        
+
         // Common required fields for all user types
         $requiredFields = [
             'country' => 'What country are you from?',
             'city' => 'What city do you live in?',
             'profile_picture' => 'Please upload a profile picture'
         ];
-        
+
         // Add birthday and gender back if they're not provided by Google
         if (empty($googleUserData['date_of_birth'])) {
             $requiredFields['date_of_birth'] = 'What is your date of birth?';
@@ -1704,7 +1782,7 @@ class AuthenticationController extends Controller
         if (empty($googleUserData['gender'])) {
             $requiredFields['gender'] = 'What is your gender?';
         }
-        
+
         // Check which fields are missing
         foreach ($requiredFields as $field => $label) {
             if (empty($googleUserData[$field])) {
@@ -1715,7 +1793,7 @@ class AuthenticationController extends Controller
                 ];
             }
         }
-        
+
         // Add user type specific fields
         if ($userType === 'doctor') {
             // Individual doctor fields
@@ -1724,7 +1802,7 @@ class AuthenticationController extends Controller
                 'years_of_experience' => 'How many years of medical experience do you have?',
                 'professional_bio' => 'Tell us about your professional background'
             ];
-            
+
             foreach ($individualDoctorFields as $field => $label) {
                 if (empty($googleUserData[$field])) {
                     $missingFields[] = [
@@ -1734,12 +1812,12 @@ class AuthenticationController extends Controller
                     ];
                 }
             }
-            
+
             // Grouped document fields - check if any are missing
             $hasNationalId = !empty($googleUserData['national_id']);
             $hasMedicalDegree = !empty($googleUserData['medical_degree']);
             $hasMedicalLicence = !empty($googleUserData['medical_licence']);
-            
+
             if (!$hasNationalId || !$hasMedicalDegree || !$hasMedicalLicence) {
                 $missingFields[] = [
                     'field' => 'documents',
@@ -1765,10 +1843,10 @@ class AuthenticationController extends Controller
                 ];
             }
         }
-        
+
         return $missingFields;
     }
-    
+
     /**
      * Get field type for form rendering
      */
@@ -1788,7 +1866,7 @@ class AuthenticationController extends Controller
             'medical_licence' => 'document',
             'documents' => 'documents'
         ];
-        
+
         return $fieldTypes[$field] ?? 'text';
     }
-} 
+}
