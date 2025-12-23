@@ -34,21 +34,21 @@ class PushNotificationService
         try {
             // First try to get from environment variable (for production)
             $serviceAccountJson = config('services.fcm.service_account_json');
-            
+
             if ($serviceAccountJson && !empty(trim($serviceAccountJson))) {
                 Log::info("🔑 PushNotificationService V1: Using service account from environment variable");
                 $decodedJson = json_decode($serviceAccountJson, true);
-                
+
                 if (json_last_error() !== JSON_ERROR_NONE) {
                     Log::error("❌ PushNotificationService V1: Invalid JSON in service account environment variable");
                     return null;
                 }
-                
+
                 if (!is_array($decodedJson)) {
                     Log::error("❌ PushNotificationService V1: Service account JSON is not a valid array");
                     return null;
                 }
-                
+
                 $credentials = new ServiceAccountCredentials(
                     'https://www.googleapis.com/auth/firebase.messaging',
                     $decodedJson
@@ -56,32 +56,32 @@ class PushNotificationService
             } else {
                 // Fallback to file path (for local development)
                 $credentialsPath = config('services.fcm.credentials_path') ?: storage_path('app/firebase-service-account.json');
-                
+
                 if (!file_exists($credentialsPath)) {
                     Log::warning("⚠️ PushNotificationService V1: Service account not found in environment variable or file at: {$credentialsPath}. Push notifications will be disabled.");
                     return null;
                 }
-                
+
                 Log::info("🔑 PushNotificationService V1: Using service account from file: {$credentialsPath}");
                 $fileContents = file_get_contents($credentialsPath);
                 $decodedJson = json_decode($fileContents, true);
-                
+
                 if (json_last_error() !== JSON_ERROR_NONE) {
                     Log::error("❌ PushNotificationService V1: Invalid JSON in service account file");
                     return null;
                 }
-                
+
                 if (!is_array($decodedJson)) {
                     Log::error("❌ PushNotificationService V1: Service account file JSON is not a valid array");
                     return null;
                 }
-                
+
                 $credentials = new ServiceAccountCredentials(
                     'https://www.googleapis.com/auth/firebase.messaging',
                     $decodedJson
                 );
             }
-            
+
             $this->accessToken = $credentials->fetchAuthToken()['access_token'];
             Log::info("✅ PushNotificationService V1: Access token obtained successfully");
             return $this->accessToken;
@@ -134,7 +134,7 @@ class PushNotificationService
         // Determine channel based on notification type
         $type = $data['type'] ?? '';
         $channelId = 'calls'; // default
-        
+
         if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
             $channelId = 'messages';
         } elseif (str_contains($type, 'appointment')) {
@@ -144,7 +144,7 @@ class PushNotificationService
         // FCM V1 API payload structure - send to each token individually
         $results = [];
         $accessToken = $this->getAccessToken();
-        
+
         if (!$accessToken) {
             Log::error("❌ PushNotificationService V1: Failed to get access token");
             return false;
@@ -282,8 +282,8 @@ class PushNotificationService
     public function sendDoctorApprovalNotification(User $doctor, bool $approved)
     {
         $title = $approved ? 'Account Approved' : 'Account Rejected';
-        $body = $approved 
-            ? 'Your doctor account has been approved' 
+        $body = $approved
+            ? 'Your doctor account has been approved'
             : 'Your doctor account has been rejected';
 
         $this->sendToUser($doctor, $title, $body);
@@ -324,4 +324,4 @@ class PushNotificationService
         $user->update(['push_token' => null]);
         Log::info("Push token removed for user {$user->id}");
     }
-} 
+}

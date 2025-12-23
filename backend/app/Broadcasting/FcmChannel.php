@@ -32,7 +32,7 @@ class FcmChannel
         try {
             // First try to get from environment variable (for production)
             $serviceAccountJson = config('services.fcm.service_account_json');
-            
+
             if ($serviceAccountJson) {
                 Log::info("🔑 FCM V1: Using service account from environment variable");
                 $credentials = new ServiceAccountCredentials(
@@ -42,26 +42,26 @@ class FcmChannel
             } else {
                 // Fallback to file path (for local development)
                 $credentialsPath = config('services.fcm.credentials_path');
-                
+
                 // If it's a relative path, make it absolute
                 if ($credentialsPath && !str_starts_with($credentialsPath, '/') && !str_starts_with($credentialsPath, 'C:')) {
                     $credentialsPath = storage_path($credentialsPath);
                 } elseif (!$credentialsPath) {
                     $credentialsPath = storage_path('app/firebase-service-account.json');
                 }
-                
+
                 if (!file_exists($credentialsPath)) {
                     Log::error("❌ FCM V1: Service account not found in environment variable or file at: {$credentialsPath}");
                     return null;
                 }
-                
+
                 Log::info("🔑 FCM V1: Using service account from file: {$credentialsPath}");
                 $credentials = new ServiceAccountCredentials(
                     'https://www.googleapis.com/auth/firebase.messaging',
                     json_decode(file_get_contents($credentialsPath), true)
                 );
             }
-            
+
             $this->accessToken = $credentials->fetchAuthToken()['access_token'];
             Log::info("✅ FCM V1: Access token obtained successfully");
             return $this->accessToken;
@@ -94,19 +94,19 @@ class FcmChannel
         }
 
         $message = $notification->toFcm($notifiable);
-        
+
         // Determine channel and type based on notification data
         $data = $message['data'] ?? [];
         $type = $data['type'] ?? '';
         $isIncomingCall = ($type === 'incoming_call' || ($data['isIncomingCall'] ?? '') === 'true');
         $channelId = 'calls'; // default
-        
+
         if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
             $channelId = 'messages';
         } elseif (str_contains($type, 'appointment')) {
             $channelId = 'appointments';
         }
-        
+
         Log::info("📤 FCM V1 Channel: Preparing FCM payload", [
             'user_id' => $notifiable->id,
             'type' => $type,
@@ -126,7 +126,7 @@ class FcmChannel
                 ],
             ]
         ];
-        
+
         // Only add notification block for NON-CALL messages
         // Incoming calls use CallKeep native UI, not notifications
         if (!$isIncomingCall && isset($message['notification'])) {
@@ -141,7 +141,7 @@ class FcmChannel
                 'visibility' => 'PUBLIC'
             ];
         }
-        
+
         // Add iOS config from notification if present
         if (isset($message['apns'])) {
             $payload['message']['apns'] = $message['apns'];
@@ -153,9 +153,9 @@ class FcmChannel
                 Log::error("❌ FCM V1 Channel: Failed to get access token");
                 return false;
             }
-            
+
             $url = str_replace('{project_id}', $this->projectId, $this->fcmUrl);
-            
+
             Log::info("🌐 FCM V1 Channel: Sending HTTP request to FCM V1 API", [
                 'user_id' => $notifiable->id,
                 'url' => $url,
