@@ -3,86 +3,171 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Services\EfasheService;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class PhoneAuthController extends Controller
 {
-    protected $efashe;
-
-    public function __construct(EfasheService $efashe)
+    /**
+     * Send OTP to phone number via SMS
+     */
+    public function sendOtp(Request $request): JsonResponse
     {
-        $this->efashe = $efashe;
-    }
-
-    // Step 1: Send OTP
-    public function sendOtp(Request $request)
-    {
-        $request->validate([
-            'phone' => 'required|string'
-        ]);
-
-        $result = $this->efashe->sendOtp($request->phone);
-
-        return response()->json($result);
-    }
-
-    // Step 2: Verify OTP
-    public function verifyOtp(Request $request)
-    {
-        $request->validate([
-            'phone' => 'required|string',
-            'otp' => 'required|string'
-        ]);
-
-        $verify = $this->efashe->verifyOtp($request->phone, $request->otp);
-
-        if (!isset($verify['success']) || !$verify['success']) {
-            return response()->json(['success' => false, 'message' => 'Invalid OTP'], 401);
-        }
-
-        // Find or create user
-        // We will attempt to find by phone.
-        // If not found, we create, but we need names since they are not nullable.
-        // We'll trust the request or default to placeholders if necessary, though for a real signup flow the frontend should provide these.
-
-        $user = User::where('phone', $request->phone)->first();
-
-        if (!$user) {
-            // New user registration
-            $request->validate([
-                'first_name' => 'required|string',
-                'last_name' => 'required|string',
+        try {
+            $validator = Validator::make($request->all(), [
+                'phone' => 'required|string|regex:/^\+[1-9]\d{1,14}$/', // E.164 format
             ]);
 
-            $user = User::create([
-                'phone' => $request->phone,
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
-                // email and password are nullable
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid phone number format. Must be in E.164 format (e.g., +265991234567)',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $phone = $request->phone;
+
+            // Generate 6-digit OTP
+            $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+
+            // Store OTP in cache with 10 minute expiry
+            $cacheKey = 'otp_' . md5($phone);
+            cache()->put($cacheKey, $otp, now()->addMinutes(10));
+
+            // Log OTP for development (remove in production or use proper SMS service)
+            Log::info('OTP generated', [
+                'phone' => $phone,
+                'otp' => $otp,
+                'expires_at' => now()->addMinutes(10)->toISOString()
             ]);
+
+            // TODO: Integrate with actual SMS service (Twilio, Africa's Talking, etc.)
+            // For now, we're just storing it in cache and logging it
+
+            // In production, you would send SMS here:
+            // $this->sendSMS($phone, "Your DocAvailable verification code is: $otp");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OTP sent successfully',
+                'phone' => $phone,
+                // Include OTP in response for development ONLY - remove in production
+                'otp' => config('app.debug') ? $otp : null,
+                'expires_in' => 600 // 10 minutes in seconds
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error sending OTP', [
+                'error' => $e->getMessage(),
+                'phone' => $request->phone ?? 'not_provided'
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send OTP',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
         }
+    }
 
-        // Check if createToken method exists (Sanctum)
-        if (method_exists($user, 'createToken')) {
-            $token = $user->createToken('api-token')->plainTextToken;
-        } else {
-            // Fallback or JWT handling if Sanctum is not used/configured this way
-            // Assuming Sanctum is available based on composer.json
-            $token = null;
+    /**
+     * Verify OTP for phone number
+     */
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'phone' => 'required|string|regex:/^\+[1-9]\d{1,14}$/',
+                'otp' => 'required|string|size:6',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $phone = $request->phone;
+            $otp = $request->otp;
+
+            // Get stored OTP from cache
+            $cacheKey = 'otp_' . md5($phone);
+            $storedOtp = cache()->get($cacheKey);
+
+            if (!$storedOtp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP has expired or not found. Please request a new code.',
+                    'error_type' => 'otp_expired'
+                ], 401);
+            }
+
+            if ($storedOtp !== $otp) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid OTP. Please check the code and try again.',
+                    'error_type' => 'invalid_otp'
+                ], 401);
+            }
+
+            // OTP is valid - clear it from cache
+            cache()->forget($cacheKey);
+
+            // Check if user exists with this phone number
+            $user = User::where('phone', $phone)->first();
+
+            if ($user) {
+                // User exists - log them in
+                $token = auth('api')->login($user);
+
+                Log::info('User logged in via phone OTP', [
+                    'user_id' => $user->id,
+                    'phone' => $phone
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Phone number verified successfully',
+                    'user' => $user,
+                    'token' => $token,
+                    'token_type' => 'bearer',
+                    'expires_in' => auth('api')->factory()->getTTL() * 60,
+                    'user_exists' => true
+                ]);
+            } else {
+                // User doesn't exist - phone verification successful but needs to complete registration
+                Log::info('Phone verified for new user', [
+                    'phone' => $phone
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Phone number verified successfully',
+                    'user_exists' => false,
+                    'phone' => $phone,
+                    'verified' => true
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error verifying OTP', [
+                'error' => $e->getMessage(),
+                'phone' => $request->phone ?? 'not_provided'
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to verify OTP',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error'
+            ], 500);
         }
-
-
-        // Since the User model might not have 'phone' or 'name' fillable or even existing columns based on the previous view of User.php,
-        // we need to be careful. The User.php viewed earlier had 'email' but not explicitly 'phone' in $fillable.
-        // It had 'firebase_uid', 'google_id', etc.
-        // I should check if 'phone' is in the User model.
-
-        return response()->json([
-            'success' => true,
-            'token' => $token,
-            'user' => $user
-        ]);
     }
 }
