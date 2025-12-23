@@ -39,7 +39,7 @@ class CallSessionController extends Controller
 
             // Get user's subscription
             $subscription = Subscription::where('user_id', $user->id)->first();
-            
+
             if (!$subscription) {
                 return response()->json([
                     'success' => false,
@@ -144,7 +144,7 @@ class CallSessionController extends Controller
             // Check availability first
             $availabilityResponse = $this->checkAvailability($request);
             $availabilityData = $availabilityResponse->getData(true);
-            
+
             if (!$availabilityData['success'] || !$availabilityData['can_make_call']) {
                 return $availabilityResponse;
             }
@@ -368,7 +368,7 @@ class CallSessionController extends Controller
                 } else {
                     return response()->json(['success' => false, 'message' => 'Session ID or Appointment ID required'], 400);
                 }
-                
+
                 $callSession = $query->lockForUpdate()->first();
 
                 if (!$callSession) {
@@ -390,14 +390,14 @@ class CallSessionController extends Controller
                             'answered_at' => $callSession->answered_at->toISOString(),
                             'status' => $callSession->status
                         ]);
-                        
+
                         // Fix race condition: use answered_at as connected_at for billing correctness
                         $callSession->update([
                             'is_connected' => true,
                             'connected_at' => $callSession->answered_at,
                             'status' => CallSession::STATUS_ACTIVE, // Set to active first
                         ]);
-                        
+
                         Log::info("RACE CONDITION FIXED: Set connected_at to answered_at for billing correctness", [
                             'call_session_id' => $callSession->id,
                             'connected_at' => $callSession->connected_at->toISOString()
@@ -408,7 +408,7 @@ class CallSessionController extends Controller
                             'call_session_id' => $callSession->id,
                             'appointment_id' => $appointmentId
                         ]);
-                        
+
                         $callSession->update([
                             'status' => CallSession::STATUS_ENDED,
                             'ended_at' => now(),
@@ -435,7 +435,7 @@ class CallSessionController extends Controller
                         ]);
                     }
                 }
-                
+
                 // Refresh call session to get updated connected_at
                 $callSession->refresh();
 
@@ -454,22 +454,22 @@ class CallSessionController extends Controller
                 if ($callSession->connected_at && !$callSession->manual_deduction_applied) {
                     $patient = $user;
                     $subscription = $patient->subscription()->lockForUpdate()->first();
-                    
+
                     if ($subscription) {
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-                        
+
                         if ($subscription->$callTypeField >= 1) {
                             // Deduct 1 session from patient
                             $subscription->$callTypeField = max(0, $subscription->$callTypeField - 1);
                             $subscription->save();
-                            
+
                             // Pay the doctor
                             $doctor = User::find($callSession->doctor_id);
                             if ($doctor) {
                                 $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
                                 $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor);
                                 $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-                                
+
                                 $doctorWallet->credit(
                                     $paymentAmount,
                                     "Manual hangup payment for 1 {$callType} call session with " . $patient->first_name . " " . $patient->last_name,
@@ -483,7 +483,7 @@ class CallSessionController extends Controller
                                         'payment_amount' => $paymentAmount,
                                     ]
                                 );
-                                
+
                                 // Send payment received notification to doctor
                                 try {
                                     $notificationService = new \App\Services\NotificationService();
@@ -509,14 +509,14 @@ class CallSessionController extends Controller
                                     ]);
                                 }
                             }
-                            
+
                             // Mark manual deduction as applied
                             $callSession->update([
                                 'manual_deduction_applied' => true,
                                 'sessions_used' => ($callSession->sessions_used ?? 0) + 1,
                             ]);
                             $manualDeductionApplied = true;
-                            
+
                             Log::info("Manual hangup deduction applied", [
                                 'call_session_id' => $callSession->id,
                                 'appointment_id' => $appointmentId,
@@ -528,12 +528,12 @@ class CallSessionController extends Controller
 
                 // Calculate duration from timestamps only
                 $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
-                
+
                 // Calculate auto-deductions: every 10 minutes (600 seconds)
                 $autoDeductions = floor($duration / 600);
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $remainingAutoDeductions = max(0, $autoDeductions - $alreadyProcessed);
-                
+
                 $totalSessionsToDeduct = $remainingAutoDeductions;
 
                 // Update call duration
@@ -566,11 +566,11 @@ class CallSessionController extends Controller
                     // Get patient subscription with lock
                     $patient = $user;
                     $subscription = $patient->subscription()->lockForUpdate()->first();
-                    
+
                     if ($subscription) {
                         // Determine call type field
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-                        
+
                         // Check if patient has enough sessions
                         if ($subscription->$callTypeField >= $remainingAutoDeductions) {
                             // Deduct from patient subscription
@@ -590,7 +590,7 @@ class CallSessionController extends Controller
                                 $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
                                 $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $remainingAutoDeductions;
                                 $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-                                
+
                                 $doctorWallet->credit(
                                     $paymentAmount,
                                     "Auto-deduction payment for {$remainingAutoDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
@@ -606,7 +606,7 @@ class CallSessionController extends Controller
                                         'payment_amount' => $paymentAmount,
                                     ]
                                 );
-                                
+
                                 // Send payment received notification to doctor
                                 try {
                                     $notificationService = new \App\Services\NotificationService();
@@ -631,7 +631,7 @@ class CallSessionController extends Controller
                                         'error' => $notificationError->getMessage()
                                     ]);
                                 }
-                                
+
                                 $deductionResult['doctor_payment_success'] = true;
                                 $deductionResult['doctor_payment_amount'] = $paymentAmount;
                             }
@@ -661,17 +661,17 @@ class CallSessionController extends Controller
                         $notificationService = new \App\Services\NotificationService();
                         $patient = $callSession->patient;
                         $doctor = $callSession->doctor;
-                        
+
                         // Determine session type for display
                         $sessionType = $callType === 'voice' ? 'audio' : ($callType === 'video' ? 'video' : 'text');
-                        
+
                         // Format duration
                         $durationMinutes = floor($duration / 60);
                         $durationSeconds = $duration % 60;
-                        $durationFormatted = $durationMinutes > 0 
+                        $durationFormatted = $durationMinutes > 0
                             ? "{$durationMinutes} minute" . ($durationMinutes > 1 ? 's' : '') . ($durationSeconds > 0 ? " {$durationSeconds} second" . ($durationSeconds > 1 ? 's' : '') : '')
                             : "{$durationSeconds} second" . ($durationSeconds > 1 ? 's' : '');
-                        
+
                         if ($patient) {
                             $doctorName = $doctor ? ($doctor->first_name . ' ' . $doctor->last_name) : 'Doctor';
                             $notificationService->createNotification(
@@ -687,7 +687,7 @@ class CallSessionController extends Controller
                                 ]
                             );
                         }
-                        
+
                         if ($doctor) {
                             $patientName = $patient ? ($patient->first_name . ' ' . $patient->last_name) : 'Patient';
                             $notificationService->createNotification(
@@ -739,7 +739,106 @@ class CallSessionController extends Controller
         }
     }
 
-    // ... reNotify method ...
+    /**
+     * Re-notify the doctor about an active call session
+     */
+    public function reNotify(Request $request): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $appointmentId = $request->input('appointment_id');
+            $sessionId = $request->input('session_id');
+
+            if (!$appointmentId && !$sessionId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment ID or Session ID is required'
+                ], 400);
+            }
+
+            $query = CallSession::query();
+            if ($sessionId) {
+                $query->where('id', $sessionId);
+            } else {
+                $query->where('appointment_id', $appointmentId);
+            }
+
+            // Find the latest active/connecting session for this patient
+            $callSession = $query->where('patient_id', $user->id)
+                ->where('status', '!=', CallSession::STATUS_ENDED)
+                ->latest()
+                ->first();
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Active call session not found'
+                ], 404);
+            }
+
+            $doctorId = $callSession->doctor_id;
+            $doctor = User::find($doctorId);
+
+            if (!$doctor) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Doctor not found'
+                ], 404);
+            }
+
+            // Re-send notification
+            $notified = false;
+            $tokensCount = !empty($doctor->push_token) ? 1 : 0;
+
+            if ($tokensCount > 0 && $doctor->push_notifications_enabled) {
+                try {
+                    $doctor->notify(new \App\Notifications\IncomingCallNotification($callSession, $user));
+                    $notified = true;
+                } catch (\Exception $notifyError) {
+                    Log::error("Failed to trigger re-notification", [
+                        'doctor_id' => $doctorId,
+                        'error' => $notifyError->getMessage()
+                    ]);
+                }
+            }
+
+            Log::info("Call session re-notified", [
+                'user_id' => $user->id,
+                'call_session_id' => $callSession->id,
+                'doctor_id' => $doctorId,
+                'notified' => $notified
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Notification re-sent successfully',
+                'data' => [
+                    'notified' => $notified,
+                    'tokens' => $tokensCount,
+                    'last_notified_at' => now()->toISOString()
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error re-notifying call session", [
+                'user_id' => Auth::id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to re-send notification'
+            ], 500);
+        }
+    }
 
     /**
      * Process call deduction (for periodic billing)
@@ -785,16 +884,16 @@ class CallSessionController extends Controller
                             'appointment_id' => $appointmentId,
                             'answered_at' => $callSession->answered_at->toISOString()
                         ]);
-                        
+
                         // Fix race condition: use answered_at as connected_at
                         $callSession->update([
                             'is_connected' => true,
                             'connected_at' => $callSession->answered_at,
                             'status' => CallSession::STATUS_ACTIVE,
                         ]);
-                        
+
                         $callSession->refresh();
-                        
+
                         Log::info("RACE CONDITION FIXED in deduction: Set connected_at to answered_at", [
                             'call_session_id' => $callSession->id,
                             'connected_at' => $callSession->connected_at->toISOString()
@@ -814,12 +913,12 @@ class CallSessionController extends Controller
 
                 // Calculate duration from timestamps only
                 $duration = $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now());
-                
+
                 // Calculate auto-deductions: every 10 minutes (600 seconds)
                 $autoDeductions = floor($duration / 600);
                 $alreadyProcessed = $callSession->auto_deductions_processed ?? 0;
                 $newDeductions = max(0, $autoDeductions - $alreadyProcessed);
-                
+
                 // Manual deduction: +1 on manual hangup
                 $manualDeduction = $callSession->ended_at ? 1 : 0;
 
@@ -836,29 +935,29 @@ class CallSessionController extends Controller
                 if ($newDeductions > 0) {
                     $patient = $user;
                     $subscription = $patient->subscription()->lockForUpdate()->first();
-                    
+
                     if ($subscription) {
                         // Determine call type field
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-                        
+
                         // Check if patient has enough sessions
                         if ($subscription->$callTypeField >= $newDeductions) {
                             // Deduct from patient subscription
                             $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
                             $subscription->save();
-                            
+
                             // Update call session
                             $callSession->auto_deductions_processed = $autoDeductions;
                             $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
                             $callSession->save();
-                            
+
                             // Pay the doctor for new deductions
                             $doctor = User::find($callSession->doctor_id);
                             if ($doctor) {
                                 $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
                                 $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
                                 $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
-                                
+
                                 $doctorWallet->credit(
                                     $paymentAmount,
                                     "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
@@ -875,7 +974,7 @@ class CallSessionController extends Controller
                                     ]
                                 );
                             }
-                            
+
                             $deductionResult['deductions_processed'] = $newDeductions;
                             $deductionResult['remaining_calls'] = $subscription->$callTypeField;
                         } else {
@@ -926,7 +1025,7 @@ class CallSessionController extends Controller
     public function answer(Request $request): JsonResponse
     {
         $appointmentId = $request->input('appointment_id');
-        
+
         $callSession = CallSession::where('appointment_id', $appointmentId)
             ->latest()
             ->first();
@@ -981,10 +1080,10 @@ class CallSessionController extends Controller
                 $callSession = CallSession::where('appointment_id', $appointmentId)
                     ->where(function ($query) use ($user) {
                         $query->where('patient_id', $user->id)
-                              ->orWhere('doctor_id', $user->id);
+                            ->orWhere('doctor_id', $user->id);
                     })
                     ->whereIn('status', [
-                        CallSession::STATUS_CONNECTING, 
+                        CallSession::STATUS_CONNECTING,
                         CallSession::STATUS_ANSWERED,
                         CallSession::STATUS_ACTIVE // Also accept active in case status was set but connected_at is missing
                     ])
@@ -997,17 +1096,17 @@ class CallSessionController extends Controller
                     $existingCall = CallSession::where('appointment_id', $appointmentId)
                         ->where(function ($query) use ($user) {
                             $query->where('patient_id', $user->id)
-                                  ->orWhere('doctor_id', $user->id);
+                                ->orWhere('doctor_id', $user->id);
                         })
                         ->first();
-                    
+
                     Log::warning("Call session not found for mark-connected", [
                         'appointment_id' => $appointmentId,
                         'user_id' => $user->id,
                         'existing_call_status' => $existingCall ? $existingCall->status : 'not found',
                         'existing_call_connected_at' => $existingCall && $existingCall->connected_at ? $existingCall->connected_at->toISOString() : 'null'
                     ]);
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Call session not found or in invalid state for connection',
@@ -1034,7 +1133,7 @@ class CallSessionController extends Controller
                         ]
                     ]);
                 }
-                
+
                 // Handle case where status is 'active' but connected_at is missing (fix inconsistent state)
                 if ($callSession->status === CallSession::STATUS_ACTIVE && !$callSession->connected_at) {
                     Log::warning("Call status is active but connected_at is missing - fixing", [
@@ -1127,7 +1226,7 @@ class CallSessionController extends Controller
                     'message' => 'Call session not found or already ended'
                 ], 404);
             }
-            
+
             // If already declined, return success (idempotent)
             if ($callSession->declined_at) {
                 Log::info("Call already declined - returning success", [
