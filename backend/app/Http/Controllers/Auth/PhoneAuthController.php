@@ -94,28 +94,17 @@ class PhoneAuthController extends Controller
             $phone = $request->phone;
             $otp = $request->otp;
 
-            // Get stored OTP from cache
-            $cacheKey = 'otp_' . md5($phone);
-            $storedOtp = cache()->get($cacheKey);
+            // Use Efashe service to verify OTP
+            $result = $this->efasheService->verifyOtp($phone, $otp);
 
-            if (!$storedOtp) {
+            if (!$result['success']) {
+                $status = ($result['message'] === 'OTP has expired. Please request a new one.') ? 401 : 401;
                 return response()->json([
                     'success' => false,
-                    'message' => 'OTP has expired or not found. Please request a new code.',
-                    'error_type' => 'otp_expired'
-                ], 401);
+                    'message' => $result['message'],
+                    'error_type' => ($result['message'] === 'OTP has expired. Please request a new one.') ? 'otp_expired' : 'invalid_otp'
+                ], $status);
             }
-
-            if ($storedOtp !== $otp) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid OTP. Please check the code and try again.',
-                    'error_type' => 'invalid_otp'
-                ], 401);
-            }
-
-            // OTP is valid - clear it from cache
-            cache()->forget($cacheKey);
 
             // Check if user exists with this phone number
             $user = User::where('phone', $phone)->first();
