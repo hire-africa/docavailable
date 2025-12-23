@@ -4,17 +4,23 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\EfasheService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 
 class PhoneAuthController extends Controller
 {
+    protected $efasheService;
+
+    public function __construct(EfasheService $efasheService)
+    {
+        $this->efasheService = $efasheService;
+    }
+
     /**
-     * Send OTP to phone number via SMS
+     * Send OTP to phone number via Efashe SMS API
      */
     public function sendOtp(Request $request): JsonResponse
     {
@@ -33,34 +39,24 @@ class PhoneAuthController extends Controller
 
             $phone = $request->phone;
 
-            // Generate 6-digit OTP
-            $otp = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+            // Use Efashe service to send OTP via SMS
+            $result = $this->efasheService->sendOtp($phone);
 
-            // Store OTP in cache with 10 minute expiry
-            $cacheKey = 'otp_' . md5($phone);
-            cache()->put($cacheKey, $otp, now()->addMinutes(10));
-
-            // Log OTP for development (remove in production or use proper SMS service)
-            Log::info('OTP generated', [
-                'phone' => $phone,
-                'otp' => $otp,
-                'expires_at' => now()->addMinutes(10)->toISOString()
-            ]);
-
-            // TODO: Integrate with actual SMS service (Twilio, Africa's Talking, etc.)
-            // For now, we're just storing it in cache and logging it
-
-            // In production, you would send SMS here:
-            // $this->sendSMS($phone, "Your DocAvailable verification code is: $otp");
-
-            return response()->json([
-                'success' => true,
-                'message' => 'OTP sent successfully',
-                'phone' => $phone,
-                // Include OTP in response for development ONLY - remove in production
-                'otp' => config('app.debug') ? $otp : null,
-                'expires_in' => 600 // 10 minutes in seconds
-            ]);
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'OTP sent successfully',
+                    'phone' => $phone,
+                    // Include OTP in debug mode for testing
+                    'otp' => $result['otp'] ?? null,
+                    'expires_in' => 600 // 10 minutes
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['message'] ?? 'Failed to send OTP'
+                ], 500);
+            }
 
         } catch (\Exception $e) {
             Log::error('Error sending OTP', [
