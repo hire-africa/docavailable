@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Fallback if configService doesn't have API_URL exposed directly or differently
-const API_URL = 'https://docavailable.com/api';
+// Backend API URL - Laravel backend on DigitalOcean
+const API_URL = 'https://docavailable-3vbdv.ondigitalocean.app/api';
 
 export const efasheService = {
     /**
