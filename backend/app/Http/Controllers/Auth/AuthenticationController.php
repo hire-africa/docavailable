@@ -14,11 +14,12 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use App\Traits\HasImageUrls;
+use App\Traits\HandlesPhoneNormalization;
 use App\Mail\VerificationCodeMail;
 
 class AuthenticationController extends Controller
 {
-    use HasImageUrls;
+    use HasImageUrls, HandlesPhoneNormalization;
 
     /**
      * Create a new controller instance.
@@ -43,6 +44,11 @@ class AuthenticationController extends Controller
                 'has_surname' => !empty($request->surname),
                 'request_data' => $request->all()
             ]);
+
+            // Normalize phone before anything else
+            if ($request->has('phone')) {
+                $request->merge(['phone' => $this->normalizePhoneNumber($request->phone)]);
+            }
 
             // Normalize common alternate/camelCase field names
             $normalized = [];
@@ -342,6 +348,11 @@ class AuthenticationController extends Controller
     public function login(Request $request): JsonResponse
     {
         try {
+            // Normalize phone before anything else
+            if ($request->has('phone')) {
+                $request->merge(['phone' => $this->normalizePhoneNumber($request->phone)]);
+            }
+
             $validator = Validator::make($request->all(), [
                 'email' => 'nullable|email',
                 'phone' => 'nullable|string',

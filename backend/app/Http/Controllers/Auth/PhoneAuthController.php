@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\EfasheService;
+use App\Traits\HandlesPhoneNormalization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +13,8 @@ use Illuminate\Support\Facades\Validator;
 
 class PhoneAuthController extends Controller
 {
+    use HandlesPhoneNormalization;
+
     protected $efasheService;
 
     public function __construct(EfasheService $efasheService)
@@ -25,6 +28,11 @@ class PhoneAuthController extends Controller
     public function sendOtp(Request $request): JsonResponse
     {
         try {
+            // Normalize phone before validation
+            if ($request->has('phone')) {
+                $request->merge(['phone' => $this->normalizePhoneNumber($request->phone)]);
+            }
+
             $validator = Validator::make($request->all(), [
                 'phone' => 'required|string|regex:/^\+[1-9]\d{1,14}$/', // E.164 format
             ]);
@@ -78,6 +86,11 @@ class PhoneAuthController extends Controller
     public function verifyOtp(Request $request): JsonResponse
     {
         try {
+            // Normalize phone before validation
+            if ($request->has('phone')) {
+                $request->merge(['phone' => $this->normalizePhoneNumber($request->phone)]);
+            }
+
             $validator = Validator::make($request->all(), [
                 'phone' => 'required|string|regex:/^\+[1-9]\d{1,14}$/',
                 'otp' => 'required|string|size:6',

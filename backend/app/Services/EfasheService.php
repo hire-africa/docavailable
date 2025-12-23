@@ -20,7 +20,7 @@ class EfasheService
         $this->baseUrl = env('EFASHE_MESSAGING_BASE_URL', 'https://messaging.efashe.com/mw');
         $this->apiKey = env('EFASHE_API_KEY', '');
         $this->apiSecret = env('EFASHE_API_SECRET', '');
-        $this->senderId = env('EFASHE_SENDER_ID', '');
+        $this->senderId = env('EFASHE_SENDER_ID', 'DocAvailable');
         $this->dlrUrl = env('EFASHE_DLR_URL', '');
     }
 
