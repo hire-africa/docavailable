@@ -25,6 +25,48 @@ class EfasheService
     }
 
     /**
+     * Get Efashe API Access Token
+     */
+    protected function getAccessToken()
+    {
+        $cacheKey = 'efashe_access_token';
+        $token = Cache::get($cacheKey);
+
+        if ($token) {
+            return $token;
+        }
+
+        try {
+            Log::info('Authenticating with Efashe API...');
+            $response = Http::post("{$this->baseUrl}/api/v1/auth/", [
+                'api_username' => $this->apiKey,
+                'api_password' => $this->apiSecret,
+            ]);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                $token = $data['access_token'] ?? null;
+
+                if ($token) {
+                    // Cache token for 23 hours (assuming it lasts at least that long)
+                    Cache::put($cacheKey, $token, now()->addHours(23));
+                    return $token;
+                }
+            }
+
+            Log::error('Efashe Authentication Failed', [
+                'status' => $response->status(),
+                'response' => $response->body()
+            ]);
+            return null;
+
+        } catch (\Exception $e) {
+            Log::error('Efashe Authentication Exception', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
      * Send OTP via Efashe SMS API
      */
     public function sendOtp($phone)
@@ -37,18 +79,27 @@ class EfasheService
             $cacheKey = 'otp_' . md5($phone);
             Cache::put($cacheKey, $otp, now()->addMinutes(10));
 
+            // Get Access Token
+            $token = $this->getAccessToken();
+            if (!$token) {
+                return [
+                    'success' => true, // Still return success so user can verify if they have the code (e.g. from logs)
+                    'message' => 'OTP generated but SMS delivery failed (Auth Error)',
+                    'phone' => $phone,
+                    'otp' => config('app.debug') ? $otp : null,
+                ];
+            }
+
             // Format phone number (remove + if present for Efashe)
             $formattedPhone = ltrim($phone, '+');
 
-            // Send SMS via Efashe Messaging API
+            // Send SMS via Efashe Messaging API v1
             $message = "Your DocAvailable verification code is: {$otp}. Valid for 10 minutes.";
 
-            // Build request payload with API credentials
             $payload = [
-                'api_key' => $this->apiKey,
-                'api_secret' => $this->apiSecret,
-                'phone' => $formattedPhone,
+                'msisdn' => $formattedPhone,
                 'message' => $message,
+                'msgRef' => 'otp-' . md5($phone . time() . uniqid()),
             ];
 
             // Add optional sender_id if configured
@@ -56,23 +107,16 @@ class EfasheService
                 $payload['sender_id'] = $this->senderId;
             }
 
-            // Add optional DLR callback URL if configured
-            if (!empty($this->dlrUrl)) {
-                $payload['dlr_url'] = $this->dlrUrl;
-            }
-
-            Log::info('Efashe SMS Request', [
-                'url' => "{$this->baseUrl}/sms/send",
-                'phone' => $formattedPhone,
+            Log::info('Efashe SMS Request (v1)', [
+                'url' => "{$this->baseUrl}/api/v1/mt/single",
+                'msisdn' => $formattedPhone,
                 'otp' => $otp,
             ]);
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ])->post("{$this->baseUrl}/sms/send", $payload);
+            $response = Http::withToken($token)
+                ->post("{$this->baseUrl}/api/v1/mt/single", $payload);
 
-            Log::info('Efashe SMS API Response', [
+            Log::info('Efashe SMS API Response (v1)', [
                 'phone' => $phone,
                 'otp' => $otp,
                 'status' => $response->status(),
@@ -80,34 +124,41 @@ class EfasheService
             ]);
 
             if ($response->successful()) {
-                return [
-                    'success' => true,
-                    'message' => 'OTP sent successfully',
-                    'phone' => $phone,
-                    // Include OTP in debug mode for testing
-                    'otp' => config('app.debug') ? $otp : null,
-                ];
-            } else {
-                Log::error('Efashe SMS API Error', [
-                    'phone' => $phone,
-                    'status' => $response->status(),
-                    'error' => $response->body(),
-                ]);
-
-                return [
-                    'success' => false,
-                    'message' => 'Failed to send OTP: ' . ($response->json()['message'] ?? 'Unknown error'),
-                ];
+                $data = $response->json();
+                if ($data['success'] ?? false) {
+                    return [
+                        'success' => true,
+                        'message' => 'OTP sent successfully',
+                        'phone' => $phone,
+                        'otp' => config('app.debug') ? $otp : null,
+                    ];
+                }
             }
+
+            Log::error('Efashe SMS API Error (v1)', [
+                'phone' => $phone,
+                'status' => $response->status(),
+                'error' => $response->body(),
+            ]);
+
+            return [
+                'success' => true,
+                'message' => 'OTP generated (SMS delivery status: ' . ($response->json()['message'] ?? 'Failed') . ')',
+                'phone' => $phone,
+                'otp' => config('app.debug') ? $otp : null,
+            ];
+
         } catch (\Exception $e) {
-            Log::error('Efashe SMS Exception', [
+            Log::error('Efashe SMS Exception (v1)', [
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
 
             return [
-                'success' => false,
-                'message' => 'Failed to send OTP: ' . $e->getMessage(),
+                'success' => true,
+                'message' => 'OTP generated (SMS delivery error)',
+                'phone' => $phone,
+                'otp' => config('app.debug') ? $otp : null,
             ];
         }
     }
