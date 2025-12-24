@@ -5,7 +5,9 @@ import { useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
+    KeyboardAvoidingView,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -15,9 +17,9 @@ import {
 import authService from '../services/authService';
 import customAlertService from '../services/customAlertService';
 import { navigateToDashboard, navigateToForgotPassword, navigateToSignup } from '../utils/navigationUtils';
-import NativeGoogleSignIn from './NativeGoogleSignIn';
-import CountryCodeSelector from './CountryCodeSelector';
 import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
+import CountryCodeSelector from './CountryCodeSelector';
+import NativeGoogleSignIn from './NativeGoogleSignIn';
 
 const { width } = Dimensions.get('window');
 
@@ -51,7 +53,7 @@ export default function LoginPage() {
         setLoading(true);
         try {
             let credentials: { email?: string; phone?: string; password: string };
-            
+
             if (authMode === 'email') {
                 credentials = { email, password };
                 console.log('LoginPage: Attempting login with email:', { email, password: '***' });
@@ -61,11 +63,11 @@ export default function LoginPage() {
                 credentials = { phone: normalizedPhone, password };
                 console.log('LoginPage: Attempting login with phone:', { phone: normalizedPhone, password: '***' });
             }
-            
+
             // Use login method directly to support both email and phone
             const authState = await authService.login(credentials as any);
             console.log('LoginPage: Login response:', authState);
-            
+
             if (authState.data && authState.data.user) {
                 console.log('LoginPage: User data found:', authState.data.user);
                 if (authState.data.user.user_type === 'admin') {
@@ -94,17 +96,17 @@ export default function LoginPage() {
             }
         } catch (error: any) {
             console.error('LoginPage: Login error:', error);
-            
+
             // Enhanced error handling with detailed messages and suggestions
             let errorMessage = 'Login failed. Please try again.';
             let errorTitle = 'Login Failed';
             let errorSuggestion = '';
-            
+
             // Check if we have detailed error information from the backend
             if (error.response?.data) {
                 const errorData = error.response.data;
                 errorMessage = errorData.message || errorMessage;
-                
+
                 // Set title based on error type
                 if (errorData.error_type) {
                     switch (errorData.error_type) {
@@ -142,7 +144,7 @@ export default function LoginPage() {
                             errorTitle = 'Login Error';
                     }
                 }
-                
+
                 // Add suggestion if available
                 if (errorData.suggestion) {
                     errorSuggestion = errorData.suggestion;
@@ -176,7 +178,7 @@ export default function LoginPage() {
                     errorMessage = error.message;
                 }
             }
-            
+
             // Show error with suggestion if available
             if (errorSuggestion) {
                 customAlertService.error(errorTitle, `${errorMessage}\n\nSuggestion: ${errorSuggestion}`);
@@ -198,14 +200,14 @@ export default function LoginPage() {
         console.log('🔐 Google Auth Success:', { user, token });
         setShowGoogleAuth(false);
         setLoading(true);
-        
+
         try {
             // Store the token in AsyncStorage
             if (user.token) {
                 await AsyncStorage.setItem('auth_token', user.token);
                 console.log('🔐 Token stored successfully');
             }
-            
+
             // Navigate to appropriate dashboard based on user type
             if (user.user_type === 'admin') {
                 navigateToDashboard('admin', true);
@@ -237,15 +239,15 @@ export default function LoginPage() {
     const handleGoogleAuthError = (error: string) => {
         console.error('🔐 Google Auth Error:', error);
         setShowGoogleAuth(false);
-        
+
         // Don't show alert for user cancellation
-        if (error.includes('cancelled') || 
+        if (error.includes('cancelled') ||
             error.includes('No user data received from Google') ||
             error.includes('SIGN_IN_CANCELLED')) {
             console.log('🔐 User cancelled Google sign-in, not showing error alert');
             return;
         }
-        
+
         customAlertService.error('Google Sign-In Error', error);
     };
 
@@ -255,177 +257,187 @@ export default function LoginPage() {
     };
 
     return (
-        <View style={styles.container}>
-            <View style={styles.content}>
-                <Text style={styles.title}>Welcome Back</Text>
-                <Text style={styles.subtitle}>Sign in to your account</Text>
-                
-                {userType && (
-                    <View style={styles.userTypeIndicator}>
-                        <FontAwesome 
-                            name={userType === 'doctor' ? 'user-md' : 'user'} 
-                            size={16} 
-                            color="#4CAF50" 
-                        />
-                        <Text style={styles.userTypeText}>
-                            {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
-                        </Text>
-                    </View>
-                )}
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.container}
+        >
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={styles.content}>
+                    <Text style={styles.title}>Welcome Back</Text>
+                    <Text style={styles.subtitle}>Sign in to your account</Text>
 
-                <View style={styles.form}>
-                    {/* Auth Mode Toggle */}
-                    <View style={styles.authModeToggle}>
-                        <TouchableOpacity
-                            style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
-                            onPress={() => setAuthMode('email')}
-                        >
-                            <FontAwesome 
-                                name="envelope" 
-                                size={16} 
-                                color={authMode === 'email' ? '#FFFFFF' : '#666'} 
-                                style={styles.toggleIcon}
+                    {userType && (
+                        <View style={styles.userTypeIndicator}>
+                            <FontAwesome
+                                name={userType === 'doctor' ? 'user-md' : 'user'}
+                                size={16}
+                                color="#4CAF50"
                             />
-                            <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
-                                Email
+                            <Text style={styles.userTypeText}>
+                                {userType === 'doctor' ? 'Doctor' : 'Patient'} Account
                             </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
-                            onPress={() => setAuthMode('phone')}
-                        >
-                            <FontAwesome 
-                                name="phone" 
-                                size={16} 
-                                color={authMode === 'phone' ? '#FFFFFF' : '#666'} 
-                                style={styles.toggleIcon}
-                            />
-                            <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
-                                Phone
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* Email Input (shown when email mode) */}
-                    {authMode === 'email' && (
-                        <View style={styles.inputContainer}>
-                            <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
-                                ]}
-                                placeholder="Email"
-                                placeholderTextColor="#666"
-                                value={email}
-                                onChangeText={setEmail}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="email-address"
-                                cursorColor="#4CAF50"
-                                caretHidden={false}
-                                selectionColor="#4CAF50"
-                            />
                         </View>
                     )}
 
-                    {/* Phone Input (shown when phone mode) */}
-                    {authMode === 'phone' && (
-                        <View style={styles.inputContainer}>
-                            <CountryCodeSelector
-                                selectedCountry={countryCode}
-                                onSelect={setCountryCode}
-                            />
-                            <TextInput
-                                style={[
-                                    styles.input,
-                                    styles.phoneInput,
-                                    Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
-                                ]}
-                                placeholder="Phone number"
-                                placeholderTextColor="#666"
-                                value={phone}
-                                onChangeText={setPhone}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                keyboardType="phone-pad"
-                                cursorColor="#4CAF50"
-                                caretHidden={false}
-                                selectionColor="#4CAF50"
-                            />
+                    <View style={styles.form}>
+                        {/* Auth Mode Toggle */}
+                        <View style={styles.authModeToggle}>
+                            <TouchableOpacity
+                                style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
+                                onPress={() => setAuthMode('email')}
+                            >
+                                <FontAwesome
+                                    name="envelope"
+                                    size={16}
+                                    color={authMode === 'email' ? '#FFFFFF' : '#666'}
+                                    style={styles.toggleIcon}
+                                />
+                                <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
+                                    Email
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
+                                onPress={() => setAuthMode('phone')}
+                            >
+                                <FontAwesome
+                                    name="phone"
+                                    size={16}
+                                    color={authMode === 'phone' ? '#FFFFFF' : '#666'}
+                                    style={styles.toggleIcon}
+                                />
+                                <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
+                                    Phone
+                                </Text>
+                            </TouchableOpacity>
                         </View>
-                    )}
 
-                    <View style={styles.inputContainer}>
-                        <FontAwesome name="lock" size={20} color="#666" style={styles.inputIcon} />
-                        <TextInput
-                            style={[
-                                styles.input,
-                                Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
-                            ]}
-                            placeholder="Password"
-                            placeholderTextColor="#666"
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                            cursorColor="#4CAF50"
-                            caretHidden={false}
-                            selectionColor="#4CAF50"
-                        />
-                    </View>
-
-                    <TouchableOpacity
-                        style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-                        onPress={handleLogin}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                            <Text style={styles.loginButtonText}>Sign In</Text>
-                        )}
-                    </TouchableOpacity>
-
-                    {/* Google Sign-In Button */}
-                    <View style={styles.dividerContainer}>
-                        <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>or</Text>
-                        <View style={styles.dividerLine} />
-                    </View>
-
-                    <TouchableOpacity
-                        style={styles.googleButton}
-                        onPress={handleGoogleSignIn}
-                        disabled={loading}
-                    >
-                        <View style={styles.googleButtonContent}>
-                            <View style={styles.googleIcon}>
-                                <Text style={styles.googleIconText}>G</Text>
+                        {/* Email Input (shown when email mode) */}
+                        {authMode === 'email' && (
+                            <View style={styles.inputContainer}>
+                                <FontAwesome name="envelope" size={20} color="#666" style={styles.inputIcon} />
+                                <TextInput
+                                    style={[
+                                        styles.input,
+                                        Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                                    ]}
+                                    placeholder="Email"
+                                    placeholderTextColor="#666"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="email-address"
+                                    cursorColor="#4CAF50"
+                                    caretHidden={false}
+                                    selectionColor="#4CAF50"
+                                />
                             </View>
-                            <Text style={styles.googleButtonText}>Continue with Google</Text>
+                        )}
+
+                        {/* Phone Input (shown when phone mode) */}
+                        {authMode === 'phone' && (
+                            <View style={styles.inputContainer}>
+                                <CountryCodeSelector
+                                    selectedCountry={countryCode}
+                                    onSelect={setCountryCode}
+                                    locked={true}
+                                />
+                                <TextInput
+                                    style={[
+                                        styles.input,
+                                        styles.phoneInput,
+                                        Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                                    ]}
+                                    placeholder="Phone number"
+                                    placeholderTextColor="#666"
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="phone-pad"
+                                    cursorColor="#4CAF50"
+                                    caretHidden={false}
+                                    selectionColor="#4CAF50"
+                                />
+                            </View>
+                        )}
+
+                        <View style={styles.inputContainer}>
+                            <FontAwesome name="lock" size={20} color="#666" style={styles.inputIcon} />
+                            <TextInput
+                                style={[
+                                    styles.input,
+                                    Platform.OS === 'web' ? ({ caretColor: '#4CAF50' } as any) : null,
+                                ]}
+                                placeholder="Password"
+                                placeholderTextColor="#666"
+                                value={password}
+                                onChangeText={setPassword}
+                                secureTextEntry
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                cursorColor="#4CAF50"
+                                caretHidden={false}
+                                selectionColor="#4CAF50"
+                            />
                         </View>
-                    </TouchableOpacity>
 
-                    <View style={styles.linksContainer}>
                         <TouchableOpacity
-                            onPress={() => navigateToForgotPassword({ userType })}
+                            style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                            onPress={handleLogin}
+                            disabled={loading}
                         >
-                            <Text style={styles.linkText}>Forgot Password?</Text>
+                            {loading ? (
+                                <ActivityIndicator color="#FFFFFF" />
+                            ) : (
+                                <Text style={styles.loginButtonText}>Sign In</Text>
+                            )}
                         </TouchableOpacity>
-                    </View>
 
-                    <View style={styles.signupContainer}>
-                        <Text style={styles.signupText}>Don&apos;t have an account? </Text>
+                        {/* Google Sign-In Button */}
+                        <View style={styles.dividerContainer}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>or</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
                         <TouchableOpacity
-                            onPress={() => navigateToSignup({ userType })}
+                            style={styles.googleButton}
+                            onPress={handleGoogleSignIn}
+                            disabled={loading}
                         >
-                            <Text style={styles.signupLink}>Sign Up</Text>
+                            <View style={styles.googleButtonContent}>
+                                <View style={styles.googleIcon}>
+                                    <Text style={styles.googleIconText}>G</Text>
+                                </View>
+                                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                            </View>
                         </TouchableOpacity>
+
+                        <View style={styles.linksContainer}>
+                            <TouchableOpacity
+                                onPress={() => navigateToForgotPassword({ userType })}
+                            >
+                                <Text style={styles.linkText}>Forgot Password?</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.signupContainer}>
+                            <Text style={styles.signupText}>Don&apos;t have an account? </Text>
+                            <TouchableOpacity
+                                onPress={() => navigateToSignup({ userType })}
+                            >
+                                <Text style={styles.signupLink}>Sign Up</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
-            </View>
+            </ScrollView>
 
             {/* Native Google Sign-In Modal */}
             <NativeGoogleSignIn
@@ -435,7 +447,7 @@ export default function LoginPage() {
                 onError={handleGoogleAuthError}
                 userType={userType as 'patient' | 'doctor' | 'admin'}
             />
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -445,10 +457,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF',
     },
     content: {
-        flex: 1,
-        justifyContent: 'center',
+        width: '100%',
         alignItems: 'center',
         paddingHorizontal: 20,
+        paddingVertical: 40,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
+        paddingBottom: 120,
     },
     title: {
         fontSize: 32,

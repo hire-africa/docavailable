@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     FlatList,
     Modal,
@@ -10,15 +10,16 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { CountryCode, COUNTRY_CODES, getDefaultCountryCode } from '../utils/phoneUtils';
+import { COUNTRY_CODES, CountryCode } from '../utils/phoneUtils';
 
 interface CountryCodeSelectorProps {
     selectedCountry: CountryCode;
     onSelect: (country: CountryCode) => void;
     style?: any;
+    locked?: boolean;
 }
 
-export default function CountryCodeSelector({ selectedCountry, onSelect, style }: CountryCodeSelectorProps) {
+export default function CountryCodeSelector({ selectedCountry, onSelect, style, locked = false }: CountryCodeSelectorProps) {
     const [showPicker, setShowPicker] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -50,11 +51,12 @@ export default function CountryCodeSelector({ selectedCountry, onSelect, style }
     return (
         <View style={[styles.container, style]}>
             <TouchableOpacity
-                style={styles.selectorButton}
-                onPress={() => setShowPicker(true)}
+                style={[styles.selectorButton, locked && styles.selectorButtonLocked]}
+                onPress={() => !locked && setShowPicker(true)}
+                disabled={locked}
             >
-                <Text style={styles.dialCodeText}>{selectedCountry.dialCode}</Text>
-                <FontAwesome name="chevron-down" size={12} color="#666" style={styles.chevron} />
+                <Text style={[styles.dialCodeText, locked && styles.dialCodeTextLocked]}>{selectedCountry.dialCode}</Text>
+                {!locked && <FontAwesome name="chevron-down" size={12} color="#666" style={styles.chevron} />}
             </TouchableOpacity>
 
             <Modal
@@ -126,6 +128,14 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#333',
         fontWeight: '500',
+    },
+    selectorButtonLocked: {
+        backgroundColor: '#E0E0E0',
+        opacity: 0.8,
+    },
+    dialCodeTextLocked: {
+        color: '#666',
+        paddingRight: 4, // Add padding to compensate for missing chevron
     },
     chevron: {
         marginLeft: 6,

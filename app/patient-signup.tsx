@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
+    Image,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -27,7 +28,7 @@ import { efasheService } from '../services/efasheService';
 import EnhancedValidation from '../utils/enhancedValidation';
 import SignUpErrorHandler from '../utils/errorHandler';
 import { navigateToLogin } from '../utils/navigationUtils';
-import { CountryCode, getMalawiCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
+import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
 import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
 import ValidationUtils from '../utils/validationUtils';
 
@@ -338,7 +339,7 @@ const Step1: React.FC<Step1Props> = ({
                             <CountryCodeSelector
                                 selectedCountry={countryCode}
                                 onSelect={setCountryCode}
-                                disabled={true}
+                                locked={true}
                             />
                             <TextInput
                                 ref={fieldRefs.phone}
@@ -617,7 +618,7 @@ export default function PatientSignUp() {
     const [gender, setGender] = useState<string | null>(null);
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
-    const [countryCode, setCountryCode] = useState<CountryCode>(getMalawiCountryCode());
+    const [countryCode, setCountryCode] = useState<CountryCode>(getDefaultCountryCode());
     const [password, setPassword] = useState('');
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');

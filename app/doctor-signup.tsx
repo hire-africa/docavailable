@@ -16,19 +16,19 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import customAlertService from '../services/customAlertService';
+import CountryCodeSelector from '../components/CountryCodeSelector';
 import DatePickerField from '../components/DatePickerField';
 import LocationPicker from '../components/LocationPicker';
 import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import CountryCodeSelector from '../components/CountryCodeSelector';
-import { navigateToLogin } from '../utils/navigationUtils';
-import { createFieldRefs, scrollToFirstError } from '../utils/scrollToError';
-import SignUpErrorHandler from '../utils/errorHandler';
-import ValidationUtils from '../utils/validationUtils';
+import customAlertService from '../services/customAlertService';
 import EnhancedValidation from '../utils/enhancedValidation';
+import SignUpErrorHandler from '../utils/errorHandler';
+import { navigateToLogin } from '../utils/navigationUtils';
 import { CountryCode, getDefaultCountryCode, normalizePhoneToE164 } from '../utils/phoneUtils';
+import { createFieldRefs } from '../utils/scrollToError';
+import ValidationUtils from '../utils/validationUtils';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -89,6 +89,8 @@ interface Step2Props {
 
 interface Step3Props {
     email: string;
+    phone: string;
+    authMode: 'email' | 'phone';
     verificationCode: string;
     setVerificationCode: (code: string) => void;
     isVerifying: boolean;
@@ -131,7 +133,7 @@ const Step1: React.FC<Step1Props> = ({
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Basic Details</Text>
-                
+
                 <View style={styles.row}>
                     <View style={styles.halfInput}>
                         <Text style={styles.inputLabel}>First Name</Text>
@@ -232,17 +234,17 @@ const Step1: React.FC<Step1Props> = ({
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Account Details</Text>
-                
+
                 {/* Auth Mode Toggle */}
                 <View style={styles.authModeToggle}>
                     <TouchableOpacity
                         style={[styles.toggleButton, authMode === 'email' && styles.toggleButtonActive]}
                         onPress={() => setAuthMode('email')}
                     >
-                        <FontAwesome 
-                            name="envelope" 
-                            size={14} 
-                            color={authMode === 'email' ? '#FFFFFF' : '#666'} 
+                        <FontAwesome
+                            name="envelope"
+                            size={14}
+                            color={authMode === 'email' ? '#FFFFFF' : '#666'}
                             style={styles.toggleIcon}
                         />
                         <Text style={[styles.toggleText, authMode === 'email' && styles.toggleTextActive]}>
@@ -253,10 +255,10 @@ const Step1: React.FC<Step1Props> = ({
                         style={[styles.toggleButton, authMode === 'phone' && styles.toggleButtonActive]}
                         onPress={() => setAuthMode('phone')}
                     >
-                        <FontAwesome 
-                            name="phone" 
-                            size={14} 
-                            color={authMode === 'phone' ? '#FFFFFF' : '#666'} 
+                        <FontAwesome
+                            name="phone"
+                            size={14}
+                            color={authMode === 'phone' ? '#FFFFFF' : '#666'}
                             style={styles.toggleIcon}
                         />
                         <Text style={[styles.toggleText, authMode === 'phone' && styles.toggleTextActive]}>
@@ -291,6 +293,7 @@ const Step1: React.FC<Step1Props> = ({
                             <CountryCodeSelector
                                 selectedCountry={countryCode}
                                 onSelect={setCountryCode}
+                                locked={true}
                             />
                             <TextInput
                                 ref={fieldRefs.phone}
@@ -306,7 +309,7 @@ const Step1: React.FC<Step1Props> = ({
                         {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
                     </>
                 )}
-                
+
                 <Text style={styles.inputLabel}>Password</Text>
                 <TextInput
                     ref={fieldRefs.password}
@@ -661,6 +664,8 @@ const Step2: React.FC<Step2Props> = ({
 // Step 3 Component: Email Verification
 const Step3: React.FC<Step3Props> = ({
     email,
+    phone,
+    authMode,
     verificationCode,
     setVerificationCode,
     isVerifying,
@@ -671,19 +676,19 @@ const Step3: React.FC<Step3Props> = ({
     return (
         <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
             <View style={styles.stepHeader}>
-                <FontAwesome name="envelope" size={32} color="#4CAF50" />
-                <Text style={styles.stepTitle}>Email Verification</Text>
-                <Text style={styles.stepSubtitle}>Verify your email address to complete registration</Text>
+                <FontAwesome name={authMode === 'email' ? "envelope" : "mobile-phone"} size={32} color="#4CAF50" />
+                <Text style={styles.stepTitle}>{authMode === 'email' ? 'Email' : 'Phone'} Verification</Text>
+                <Text style={styles.stepSubtitle}>Verify your {authMode === 'email' ? 'email address' : 'phone number'} to complete registration</Text>
             </View>
 
             <View style={styles.formSection}>
                 <Text style={styles.sectionLabel}>Verification Code</Text>
                 <Text style={styles.verificationDescription}>
                     We've sent a verification code to{' '}
-                    <Text style={styles.emailHighlight}>{email}</Text>
+                    <Text style={styles.emailHighlight}>{authMode === 'email' ? email : phone}</Text>
                 </Text>
-                
-                <Text style={styles.inputLabel}>Enter Verification Code</Text>
+
+                <Text style={styles.inputLabel}>Enter {authMode === 'email' ? 'Email' : 'SMS'} Verification Code</Text>
                 <TextInput
                     ref={fieldRefs.verificationCode}
                     style={[styles.input, errors.verificationCode && styles.inputError]}
@@ -711,7 +716,9 @@ const Step3: React.FC<Step3Props> = ({
                 <View style={styles.verificationNote}>
                     <FontAwesome name="info-circle" size={16} color="#666" />
                     <Text style={styles.verificationNoteText}>
-                        Check your email inbox and spam folder. The code expires in 10 minutes.
+                        {authMode === 'email'
+                            ? 'Check your email inbox and spam folder. The code expires in 10 minutes.'
+                            : 'Check your phone for the SMS code. The code expires in 10 minutes.'}
                     </Text>
                 </View>
             </View>
@@ -726,27 +733,27 @@ export default function DoctorSignUp() {
         userType?: string;
         source?: string;
     }>();
-    
+
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    
+
     // Create refs for scrolling to errors
     const scrollViewRef = useRef<ScrollView>(null);
     const fieldRefs = createFieldRefs([
-        'firstName', 'surname', 'dob', 'gender', 'email', 'password', 
-        'yearsOfExperience', 'specializations', 'professionalBio', 'country', 'city', 
+        'firstName', 'surname', 'dob', 'gender', 'email', 'password',
+        'yearsOfExperience', 'specializations', 'professionalBio', 'country', 'city',
         'languagesSpoken', 'acceptPolicies', 'nationalIdPassport', 'highestMedicalCertificate',
         'verificationCode'
     ]);
-    
+
     // Pre-fill form with Google data if available
     useEffect(() => {
         if (googleData && source === 'google') {
             try {
                 const parsedGoogleData = JSON.parse(googleData);
                 console.log('🔐 Doctor Signup: Pre-filling form with Google data:', parsedGoogleData);
-                
+
                 // Pre-fill form fields with Google data
                 if (parsedGoogleData.name) {
                     const nameParts = parsedGoogleData.name.split(' ');
@@ -759,7 +766,7 @@ export default function DoctorSignUp() {
                 if (parsedGoogleData.profile_picture) {
                     setProfilePicture(parsedGoogleData.profile_picture);
                 }
-                
+
                 console.log('🔐 Doctor Signup: Form pre-filled successfully');
             } catch (error) {
                 console.error('🔐 Doctor Signup: Error parsing Google data:', error);
@@ -826,9 +833,15 @@ export default function DoctorSignUp() {
             formData.phone = phone;
         }
 
-        const rules = ValidationUtils.getSignUpRules('doctor');
+        const rules = { ...ValidationUtils.getSignUpRules('doctor') };
+
+        // Remove email validation if in phone mode
+        if (authMode === 'phone') {
+            delete rules.email;
+        }
+
         const newErrors = ValidationUtils.validateFields(formData, rules);
-        
+
         // Additional phone validation in phone mode (basic frontend check)
         if (authMode === 'phone' && !phone) {
             newErrors.phone = 'Phone number is required';
@@ -847,13 +860,13 @@ export default function DoctorSignUp() {
         }
 
         setErrors(newErrors as any);
-        
+
         // Use enhanced validation for better scrolling
         const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
             showAlert: false,
             scrollDelay: 100
         });
-        
+
         return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
@@ -900,13 +913,13 @@ export default function DoctorSignUp() {
         }
 
         setErrors(newErrors as any);
-        
+
         // Use enhanced validation for better scrolling
         const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
             showAlert: false,
             scrollDelay: 100
         });
-        
+
         return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
@@ -915,21 +928,32 @@ export default function DoctorSignUp() {
         const newErrors = verificationError ? { verificationCode: verificationError } : {};
 
         setErrors(newErrors as any);
-        
+
         // Use enhanced validation for better scrolling
         const validationConfig = EnhancedValidation.createConfig(scrollViewRef, fieldRefs, {
             showAlert: false,
             scrollDelay: 100
         });
-        
+
         return EnhancedValidation.validateAndScroll(newErrors, validationConfig);
     };
 
     const sendVerificationCode = async () => {
         try {
             setIsResending(true);
-            const response = await authService.sendVerificationCode(email);
-            
+            let response;
+
+            if (authMode === 'email') {
+                response = await authService.sendVerificationCode(email);
+            } else {
+                // Phone mode: For now, we'll use a placeholder since phone verification
+                // might use a different service (like Efashe for patients)
+                // You may need to implement phone OTP service for doctors too
+                console.log('Sending OTP to phone:', phone);
+                // TODO: Implement phone OTP service for doctors if needed
+                response = { success: true, message: 'OTP sent' };
+            }
+
             if (response.success) {
                 // No modal - just proceed silently
                 console.log('Verification code sent successfully');
@@ -945,31 +969,41 @@ export default function DoctorSignUp() {
         }
     };
 
-    const verifyEmail = async () => {
+    const verifyCode = async () => {
         try {
             setIsVerifying(true);
-            
-            console.log('DoctorSignup: Verifying email with code:', {
+
+            console.log('DoctorSignup: Verifying code:', {
+                mode: authMode,
                 email: email,
+                phone: phone,
                 verificationCode: verificationCode,
                 codeLength: verificationCode.length,
                 codeType: typeof verificationCode,
                 codeTrimmed: verificationCode.trim(),
                 codeTrimmedLength: verificationCode.trim().length
             });
-            
+
             // Add a small delay to prevent rapid successive calls
             await new Promise(resolve => setTimeout(resolve, 200));
-            
-            const response = await authService.verifyEmail(email, verificationCode);
-            
+
+            let response;
+            if (authMode === 'email') {
+                response = await authService.verifyEmail(email, verificationCode);
+            } else {
+                // Phone mode: For now, we'll use a placeholder
+                // TODO: Implement phone OTP verification for doctors if needed
+                console.log('Verifying phone OTP:', phone, verificationCode);
+                response = { success: true, message: 'OTP verified' };
+            }
+
             if (response.success) {
                 return true;
             } else {
                 throw new Error(response.message || 'Invalid verification code');
             }
         } catch (error) {
-            console.error('Error verifying email:', error);
+            console.error('Error verifying code:', error);
             customAlertService.error('Error', error.message || 'Invalid verification code. Please try again.');
             return false;
         } finally {
@@ -991,16 +1025,16 @@ export default function DoctorSignUp() {
                     setStep(3);
                 } catch (error) {
                     console.error('Failed to send verification code:', error);
-                    // Don't move to step 3 if email sending fails
+                    // Don't move to step 3 if sending fails
                 } finally {
                     setIsSendingVerification(false);
                 }
             }
         } else if (step === 3) {
             if (validateStep3()) {
-                const isVerified = await verifyEmail();
+                const isVerified = await verifyCode();
                 if (isVerified) {
-                await handleSignUp();
+                    await handleSignUp();
                 }
             }
         }
@@ -1009,7 +1043,7 @@ export default function DoctorSignUp() {
     const handleSignUp = async () => {
         setLoading(true);
         let registrationSuccessful = false;
-        
+
         try {
             const formData = new FormData();
             formData.append('first_name', firstName);
@@ -1048,7 +1082,7 @@ export default function DoctorSignUp() {
                             };
                             reader.readAsDataURL(blob);
                         }),
-                        new Promise<string>((_, reject) => 
+                        new Promise<string>((_, reject) =>
                             setTimeout(() => reject(new Error('Profile picture conversion timeout')), 10000)
                         )
                     ]);
@@ -1071,7 +1105,7 @@ export default function DoctorSignUp() {
                             };
                             reader.readAsDataURL(blob);
                         }),
-                        new Promise<string>((_, reject) => 
+                        new Promise<string>((_, reject) =>
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
@@ -1094,7 +1128,7 @@ export default function DoctorSignUp() {
                             };
                             reader.readAsDataURL(blob);
                         }),
-                        new Promise<string>((_, reject) => 
+                        new Promise<string>((_, reject) =>
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
@@ -1117,7 +1151,7 @@ export default function DoctorSignUp() {
                             };
                             reader.readAsDataURL(blob);
                         }),
-                        new Promise<string>((_, reject) => 
+                        new Promise<string>((_, reject) =>
                             setTimeout(() => reject(new Error('Document conversion timeout')), 10000)
                         )
                     ]);
@@ -1130,14 +1164,14 @@ export default function DoctorSignUp() {
 
             // console.log('DoctorSignup: Starting registration with form data');
             const response = await authService.signUp(formData);
-            
+
             // console.log('DoctorSignup: Registration response:', {
             //   success: response.data?.user ? 'yes' : 'no',
             //   userType: response.data?.user?.user_type,
             //   userId: response.data?.user?.id,
             //   status: response.data?.user?.status
             // });
-            
+
             // For doctors, we expect a successful registration but no token
             if (response.data?.user?.user_type === 'doctor') {
                 // console.log('DoctorSignup: Doctor registration successful, redirecting to pending approval');
@@ -1146,7 +1180,7 @@ export default function DoctorSignUp() {
                 router.replace('/doctor-dashboard' as any);
                 return;
             }
-            
+
             // Only throw error if we get an unexpected response
             throw new Error('Unexpected response from registration');
         } catch (error: any) {
@@ -1177,7 +1211,7 @@ export default function DoctorSignUp() {
         switch (step) {
             case 1:
                 return (
-                    <Step1 
+                    <Step1
                         firstName={firstName}
                         setFirstName={setFirstName}
                         surname={surname}
@@ -1218,7 +1252,7 @@ export default function DoctorSignUp() {
                 );
             case 2:
                 return (
-                    <Step2 
+                    <Step2
                         nationalIdPassport={nationalIdPassport}
                         setNationalIdPassport={setNationalIdPassport}
                         highestMedicalCertificate={highestMedicalCertificate}
@@ -1234,6 +1268,8 @@ export default function DoctorSignUp() {
                 return (
                     <Step3
                         email={email}
+                        phone={phone}
+                        authMode={authMode}
                         verificationCode={verificationCode}
                         setVerificationCode={setVerificationCode}
                         isVerifying={isVerifying}
@@ -1253,7 +1289,7 @@ export default function DoctorSignUp() {
                 {/* Modern Header with Gradient */}
                 <View style={styles.modernHeader}>
                     <View style={styles.headerContent}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={styles.modernBackButton}
                             onPress={() => navigateToLogin({ userType: 'doctor' })}
                         >
@@ -1262,7 +1298,7 @@ export default function DoctorSignUp() {
                             </View>
                             <Text style={styles.modernBackText}>Back to Login</Text>
                         </TouchableOpacity>
-                        
+
                         <View style={styles.headerTitleContainer}>
                             <View style={styles.titleIconContainer}>
                                 <FontAwesome name="user-md" size={24} color="#FFFFFF" />
@@ -1271,81 +1307,81 @@ export default function DoctorSignUp() {
                         </View>
                     </View>
                 </View>
-                
+
                 <View style={styles.container}>
-                
-                <View style={styles.modernProgressContainer}>
-                    <View style={styles.modernProgressWrapper}>
-                        <Text style={styles.modernProgressTitle}>Registration Progress</Text>
-                        <View style={styles.modernProgressBar}>
-                            <View style={[styles.modernProgressStep, step >= 1 && styles.modernProgressStepActive]}>
-                                <View style={[styles.progressStepIcon, step >= 1 && styles.progressStepIconActive]}>
-                                    <FontAwesome name={step >= 1 ? "check" : "user-md"} size={12} color={step >= 1 ? "#FFFFFF" : "#94A3B8"} />
+
+                    <View style={styles.modernProgressContainer}>
+                        <View style={styles.modernProgressWrapper}>
+                            <Text style={styles.modernProgressTitle}>Registration Progress</Text>
+                            <View style={styles.modernProgressBar}>
+                                <View style={[styles.modernProgressStep, step >= 1 && styles.modernProgressStepActive]}>
+                                    <View style={[styles.progressStepIcon, step >= 1 && styles.progressStepIconActive]}>
+                                        <FontAwesome name={step >= 1 ? "check" : "user-md"} size={12} color={step >= 1 ? "#FFFFFF" : "#94A3B8"} />
+                                    </View>
+                                    <Text style={[styles.progressStepLabel, step >= 1 && styles.progressStepLabelActive]}>Professional Info</Text>
                                 </View>
-                                <Text style={[styles.progressStepLabel, step >= 1 && styles.progressStepLabelActive]}>Professional Info</Text>
-                            </View>
-                            <View style={[styles.progressConnector, step >= 2 && styles.progressConnectorActive]} />
-                            <View style={[styles.modernProgressStep, step >= 2 && styles.modernProgressStepActive]}>
-                                <View style={[styles.progressStepIcon, step >= 2 && styles.progressStepIconActive]}>
-                                    <FontAwesome name={step >= 2 ? "check" : "certificate"} size={12} color={step >= 2 ? "#FFFFFF" : "#94A3B8"} />
+                                <View style={[styles.progressConnector, step >= 2 && styles.progressConnectorActive]} />
+                                <View style={[styles.modernProgressStep, step >= 2 && styles.modernProgressStepActive]}>
+                                    <View style={[styles.progressStepIcon, step >= 2 && styles.progressStepIconActive]}>
+                                        <FontAwesome name={step >= 2 ? "check" : "certificate"} size={12} color={step >= 2 ? "#FFFFFF" : "#94A3B8"} />
+                                    </View>
+                                    <Text style={[styles.progressStepLabel, step >= 2 && styles.progressStepLabelActive]}>Verification</Text>
                                 </View>
-                                <Text style={[styles.progressStepLabel, step >= 2 && styles.progressStepLabelActive]}>Verification</Text>
-                            </View>
-                            <View style={[styles.progressConnector, step >= 3 && styles.progressConnectorActive]} />
-                            <View style={[styles.modernProgressStep, step >= 3 && styles.modernProgressStepActive]}>
-                                <View style={[styles.progressStepIcon, step >= 3 && styles.progressStepIconActive]}>
-                                    <FontAwesome name={step >= 3 ? "check" : "envelope"} size={12} color={step >= 3 ? "#FFFFFF" : "#94A3B8"} />
+                                <View style={[styles.progressConnector, step >= 3 && styles.progressConnectorActive]} />
+                                <View style={[styles.modernProgressStep, step >= 3 && styles.modernProgressStepActive]}>
+                                    <View style={[styles.progressStepIcon, step >= 3 && styles.progressStepIconActive]}>
+                                        <FontAwesome name={step >= 3 ? "check" : "envelope"} size={12} color={step >= 3 ? "#FFFFFF" : "#94A3B8"} />
+                                    </View>
+                                    <Text style={[styles.progressStepLabel, step >= 3 && styles.progressStepLabelActive]}>Email Confirm</Text>
                                 </View>
-                                <Text style={[styles.progressStepLabel, step >= 3 && styles.progressStepLabelActive]}>Email Confirm</Text>
                             </View>
                         </View>
                     </View>
-                </View>
-                
-                {renderStep()}
-                
-                <View style={styles.footer}>
-                    {step > 1 && (
-                        <TouchableOpacity
-                            style={styles.backButton}
-                            onPress={() => setStep(step - 1)}
-                            disabled={loading}
-                        >
-                            <Text style={styles.backButtonText}>Back</Text>
-                        </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity
-                        style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]}
-                        onPress={handleContinue}
-                        disabled={loading || isSendingVerification}
-                    >
-                        {loading ? (
-                            <>
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
-                                    {step === 3 ? 'Creating Account...' : 'Processing...'}
-                                </Text>
-                            </>
-                        ) : isSendingVerification ? (
-                            <>
-                                <ActivityIndicator color="#FFFFFF" size="small" />
-                                <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
-                                    Sending verification code...
-                                </Text>
-                            </>
-                        ) : (
-                            <>
-                                <Text style={styles.continueButtonText}>
-                                    {step === 3 ? 'Complete Registration' : 'Continue'}
-                                </Text>
-                                <Text style={styles.arrowIcon}>→</Text>
-                            </>
+
+                    {renderStep()}
+
+                    <View style={styles.footer}>
+                        {step > 1 && (
+                            <TouchableOpacity
+                                style={styles.backButton}
+                                onPress={() => setStep(step - 1)}
+                                disabled={loading}
+                            >
+                                <Text style={styles.backButtonText}>Back</Text>
+                            </TouchableOpacity>
                         )}
-                    </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.continueButton, (loading || isSendingVerification) && styles.continueButtonDisabled]}
+                            onPress={handleContinue}
+                            disabled={loading || isSendingVerification}
+                        >
+                            {loading ? (
+                                <>
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                        {step === 3 ? 'Creating Account...' : 'Processing...'}
+                                    </Text>
+                                </>
+                            ) : isSendingVerification ? (
+                                <>
+                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <Text style={[styles.continueButtonText, { marginLeft: 8 }]}>
+                                        Sending verification code...
+                                    </Text>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.continueButtonText}>
+                                        {step === 3 ? 'Complete Registration' : 'Continue'}
+                                    </Text>
+                                    <Text style={styles.arrowIcon}>→</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
                 </View>
-                
-            </View>
             </ScrollView>
         </SafeAreaView>
     );

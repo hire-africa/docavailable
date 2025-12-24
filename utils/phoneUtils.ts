@@ -80,7 +80,7 @@ export const COUNTRY_CODES: CountryCode[] = [
 export function getDefaultCountryCode(): CountryCode {
   // Try to detect user's country from locale (if available)
   // For now, default to US
-  return COUNTRY_CODES.find(c => c.code === 'US') || COUNTRY_CODES[0];
+  return COUNTRY_CODES.find(c => c.code === 'MW') || COUNTRY_CODES[0];
 }
 
 /**
@@ -151,7 +151,7 @@ export function formatPhoneForDisplay(phoneNumber: string): string {
 
   // Remove + for display formatting
   const digits = phoneNumber.replace(/[^\d]/g, '');
-  
+
   // Format based on length (basic formatting)
   if (digits.length <= 3) {
     return '+' + digits;
