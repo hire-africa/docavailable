@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Dimensions,
     Platform,
@@ -14,7 +14,6 @@ import {
 import { apiService } from '../app/services/apiService';
 import DatePickerField from '../components/DatePickerField';
 import { Icon } from '../components/Icon';
-import LocationPicker from '../components/LocationPicker';
 import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
@@ -31,7 +30,7 @@ export default function EditDoctorProfile() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
-    
+
     // Form fields
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
@@ -40,11 +39,9 @@ export default function EditDoctorProfile() {
     const [specializations, setSpecializations] = useState<string[]>([]);
     const [yearsOfExperience, setYearsOfExperience] = useState('');
     const [bio, setBio] = useState('');
-    const [country, setCountry] = useState('');
-    const [city, setCity] = useState('');
     const [profilePicture, setProfilePicture] = useState<string | null>(null);
     const [languagesSpoken, setLanguagesSpoken] = useState<string[]>([]);
-    
+
     // Validation errors
     const [errors, setErrors] = useState<any>({});
 
@@ -53,16 +50,16 @@ export default function EditDoctorProfile() {
             router.replace('/');
             return;
         }
-        
+
         // Load existing data first, then try to refresh in background
         const initializeData = async () => {
             try {
                 // First load with existing data
                 loadUserData();
-                
+
                 // Only refresh if we don't have complete user data
                 const hasCompleteData = user && user.first_name && user.last_name;
-                
+
                 if (!hasCompleteData) {
                     // Then try to refresh in background (don't block UI)
                     setTimeout(async () => {
@@ -85,7 +82,7 @@ export default function EditDoctorProfile() {
                 loadUserData();
             }
         };
-        
+
         initializeData();
     }, [user]);
 
@@ -102,22 +99,22 @@ export default function EditDoctorProfile() {
         // console.log('EditDoctorProfile: user:', user);
         // console.log('EditDoctorProfile: userData type:', typeof userData);
         // console.log('EditDoctorProfile: user type:', typeof user);
-        
+
         try {
             if (userData || user) {
                 // Use userData first, then fallback to user
                 const currentUser = userData || user;
-                
+
                 // console.log('EditDoctorProfile: Using currentUser:', currentUser);
                 // console.log('EditDoctorProfile: currentUser keys:', Object.keys(currentUser || {}));
-                
+
                 // Validate that we have the expected user data structure
                 if (!currentUser || typeof currentUser !== 'object') {
                     console.error('EditDoctorProfile: Invalid user data structure:', currentUser);
                     Alert.error('Error', 'Invalid user data. Please try again.');
                     return;
                 }
-                
+
                 setFirstName(currentUser?.first_name || '');
                 setLastName(currentUser?.last_name || '');
                 setDateOfBirth(currentUser?.date_of_birth || '');
@@ -127,25 +124,23 @@ export default function EditDoctorProfile() {
                 setSpecializations(Array.isArray(specializations) ? specializations : []);
                 setYearsOfExperience(currentUser?.years_of_experience ? currentUser.years_of_experience.toString() : '');
                 setBio(currentUser?.bio || '');
-                setCountry(currentUser?.country || '');
-                setCity(currentUser?.city || '');
                 setProfilePicture(currentUser?.profile_picture_url || currentUser?.profile_picture || null);
                 // Handle languages_spoken - might be array, string, or null
                 let languages = [];
                 if (currentUser?.languages_spoken) {
-                  if (Array.isArray(currentUser.languages_spoken)) {
-                    languages = currentUser.languages_spoken;
-                  } else if (typeof currentUser.languages_spoken === 'string') {
-                    try {
-                      languages = JSON.parse(currentUser.languages_spoken);
-                    } catch (e) {
-                      console.error('Error parsing languages_spoken:', e);
-                      languages = [];
+                    if (Array.isArray(currentUser.languages_spoken)) {
+                        languages = currentUser.languages_spoken;
+                    } else if (typeof currentUser.languages_spoken === 'string') {
+                        try {
+                            languages = JSON.parse(currentUser.languages_spoken);
+                        } catch (e) {
+                            console.error('Error parsing languages_spoken:', e);
+                            languages = [];
+                        }
                     }
-                  }
                 }
                 setLanguagesSpoken(languages);
-                
+
                 // console.log('EditDoctorProfile: Loaded data:', {
                 //   firstName: currentUser?.first_name,
                 //   lastName: currentUser?.last_name,
@@ -174,17 +169,17 @@ export default function EditDoctorProfile() {
     const handleImageSelected = async (imageUri: string) => {
         try {
             setUploadingImage(true);
-            
+
             // console.log('EditDoctorProfile: Starting image upload...');
             // console.log('EditDoctorProfile: Image URI:', imageUri);
-            
+
             // Debug: Check authentication token
             const token = await apiService.getAuthToken();
             console.log('EditDoctorProfile: Auth token available:', !!token);
-            
+
             // Create form data for image upload
             const formData = new FormData();
-            
+
             // Convert image to base64 (same approach as signup forms)
             try {
                 const response = await fetch(imageUri);
@@ -210,15 +205,16 @@ export default function EditDoctorProfile() {
             // console.log('EditDoctorProfile: Upload response:', response);
 
             if (response.success) {
-                const newProfilePictureUrl = response.data?.profile_picture_url || imageUri;
+                const responseData = response.data as any;
+                const newProfilePictureUrl = responseData?.profile_picture_url || imageUri;
                 setProfilePicture(newProfilePictureUrl);
                 // console.log('EditDoctorProfile: Profile picture updated successfully:', newProfilePictureUrl);
-                
+
                 // Refresh user data to update the profile picture in AuthContext
                 try {
                     await refreshUserData();
                     // console.log('EditDoctorProfile: User data refreshed after upload');
-                    
+
                     // Force a re-render by updating local state
                     setTimeout(() => {
                         // console.log('EditDoctorProfile: Forcing re-render after profile picture update');
@@ -227,7 +223,7 @@ export default function EditDoctorProfile() {
                 } catch (error) {
                     console.error('EditDoctorProfile: Error refreshing user data after upload:', error);
                 }
-                
+
                 Alert.alert('Success', 'Profile picture updated successfully!');
             } else {
                 console.error('EditDoctorProfile: Upload failed:', response.message || 'Unknown error');
@@ -241,9 +237,9 @@ export default function EditDoctorProfile() {
                 status: error.response?.status,
                 statusText: error.response?.statusText
             });
-            
+
             let errorMessage = 'Failed to upload profile picture. Please try again.';
-            
+
             // Check for file size error
             if (error.response?.data?.message && error.response.data.message.includes('2048 kilobytes')) {
                 errorMessage = 'Image file is too large. Please select a smaller image (under 2MB).';
@@ -252,7 +248,7 @@ export default function EditDoctorProfile() {
             } else if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             Alert.alert('Error', errorMessage);
         } finally {
             setUploadingImage(false);
@@ -284,7 +280,7 @@ export default function EditDoctorProfile() {
         setSaving(true);
         try {
             console.log('EditDoctorProfile: Starting profile update...');
-            
+
             const updateData: any = {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
@@ -296,8 +292,6 @@ export default function EditDoctorProfile() {
             updateData.gender = gender && gender.trim() ? gender.toLowerCase() : null;
             updateData.years_of_experience = yearsOfExperience && yearsOfExperience.trim() ? parseInt(yearsOfExperience) : null;
             updateData.bio = bio && bio.trim() ? bio.trim() : null;
-            updateData.country = country && country.trim() ? country.trim() : null;
-            updateData.city = city && city.trim() ? city.trim() : null;
             updateData.languages_spoken = languagesSpoken.length > 0 ? JSON.stringify(languagesSpoken) : null;
 
             console.log('EditDoctorProfile: Update data:', updateData);
@@ -309,7 +303,7 @@ export default function EditDoctorProfile() {
             if (response.success) {
                 // Refresh user data to get the updated information
                 await refreshUserData();
-                
+
                 Alert.alert(
                     'Success',
                     'Profile updated successfully!',
@@ -332,14 +326,14 @@ export default function EditDoctorProfile() {
                 status: error.response?.status,
                 statusText: error.response?.statusText
             });
-            
+
             let errorMessage = 'Failed to update profile. Please try again.';
-            
+
             // Handle validation errors specifically
             if (error.response?.status === 422 && error.response?.data?.errors) {
                 const validationErrors = error.response.data.errors;
                 const errorFields = Object.keys(validationErrors);
-                const errorMessages = errorFields.map(field => 
+                const errorMessages = errorFields.map(field =>
                     `${field.replace('_', ' ')}: ${validationErrors[field][0]}`
                 ).join('\n');
                 errorMessage = `Validation failed:\n${errorMessages}`;
@@ -349,7 +343,7 @@ export default function EditDoctorProfile() {
             } else if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             Alert.alert('Error', errorMessage);
         } finally {
             setSaving(false);
@@ -409,7 +403,7 @@ export default function EditDoctorProfile() {
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Basic Information</Text>
-                        
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>First Name *</Text>
                             <TextInput
@@ -442,7 +436,7 @@ export default function EditDoctorProfile() {
                     {/* Personal Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Personal Information</Text>
-                        
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Date of Birth</Text>
                             <DatePickerField
@@ -483,7 +477,7 @@ export default function EditDoctorProfile() {
                     {/* Professional Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Professional Information</Text>
-                        
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Specializations *</Text>
                             <MultipleSpecializationPicker
@@ -507,21 +501,11 @@ export default function EditDoctorProfile() {
                         </View>
                     </View>
 
-                    {/* Location Information */}
-                    <View style={styles.section}>
-                        <LocationPicker
-                            country={country}
-                            setCountry={setCountry}
-                            city={city}
-                            setCity={setCity}
-                            errors={errors}
-                        />
-                    </View>
 
                     {/* Bio */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Professional Bio</Text>
-                        
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>About Me</Text>
                             <TextInput

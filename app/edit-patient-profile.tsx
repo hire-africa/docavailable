@@ -1,9 +1,7 @@
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Dimensions,
-    FlatList,
-    Modal,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -14,9 +12,9 @@ import {
     View
 } from 'react-native';
 import { apiService } from '../app/services/apiService';
+import DatePickerField from '../components/DatePickerField';
 import { Icon } from '../components/Icon';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
-import DatePickerField from '../components/DatePickerField';
 import { useAuth } from '../contexts/AuthContext';
 import { Alert } from '../utils/customAlert';
 
@@ -25,48 +23,24 @@ const isWeb = Platform.OS === 'web';
 const maxWidth = isWeb ? 800 : width;
 const isLargeScreen = width > 768;
 
-// Complete list of all countries in the world
-const countryList = [
-    'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Antigua and Barbuda', 'Argentina', 'Armenia', 'Australia', 'Austria',
-    'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados', 'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan',
-    'Bolivia', 'Bosnia and Herzegovina', 'Botswana', 'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Burundi', 'Cabo Verde', 'Cambodia',
-    'Cameroon', 'Canada', 'Central African Republic', 'Chad', 'Chile', 'China', 'Colombia', 'Comoros', 'Congo', 'Costa Rica',
-    'Croatia', 'Cuba', 'Cyprus', 'Czech Republic', 'Democratic Republic of the Congo', 'Denmark', 'Djibouti', 'Dominica', 'Dominican Republic', 'Ecuador',
-    'Egypt', 'El Salvador', 'Equatorial Guinea', 'Eritrea', 'Estonia', 'Eswatini', 'Ethiopia', 'Fiji', 'Finland', 'France',
-    'Gabon', 'Gambia', 'Georgia', 'Germany', 'Ghana', 'Greece', 'Grenada', 'Guatemala', 'Guinea', 'Guinea-Bissau',
-    'Guyana', 'Haiti', 'Honduras', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland',
-    'Israel', 'Italy', 'Ivory Coast', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kiribati', 'Kuwait',
-    'Kyrgyzstan', 'Laos', 'Latvia', 'Lebanon', 'Lesotho', 'Liberia', 'Libya', 'Liechtenstein', 'Lithuania', 'Luxembourg',
-    'Madagascar', 'Malawi', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Marshall Islands', 'Mauritania', 'Mauritius', 'Mexico',
-    'Micronesia', 'Moldova', 'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia', 'Nauru',
-    'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Niger', 'Nigeria', 'North Korea', 'North Macedonia', 'Norway', 'Oman',
-    'Pakistan', 'Palau', 'Palestine', 'Panama', 'Papua New Guinea', 'Paraguay', 'Peru', 'Philippines', 'Poland', 'Portugal',
-    'Qatar', 'Romania', 'Russia', 'Rwanda', 'Saint Kitts and Nevis', 'Saint Lucia', 'Saint Vincent and the Grenadines', 'Samoa', 'San Marino', 'Sao Tome and Principe',
-    'Saudi Arabia', 'Senegal', 'Serbia', 'Seychelles', 'Sierra Leone', 'Singapore', 'Slovakia', 'Slovenia', 'Solomon Islands', 'Somalia',
-    'South Africa', 'South Korea', 'South Sudan', 'Spain', 'Sri Lanka', 'Sudan', 'Suriname', 'Sweden', 'Switzerland', 'Syria',
-    'Taiwan', 'Tajikistan', 'Tanzania', 'Thailand', 'Timor-Leste', 'Togo', 'Tonga', 'Trinidad and Tobago', 'Tunisia', 'Turkey',
-    'Turkmenistan', 'Tuvalu', 'Uganda', 'Ukraine', 'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu',
-    'Vatican City', 'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe'
-].sort();
+
 
 export default function EditPatientProfile() {
     const { user, userData, refreshUserData } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
-    
+
     // Form fields
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [dateOfBirth, setDateOfBirth] = useState('');
     const [gender, setGender] = useState('');
-    const [country, setCountry] = useState('');
-    const [city, setCity] = useState('');
     const [profilePicture, setProfilePicture] = useState<string | null>(null);
-    
+
     // Validation errors
     const [errors, setErrors] = useState<any>({});
-    
+
     // Country picker modal state
     const [showCountryPicker, setShowCountryPicker] = useState(false);
 
@@ -75,16 +49,16 @@ export default function EditPatientProfile() {
             router.replace('/');
             return;
         }
-        
+
         // Load existing data first, then try to refresh in background
         const initializeData = async () => {
             try {
                 // First load with existing data
                 loadUserData();
-                
+
                 // Only refresh if we don't have complete user data
                 const hasCompleteData = user && user.first_name && user.last_name;
-                
+
                 if (!hasCompleteData) {
                     // Then try to refresh in background (don't block UI)
                     setTimeout(async () => {
@@ -107,7 +81,7 @@ export default function EditPatientProfile() {
                 loadUserData();
             }
         };
-        
+
         initializeData();
     }, [user]);
 
@@ -124,30 +98,28 @@ export default function EditPatientProfile() {
         // console.log('EditPatientProfile: user:', user);
         // console.log('EditPatientProfile: userData type:', typeof userData);
         // console.log('EditPatientProfile: user type:', typeof user);
-        
+
         try {
             if (userData || user) {
                 // Use userData first, then fallback to user
                 const currentUser = userData || user;
-                
+
                 // console.log('EditPatientProfile: Using currentUser:', currentUser);
                 // console.log('EditPatientProfile: currentUser keys:', Object.keys(currentUser || {}));
-                
+
                 // Validate that we have the expected user data structure
                 if (!currentUser || typeof currentUser !== 'object') {
                     console.error('EditPatientProfile: Invalid user data structure:', currentUser);
                     Alert.error('Error', 'Invalid user data. Please try again.');
                     return;
                 }
-                
+
                 setFirstName(currentUser?.first_name || '');
                 setLastName(currentUser?.last_name || '');
                 setDateOfBirth(currentUser?.date_of_birth || '');
                 setGender(currentUser?.gender || '');
-                setCountry(currentUser?.country || '');
-                setCity(currentUser?.city || '');
                 setProfilePicture(currentUser?.profile_picture_url || currentUser?.profile_picture || null);
-                
+
                 // console.log('EditPatientProfile: Loaded data:', {
                 //   firstName: currentUser?.first_name,
                 //   lastName: currentUser?.last_name,
@@ -173,17 +145,17 @@ export default function EditPatientProfile() {
     const handleImageSelected = async (imageUri: string) => {
         try {
             setUploadingImage(true);
-            
+
             // console.log('EditPatientProfile: Starting image upload...');
             // console.log('EditPatientProfile: Image URI:', imageUri);
-            
+
             // Debug: Check authentication token
             const token = await apiService.getAuthToken();
             console.log('EditPatientProfile: Auth token available:', !!token);
-            
+
             // Create form data for image upload
             const formData = new FormData();
-            
+
             // Convert image to base64 (same approach as signup forms)
             try {
                 const response = await fetch(imageUri);
@@ -209,11 +181,12 @@ export default function EditPatientProfile() {
             // console.log('EditPatientProfile: Upload response:', response);
 
             if (response.success) {
-                const newProfilePictureUrl = response.data?.profile_picture_url || imageUri;
+                const responseData = response.data as any;
+                const newProfilePictureUrl = responseData?.profile_picture_url || imageUri;
                 console.log('EditPatientProfile: Upload response data:', response.data);
                 console.log('EditPatientProfile: New profile picture URL:', newProfilePictureUrl);
                 setProfilePicture(newProfilePictureUrl);
-                
+
                 // Refresh user data to update the profile picture in AuthContext
                 try {
                     await refreshUserData();
@@ -221,7 +194,7 @@ export default function EditPatientProfile() {
                         profile_picture: user?.profile_picture,
                         profile_picture_url: user?.profile_picture_url
                     });
-                    
+
                     // Force a re-render by updating local state
                     setTimeout(() => {
                         // console.log('EditPatientProfile: Forcing re-render after profile picture update');
@@ -230,7 +203,7 @@ export default function EditPatientProfile() {
                 } catch (error) {
                     console.error('EditPatientProfile: Error refreshing user data after upload:', error);
                 }
-                
+
                 Alert.success('Success', 'Profile picture updated successfully!');
             } else {
                 console.error('EditPatientProfile: Upload failed:', response.message || 'Unknown error');
@@ -244,9 +217,9 @@ export default function EditPatientProfile() {
                 status: error.response?.status,
                 statusText: error.response?.statusText
             });
-            
+
             let errorMessage = 'Failed to upload profile picture. Please try again.';
-            
+
             // Check for file size error
             if (error.response?.data?.message && error.response.data.message.includes('2048 kilobytes')) {
                 errorMessage = 'Image file is too large. Please select a smaller image (under 2MB).';
@@ -255,7 +228,7 @@ export default function EditPatientProfile() {
             } else if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             Alert.error('Error', errorMessage);
         } finally {
             setUploadingImage(false);
@@ -281,14 +254,6 @@ export default function EditPatientProfile() {
             newErrors.gender = 'Gender is required';
         }
 
-        if (!country.trim()) {
-            newErrors.country = 'Country is required';
-        }
-
-        if (!city.trim()) {
-            newErrors.city = 'City is required';
-        }
-
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -299,14 +264,12 @@ export default function EditPatientProfile() {
         setSaving(true);
         try {
             console.log('EditPatientProfile: Starting profile update...');
-            
+
             const updateData: any = {
                 first_name: firstName.trim(),
                 last_name: lastName.trim(),
                 date_of_birth: dateOfBirth,
                 gender: gender,
-                country: country.trim(),
-                city: city.trim(),
             };
 
             console.log('EditPatientProfile: Update data:', updateData);
@@ -316,7 +279,7 @@ export default function EditPatientProfile() {
             if (response.success) {
                 // Refresh user data to get the updated information
                 await refreshUserData();
-                
+
                 Alert.success(
                     'Success',
                     'Profile updated successfully!',
@@ -334,14 +297,14 @@ export default function EditPatientProfile() {
                 status: error.response?.status,
                 statusText: error.response?.statusText
             });
-            
+
             let errorMessage = 'Failed to update profile. Please try again.';
-            
+
             // Handle validation errors specifically
             if (error.response?.status === 422 && error.response?.data?.errors) {
                 const validationErrors = error.response.data.errors;
                 const errorFields = Object.keys(validationErrors);
-                const errorMessages = errorFields.map(field => 
+                const errorMessages = errorFields.map(field =>
                     `${field.replace('_', ' ')}: ${validationErrors[field][0]}`
                 ).join('\n');
                 errorMessage = `Validation failed:\n${errorMessages}`;
@@ -351,26 +314,14 @@ export default function EditPatientProfile() {
             } else if (error.message) {
                 errorMessage = error.message;
             }
-            
+
             Alert.error('Error', errorMessage);
         } finally {
             setSaving(false);
         }
     };
 
-    const handleCountrySelect = (selectedCountry: string) => {
-        setCountry(selectedCountry);
-        setShowCountryPicker(false);
-    };
 
-    const renderPickerItem = ({ item }: { item: string }) => (
-        <TouchableOpacity
-            style={styles.pickerItem}
-            onPress={() => handleCountrySelect(item)}
-        >
-            <Text style={styles.pickerItemText}>{item}</Text>
-        </TouchableOpacity>
-    );
 
 
     if (loading) {
@@ -426,7 +377,7 @@ export default function EditPatientProfile() {
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Basic Information</Text>
-                        
+
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>First Name *</Text>
                             <TextInput
@@ -499,38 +450,6 @@ export default function EditPatientProfile() {
                     </View>
 
 
-                    {/* Location Information */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Location</Text>
-                        
-                        <View style={styles.row}>
-                            <View style={styles.halfInput}>
-                                <Text style={styles.inputLabel}>Country</Text>
-                                <TouchableOpacity
-                                    style={[styles.pickerButton, errors?.country && styles.inputError]}
-                                    onPress={() => setShowCountryPicker(true)}
-                                >
-                                    <Text style={[styles.pickerButtonText, !country && styles.placeholderText]}>
-                                        {country || 'Select Country'}
-                                    </Text>
-                                    <Icon name="chevron-down" size={16} color="#666" />
-                                </TouchableOpacity>
-                                {errors?.country && <Text style={styles.errorText}>{errors.country}</Text>}
-                            </View>
-
-                            <View style={styles.halfInput}>
-                                <Text style={styles.inputLabel}>City</Text>
-                                <TextInput
-                                    style={[styles.input, errors?.city && styles.inputError]}
-                                    placeholder={city || "Enter your city"}
-                                    placeholderTextColor="#999"
-                                    value={city}
-                                    onChangeText={setCity}
-                                />
-                                {errors?.city && <Text style={styles.errorText}>{errors.city}</Text>}
-                            </View>
-                        </View>
-                    </View>
 
 
                     {/* Save Button */}
@@ -549,33 +468,6 @@ export default function EditPatientProfile() {
                 </View>
             </ScrollView>
 
-            {/* Country Picker Modal */}
-            <Modal
-                visible={showCountryPicker}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setShowCountryPicker(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Select Country</Text>
-                            <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
-                                <Icon name="times" size={20} color="#666" />
-                            </TouchableOpacity>
-                        </View>
-                        <FlatList
-                            data={countryList}
-                            keyExtractor={(item) => item}
-                            renderItem={renderPickerItem}
-                            showsVerticalScrollIndicator={false}
-                            initialNumToRender={20}
-                            maxToRenderPerBatch={20}
-                            windowSize={10}
-                        />
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }

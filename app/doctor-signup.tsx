@@ -23,6 +23,7 @@ import MultipleLanguagePicker from '../components/MultipleLanguagePicker';
 import MultipleSpecializationPicker from '../components/MultipleSpecializationPicker';
 import ProfilePicturePicker from '../components/ProfilePicturePicker';
 import customAlertService from '../services/customAlertService';
+import { efasheService } from '../services/efasheService';
 import EnhancedValidation from '../utils/enhancedValidation';
 import SignUpErrorHandler from '../utils/errorHandler';
 import { navigateToLogin } from '../utils/navigationUtils';
@@ -946,12 +947,12 @@ export default function DoctorSignUp() {
             if (authMode === 'email') {
                 response = await authService.sendVerificationCode(email);
             } else {
-                // Phone mode: For now, we'll use a placeholder since phone verification
-                // might use a different service (like Efashe for patients)
-                // You may need to implement phone OTP service for doctors too
-                console.log('Sending OTP to phone:', phone);
-                // TODO: Implement phone OTP service for doctors if needed
-                response = { success: true, message: 'OTP sent' };
+                // Phone mode: use Efashe service
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                console.log('Sending OTP to:', normalizedPhone);
+                const result = await efasheService.sendOtp(normalizedPhone);
+                response = { success: true, message: 'OTP sent' }; // Efashe result adapter
+                if (!result) throw new Error('Failed to send OTP');
             }
 
             if (response.success) {
@@ -991,10 +992,11 @@ export default function DoctorSignUp() {
             if (authMode === 'email') {
                 response = await authService.verifyEmail(email, verificationCode);
             } else {
-                // Phone mode: For now, we'll use a placeholder
-                // TODO: Implement phone OTP verification for doctors if needed
-                console.log('Verifying phone OTP:', phone, verificationCode);
-                response = { success: true, message: 'OTP verified' };
+                // Phone mode: use Efashe service
+                const normalizedPhone = normalizePhoneToE164(phone, countryCode);
+                const result = await efasheService.verifyOtp(normalizedPhone, verificationCode);
+                // Efashe service verifyOtp returns { success: boolean, token?: string, user?: any }
+                response = result;
             }
 
             if (response.success) {

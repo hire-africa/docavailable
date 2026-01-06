@@ -30,10 +30,14 @@ class ProcessAppointmentSessions extends Command
     {
         $this->info('Processing appointment sessions...');
 
-        // Find confirmed appointments that are at or past their scheduled time
+        $now = now();
+        $tenMinutesAgo = $now->copy()->subMinutes(10);
+
+        // Find confirmed appointments that are at or past their scheduled time (within last 10 minutes)
+        // Use appointment_date and appointment_time legacy fields
         $confirmedAppointments = Appointment::where('status', Appointment::STATUS_CONFIRMED)
-            ->where('scheduled_time', '<=', now())
-            ->where('scheduled_time', '>=', now()->subMinutes(10))
+            ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
+            ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) >= ?", [$tenMinutesAgo->toDateTimeString()])
             ->get();
 
         if ($confirmedAppointments->isEmpty()) {
@@ -47,11 +51,12 @@ class ProcessAppointmentSessions extends Command
 
         foreach ($confirmedAppointments as $appointment) {
             try {
-                $scheduledTime = Carbon::parse($appointment->scheduled_time);
+                // Calculate scheduled time from date and time fields
+                $scheduledTime = Carbon::parse($appointment->appointment_date . ' ' . $appointment->appointment_time);
                 $elapsedMinutes = $scheduledTime->diffInMinutes(now());
-                
+
                 $this->info("Processing appointment {$appointment->id} (Patient: {$appointment->patient->first_name}, Doctor: {$appointment->doctor->first_name}, Elapsed: {$elapsedMinutes} minutes)");
-                
+
                 // Check if patient joined within first 10 minutes
                 if (!$appointment->patient_joined && $elapsedMinutes >= 10) {
                     // Mark as missed, deduct 1 session
@@ -61,14 +66,14 @@ class ProcessAppointmentSessions extends Command
                         'sessions_deducted' => 1,
                         'completed_at' => now()
                     ]);
-                    
+
                     // Process deduction
                     $paymentService = new DoctorPaymentService();
                     $paymentService->deductSessionFromPatient($appointment->patient_id, 1);
-                    
+
                     $this->info("Appointment {$appointment->id} marked as missed - 1 session deducted from patient");
                 }
-                
+
                 // Check if doctor joined when patient joined
                 if ($appointment->patient_joined && !$appointment->doctor_joined && $elapsedMinutes >= 10) {
                     // Cancel session, no deduction
@@ -76,12 +81,12 @@ class ProcessAppointmentSessions extends Command
                         'status' => Appointment::STATUS_CANCELLED,
                         'cancelled_reason' => 'Doctor did not join within first session'
                     ]);
-                    
+
                     $this->info("Appointment {$appointment->id} cancelled - doctor did not join, no session deducted");
                 }
-                
+
                 $processedCount++;
-                
+
             } catch (\Exception $e) {
                 $this->error("Error processing appointment {$appointment->id}: " . $e->getMessage());
             }

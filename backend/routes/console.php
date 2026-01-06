@@ -59,3 +59,15 @@ Schedule::command('subscriptions:process-expirations')
 Artisan::command('sessions:clear-active {--force : Force clear without confirmation}', function () {
     $this->call(\App\Console\Commands\ClearActiveSessions::class);
 })->purpose('Clear all active text sessions and their cached messages');
+
+// NEW: Activate scheduled sessions every minute
+Schedule::command('sessions:activate-scheduled')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// NEW: Activate booked appointments when their scheduled time arrives
+Schedule::command('appointments:activate-booked')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();
