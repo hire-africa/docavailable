@@ -28,7 +28,9 @@ class Appointment extends Model
         'reschedule_status',
         'patient_joined',
         'doctor_joined',
-        'cancelled_reason'
+        'cancelled_reason',
+        'actual_start_time',
+        'actual_end_time'
     ];
 
     // Appointment status constants
@@ -109,7 +111,7 @@ class Appointment extends Model
         }
 
         // Convert string status to numeric
-        return match (strtolower($this->status)) {
+        return match (strtolower((string) $this->status)) {
             'pending' => self::STATUS_PENDING,
             'confirmed' => self::STATUS_CONFIRMED,
             'cancelled' => self::STATUS_CANCELLED,

@@ -35,7 +35,16 @@ class ActivateBookedAppointments extends Command
         // Use a 5-minute grace period after the scheduled time
         $now = Carbon::now();
 
-        $appointmentsToActivate = Appointment::where('status', Appointment::STATUS_CONFIRMED)
+        $appointmentsToActivate = Appointment::select([
+            'id',
+            'patient_id',
+            'doctor_id',
+            'appointment_date',
+            'appointment_time',
+            'status',
+            'appointment_type'
+        ])
+            ->where('status', Appointment::STATUS_CONFIRMED)
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
             ->get();
 
