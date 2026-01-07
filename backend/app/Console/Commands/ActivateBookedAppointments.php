@@ -76,7 +76,7 @@ class ActivateBookedAppointments extends Command
     {
         // Update appointment status to in_progress
         $appointment->update([
-            'status' => 'in_progress',
+            'status' => Appointment::STATUS_IN_PROGRESS,
             'actual_start_time' => now(),
         ]);
 

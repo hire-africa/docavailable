@@ -39,6 +39,7 @@ class Appointment extends Model
     const STATUS_RESCHEDULE_PROPOSED = 4;
     const STATUS_RESCHEDULE_ACCEPTED = 5;
     const STATUS_RESCHEDULE_REJECTED = 6;
+    const STATUS_IN_PROGRESS = 7;
 
     // Reschedule status constants
     const RESCHEDULE_PENDING = 0;
@@ -50,15 +51,18 @@ class Appointment extends Model
     const TYPE_AUDIO = 'audio';
     const TYPE_VIDEO = 'video';
 
-    public function patient(){
+    public function patient()
+    {
         return $this->belongsTo(User::class, 'patient_id');
     }
 
-    public function doctor(){
+    public function doctor()
+    {
         return $this->belongsTo(User::class, 'doctor_id');
     }
 
-    public function proposedBy(){
+    public function proposedBy()
+    {
         return $this->belongsTo(User::class, 'reschedule_proposed_by');
     }
 
@@ -87,7 +91,7 @@ class Appointment extends Model
      */
     public function getAppointmentTypeDisplayAttribute(): string
     {
-        return match($this->appointment_type) {
+        return match ($this->appointment_type) {
             self::TYPE_TEXT => 'Text Session',
             self::TYPE_AUDIO => 'Audio Call',
             self::TYPE_VIDEO => 'Video Call',
@@ -103,9 +107,9 @@ class Appointment extends Model
         if (is_numeric($this->status)) {
             return (int) $this->status;
         }
-        
+
         // Convert string status to numeric
-        return match(strtolower($this->status)) {
+        return match (strtolower($this->status)) {
             'pending' => self::STATUS_PENDING,
             'confirmed' => self::STATUS_CONFIRMED,
             'cancelled' => self::STATUS_CANCELLED,
@@ -113,6 +117,7 @@ class Appointment extends Model
             'reschedule_proposed' => self::STATUS_RESCHEDULE_PROPOSED,
             'reschedule_accepted' => self::STATUS_RESCHEDULE_ACCEPTED,
             'reschedule_rejected' => self::STATUS_RESCHEDULE_REJECTED,
+            'in_progress' => self::STATUS_IN_PROGRESS,
             default => self::STATUS_PENDING
         };
     }
@@ -137,7 +142,7 @@ class Appointment extends Model
                 $this->user_timezone
             );
         }
-        
+
         // Fallback to old format for backward compatibility
         return \Carbon\Carbon::parse($this->appointment_date . ' ' . $this->appointment_time);
     }

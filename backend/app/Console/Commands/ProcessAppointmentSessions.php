@@ -33,9 +33,9 @@ class ProcessAppointmentSessions extends Command
         $now = now();
         $tenMinutesAgo = $now->copy()->subMinutes(10);
 
-        // Find confirmed appointments that are at or past their scheduled time (within last 10 minutes)
+        // Find confirmed or in-progress appointments that are at or past their scheduled time (within last 10 minutes)
         // Use appointment_date and appointment_time legacy fields
-        $confirmedAppointments = Appointment::where('status', Appointment::STATUS_CONFIRMED)
+        $confirmedAppointments = Appointment::whereIn('status', [Appointment::STATUS_CONFIRMED, Appointment::STATUS_IN_PROGRESS])
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) >= ?", [$tenMinutesAgo->toDateTimeString()])
             ->get();
