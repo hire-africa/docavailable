@@ -39,6 +39,14 @@ use Illuminate\Support\Facades\DB;
 // Debug routes removed for security
 // Debug endpoints are not available in production
 
+Route::get('/debug/check-recent', function () {
+    return [
+        'server_time' => now()->toDateTimeString(),
+        'recent_appointments' => \App\Models\Appointment::latest('updated_at')->take(5)->get(['id', 'status', 'appointment_datetime_utc', 'updated_at']),
+        'recent_sessions' => \App\Models\TextSession::latest('updated_at')->take(5)->get(['id', 'status', 'scheduled_at', 'updated_at']),
+    ];
+});
+
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
     Route::post('/register', [AuthenticationController::class, 'register']);
