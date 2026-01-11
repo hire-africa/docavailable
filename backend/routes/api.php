@@ -56,8 +56,12 @@ Route::get('/debug/scheduler-status-public', function () {
     $migrationResult = null;
     if (request()->has('migrate')) {
         try {
-            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            $migrationResult = \Illuminate\Support\Facades\Artisan::output();
+            $params = ['--force' => true];
+            if (request()->has('path')) {
+                $params['--path'] = request()->get('path');
+            }
+            \Illuminate\Support\Facades\Artisan::call('migrate', $params);
+            $migrationResult = "Migration success: " . \Illuminate\Support\Facades\Artisan::output();
         } catch (\Throwable $e) {
             $migrationResult = "Migration failed: " . $e->getMessage();
         }
