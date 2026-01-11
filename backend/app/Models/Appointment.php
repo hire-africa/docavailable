@@ -33,6 +33,12 @@ class Appointment extends Model
         'actual_end_time'
     ];
 
+    protected $casts = [
+        'appointment_datetime_utc' => 'datetime',
+        'actual_start_time' => 'datetime',
+        'actual_end_time' => 'datetime',
+    ];
+
     // Appointment status constants
     const STATUS_PENDING = 0;
     const STATUS_CONFIRMED = 1;

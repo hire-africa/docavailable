@@ -58,7 +58,7 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
-        $senderName = $this->data['sender_name'] ?? 'Unknown';
+        $senderName = $this->getSenderName();
         $sessionId = $this->data['session_id'] ?? '';
         // Use appointment_id as the unified key the client expects
         $appointmentId = is_string($sessionId) && str_starts_with($sessionId, 'text_session_')
@@ -72,7 +72,7 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
             ],
             'data' => [
                 'type' => 'chat_message',
-                'appointment_id' => (string)$appointmentId,
+                'appointment_id' => (string) $appointmentId,
                 'sender_name' => $senderName,
                 'message_count' => '1',
                 'timestamp' => now()->toISOString(),
@@ -87,14 +87,15 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $senderName = $this->getSenderName();
         return [
             'type' => 'text_session_message',
             'session_id' => $this->data['session_id'],
-            'sender_name' => $this->data['sender_name'],
+            'sender_name' => $senderName,
             'message_preview' => $this->data['message_preview'],
             'message_id' => $this->data['message_id'],
             'title' => 'New Message in Text Session',
-            'body' => $this->data['sender_name'] . ' sent you a message: ' . $this->data['message_preview'],
+            'body' => $senderName . ' sent you a message: ' . $this->data['message_preview'],
         ];
     }
 
@@ -103,14 +104,36 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
      */
     public function toDatabase(object $notifiable): array
     {
+        $senderName = $this->getSenderName();
         return [
             'type' => 'text_session_message',
             'session_id' => $this->data['session_id'],
-            'sender_name' => $this->data['sender_name'],
+            'sender_name' => $senderName,
             'message_preview' => $this->data['message_preview'],
             'message_id' => $this->data['message_id'],
             'title' => 'New Message in Text Session',
-            'body' => $this->data['sender_name'] . ' sent you a message: ' . $this->data['message_preview'],
+            'body' => $senderName . ' sent you a message: ' . $this->data['message_preview'],
         ];
     }
-} 
+
+    /**
+     * Get anonymized sender name if enabled
+     */
+    private function getSenderName(): string
+    {
+        $senderName = $this->data['sender_name'] ?? 'Unknown';
+
+        // If we have a sender_id, we can check for anonymous mode
+        if (isset($this->data['sender_id'])) {
+            $sender = \App\Models\User::find($this->data['sender_id']);
+            if ($sender) {
+                $anonymizationService = app(\App\Services\AnonymizationService::class);
+                if ($anonymizationService->isAnonymousModeEnabled($sender)) {
+                    return $anonymizationService->getAnonymizedDisplayName($sender);
+                }
+            }
+        }
+
+        return $senderName;
+    }
+}

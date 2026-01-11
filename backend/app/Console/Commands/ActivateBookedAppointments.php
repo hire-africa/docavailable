@@ -41,11 +41,13 @@ class ActivateBookedAppointments extends Command
             'doctor_id',
             'appointment_date',
             'appointment_time',
+            'appointment_datetime_utc',
             'status',
             'appointment_type'
         ])
             ->where('status', Appointment::STATUS_CONFIRMED)
-            ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
+            ->whereNotNull('appointment_datetime_utc')
+            ->where('appointment_datetime_utc', '<=', $now)
             ->get();
 
         if ($appointmentsToActivate->isEmpty()) {

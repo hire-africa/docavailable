@@ -34,7 +34,7 @@ class ChatMessageNotification extends Notification implements ShouldQueue
     public function via($notifiable): array
     {
         $channels = ['database'];
-        
+
         // Only send push notifications for chat messages
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
             $channels[] = 'fcm';
@@ -49,7 +49,7 @@ class ChatMessageNotification extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         $senderName = $this->getSenderDisplayName();
-        
+
         // SECURE: Only send notification triggers, NOT message content
         return [
             'notification' => [
@@ -89,10 +89,16 @@ class ChatMessageNotification extends Notification implements ShouldQueue
      */
     private function getSenderDisplayName(): string
     {
+        $anonymizationService = app(\App\Services\AnonymizationService::class);
+
+        if ($anonymizationService->isAnonymousModeEnabled($this->sender)) {
+            return $anonymizationService->getAnonymizedDisplayName($this->sender);
+        }
+
         if ($this->sender->role === 'doctor') {
             return "Dr. {$this->sender->first_name} {$this->sender->last_name}";
         }
-        
+
         return "{$this->sender->first_name} {$this->sender->last_name}";
     }
 
@@ -104,7 +110,7 @@ class ChatMessageNotification extends Notification implements ShouldQueue
         if (strlen($message) <= 100) {
             return $message;
         }
-        
+
         return substr($message, 0, 97) . '...';
     }
-} 
+}

@@ -326,7 +326,7 @@ class ChatController extends Controller
         $session = null;
         if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
             $sessionId = str_replace('text_session_', '', $appointmentId);
-            
+
             // Use transaction with lockForUpdate() for atomic operations
             $session = DB::transaction(function () use ($sessionId, $user, $request, $appointmentId) {
                 // Lock the session row for update to prevent race conditions
@@ -452,6 +452,7 @@ class ChatController extends Controller
                     if ($recipient && $recipient->push_notifications_enabled && $recipient->push_token) {
                         $notificationData = [
                             'session_id' => $session->id,
+                            'sender_id' => $user->id,
                             'sender_name' => $this->getUserName($user->id),
                             'message_preview' => substr($request->message ?? '', 0, 50),
                             'message_id' => $message['id']
@@ -1228,13 +1229,15 @@ class ChatController extends Controller
      */
     private function getUserName($userId): string
     {
-        $user = DB::table('users')
-            ->where('id', $userId)
-            ->select('first_name', 'last_name', 'user_type')
-            ->first();
+        $user = \App\Models\User::find($userId);
 
         if (!$user) {
             return 'Unknown User';
+        }
+
+        // Check if anonymous mode is enabled
+        if ($this->anonymizationService->isAnonymousModeEnabled($user)) {
+            return $this->anonymizationService->getAnonymizedDisplayName($user);
         }
 
         $name = $user->first_name . ' ' . $user->last_name;

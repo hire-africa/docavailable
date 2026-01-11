@@ -5,7 +5,7 @@ services:
     github:
       branch: main
       deploy_on_push: true
-      repo: your-username/your-repo
+      repo: hire-africa/docavailable
     build_command: |
       composer install --no-dev --optimize-autoloader
       php artisan config:cache
@@ -45,3 +45,36 @@ databases:
   - name: db
     engine: PG
     version: "15"
+
+workers:
+  # Laravel Scheduler - runs scheduled commands every minute
+  - name: scheduler
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: hire-africa/docavailable
+    build_command: composer install --no-dev --optimize-autoloader
+    run_command: php artisan schedule:work
+    environment_slug: php
+    envs:
+      - key: APP_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+  # Laravel Queue Worker - processes notifications and background jobs
+  - name: queue-worker
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: hire-africa/docavailable
+    build_command: composer install --no-dev --optimize-autoloader
+    run_command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    environment_slug: php
+    envs:
+      - key: APP_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+    instance_count: 1
+    instance_size_slug: basic-xxs
