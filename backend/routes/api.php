@@ -41,33 +41,42 @@ use Illuminate\Support\Facades\DB;
 
 // TEMPORARY: Public scheduler debug endpoint (REMOVE AFTER VERIFICATION)
 Route::get('/debug/scheduler-status-public', function () {
-    $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
-        ->whereNotNull('appointment_datetime_utc')
-        ->where('appointment_datetime_utc', '<=', now())
-        ->select(['id', 'appointment_datetime_utc', 'status', 'created_at'])
-        ->get();
+    try {
+        $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
+            ->whereNotNull('appointment_datetime_utc')
+            ->where('appointment_datetime_utc', '<=', now())
+            ->select(['id', 'appointment_datetime_utc', 'status', 'created_at'])
+            ->get();
 
-    $nullUtcAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
-        ->whereNull('appointment_datetime_utc')
-        ->count();
+        $nullUtcAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
+            ->whereNull('appointment_datetime_utc')
+            ->count();
 
-    $pendingSessions = \App\Models\TextSession::where('status', \App\Models\TextSession::STATUS_SCHEDULED)
-        ->whereNotNull('scheduled_at')
-        ->where('scheduled_at', '<=', now())
-        ->count();
+        $pendingSessions = \App\Models\TextSession::where('status', \App\Models\TextSession::STATUS_SCHEDULED)
+            ->whereNotNull('scheduled_at')
+            ->where('scheduled_at', '<=', now())
+            ->count();
 
-    return response()->json([
-        'server_time_utc' => now()->toDateTimeString(),
-        'server_timezone' => config('app.timezone'),
-        'pending_appointment_activations' => $pendingAppointments->count(),
-        'pending_appointments' => $pendingAppointments,
-        'appointments_with_null_utc' => $nullUtcAppointments,
-        'pending_session_activations' => $pendingSessions,
-        'message' => $pendingAppointments->isEmpty() && $pendingSessions === 0
-            ? 'No pending activations - scheduler is likely working correctly'
-            : 'Found pending activations - scheduler may not be running',
-        'warning' => 'THIS IS A TEMPORARY ENDPOINT - REMOVE AFTER VERIFICATION'
-    ]);
+        return response()->json([
+            'server_time_utc' => now()->toDateTimeString(),
+            'server_timezone' => config('app.timezone'),
+            'pending_appointment_activations' => $pendingAppointments->count(),
+            'pending_appointments' => $pendingAppointments,
+            'appointments_with_null_utc' => $nullUtcAppointments,
+            'pending_session_activations' => $pendingSessions,
+            'message' => $pendingAppointments->isEmpty() && $pendingSessions === 0
+                ? 'No pending activations - scheduler is likely working correctly'
+                : 'Found pending activations - scheduler may not be running',
+            'warning' => 'THIS IS A TEMPORARY ENDPOINT - REMOVE AFTER VERIFICATION'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            // 'trace' => $e->getTraceAsString() // Might be too long
+        ], 500);
+    }
 });
 Route::middleware(['auth:api'])->get('/debug/scheduler-status', function () {
     $user = auth()->user();
