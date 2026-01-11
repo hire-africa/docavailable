@@ -73,8 +73,12 @@ Route::get('/debug/scheduler-status-public', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
             $activationResult = "Booked: " . \Illuminate\Support\Facades\Artisan::output();
+
             \Illuminate\Support\Facades\Artisan::call('sessions:activate-scheduled');
             $activationResult .= " | Sessions: " . \Illuminate\Support\Facades\Artisan::output();
+
+            \Illuminate\Support\Facades\Artisan::call('schedule:run');
+            $activationResult .= " | ScheduleRun: " . \Illuminate\Support\Facades\Artisan::output();
         } catch (\Throwable $e) {
             $activationResult = "Activation failed: " . $e->getMessage();
         }
