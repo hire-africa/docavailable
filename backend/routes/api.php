@@ -49,55 +49,57 @@ Route::get('/debug/scheduler-status-public', function () {
     try {
         \Illuminate\Support\Facades\Artisan::call('route:clear');
         \Illuminate\Support\Facades\Artisan::call('config:clear');
-    } catch (\Exception $e) {
+    } catch (\Throwable $e) {
     }
 
     try {
         $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
         $mtime = filemtime($modelPath);
         $content = file_get_contents($modelPath);
-        $hasConstant = str_contains($content, 'STATUS_SCHEDULED');
+        $hasConstantInFile = str_contains($content, 'STATUS_SCHEDULED');
+
+        // Use defined() to avoid fatal crash if the constant is missing in the loaded class
+        $statusScheduled = defined('\App\Models\TextSession::STATUS_SCHEDULED')
+            ? \App\Models\TextSession::STATUS_SCHEDULED
+            : 'scheduled';
 
         $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
             ->whereNotNull('appointment_datetime_utc')
             ->where('appointment_datetime_utc', '<=', now())
-            ->select(['id', 'appointment_datetime_utc', 'status', 'created_at'])
             ->get();
 
-        $nullUtcAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
-            ->whereNull('appointment_datetime_utc')
-            ->count();
-
-        $pendingSessions = \App\Models\TextSession::where('status', \App\Models\TextSession::STATUS_SCHEDULED)
+        $pendingSessions = \App\Models\TextSession::where('status', $statusScheduled)
             ->whereNotNull('scheduled_at')
             ->where('scheduled_at', '<=', now())
             ->count();
 
         return response()->json([
+            'status' => 'success',
             'server_time_utc' => now()->toDateTimeString(),
             'model_info' => [
                 'path' => $modelPath,
                 'mtime' => date('Y-m-d H:i:s', $mtime),
-                'has_constant_in_file' => $hasConstant,
+                'has_constant_in_file' => $hasConstantInFile,
+                'constant_defined_in_class' => defined('\App\Models\TextSession::STATUS_SCHEDULED'),
             ],
             'pending_appointment_activations' => $pendingAppointments->count(),
-            'appointments_with_null_utc' => $nullUtcAppointments,
             'pending_session_activations' => $pendingSessions,
         ]);
-    } catch (\Exception $e) {
-        // If the constant check failed, try to return as much info as possible
+    } catch (\Throwable $e) {
         $info = [];
         try {
-            $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
+            $class = new \ReflectionClass(\App\Models\TextSession::class);
+            $modelPath = $class->getFileName();
             $info = [
                 'path' => $modelPath,
                 'mtime' => date('Y-m-d H:i:s', filemtime($modelPath)),
-                'content_snippet' => substr(file_get_contents($modelPath), 0, 500)
+                'content_snippet' => substr(file_get_contents($modelPath), 0, 1000)
             ];
-        } catch (\Exception $inner) {
+        } catch (\Throwable $inner) {
         }
 
         return response()->json([
+            'status' => 'error',
             'error' => $e->getMessage(),
             'model_info' => $info,
             'file' => $e->getFile(),
