@@ -32,8 +32,10 @@ class ActivateBookedAppointments extends Command
         $this->info('Checking for appointments to activate...');
 
         // Find all confirmed appointments where scheduled time has arrived
-        // Use a 5-minute grace period after the scheduled time
-        $now = Carbon::now();
+        // Use UTC to match the DB field
+        $now = Carbon::now('UTC');
+
+        Log::info('🕐 [ActivateBookedAppointments] Checking at ' . $now->toDateTimeString());
 
         $appointmentsToActivate = Appointment::select([
             'id',

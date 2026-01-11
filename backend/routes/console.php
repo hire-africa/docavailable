@@ -62,12 +62,8 @@ Artisan::command('sessions:clear-active {--force : Force clear without confirmat
 
 // NEW: Activate scheduled sessions every minute
 Schedule::command('sessions:activate-scheduled')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->everyMinute();
 
 // NEW: Activate booked appointments when their scheduled time arrives
 Schedule::command('appointments:activate-booked')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->everyMinute();

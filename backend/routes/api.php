@@ -46,6 +46,14 @@ Route::get('/debug/check-recent', function () {
     ];
 });
 
+Route::get('/debug/logs', function () {
+    $logPath = storage_path('logs/laravel.log');
+    if (!file_exists($logPath))
+        return ['message' => 'Log file not found'];
+    $logs = file($logPath);
+    return array_slice($logs, -50);
+});
+
 Route::get('/debug/fix-appointments', function () {
     $appointments = \App\Models\Appointment::whereIn('status', [0, 1, 4])->get();
     $results = [];
