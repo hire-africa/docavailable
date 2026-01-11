@@ -71,3 +71,8 @@ Schedule::command('appointments:activate-booked')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// HEARTBEAT: Verify scheduler is running
+Schedule::call(function () {
+    \Illuminate\Support\Facades\Cache::put('scheduler_heartbeat', now()->toDateTimeString(), 120);
+})->everyMinute();

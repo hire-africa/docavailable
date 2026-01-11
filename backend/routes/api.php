@@ -113,6 +113,7 @@ Route::get('/debug/scheduler-status-public', function () {
         return response()->json([
             'status' => 'success',
             'server_time_utc' => now()->toDateTimeString(),
+            'scheduler_heartbeat' => \Illuminate\Support\Facades\Cache::get('scheduler_heartbeat'),
             'migration_result' => $migrationResult,
             'activation_result' => $activationResult,
             'paths' => [
