@@ -41,6 +41,9 @@ use Illuminate\Support\Facades\DB;
 
 // TEMPORARY: Public scheduler debug endpoint (REMOVE AFTER VERIFICATION)
 Route::get('/debug/scheduler-status-public', function () {
+    if (function_exists('opcache_reset')) {
+        opcache_reset();
+    }
     try {
         $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
             ->whereNotNull('appointment_datetime_utc')

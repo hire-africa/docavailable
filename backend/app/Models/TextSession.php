@@ -10,6 +10,7 @@ class TextSession extends Model
 {
     use HasFactory;
 
+    // Force rebuild - v2
     protected $fillable = [
         'patient_id',
         'doctor_id',
