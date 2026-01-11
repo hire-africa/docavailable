@@ -34,32 +34,7 @@ use Illuminate\Support\Facades\DB;
 |--------------------------------------------------------------------------
 */
 
-Route::get('/debug/apt32', function () {
-    $apt = \App\Models\Appointment::find(32);
-    if (!$apt)
-        return ['error' => 'not found'];
-
-    // Calculate what UTC should be
-    $localDateTime = \Carbon\Carbon::parse($apt->appointment_date . ' ' . $apt->appointment_time, $apt->user_timezone ?: 'UTC');
-    $calculatedUtc = $localDateTime->utc();
-
-    // Force update
-    $apt->appointment_datetime_utc = $calculatedUtc;
-    $apt->saveQuietly(); // Skip model events to avoid double-calculation
-
-    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
-    $output = \Illuminate\Support\Facades\Artisan::output();
-
-    $apt->refresh();
-    return [
-        'now_utc' => now('UTC')->toDateTimeString(),
-        'input' => $apt->appointment_date . ' ' . $apt->appointment_time . ' (' . $apt->user_timezone . ')',
-        'calculated_utc' => $calculatedUtc->toDateTimeString(),
-        'stored_utc' => $apt->appointment_datetime_utc,
-        'status' => $apt->status,
-        'output' => $output
-    ];
-});
+// Debug routes removed for security
 
 
 // Authentication routes (rate limited)
