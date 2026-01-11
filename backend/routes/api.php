@@ -35,8 +35,20 @@ use Illuminate\Support\Facades\DB;
 */
 
 Route::get('/debug/apt32', function () {
+    $apt = \App\Models\Appointment::find(32);
+    if ($apt) {
+        // Fix the UTC timestamp
+        $apt->appointment_datetime_utc = \App\Services\TimezoneService::convertToUTC(
+            $apt->appointment_date,
+            $apt->appointment_time,
+            $apt->user_timezone ?: 'UTC'
+        );
+        $apt->save();
+    }
+
     \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
     $output = \Illuminate\Support\Facades\Artisan::output();
+
     $apt = \App\Models\Appointment::find(32);
     return [
         'now_utc' => now('UTC')->toDateTimeString(),
