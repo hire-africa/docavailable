@@ -48,12 +48,24 @@ Route::get('/debug/check-recent', function () {
 
 Route::get('/debug/fix-appointments', function () {
     $appointments = \App\Models\Appointment::whereIn('status', [0, 1, 4])->get();
-    $fixed = 0;
+    $results = [];
     foreach ($appointments as $app) {
-        $app->save(); // This triggers the booted saving event
-        $fixed++;
+        $oldUtc = $app->appointment_datetime_utc;
+        $newUtc = \App\Services\TimezoneService::convertToUTC(
+            $app->appointment_date,
+            $app->appointment_time,
+            $app->user_timezone ?: 'UTC'
+        );
+        $app->appointment_datetime_utc = $newUtc;
+        $app->save();
+        $results[] = [
+            'id' => $app->id,
+            'old' => $oldUtc,
+            'new' => $newUtc,
+            'match' => $oldUtc == $newUtc
+        ];
     }
-    return ['fixed_count' => $fixed];
+    return $results;
 });
 
 // Authentication routes (rate limited)

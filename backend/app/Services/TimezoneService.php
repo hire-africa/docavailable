@@ -29,8 +29,18 @@ class TimezoneService
                 return null;
             }
 
+            $utc = $appointmentDateTime->utc();
+
+            Log::info('🕒 [TimezoneService] convertToUTC', [
+                'input_date' => $dateStr,
+                'input_time' => $timeStr,
+                'input_timezone' => $userTimezone,
+                'parsed_local' => $appointmentDateTime->toDateTimeString(),
+                'result_utc' => $utc->toDateTimeString()
+            ]);
+
             // Convert to UTC
-            return $appointmentDateTime->utc();
+            return $utc;
         } catch (\Exception $e) {
             Log::error('Error converting appointment to UTC', [
                 'date' => $dateStr,
