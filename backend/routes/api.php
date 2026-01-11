@@ -76,6 +76,13 @@ Route::get('/debug/scheduler-status-public', function () {
         return response()->json([
             'status' => 'success',
             'server_time_utc' => now()->toDateTimeString(),
+            'paths' => [
+                'pwd' => getcwd(),
+                'base_path' => base_path(),
+            ],
+            'git_info' => [
+                'latest_hash' => trim(shell_exec('git rev-parse HEAD')),
+            ],
             'model_info' => [
                 'path' => $modelPath,
                 'mtime' => date('Y-m-d H:i:s', $mtime),
@@ -101,6 +108,13 @@ Route::get('/debug/scheduler-status-public', function () {
         return response()->json([
             'status' => 'error',
             'error' => $e->getMessage(),
+            'paths' => [
+                'pwd' => getcwd(),
+                'base_path' => base_path(),
+            ],
+            'git_info' => [
+                'latest_hash' => trim(shell_exec('git rev-parse HEAD')),
+            ],
             'model_info' => $info,
             'file' => $e->getFile(),
             'line' => $e->getLine(),
