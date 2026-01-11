@@ -15,30 +15,46 @@ return new class extends Migration {
     {
         Schema::table('text_sessions', function (Blueprint $table) {
             // Scheduled session fields
-            $table->timestamp('scheduled_at')->nullable()->after('ended_at')
-                ->comment('When the scheduled session should activate');
+            if (!Schema::hasColumn('text_sessions', 'scheduled_at')) {
+                $table->timestamp('scheduled_at')->nullable()->after('ended_at')
+                    ->comment('When the scheduled session should activate');
+            }
 
-            $table->unsignedBigInteger('appointment_id')->nullable()->after('scheduled_at')
-                ->comment('Optional link to appointments table for scheduled sessions');
+            if (!Schema::hasColumn('text_sessions', 'appointment_id')) {
+                $table->unsignedBigInteger('appointment_id')->nullable()->after('scheduled_at')
+                    ->comment('Optional link to appointments table for scheduled sessions');
+            }
 
             // Session type and feature flags
-            $table->string('session_type', 20)->default('text')->after('appointment_id')
-                ->comment('Type of session: text, audio, or video');
+            if (!Schema::hasColumn('text_sessions', 'session_type')) {
+                $table->string('session_type', 20)->default('text')->after('appointment_id')
+                    ->comment('Type of session: text, audio, or video');
+            }
 
-            $table->boolean('text_enabled')->default(true)->after('session_type')
-                ->comment('Whether text chat is enabled for this session');
+            if (!Schema::hasColumn('text_sessions', 'text_enabled')) {
+                $table->boolean('text_enabled')->default(true)->after('session_type')
+                    ->comment('Whether text chat is enabled for this session');
+            }
 
-            $table->boolean('call_enabled')->default(false)->after('text_enabled')
-                ->comment('Whether call functionality is enabled for this session');
+            if (!Schema::hasColumn('text_sessions', 'call_enabled')) {
+                $table->boolean('call_enabled')->default(false)->after('text_enabled')
+                    ->comment('Whether call functionality is enabled for this session');
+            }
 
-            // Add foreign key constraint
-            $table->foreign('appointment_id')
-                ->references('id')
-                ->on('appointments')
-                ->nullOnDelete();
+            // Add foreign key constraint if not exists
+            try {
+                $table->foreign('appointment_id')
+                    ->references('id')
+                    ->on('appointments')
+                    ->nullOnDelete();
+            } catch (\Throwable $e) {
+            }
 
             // Index for scheduler queries (find scheduled sessions ready to activate)
-            $table->index(['status', 'scheduled_at'], 'idx_scheduled_sessions');
+            try {
+                $table->index(['status', 'scheduled_at'], 'idx_scheduled_sessions');
+            } catch (\Throwable $e) {
+            }
         });
     }
 

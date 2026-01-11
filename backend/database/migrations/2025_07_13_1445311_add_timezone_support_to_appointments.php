@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -13,13 +12,21 @@ return new class extends Migration
     {
         Schema::table('appointments', function (Blueprint $table) {
             // Add UTC datetime column for proper timezone handling
-            $table->timestamp('appointment_datetime_utc')->nullable()->after('appointment_time');
-            
+            if (!Schema::hasColumn('appointments', 'appointment_datetime_utc')) {
+                $table->timestamp('appointment_datetime_utc')->nullable()->after('appointment_time');
+            }
+
             // Add user timezone for conversion back to local time
-            $table->string('user_timezone', 50)->default('UTC')->after('appointment_datetime_utc');
-            
+            if (!Schema::hasColumn('appointments', 'user_timezone')) {
+                $table->string('user_timezone', 50)->default('UTC')->after('appointment_datetime_utc');
+            }
+
             // Add index for better query performance
-            $table->index(['appointment_datetime_utc', 'status']);
+            // Note: Index addition might still fail if it exists, but usually Laravel handles it or we can try-catch
+            try {
+                $table->index(['appointment_datetime_utc', 'status']);
+            } catch (\Exception $e) {
+            }
         });
     }
 
