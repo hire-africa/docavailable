@@ -42,7 +42,7 @@ use Illuminate\Support\Facades\DB;
 Route::get('/debug/check-recent', function () {
     return [
         'server_time' => now()->toDateTimeString(),
-        'recent_appointments' => \App\Models\Appointment::latest('updated_at')->take(10)->get(['id', 'status', 'appointment_date', 'appointment_time', 'appointment_datetime_utc', 'updated_at']),
+        'recent_appointments' => \App\Models\Appointment::latest('updated_at')->take(10)->get(['id', 'status', 'appointment_date', 'appointment_time', 'appointment_datetime_utc', 'user_timezone', 'updated_at']),
     ];
 });
 
