@@ -10,24 +10,26 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::table('appointments', function (Blueprint $table) {
-            // Add UTC datetime column for proper timezone handling
-            if (!Schema::hasColumn('appointments', 'appointment_datetime_utc')) {
+        // Add columns individually
+        if (!Schema::hasColumn('appointments', 'appointment_datetime_utc')) {
+            Schema::table('appointments', function (Blueprint $table) {
                 $table->timestamp('appointment_datetime_utc')->nullable()->after('appointment_time');
-            }
+            });
+        }
 
-            // Add user timezone for conversion back to local time
-            if (!Schema::hasColumn('appointments', 'user_timezone')) {
+        if (!Schema::hasColumn('appointments', 'user_timezone')) {
+            Schema::table('appointments', function (Blueprint $table) {
                 $table->string('user_timezone', 50)->default('UTC')->after('appointment_datetime_utc');
-            }
+            });
+        }
 
-            // Add index for better query performance
-            // Note: Index addition might still fail if it exists, but usually Laravel handles it or we can try-catch
-            try {
+        // Try adding index separately
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
                 $table->index(['appointment_datetime_utc', 'status']);
-            } catch (\Exception $e) {
-            }
-        });
+            });
+        } catch (\Throwable $e) {
+        }
     }
 
     /**
