@@ -1,4 +1,4 @@
-name: docavailable-backend
+name: docavailable
 region: fra
 services:
   - name: backend
