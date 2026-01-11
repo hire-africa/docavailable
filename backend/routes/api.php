@@ -67,6 +67,19 @@ Route::get('/debug/scheduler-status-public', function () {
         }
     }
 
+    // Manual activation trigger
+    $activationResult = null;
+    if (request()->has('activate')) {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
+            $activationResult = "Booked: " . \Illuminate\Support\Facades\Artisan::output();
+            \Illuminate\Support\Facades\Artisan::call('sessions:activate-scheduled');
+            $activationResult .= " | Sessions: " . \Illuminate\Support\Facades\Artisan::output();
+        } catch (\Throwable $e) {
+            $activationResult = "Activation failed: " . $e->getMessage();
+        }
+    }
+
     try {
         $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
         $mtime = filemtime($modelPath);
@@ -83,7 +96,7 @@ Route::get('/debug/scheduler-status-public', function () {
             $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
                 ->whereNotNull('appointment_datetime_utc')
                 ->where('appointment_datetime_utc', '<=', now())
-                ->get();
+                ->pluck('id');
         } catch (\Throwable $e) {
         }
 
@@ -101,6 +114,7 @@ Route::get('/debug/scheduler-status-public', function () {
             'status' => 'success',
             'server_time_utc' => now()->toDateTimeString(),
             'migration_result' => $migrationResult,
+            'activation_result' => $activationResult,
             'paths' => [
                 'pwd' => getcwd(),
                 'base_path' => base_path(),
@@ -114,7 +128,7 @@ Route::get('/debug/scheduler-status-public', function () {
                 'has_constant_in_file' => $hasConstantInFile,
                 'constant_defined_in_class' => defined('\App\Models\TextSession::STATUS_SCHEDULED'),
             ],
-            'pending_appointment_activations' => is_numeric($pendingAppointments) ? $pendingAppointments : $pendingAppointments->count(),
+            'pending_appointment_activations' => $pendingAppointments,
             'pending_session_activations' => $pendingSessionsCount,
         ]);
     } catch (\Throwable $e) {
@@ -134,6 +148,7 @@ Route::get('/debug/scheduler-status-public', function () {
             'status' => 'error',
             'error' => $e->getMessage(),
             'migration_result' => $migrationResult,
+            'activation_result' => $activationResult,
             'paths' => [
                 'pwd' => getcwd(),
                 'base_path' => base_path(),
