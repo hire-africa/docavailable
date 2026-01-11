@@ -42,8 +42,8 @@ use Illuminate\Support\Facades\DB;
 Route::get('/debug/check-recent', function () {
     return [
         'server_time' => now()->toDateTimeString(),
-        'recent_appointments' => \App\Models\Appointment::latest('updated_at')->take(5)->get(['id', 'status', 'appointment_datetime_utc', 'updated_at']),
-        'recent_sessions' => \App\Models\TextSession::latest('updated_at')->take(5)->get(['id', 'status', 'scheduled_at', 'updated_at']),
+        'confirmed_appointments' => \App\Models\Appointment::where('status', 1)->get(['id', 'status', 'appointment_datetime_utc', 'updated_at']),
+        'in_progress_appointments' => \App\Models\Appointment::where('status', 7)->get(['id', 'status', 'appointment_datetime_utc', 'updated_at']),
     ];
 });
 
