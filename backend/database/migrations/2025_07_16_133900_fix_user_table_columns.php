@@ -5,8 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -38,4 +37,4 @@ return new class extends Migration
         DB::statement('UPDATE users SET role = user_type WHERE user_type IS NOT NULL');
         DB::statement('UPDATE users SET professional_bio = bio WHERE bio IS NOT NULL');
     }
-}; 
+};

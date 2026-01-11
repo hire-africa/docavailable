@@ -25,6 +25,12 @@ class TextSession extends Model
         'doctor_response_deadline',
         'activated_at',
         'auto_deductions_processed',
+        // Scheduled session fields
+        'scheduled_at',
+        'appointment_id',
+        'session_type',
+        'text_enabled',
+        'call_enabled',
     ];
 
     protected $casts = [
@@ -33,6 +39,9 @@ class TextSession extends Model
         'last_activity_at' => 'datetime',
         'doctor_response_deadline' => 'datetime',
         'activated_at' => 'datetime',
+        'scheduled_at' => 'datetime',
+        'text_enabled' => 'boolean',
+        'call_enabled' => 'boolean',
     ];
 
     // Status constants
@@ -41,6 +50,12 @@ class TextSession extends Model
     const STATUS_EXPIRED = 'expired';
     const STATUS_WAITING_FOR_DOCTOR = 'waiting_for_doctor';
     const STATUS_PENDING = 'pending';
+    const STATUS_SCHEDULED = 'scheduled';
+
+    // Session type constants
+    const TYPE_TEXT = 'text';
+    const TYPE_AUDIO = 'audio';
+    const TYPE_VIDEO = 'video';
 
     /**
      * Get the patient that owns the text session.
@@ -56,6 +71,14 @@ class TextSession extends Model
     public function doctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'doctor_id');
+    }
+
+    /**
+     * Get the appointment linked to this session (for scheduled sessions).
+     */
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
     }
 
     /**
@@ -93,6 +116,67 @@ class TextSession extends Model
     public function isWaitingForDoctor(): bool
     {
         return $this->status === self::STATUS_WAITING_FOR_DOCTOR;
+    }
+
+    /**
+     * Check if the session is scheduled (not yet activated).
+     */
+    public function isScheduled(): bool
+    {
+        return $this->status === self::STATUS_SCHEDULED;
+    }
+
+    /**
+     * Check if a scheduled session is ready to be activated (time has arrived).
+     */
+    public function isReadyToActivate(): bool
+    {
+        return $this->isScheduled() &&
+            $this->scheduled_at &&
+            $this->scheduled_at->isPast();
+    }
+
+    /**
+     * Activate a scheduled session when its time arrives.
+     * Transitions from STATUS_SCHEDULED to STATUS_WAITING_FOR_DOCTOR.
+     */
+    public function activateScheduledSession(): void
+    {
+        if (!$this->isScheduled()) {
+            return;
+        }
+
+        $this->update([
+            'status' => self::STATUS_WAITING_FOR_DOCTOR,
+            'started_at' => now(),
+            'last_activity_at' => now(),
+            'doctor_response_deadline' => now()->addSeconds(90),
+        ]);
+
+        \Illuminate\Support\Facades\Log::info("Scheduled session activated", [
+            'session_id' => $this->id,
+            'session_type' => $this->session_type,
+            'patient_id' => $this->patient_id,
+            'doctor_id' => $this->doctor_id,
+            'scheduled_at' => $this->scheduled_at,
+            'activated_at' => now(),
+        ]);
+    }
+
+    /**
+     * Check if text chat is enabled for this session.
+     */
+    public function isTextEnabled(): bool
+    {
+        return $this->text_enabled ?? true;
+    }
+
+    /**
+     * Check if call functionality is enabled for this session.
+     */
+    public function isCallEnabled(): bool
+    {
+        return $this->call_enabled ?? false;
     }
 
     /**
@@ -309,18 +393,18 @@ class TextSession extends Model
     public function getSessionsToDeduct(bool $isManualEnd = true): int
     {
         $elapsedMinutes = $this->getElapsedMinutes();
-        
+
         // Calculate total sessions needed based on elapsed time
         // Every 10 minutes = 1 session, plus 1 for manual end
         $totalSessionsNeeded = floor($elapsedMinutes / 10);
         if ($isManualEnd) {
             $totalSessionsNeeded += 1; // Add 1 for manual end
         }
-        
+
         // Subtract what's already been auto-deducted
         $alreadyProcessed = $this->auto_deductions_processed ?? 0;
         $sessionsToDeduct = max(0, $totalSessionsNeeded - $alreadyProcessed);
-        
+
         \Illuminate\Support\Facades\Log::info("Calculating sessions to deduct", [
             'session_id' => $this->id,
             'elapsed_minutes' => $elapsedMinutes,
@@ -329,7 +413,7 @@ class TextSession extends Model
             'sessions_to_deduct' => $sessionsToDeduct,
             'is_manual_end' => $isManualEnd
         ]);
-        
+
         return $sessionsToDeduct;
     }
 
@@ -364,7 +448,7 @@ class TextSession extends Model
 
             // Calculate sessions to deduct (accounts for auto-deductions)
             $sessionsToDeduct = $session->getSessionsToDeduct(true);
-            
+
             // Update session status first
             $session->update([
                 'status' => self::STATUS_ENDED,

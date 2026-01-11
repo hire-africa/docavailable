@@ -5,8 +5,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         $connection = config('database.default');
@@ -21,14 +20,14 @@ return new class extends Migration
                 AND constraint_type = 'UNIQUE'
                 AND constraint_name LIKE '%user_id%'
             ");
-            
+
             foreach ($constraints as $constraint) {
                 DB::statement("ALTER TABLE subscriptions DROP CONSTRAINT IF EXISTS {$constraint->constraint_name}");
             }
-            
+
             // Ensure user_id is not unique (users can have multiple subscriptions)
             // This is already handled by the foreign key constraint
-            
+
         } else {
             // For other databases, use Schema builder
             Schema::table('subscriptions', function (Blueprint $table) {
