@@ -40,9 +40,15 @@ use Illuminate\Support\Facades\DB;
 // Debug endpoints are not available in production
 
 Route::get('/debug/check-recent', function () {
+    // Manually trigger activation
+    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
+    $output = \Illuminate\Support\Facades\Artisan::output();
+
+    $appointment = \App\Models\Appointment::find(31);
     return [
         'server_time' => now()->toDateTimeString(),
-        'target_appointment' => \App\Models\Appointment::find(31),
+        'command_output' => $output,
+        'appointment' => $appointment
     ];
 });
 
