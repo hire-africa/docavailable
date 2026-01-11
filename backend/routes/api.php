@@ -44,7 +44,20 @@ Route::get('/debug/scheduler-status-public', function () {
     if (function_exists('opcache_reset')) {
         opcache_reset();
     }
+
+    // Force clear caches
     try {
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+    } catch (\Exception $e) {
+    }
+
+    try {
+        $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
+        $mtime = filemtime($modelPath);
+        $content = file_get_contents($modelPath);
+        $hasConstant = str_contains($content, 'STATUS_SCHEDULED');
+
         $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
             ->whereNotNull('appointment_datetime_utc')
             ->where('appointment_datetime_utc', '<=', now())
@@ -62,22 +75,33 @@ Route::get('/debug/scheduler-status-public', function () {
 
         return response()->json([
             'server_time_utc' => now()->toDateTimeString(),
-            'server_timezone' => config('app.timezone'),
+            'model_info' => [
+                'path' => $modelPath,
+                'mtime' => date('Y-m-d H:i:s', $mtime),
+                'has_constant_in_file' => $hasConstant,
+            ],
             'pending_appointment_activations' => $pendingAppointments->count(),
-            'pending_appointments' => $pendingAppointments,
             'appointments_with_null_utc' => $nullUtcAppointments,
             'pending_session_activations' => $pendingSessions,
-            'message' => $pendingAppointments->isEmpty() && $pendingSessions === 0
-                ? 'No pending activations - scheduler is likely working correctly'
-                : 'Found pending activations - scheduler may not be running',
-            'warning' => 'THIS IS A TEMPORARY ENDPOINT - REMOVE AFTER VERIFICATION'
         ]);
     } catch (\Exception $e) {
+        // If the constant check failed, try to return as much info as possible
+        $info = [];
+        try {
+            $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
+            $info = [
+                'path' => $modelPath,
+                'mtime' => date('Y-m-d H:i:s', filemtime($modelPath)),
+                'content_snippet' => substr(file_get_contents($modelPath), 0, 500)
+            ];
+        } catch (\Exception $inner) {
+        }
+
         return response()->json([
             'error' => $e->getMessage(),
+            'model_info' => $info,
             'file' => $e->getFile(),
             'line' => $e->getLine(),
-            // 'trace' => $e->getTraceAsString() // Might be too long
         ], 500);
     }
 });
