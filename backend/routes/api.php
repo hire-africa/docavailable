@@ -35,64 +35,6 @@ use Illuminate\Support\Facades\DB;
 */
 
 
-
-// Debug routes removed for security
-// Debug endpoints are not available in production
-
-Route::get('/debug/check-recent', function () {
-    // Manually trigger activation
-    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
-    $output = \Illuminate\Support\Facades\Artisan::output();
-
-    $appointment = \App\Models\Appointment::find(31);
-    return [
-        'server_time' => now()->toDateTimeString(),
-        'command_output' => $output,
-        'appointment' => $appointment
-    ];
-});
-
-Route::get('/debug/logs', function () {
-    $logPath = storage_path('logs/laravel.log');
-    if (!file_exists($logPath))
-        return ['message' => 'Log file not found'];
-    $logs = file($logPath);
-    return array_slice($logs, -50);
-});
-
-Route::get('/debug/activate-now', function () {
-    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
-    $output = \Illuminate\Support\Facades\Artisan::output();
-    $appointment = \App\Models\Appointment::find(31);
-    return [
-        'command_output' => $output,
-        'appointment_31_status' => $appointment ? $appointment->status : 'not found',
-        'appointment_31_updated' => $appointment ? $appointment->updated_at : null
-    ];
-});
-
-Route::get('/debug/fix-appointments', function () {
-    $appointments = \App\Models\Appointment::whereIn('status', [0, 1, 4])->get();
-    $results = [];
-    foreach ($appointments as $app) {
-        $oldUtc = $app->appointment_datetime_utc;
-        $newUtc = \App\Services\TimezoneService::convertToUTC(
-            $app->appointment_date,
-            $app->appointment_time,
-            $app->user_timezone ?: 'UTC'
-        );
-        $app->appointment_datetime_utc = $newUtc;
-        $app->save();
-        $results[] = [
-            'id' => $app->id,
-            'old' => $oldUtc,
-            'new' => $newUtc,
-            'match' => $oldUtc == $newUtc
-        ];
-    }
-    return $results;
-});
-
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
     Route::post('/register', [AuthenticationController::class, 'register']);
