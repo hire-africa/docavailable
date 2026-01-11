@@ -14,13 +14,19 @@ use Illuminate\Support\Facades\Log;
 use App\Models\DoctorWallet;
 use App\Services\DoctorPaymentService;
 
+/**
+ * @deprecated Use TextSessionController::createScheduled() instead for unified session management.
+ */
 class TextAppointmentController extends Controller
 {
     /**
      * Start a text appointment session when appointment time is reached.
+     * @deprecated Use TextSessionController::createScheduled() instead.
      */
     public function startSession(Request $request): JsonResponse
     {
+        Log::warning('DEPRECATED: TextAppointmentController::startSession called. Use TextSessionController::createScheduled instead.');
+
         try {
             // Validate request
             $validator = Validator::make($request->all(), [
@@ -74,8 +80,8 @@ class TextAppointmentController extends Controller
             // Check if appointment time has been reached using TimezoneService
             $userTimezone = $request->get('user_timezone') ?: config('app.timezone', 'UTC');
             $isTimeReached = TimezoneService::isAppointmentTimeReached(
-                $appointment->appointment_date,
-                $appointment->appointment_time,
+                $appointment->appointment_datetime_utc,
+                null,
                 $userTimezone,
                 5 // 5 minute buffer
             );

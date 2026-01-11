@@ -24,7 +24,7 @@ class TimezoneService
 
             // Parse the date/time in user's timezone
             $appointmentDateTime = self::parseAppointmentDateTime($dateStr, $timeStr, $userTimezone);
-            
+
             if (!$appointmentDateTime) {
                 return null;
             }
@@ -75,66 +75,34 @@ class TimezoneService
     public static function isAppointmentTimeReached($dateStr, $timeStr, $userTimezone = 'UTC', $bufferMinutes = 5)
     {
         try {
-            // Validate input parameters
-            if (empty($dateStr) || empty($timeStr)) {
-                Log::warning('Empty appointment date or time provided', [
-                    'date' => $dateStr,
-                    'time' => $timeStr,
-                    'timezone' => $userTimezone
-                ]);
-                return false;
+            // If the first argument is already a Carbon instance (our new field), use it directly
+            if ($dateStr instanceof Carbon) {
+                $appointmentUTC = $dateStr;
+            } else if (is_object($dateStr) && property_exists($dateStr, 'appointment_datetime_utc') && $dateStr->appointment_datetime_utc) {
+                // If an Appointment object was passed
+                $appointmentUTC = $dateStr->appointment_datetime_utc;
+            } else {
+                // Fallback to legacy string parsing
+                if (empty($dateStr) || empty($timeStr)) {
+                    return false;
+                }
+
+                $appointmentDateTime = self::parseAppointmentDateTime($dateStr, $timeStr, $userTimezone);
+                if (!$appointmentDateTime) {
+                    return false;
+                }
+                $appointmentUTC = $appointmentDateTime->utc();
             }
 
-            // Validate timezone
-            if (!self::isValidTimezone($userTimezone)) {
-                Log::warning('Invalid timezone provided, defaulting to UTC', [
-                    'provided_timezone' => $userTimezone,
-                    'fallback_timezone' => 'UTC'
-                ]);
-                $userTimezone = 'UTC';
-            }
-
-            $appointmentDateTime = self::parseAppointmentDateTime($dateStr, $timeStr, $userTimezone);
-            
-            if (!$appointmentDateTime) {
-                Log::error('Failed to parse appointment date/time', [
-                    'date' => $dateStr,
-                    'time' => $timeStr,
-                    'timezone' => $userTimezone
-                ]);
-                return false;
-            }
-
-            // Convert to UTC for comparison
-            $appointmentUTC = $appointmentDateTime->utc();
             $nowUTC = Carbon::now('UTC');
-            
-            // Allow appointments to start up to bufferMinutes before scheduled time
-            $earliestStartTime = $nowUTC->copy()->subMinutes($bufferMinutes);
-            
-            $isReached = $appointmentUTC->lte($earliestStartTime);
-            
-            // Log the decision for debugging
-            Log::info('Appointment time check result', [
-                'date' => $dateStr,
-                'time' => $timeStr,
-                'timezone' => $userTimezone,
-                'appointment_utc' => $appointmentUTC->toISOString(),
-                'current_utc' => $nowUTC->toISOString(),
-                'earliest_start_utc' => $earliestStartTime->toISOString(),
-                'buffer_minutes' => $bufferMinutes,
-                'is_reached' => $isReached
-            ]);
-            
-            return $isReached;
+
+            // CORRECT LOGIC: Allow starting up to X minutes BEFORE the scheduled time
+            // If now is 21:57 and appointment is 22:00 (buffer 5), then (now + 5) is 22:02.
+            // 22:00 <= 22:02 is TRUE.
+            return $appointmentUTC->lte($nowUTC->copy()->addMinutes($bufferMinutes));
+
         } catch (\Exception $e) {
-            Log::error('Error checking appointment time', [
-                'date' => $dateStr,
-                'time' => $timeStr,
-                'timezone' => $userTimezone,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('Error checking appointment time', ['error' => $e->getMessage()]);
             return false;
         }
     }
@@ -159,16 +127,16 @@ class TimezoneService
                 // Format: MM/DD/YYYY
                 $dateParts = explode('/', $dateStr);
                 if (count($dateParts) === 3) {
-                    $month = (int)$dateParts[0];
-                    $day = (int)$dateParts[1];
-                    $year = (int)$dateParts[2];
-                    
+                    $month = (int) $dateParts[0];
+                    $day = (int) $dateParts[1];
+                    $year = (int) $dateParts[2];
+
                     // Handle time format (remove AM/PM if present)
                     $timeStr = preg_replace('/\s*(AM|PM)/i', '', $timeStr);
                     $timeParts = explode(':', $timeStr);
-                    $hour = (int)$timeParts[0];
-                    $minute = (int)$timeParts[1];
-                    
+                    $hour = (int) $timeParts[0];
+                    $minute = (int) $timeParts[1];
+
                     return Carbon::create($year, $month, $day, $hour, $minute, 0, $timezone);
                 }
             } else {
@@ -184,7 +152,7 @@ class TimezoneService
             ]);
             return null;
         }
-        
+
         return null;
     }
 
