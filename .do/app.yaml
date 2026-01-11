@@ -1,0 +1,88 @@
+name: docavailable-backend
+region: fra
+services:
+  - name: backend
+    source_dir: backend
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: hire-africa/docavailable
+    build_command: |
+      composer install --no-dev --optimize-autoloader
+      php artisan config:cache
+      php artisan route:cache
+      php artisan view:cache
+    run_command: |
+      php artisan migrate --force
+      php artisan storage:link
+      php artisan optimize
+      heroku-php-apache2 public/
+    environment_slug: php
+    envs:
+      - key: APP_NAME
+        value: DocAvailable
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: JWT_SECRET
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: CACHE_STORE
+        value: redis
+      - key: QUEUE_CONNECTION
+        value: redis
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+
+workers:
+  # Laravel Scheduler - manages 1-minute activation intervals
+  - name: scheduler
+    source_dir: backend
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: hire-africa/docavailable
+    build_command: composer install --no-dev --optimize-autoloader
+    run_command: php artisan schedule:work
+    environment_slug: php
+    envs:
+      - key: APP_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: DB_CONNECTION
+        value: pgsql
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+  # Laravel Queue Worker - processes notifications
+  - name: queue-worker
+    source_dir: backend
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: hire-africa/docavailable
+    build_command: composer install --no-dev --optimize-autoloader
+    run_command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    environment_slug: php
+    envs:
+      - key: APP_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+      - key: DB_CONNECTION
+        value: pgsql
+    instance_count: 1
+    instance_size_slug: basic-xxs
+
+databases:
+  - name: db
+    engine: PG
+    version: "15"
