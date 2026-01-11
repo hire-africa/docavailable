@@ -34,6 +34,24 @@ use Illuminate\Support\Facades\DB;
 |--------------------------------------------------------------------------
 */
 
+Route::get('/debug/apt32', function () {
+    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
+    $output = \Illuminate\Support\Facades\Artisan::output();
+    $apt = \App\Models\Appointment::find(32);
+    return [
+        'now_utc' => now('UTC')->toDateTimeString(),
+        'output' => $output,
+        'apt' => $apt ? [
+            'id' => $apt->id,
+            'status' => $apt->status,
+            'date' => $apt->appointment_date,
+            'time' => $apt->appointment_time,
+            'utc' => $apt->appointment_datetime_utc,
+            'tz' => $apt->user_timezone
+        ] : 'not found'
+    ];
+});
+
 
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
