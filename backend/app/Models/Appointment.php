@@ -10,6 +10,24 @@ class Appointment extends Model
 {
     use HasFactory;
 
+    protected static function booted()
+    {
+        static::saving(function ($appointment) {
+            // Automatically update appointment_datetime_utc if date or time changes
+            if ($appointment->isDirty(['appointment_date', 'appointment_time', 'user_timezone'])) {
+                $utcDateTime = \App\Services\TimezoneService::convertToUTC(
+                    $appointment->appointment_date,
+                    $appointment->appointment_time,
+                    $appointment->user_timezone ?: 'UTC'
+                );
+
+                if ($utcDateTime) {
+                    $appointment->appointment_datetime_utc = $utcDateTime;
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'patient_id',
         'doctor_id',

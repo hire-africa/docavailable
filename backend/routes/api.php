@@ -46,6 +46,16 @@ Route::get('/debug/check-recent', function () {
     ];
 });
 
+Route::get('/debug/fix-appointments', function () {
+    $appointments = \App\Models\Appointment::whereIn('status', [0, 1, 4])->get();
+    $fixed = 0;
+    foreach ($appointments as $app) {
+        $app->save(); // This triggers the booted saving event
+        $fixed++;
+    }
+    return ['fixed_count' => $fixed];
+});
+
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
     Route::post('/register', [AuthenticationController::class, 'register']);
