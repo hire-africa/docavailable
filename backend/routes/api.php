@@ -52,6 +52,17 @@ Route::get('/debug/scheduler-status-public', function () {
     } catch (\Throwable $e) {
     }
 
+    // Manual migration trigger
+    $migrationResult = null;
+    if (request()->has('migrate')) {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            $migrationResult = \Illuminate\Support\Facades\Artisan::output();
+        } catch (\Throwable $e) {
+            $migrationResult = "Migration failed: " . $e->getMessage();
+        }
+    }
+
     try {
         $modelPath = (new \ReflectionClass(\App\Models\TextSession::class))->getFileName();
         $mtime = filemtime($modelPath);
@@ -63,19 +74,29 @@ Route::get('/debug/scheduler-status-public', function () {
             ? \App\Models\TextSession::STATUS_SCHEDULED
             : 'scheduled';
 
-        $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
-            ->whereNotNull('appointment_datetime_utc')
-            ->where('appointment_datetime_utc', '<=', now())
-            ->get();
+        $pendingAppointments = collect();
+        try {
+            $pendingAppointments = \App\Models\Appointment::where('status', \App\Models\Appointment::STATUS_CONFIRMED)
+                ->whereNotNull('appointment_datetime_utc')
+                ->where('appointment_datetime_utc', '<=', now())
+                ->get();
+        } catch (\Throwable $e) {
+        }
 
-        $pendingSessions = \App\Models\TextSession::where('status', $statusScheduled)
-            ->whereNotNull('scheduled_at')
-            ->where('scheduled_at', '<=', now())
-            ->count();
+        $pendingSessionsCount = 0;
+        try {
+            $pendingSessionsCount = \App\Models\TextSession::where('status', $statusScheduled)
+                ->whereNotNull('scheduled_at')
+                ->where('scheduled_at', '<=', now())
+                ->count();
+        } catch (\Throwable $e) {
+            $pendingSessionsCount = "Error: " . $e->getMessage();
+        }
 
         return response()->json([
             'status' => 'success',
             'server_time_utc' => now()->toDateTimeString(),
+            'migration_result' => $migrationResult,
             'paths' => [
                 'pwd' => getcwd(),
                 'base_path' => base_path(),
@@ -89,8 +110,8 @@ Route::get('/debug/scheduler-status-public', function () {
                 'has_constant_in_file' => $hasConstantInFile,
                 'constant_defined_in_class' => defined('\App\Models\TextSession::STATUS_SCHEDULED'),
             ],
-            'pending_appointment_activations' => $pendingAppointments->count(),
-            'pending_session_activations' => $pendingSessions,
+            'pending_appointment_activations' => is_numeric($pendingAppointments) ? $pendingAppointments : $pendingAppointments->count(),
+            'pending_session_activations' => $pendingSessionsCount,
         ]);
     } catch (\Throwable $e) {
         $info = [];
@@ -108,6 +129,7 @@ Route::get('/debug/scheduler-status-public', function () {
         return response()->json([
             'status' => 'error',
             'error' => $e->getMessage(),
+            'migration_result' => $migrationResult,
             'paths' => [
                 'pwd' => getcwd(),
                 'base_path' => base_path(),
