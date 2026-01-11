@@ -54,6 +54,17 @@ Route::get('/debug/logs', function () {
     return array_slice($logs, -50);
 });
 
+Route::get('/debug/activate-now', function () {
+    \Illuminate\Support\Facades\Artisan::call('appointments:activate-booked');
+    $output = \Illuminate\Support\Facades\Artisan::output();
+    $appointment = \App\Models\Appointment::find(31);
+    return [
+        'command_output' => $output,
+        'appointment_31_status' => $appointment ? $appointment->status : 'not found',
+        'appointment_31_updated' => $appointment ? $appointment->updated_at : null
+    ];
+});
+
 Route::get('/debug/fix-appointments', function () {
     $appointments = \App\Models\Appointment::whereIn('status', [0, 1, 4])->get();
     $results = [];
