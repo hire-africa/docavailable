@@ -24,6 +24,7 @@ use App\Http\Controllers\TextSessionController;
 use App\Http\Controllers\TextAppointmentController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\BlogFeedController;
+use App\Http\Controllers\AppVersionController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\DB;
@@ -56,6 +57,9 @@ Route::post('/check-user-exists', [AuthenticationController::class, 'checkUserEx
 
 // Find user by email for Google authentication
 Route::post('/find-user-by-email', [AuthenticationController::class, 'findUserByEmail'])->middleware('throttle:30,1');
+
+// App Version Check
+Route::post('/app/version-check', [AppVersionController::class, 'checkVersion']);
 
 // Backward compatibility routes for mobile app
 Route::post('/login', [AuthenticationController::class, 'login'])->middleware('throttle:5,1');

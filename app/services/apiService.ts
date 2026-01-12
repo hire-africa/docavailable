@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { environment } from '../../config/environment';
 
 // Types
@@ -73,12 +75,12 @@ class ApiService {
   constructor() {
     // Use environment configuration for consistent URL handling
     const rawBaseURL = environment.LARAVEL_API_URL;
-    
+
     // Remove trailing /api if it exists to avoid double /api/api/
     this.baseURL = rawBaseURL.endsWith('/api') ? rawBaseURL.slice(0, -4) : rawBaseURL;
-    
+
     console.log('ApiService: Initialized with base URL:', this.baseURL);
-    
+
     // Main API instance
     this.api = axios.create({
       baseURL: `${this.baseURL}/api`, // Always append /api to the clean base URL
@@ -102,47 +104,51 @@ class ApiService {
       },
     });
 
-      // Request interceptor to add auth token
-  this.api.interceptors.request.use(
-    async (config) => {
-      const token = await this.getAuthToken();
-      console.log('🔐 [ApiService] Request interceptor:', { 
-        url: config.url, 
-        hasToken: !!token,
-        method: config.method 
-      });
-      
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      } else {
-        // If no token is available, don't make the request for protected endpoints
-        const protectedEndpoints = [
-          '/subscription',
-          '/appointments',
-          '/text-sessions/active-sessions',
-          '/user',
-          '/upload/profile-picture',
-          '/upload/id-document',
-          '/upload/chat-image',
-          '/upload/chat-attachment',
-          '/upload/voice-message'
-        ];
-        
-        const isProtectedEndpoint = protectedEndpoints.some(endpoint => 
-          config.url?.includes(endpoint)
-        );
-        
-        if (isProtectedEndpoint) {
-          console.log('ApiService: No token available for protected endpoint, skipping request');
-          return Promise.reject(new Error('No authentication token available'));
+    // Request interceptor to add auth token
+    this.api.interceptors.request.use(
+      async (config) => {
+        const token = await this.getAuthToken();
+        console.log('🔐 [ApiService] Request interceptor:', {
+          url: config.url,
+          hasToken: !!token,
+          method: config.method
+        });
+
+        // Add App Version and Platform headers
+        config.headers['X-App-Version'] = Constants.expoConfig?.version ?? '1.0.0';
+        config.headers['X-Platform'] = Platform.OS;
+
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          // If no token is available, don't make the request for protected endpoints
+          const protectedEndpoints = [
+            '/subscription',
+            '/appointments',
+            '/text-sessions/active-sessions',
+            '/user',
+            '/upload/profile-picture',
+            '/upload/id-document',
+            '/upload/chat-image',
+            '/upload/chat-attachment',
+            '/upload/voice-message'
+          ];
+
+          const isProtectedEndpoint = protectedEndpoints.some(endpoint =>
+            config.url?.includes(endpoint)
+          );
+
+          if (isProtectedEndpoint) {
+            console.log('ApiService: No token available for protected endpoint, skipping request');
+            return Promise.reject(new Error('No authentication token available'));
+          }
         }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
       }
-      return config;
-    },
-    (error) => {
-      return Promise.reject(error);
-    }
-  );
+    );
 
     // Response interceptor to handle token refresh
     this.api.interceptors.response.use(
@@ -169,7 +175,7 @@ class ApiService {
         // Only attempt refresh for 401 errors (authentication issues), not 500 errors (server issues)
         if (error.response?.status === 401 && !originalRequest._retry && !this.isRefreshing) {
           const currentToken = await this.getAuthToken();
-          
+
           // If no token exists, don't try to refresh - just reject
           if (!currentToken) {
             console.log('ApiService: No token available for 401 error');
@@ -182,7 +188,7 @@ class ApiService {
           try {
             console.log('ApiService: Attempting automatic token refresh...');
             const refreshed = await this.refreshToken();
-            
+
             if (refreshed) {
               const newToken = await this.getAuthToken();
               if (newToken) {
@@ -192,7 +198,7 @@ class ApiService {
                 return this.api(originalRequest);
               }
             }
-            
+
             // Refresh failed or no new token, clear auth only for actual auth failures
             this.isRefreshing = false;
             console.log('ApiService: Token refresh failed, clearing auth data');
@@ -275,24 +281,24 @@ class ApiService {
   async register(formData: FormData): Promise<AuthResponse> {
     try {
       console.log('ApiService: Making registration request to:', `${this.baseURL}/api/register`);
-      
+
       const response: AxiosResponse<AuthResponse> = await this.api.post('/register', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      
+
       console.log('ApiService: Registration response:', {
         success: response.data.success,
         message: response.data.message,
         status: response.status
       });
-      
+
       if (response.data.success) {
         await this.setAuthToken(response.data.data.token);
         await this.setUserData(response.data.data.user);
       }
-      
+
       return response.data;
     } catch (error: any) {
       console.error('ApiService: Registration error:', {
@@ -312,12 +318,12 @@ class ApiService {
   async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
     try {
       const response: AxiosResponse<AuthResponse> = await this.api.post('/login', credentials);
-      
+
       if (response.data.success) {
         await this.setAuthToken(response.data.data.token);
         await this.setUserData(response.data.data.user);
       }
-      
+
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -327,12 +333,12 @@ class ApiService {
   async googleLogin(credentials: { id_token: string }): Promise<AuthResponse> {
     try {
       const response: AxiosResponse<AuthResponse> = await this.api.post('/google-login', credentials);
-      
+
       if (response.data.success) {
         await this.setAuthToken(response.data.data.token);
         await this.setUserData(response.data.data.user);
       }
-      
+
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -353,7 +359,7 @@ class ApiService {
   async refreshToken(): Promise<boolean> {
     try {
       console.log('ApiService: Attempting token refresh...');
-      
+
       // Get the current token to include in refresh request
       const currentToken = await this.getAuthToken();
       if (!currentToken) {
@@ -367,7 +373,7 @@ class ApiService {
         const expiryTime = payload.exp * 1000;
         const currentTime = Date.now();
         const timeUntilExpiry = expiryTime - currentTime;
-        
+
         // If token is still valid for more than 1 minute, don't refresh
         if (timeUntilExpiry > 60 * 1000) {
           console.log('ApiService: Token still valid, no refresh needed');
@@ -384,14 +390,14 @@ class ApiService {
         },
         timeout: 10000 // 10 second timeout for refresh
       });
-      
+
       if (response.data.success && response.data.data) {
         console.log('ApiService: Token refresh successful');
         await this.setAuthToken(response.data.data.token);
         await this.setUserData(response.data.data.user);
         return true;
       }
-      
+
       console.log('ApiService: Token refresh failed - invalid response');
       return false;
     } catch (error: any) {
@@ -400,14 +406,14 @@ class ApiService {
         status: error.response?.status,
         data: error.response?.data
       });
-      
+
       // If refresh fails with 401, clear the token
       if (error.response?.status === 401) {
         console.log('ApiService: Refresh failed with 401, clearing token');
         await this.removeAuthToken();
         await this.removeUserData();
       }
-      
+
       return false;
     }
   }
@@ -423,7 +429,7 @@ class ApiService {
       const expiryTime = payload.exp * 1000; // Convert to milliseconds
       const currentTime = Date.now();
       const timeUntilExpiry = expiryTime - currentTime;
-      
+
       // Return true if token expires in less than 5 minutes
       return timeUntilExpiry < 5 * 60 * 1000;
     } catch (error) {
@@ -456,33 +462,33 @@ class ApiService {
   async getCurrentUser(): Promise<User | null> {
     try {
       console.log('ApiService: Making GET request to /user...');
-      
+
       const response: AxiosResponse<ApiResponse<User>> = await this.api.get('/user');
-      
+
       console.log('ApiService: /user response received:', {
         success: response.data.success,
         hasData: !!response.data.data,
         status: response.status
       });
-      
+
       if (response.data.success && response.data.data) {
         console.log('ApiService: Setting user data...');
         await this.setUserData(response.data.data);
         return response.data.data;
       }
-      
+
       console.log('ApiService: No valid user data in response');
       return null;
     } catch (error: any) {
       console.error('ApiService: Get current user error:', error);
-      
+
       // If it's an authentication error (401), clear the token
       if (error.response?.status === 401) {
         console.log('ApiService: Authentication failed, clearing token...');
         await this.removeAuthToken();
         await this.removeUserData();
       }
-      
+
       return null;
     }
   }
@@ -490,11 +496,11 @@ class ApiService {
   async updateProfile(profileData: Partial<User>): Promise<ApiResponse<User>> {
     try {
       const response: AxiosResponse<ApiResponse<User>> = await this.api.patch('/profile', profileData);
-      
+
       if (response.data.success && response.data.data) {
         await this.setUserData(response.data.data);
       }
-      
+
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -525,6 +531,33 @@ class ApiService {
     return await this.getUserData();
   }
 
+  // App Version Check
+  async checkAppVersion(platform: 'android' | 'ios', currentVersion: string): Promise<{
+    minVersion: string;
+    forceUpdate: boolean;
+    storeUrl: string;
+    title: string;
+    message: string;
+  }> {
+    try {
+      const response = await this.api.post('/app/version-check', {
+        platform,
+        current_version: currentVersion
+      });
+      return response.data;
+    } catch (error) {
+      console.error('ApiService: Error checking app version:', error);
+      // Return safe defaults in case of error (don't block user)
+      return {
+        minVersion: '0.0.0',
+        forceUpdate: false,
+        storeUrl: '',
+        title: '',
+        message: ''
+      };
+    }
+  }
+
   // Health check
   async healthCheck(): Promise<ApiResponse> {
     try {
@@ -545,16 +578,16 @@ class ApiService {
   async checkConnectivity(): Promise<boolean> {
     const maxRetries = 2;
     const baseTimeout = 12000; // Increased to 12s for better reliability
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         console.log(`ApiService: Checking connectivity to: ${this.baseURL} (attempt ${attempt}/${maxRetries})`);
-        
+
         // Use the configured axios instance for consistency
         const response = await this.api.get('/health', {
           timeout: baseTimeout + (attempt - 1) * 3000, // Progressive timeout: 12s, 15s
         });
-        
+
         // Check if response is actually JSON
         const contentType = response.headers['content-type'] || '';
         if (!contentType.includes('application/json')) {
@@ -562,10 +595,10 @@ class ApiService {
           console.error('ApiService: Response content:', response.data.substring(0, 200));
           return false;
         }
-        
+
         console.log('ApiService: Connectivity check successful');
         return true;
-        
+
       } catch (error: any) {
         console.error(`ApiService: Connectivity check failed (attempt ${attempt}/${maxRetries}):`, {
           message: error.message,
@@ -573,24 +606,24 @@ class ApiService {
           status: error.response?.status,
           contentType: error.response?.headers?.['content-type']
         });
-        
+
         // Check if error response is HTML (deployment issue)
         if (error.response?.data && typeof error.response.data === 'string' && error.response.data.includes('<br />')) {
           console.error('ApiService: Backend appears to have deployment issues - returning HTML instead of JSON');
         }
-        
+
         // If this is the last attempt, return false
         if (attempt === maxRetries) {
           return false;
         }
-        
+
         // Wait before retrying (exponential backoff)
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 3000);
         console.log(`ApiService: Retrying connectivity check in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
-    
+
     return false;
   }
 
@@ -619,11 +652,11 @@ class ApiService {
         .join('\n');
       return new Error(`Validation failed:\n${errorMessages}`);
     }
-    
+
     if (err.response?.data?.message) {
       return new Error(err.response.data.message);
     }
-    
+
     // Handle specific HTTP status codes
     if (err.response?.status) {
       switch (err.response.status) {
@@ -647,45 +680,45 @@ class ApiService {
           return new Error(`Request failed with status ${error.response.status}. Please try again.`);
       }
     }
-    
+
     // Handle network errors
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
       return new Error('Request timed out. Please check your internet connection and try again.');
     }
-    
+
     if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
       return new Error('Network error. Please check your internet connection and try again.');
     }
-    
+
     if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo ENOTFOUND')) {
       return new Error('Cannot connect to server. Please check your internet connection and try again.');
     }
-    
+
     if (error.code === 'ECONNREFUSED' || error.message?.includes('ECONNREFUSED')) {
       return new Error('Server is not responding. Please try again later or contact support.');
     }
-    
+
     // Handle circuit breaker errors
     if (error.message?.includes('Service temporarily unavailable')) {
       return error;
     }
-    
+
     // Default error message
     return new Error((error as any).message || 'An unexpected error occurred. Please try again.');
   }
 
   private async retryRequest<T>(requestFn: () => Promise<T>, maxRetries: number = 2): Promise<T> {
     // Circuit breaker disabled - always try requests
-    
+
     let lastError: any;
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const result = await requestFn();
         return result;
       } catch (error: any) {
         lastError = error;
-        
+
         // Enhanced error logging
         console.error('❌ [ApiService] Request failed:', {
           attempt: attempt + 1,
@@ -695,18 +728,18 @@ class ApiService {
           data: error.response?.data,
           url: error.config?.url
         });
-        
+
         // Don't retry on authentication errors (401) or client errors (4xx)
         if (error.response?.status === 401) {
           console.log('❌ [ApiService] Authentication error, not retrying');
           throw error;
         }
-        
+
         if (error.response?.status >= 400 && error.response?.status < 500) {
           console.log('❌ [ApiService] Client error, not retrying');
           throw error;
         }
-        
+
         // Allow a single retry on timeout errors to mitigate cold starts/temporary slowness
         if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
           if (attempt === 0) {
@@ -716,7 +749,7 @@ class ApiService {
             throw error;
           }
         }
-        
+
         // Allow a single retry on transient network errors
         if (error.code === 'NETWORK_ERROR' || error.message?.includes('Network Error')) {
           if (attempt === 0) {
@@ -726,20 +759,20 @@ class ApiService {
             throw error;
           }
         }
-        
+
         // Don't retry on the last attempt
         if (attempt === maxRetries) {
           throw error;
         }
-        
+
         // Wait before retrying (exponential backoff)
         const delay = Math.pow(2, attempt) * 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
-        
+
         console.log(`ApiService: Retrying request (attempt ${attempt + 1}/${maxRetries + 1})`);
       }
     }
-    
+
     throw lastError;
   }
 
@@ -752,23 +785,23 @@ class ApiService {
 
   async post<T>(url: string, data?: any): Promise<ApiResponse<T>> {
     console.log('📤 [ApiService] POST request:', { url, data });
-    
+
     return this.retryRequest(async () => {
       try {
         const response: AxiosResponse<ApiResponse<T>> = await this.api.post(url, data);
-        console.log('✅ [ApiService] POST response:', { 
-          url, 
-          status: response.status, 
+        console.log('✅ [ApiService] POST response:', {
+          url,
+          status: response.status,
           success: response.data?.success,
-          message: response.data?.message 
+          message: response.data?.message
         });
         return response.data;
       } catch (error) {
-        console.error('❌ [ApiService] POST error:', { 
-          url, 
+        console.error('❌ [ApiService] POST error:', {
+          url,
           error: (error as any)?.message,
           status: (error as any)?.response?.status,
-          data: (error as any)?.response?.data 
+          data: (error as any)?.response?.data
         });
         throw error;
       }
@@ -799,18 +832,18 @@ class ApiService {
   // File upload method
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
     console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({ key, type: typeof value })) });
-    
+
     // Check and refresh token proactively before upload
     const tokenIsValid = await this.checkAndRefreshToken();
     if (!tokenIsValid) {
       console.error('❌ [ApiService] Cannot upload file - no valid authentication token');
       throw new Error('Authentication required. Please log in again.');
     }
-    
+
     // Debug: Check token after refresh
     const token = await this.getAuthToken();
     console.log('📤 [ApiService] UploadFile token check:', { hasToken: !!token, url, tokenLength: token?.length });
-    
+
     return this.retryRequest(async () => {
       try {
         // Don't manually set Content-Type for FormData - let axios handle it with boundary
@@ -820,21 +853,21 @@ class ApiService {
           // Note: We're not setting Content-Type here - axios will set it automatically with boundary
           // for FormData objects, which is required for proper multipart/form-data handling
         });
-        console.log('✅ [ApiService] UploadFile response:', { 
-          url, 
-          status: response.status, 
+        console.log('✅ [ApiService] UploadFile response:', {
+          url,
+          status: response.status,
           success: response.data?.success,
-          message: response.data?.message 
+          message: response.data?.message
         });
         return response.data;
       } catch (error) {
-        console.error('❌ [ApiService] UploadFile error:', { 
-          url, 
+        console.error('❌ [ApiService] UploadFile error:', {
+          url,
           error: (error as any)?.message,
           status: (error as any)?.response?.status,
-          data: (error as any)?.response?.data 
+          data: (error as any)?.response?.data
         });
-        
+
         // If authentication error, try to refresh token once more and retry
         if ((error as any)?.response?.status === 401) {
           console.log('🔄 [ApiService] Upload failed with 401, attempting token refresh...');
@@ -845,15 +878,15 @@ class ApiService {
             const retryResponse: AxiosResponse<ApiResponse<T>> = await this.api.post(url, formData, {
               timeout: 30000,
             });
-            console.log('✅ [ApiService] UploadFile retry response:', { 
-              url, 
-              status: retryResponse.status, 
-              success: retryResponse.data?.success 
+            console.log('✅ [ApiService] UploadFile retry response:', {
+              url,
+              status: retryResponse.status,
+              success: retryResponse.data?.success
             });
             return retryResponse.data;
           }
         }
-        
+
         throw error;
       }
     });
