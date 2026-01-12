@@ -37,20 +37,27 @@ class ActivateBookedAppointments extends Command
 
         Log::info('🕐 [ActivateBookedAppointments] Checking at ' . $now->toDateTimeString());
 
-        $appointmentsToActivate = Appointment::select([
-            'id',
-            'patient_id',
-            'doctor_id',
-            'appointment_date',
-            'appointment_time',
-            'appointment_datetime_utc',
-            'status',
-            'appointment_type'
-        ])
-            ->where('status', Appointment::STATUS_CONFIRMED)
-            ->whereNotNull('appointment_datetime_utc')
-            ->where('appointment_datetime_utc', '<=', $now)
-            ->get();
+        // Fetch all confirmed appointments and filter using TimezoneService for maximum resilience
+        $allConfirmed = Appointment::where('status', Appointment::STATUS_CONFIRMED)->get();
+
+        $appointmentsToActivate = $allConfirmed->filter(function ($appointment) {
+            $reached = \App\Services\TimezoneService::isAppointmentTimeReached(
+                $appointment->appointment_date,
+                $appointment->appointment_time,
+                $appointment->user_timezone ?? 'Africa/Blantyre'
+            );
+
+            if ($reached) {
+                Log::info("🎯 [ActivateBookedAppointments] Appointment {$appointment->id} is ready for activation", [
+                    'date' => $appointment->appointment_date,
+                    'time' => $appointment->appointment_time,
+                    'tz' => $appointment->user_timezone
+                ]);
+            }
+
+            return $reached;
+        });
+
 
         if ($appointmentsToActivate->isEmpty()) {
             $this->info('No appointments to activate.');
@@ -87,14 +94,32 @@ class ActivateBookedAppointments extends Command
      */
     private function activateAppointment(Appointment $appointment): void
     {
+        $this->info("   Activating appointment {$appointment->id} ({$appointment->appointment_type})");
+
+        // PERFORM UPFRONT BILLING: Deduct 1 session from patient's subscription immediately
+        // This ensures the patient is charged for the start of the session.
+        $paymentService = new \App\Services\DoctorPaymentService();
+        $deducted = $paymentService->deductFromPatientSubscriptionForAppointment($appointment);
+
+        if (!$deducted) {
+            Log::warning("⚠️ [ActivateBookedAppointments] Unable to deduct session for appointment {$appointment->id}. Aborting activation.", [
+                'appointment_id' => $appointment->id,
+                'patient_id' => $appointment->patient_id
+            ]);
+            $this->error("   ❌ Subscription deduction failed for appointment {$appointment->id}");
+            return;
+        }
+
+        Log::info("💰 [ActivateBookedAppointments] Successfully deducted 1 session for appointment {$appointment->id}");
+
         // For text appointments, we need to create the associated TextSession and ChatRoom
         // This ensures the "Active Session" banner appears on the frontend and chat works
         if ($appointment->appointment_type === 'text') {
             $this->activateTextSession($appointment);
         } else {
-            // Standard activation for other types
+            // Standard activation for other types (audio/video)
             $appointment->update([
-                'status' => Appointment::STATUS_IN_PROGRESS,
+                'status' => Appointment::STATUS_IN_PROGRESS, // 7
                 'actual_start_time' => now(),
             ]);
         }
@@ -119,29 +144,17 @@ class ActivateBookedAppointments extends Command
     private function activateTextSession(Appointment $appointment): void
     {
         try {
-            // Check for valid subscription
+            // Fetch subscription to get context for TextSession record
             $subscription = \App\Models\Subscription::where('user_id', $appointment->patient_id)
                 ->where('is_active', true)
                 ->first();
-
-            if (!$subscription) {
-                Log::warning("Skipping text session activation: No active subscription", [
-                    'appointment_id' => $appointment->id,
-                    'patient_id' => $appointment->patient_id
-                ]);
-                return;
-            }
-
-            // Note: We allow activation even if sessions_remaining is 0,
-            // as billing will be handled by auto-deduction (duration) or manual end (base fee).
-            // This aligns with instant session behavior.
 
             \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $subscription) {
                 // Check if session already exists
                 $existingSession = \App\Models\TextSession::where('appointment_id', $appointment->id)->first();
 
                 if ($existingSession) {
-                    $this->info("   Text session already exists for appointment {$appointment->id}");
+                    $this->info("      Text session already exists for appointment {$appointment->id}");
                     $session = $existingSession;
 
                     // Ensure status is correct if it was just scheduled
@@ -151,24 +164,25 @@ class ActivateBookedAppointments extends Command
                             'started_at' => now(),
                             'activated_at' => now(),
                             'doctor_response_deadline' => now()->addSeconds(90),
+                            'sessions_used' => 1 // Mark as 1 used since we deducted at activation
                         ]);
                     }
                 } else {
                     // Create new TextSession
-                    // NO UPFRONT DEDUCTION: sessions_used starts at 0
+                    // SET UPFRONT DEDUCTION: sessions_used starts at 1
                     $session = \App\Models\TextSession::create([
                         'appointment_id' => $appointment->id,
                         'patient_id' => $appointment->patient_id,
                         'doctor_id' => $appointment->doctor_id,
                         'status' => 'waiting_for_doctor', // Initial status
-                        'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
+                        'sessions_remaining_before_start' => $subscription ? $subscription->text_sessions_remaining : 0,
                         'doctor_response_deadline' => now()->addSeconds(90),
                         'started_at' => now(),
                         'activated_at' => now(), // Important for auto-deduction timer
                         'last_activity_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),
-                        'sessions_used' => 0 // Explicitly 0, billing happens later
+                        'sessions_used' => 1 // 1 session is consumed immediately
                     ]);
 
                     $this->info("   Created text session {$session->id}");
