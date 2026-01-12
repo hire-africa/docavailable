@@ -91,11 +91,8 @@ class AppointmentRequest extends FormRequest
                         $validator->errors()->add('appointment_time', 'Appointment time cannot be more than 1 year in the future.');
                     }
 
-                    // Check if appointment is within business hours (8 AM to 8 PM)
-                    $hour = $appointmentDateTime->hour;
-                    if ($hour < 8 || $hour >= 20) {
-                        $validator->errors()->add('appointment_time', 'Appointments can only be scheduled between 8:00 AM and 8:00 PM.');
-                    }
+                    // REMOVED: Harcoded 8AM-8PM restriction removed per user request.
+                    // Validation now relies on doctor's specific availability settings.
 
                 } catch (\Exception $e) {
                     $validator->errors()->add('appointment_time', 'Invalid appointment date and time combination.');
