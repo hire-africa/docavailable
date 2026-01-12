@@ -112,7 +112,7 @@ export const IconNames = {
   security: 'security',
   helpMaterial: 'help',
   exitToApp: 'exit-to-app',
-  
+
   // Ionicons
   iosHome: 'ios-home',
   iosPerson: 'ios-person',
@@ -142,6 +142,16 @@ export const IconNames = {
   iosShield: 'ios-shield',
   iosHelpCircleOutline: 'ios-help-circle-outline',
   iosExit: 'ios-exit',
+
+  // Added icons
+  play: 'play',
+  playCircle: 'play-circle',
+  comment: 'comment',
+  wifi: 'wifi',
+  globe: 'globe',
+  image: 'image',
+  'shopping-cart': 'shopping-cart',
+  shoppingCart: 'shopping-cart',
 } as const;
 
 export type IconName = keyof typeof IconNames;
@@ -154,16 +164,16 @@ interface IconProps {
   style?: any;
 }
 
-export const Icon: React.FC<IconProps> = ({ 
-  name, 
-  size = 24, 
-  color = '#000', 
+export const Icon: React.FC<IconProps> = ({
+  name,
+  size = 24,
+  color = '#000',
   type = 'fontawesome',
-  style 
+  style
 }) => {
   // Get the actual icon name
   const iconName = IconNames[name];
-  
+
   if (!iconName) {
     console.warn(`Icon name "${name}" not found in IconNames`);
     return null;
@@ -330,8 +340,18 @@ const getFallbackIcon = (name: IconName): string => {
     iosShield: '🛡️',
     iosHelpCircleOutline: '❓',
     iosExit: '🚪',
+
+    // Added icons fallbacks
+    play: '▶️',
+    playCircle: '▶️',
+    comment: '💬',
+    wifi: '📶',
+    globe: '🌍',
+    image: '🖼️',
+    'shopping-cart': '🛒',
+    shoppingCart: '🛒',
   };
-  
+
   return fallbackMap[name] || '❓';
 };
 

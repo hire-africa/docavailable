@@ -109,7 +109,7 @@ class AuthenticationController extends Controller
                 'password' => 'required|string|min:8|confirmed',
                 'first_name' => 'required|string|max:255',
                 'last_name' => 'nullable|string|max:255',
-                'user_type' => 'required|in:patient,doctor,admin',
+                'user_type' => 'required|in:patient,doctor', // SECURITY: admin removed - admins must be created via protected admin routes
                 'date_of_birth' => 'nullable|date',
                 'gender' => 'nullable|in:male,female,other',
                 'country' => 'nullable|string|max:255',
@@ -167,36 +167,50 @@ class AuthenticationController extends Controller
             if ($request->profile_picture) {
                 // Check if it's a URL (Google profile picture) or base64 data
                 if (filter_var($request->profile_picture, FILTER_VALIDATE_URL)) {
-                    // It's a URL - download and process the image
-                    \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', ['url' => $request->profile_picture]);
+                    // SECURITY FIX: Prevent SSRF by validating URL scheme and host
+                    $url = $request->profile_picture;
+                    $parsedUrl = parse_url($url);
 
-                    try {
-                        $imageContent = file_get_contents($request->profile_picture);
-                        if ($imageContent && strlen($imageContent) > 100) {
-                            // Compress image before storing
-                            $compressedImage = $this->compressImage($imageContent);
+                    $allowedHosts = ['lh3.googleusercontent.com', 'graph.facebook.com', 'platform-lookaside.fbsbx.com'];
+                    $host = strtolower($parsedUrl['host'] ?? '');
 
-                            $filename = \Illuminate\Support\Str::uuid() . '.jpg';
-                            $path = 'profile_pictures/' . $filename;
+                    // Allow subdomains of googleusercontent.com
+                    $isAllowed = in_array($host, $allowedHosts) || str_ends_with($host, '.googleusercontent.com');
 
-                            // Store compressed image in DigitalOcean Spaces
-                            \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+                    if (($parsedUrl['scheme'] ?? '') !== 'https' || !$isAllowed) {
+                        \Illuminate\Support\Facades\Log::warning('Blocked potential SSRF attempt in profile picture upload', ['url' => $url]);
+                    } else {
+                        // It's a URL - download and process the image
+                        \Illuminate\Support\Facades\Log::info('Profile picture is URL, downloading from:', ['url' => $request->profile_picture]);
 
-                            // Get the public URL from DigitalOcean Spaces
-                            $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
-                            $profilePicturePath = $publicUrl;
+                        try {
+                            $imageContent = file_get_contents($request->profile_picture);
+                            if ($imageContent && strlen($imageContent) > 100) {
+                                // Compress image before storing
+                                $compressedImage = $this->compressImage($imageContent);
 
-                            \Illuminate\Support\Facades\Log::info('Google profile picture uploaded successfully', [
-                                'original_url' => $request->profile_picture,
-                                'stored_path' => $path,
-                                'public_url' => $publicUrl
+                                $filename = \Illuminate\Support\Str::uuid() . '.jpg';
+                                $path = 'profile_pictures/' . $filename;
+
+                                // Store compressed image in DigitalOcean Spaces
+                                \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $compressedImage);
+
+                                // Get the public URL from DigitalOcean Spaces
+                                $publicUrl = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
+                                $profilePicturePath = $publicUrl;
+
+                                \Illuminate\Support\Facades\Log::info('Google profile picture uploaded successfully', [
+                                    'original_url' => $request->profile_picture,
+                                    'stored_path' => $path,
+                                    'public_url' => $publicUrl
+                                ]);
+                            }
+                        } catch (\Exception $e) {
+                            \Illuminate\Support\Facades\Log::error('Failed to download Google profile picture', [
+                                'url' => $request->profile_picture,
+                                'error' => $e->getMessage()
                             ]);
                         }
-                    } catch (\Exception $e) {
-                        \Illuminate\Support\Facades\Log::error('Failed to download Google profile picture', [
-                            'url' => $request->profile_picture,
-                            'error' => $e->getMessage()
-                        ]);
                     }
                 } else {
                     // It's base64 data - process as before
@@ -314,6 +328,21 @@ class AuthenticationController extends Controller
                 'user_type' => $user->user_type
             ]);
 
+            // Send welcome notification to new user
+            try {
+                $user->notify(new \App\Notifications\WelcomeNotification($user->user_type));
+                Log::info('Welcome notification sent to new user', [
+                    'user_id' => $user->id,
+                    'user_type' => $user->user_type
+                ]);
+            } catch (\Exception $notificationError) {
+                // Log but don't fail registration if notification fails
+                Log::warning('Failed to send welcome notification', [
+                    'user_id' => $user->id,
+                    'error' => $notificationError->getMessage()
+                ]);
+            }
+
             // Generate full URLs for images if they exist
             $userData = $this->generateImageUrls($user);
 
@@ -413,7 +442,23 @@ class AuthenticationController extends Controller
                 $identifierType = 'phone';
             }
 
+            // Rate Limiting / Lockout Check
+            $throttleKey = strtolower($identifier) . '|' . $request->ip();
+            if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($throttleKey, 5)) {
+                $seconds = \Illuminate\Support\Facades\RateLimiter::availableIn($throttleKey);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Too many login attempts. Please try again in ' . ceil($seconds / 60) . ' minutes.',
+                    'error_type' => 'account_locked',
+                    'retry_after' => $seconds
+                ], 429);
+            }
+
             if (!$token = auth('api')->attempt($credentials)) {
+                // Increment failed attempts
+                \Illuminate\Support\Facades\RateLimiter::hit($throttleKey, 300); // Lockout for 5 minutes (300 seconds)
+
+                // Check if user exists to provide more specific error message
                 // Check if user exists to provide more specific error message
                 $user = null;
                 if ($identifierType === 'email') {
@@ -766,35 +811,56 @@ class AuthenticationController extends Controller
     private function verifyGoogleIdToken($idToken)
     {
         try {
-            Log::info('Starting Google token verification', [
+            Log::info('Starting Google token verification with Google API', [
                 'token_length' => strlen($idToken),
                 'token_preview' => substr($idToken, 0, 20) . '...'
             ]);
 
-            // For now, let's use a simpler approach - decode the JWT without verification
-            // In production, you should verify the token with Google's public keys
-            $parts = explode('.', $idToken);
-            if (count($parts) !== 3) {
-                Log::error('Invalid JWT format');
+            // SECURITY FIX: Verify token with Google's tokeninfo endpoint
+            // This validates the signature and ensures the token is authentic
+            $response = \Illuminate\Support\Facades\Http::timeout(10)
+                ->get('https://oauth2.googleapis.com/tokeninfo', [
+                    'id_token' => $idToken
+                ]);
+
+            if (!$response->successful()) {
+                Log::error('Google token verification failed - API returned error', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
                 return false;
             }
 
-            // Decode the payload (middle part)
-            $payload = json_decode(base64_decode(str_replace(['-', '_'], ['+', '/'], $parts[1])), true);
+            $payload = $response->json();
 
-            Log::info('🔍 DEBUG: JWT payload decoded', [
-                'payload' => $payload ? 'SUCCESS' : 'FAILED',
-                'payload_keys' => $payload ? array_keys($payload) : 'No payload',
-                'email' => $payload['email'] ?? 'missing',
-                'sub' => $payload['sub'] ?? 'missing'
-            ]);
-
-            if (!$payload) {
-                Log::error('Failed to decode JWT payload');
+            if (!$payload || isset($payload['error'])) {
+                Log::error('Google token verification failed - invalid response', [
+                    'error' => $payload['error'] ?? 'Unknown error',
+                    'error_description' => $payload['error_description'] ?? ''
+                ]);
                 return false;
             }
 
-            // Check if token is expired
+            // Verify the token is for our application (audience check)
+            $expectedClientId = env('GOOGLE_CLIENT_ID');
+            if ($expectedClientId && isset($payload['aud']) && $payload['aud'] !== $expectedClientId) {
+                Log::error('Google token verification failed - audience mismatch', [
+                    'expected' => $expectedClientId,
+                    'received' => $payload['aud']
+                ]);
+                return false;
+            }
+
+            // Verify issuer
+            $validIssuers = ['accounts.google.com', 'https://accounts.google.com'];
+            if (isset($payload['iss']) && !in_array($payload['iss'], $validIssuers)) {
+                Log::error('Google token verification failed - invalid issuer', [
+                    'issuer' => $payload['iss']
+                ]);
+                return false;
+            }
+
+            // Check if token is expired (Google's API already checks this, but double-check)
             if (isset($payload['exp']) && $payload['exp'] < time()) {
                 Log::error('Google token has expired', [
                     'exp' => $payload['exp'],
@@ -803,22 +869,16 @@ class AuthenticationController extends Controller
                 return false;
             }
 
-            // Extract user information from the token
+            // Extract user information from the verified token
             $googleUser = [
                 'sub' => $payload['sub'] ?? '',
                 'email' => $payload['email'] ?? '',
                 'name' => $payload['name'] ?? '',
                 'given_name' => $payload['given_name'] ?? '',
                 'family_name' => $payload['family_name'] ?? '',
-                'email_verified' => $payload['email_verified'] ?? false,
+                'email_verified' => ($payload['email_verified'] ?? 'false') === 'true',
                 'picture' => $payload['picture'] ?? null
             ];
-
-            // Fetch additional data from Google People API if access token is available
-            $additionalData = $this->fetchGooglePeopleData($idToken);
-            if ($additionalData) {
-                $googleUser = array_merge($googleUser, $additionalData);
-            }
 
             // Validate required fields
             if (empty($googleUser['email']) || empty($googleUser['sub'])) {
@@ -837,7 +897,7 @@ class AuthenticationController extends Controller
                 return false;
             }
 
-            Log::info('Google token verification successful', [
+            Log::info('Google token verification successful (verified with Google API)', [
                 'email' => $googleUser['email'],
                 'sub' => $googleUser['sub'],
                 'name' => $googleUser['name']

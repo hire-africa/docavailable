@@ -29,7 +29,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import BottomNavigation from '../components/BottomNavigation';
 import Icon, { IconName } from '../components/Icon';
 import { RealTimeEventService } from '../services/realTimeEventService';
-import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { Activity, addRealtimeActivity, generateUserActivities } from '../utils/activityUtils';
 
 import AlertDialog from '../components/AlertDialog';
 import CacheManagementModal from '../components/CacheManagementModal';
@@ -181,7 +181,7 @@ export default function PatientDashboard() {
   const [showAppTour, setShowAppTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
   const discoverScrollViewRef = useRef<ScrollView>(null);
-  
+
   // Initialize refs for tour elements
   useEffect(() => {
     // Initialize tab refs
@@ -191,7 +191,7 @@ export default function PatientDashboard() {
         tourTabRefs.current[key] = React.createRef<View>();
       }
     });
-    
+
     // Initialize discover page refs
     const discoverKeys = ['discover-bookmark-btn', 'discover-search-bar', 'discover-doctors-list'];
     discoverKeys.forEach(key => {
@@ -611,6 +611,9 @@ export default function PatientDashboard() {
 
   // Check if appointment is ready for session
   const isAppointmentReadyForSession = (appointment: any) => {
+    // If appointment is already in progress, it's definitely ready
+    if (appointment.status === 'in_progress' || appointment.status === 7) return true;
+
     if (!appointment.date || !appointment.time) return false;
 
     const now = new Date();
@@ -619,12 +622,20 @@ export default function PatientDashboard() {
     const appointmentDate = new Date(year, month - 1, day, hour, minute);
 
     // Session is ready if appointment time has passed and status is confirmed
-    return appointment.status === 'confirmed' && now >= appointmentDate;
+    // Handle both string 'confirmed' and numeric 1
+    const isConfirmed = appointment.status === 'confirmed' || appointment.status === 1;
+    return isConfirmed && now >= appointmentDate;
   };
 
   // Get appointment session status
   const getAppointmentSessionStatus = (appointment: any) => {
-    if (appointment.status !== 'confirmed') return 'pending';
+    // Handle in_progress status explicitly
+    if (appointment.status === 'in_progress' || appointment.status === 7) return 'active';
+
+    // Handle both string 'confirmed' and numeric 1
+    const isConfirmed = appointment.status === 'confirmed' || appointment.status === 1;
+
+    if (!isConfirmed) return 'pending';
     if (isAppointmentReadyForSession(appointment)) return 'ready';
     return 'scheduled';
   };
@@ -2147,10 +2158,11 @@ export default function PatientDashboard() {
             .filter(appt => {
               // Only show confirmed appointments in messages
               const status = appt.status;
-              const isConfirmed =
-                status === 'confirmed' || status === 1; // Only confirmed appointments
+              const isConfirmedOrInProgress =
+                status === 'confirmed' || status === 1 ||
+                status === 'in_progress' || status === 7; // Include in_progress appointments
 
-              return isConfirmed && (
+              return isConfirmedOrInProgress && (
                 !messageSearchQuery ||
                 (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())

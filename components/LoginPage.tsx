@@ -407,15 +407,15 @@ export default function LoginPage() {
                         </View>
 
                         <TouchableOpacity
-                            style={styles.googleButton}
-                            onPress={handleGoogleSignIn}
-                            disabled={loading}
+                            style={[styles.googleButton, styles.googleButtonDisabled]}
+                            onPress={() => { }}
+                            disabled={true}
                         >
                             <View style={styles.googleButtonContent}>
                                 <View style={styles.googleIcon}>
                                     <Text style={styles.googleIconText}>G</Text>
                                 </View>
-                                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                                <Text style={styles.googleButtonText}>Continue with Google (Coming Soon)</Text>
                             </View>
                         </TouchableOpacity>
 
@@ -681,5 +681,9 @@ const styles = StyleSheet.create({
     },
     phoneInput: {
         flex: 1,
+    },
+    googleButtonDisabled: {
+        opacity: 0.6,
+        backgroundColor: '#F5F5F5',
     },
 }); 

@@ -9,21 +9,22 @@ use App\Models\User;
 use App\Models\Subscription;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class DoctorPaymentService
 {
     // Payment amounts in MWK (Malawi) - All session types same rate
     private const MWK_PAYMENT_RATES = [
-        'text' => 4000.00,
-        'audio' => 4000.00,
-        'video' => 4000.00,
+        'text' => 3500.00,
+        'audio' => 3500.00,
+        'video' => 3500.00,
     ];
 
     // Payment amounts in USD (International) - All session types same rate
     private const USD_PAYMENT_RATES = [
-        'text' => 4.00,
-        'audio' => 4.00,
-        'video' => 4.00,
+        'text' => 3.00,
+        'audio' => 3.00,
+        'video' => 3.00,
     ];
 
     /**
@@ -65,7 +66,7 @@ class DoctorPaymentService
             $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $sessionsCount; // FIX: Multiply by sessions count
             $currency = self::getCurrency($doctor);
             $description = "Payment for {$sessionsCount} text session(s) with " . $session->patient->first_name . " " . $session->patient->last_name;
-            
+
             // Get payment transaction ID from patient's subscription
             $paymentTransactionId = null;
             $paymentGateway = null;
@@ -126,7 +127,7 @@ class DoctorPaymentService
             $currency = self::getCurrency($doctor);
 
             $description = "Payment for {$sessionType} appointment with " . $appointment->patient->first_name . " " . $appointment->patient->last_name;
-            
+
             // Get payment transaction ID from patient's subscription
             $paymentTransactionId = null;
             $paymentGateway = null;
@@ -223,11 +224,11 @@ class DoctorPaymentService
             $elapsedMinutes = $session->getElapsedMinutes();
             $autoDeductions = floor($elapsedMinutes / 10);
             $manualDeduction = $isManualEnd ? 1 : 0;
-            
+
             $result['auto_deductions'] = $autoDeductions;
             $result['manual_deduction'] = $manualDeduction;
             $result['patient_sessions_deducted'] = $sessionsToDeduct;
-            
+
             // Process doctor payment - FIX: Pass sessions count
             $doctorPaymentSuccess = $this->processTextSessionPayment($session, $sessionsToDeduct);
             $result['doctor_payment_success'] = $doctorPaymentSuccess;
@@ -320,7 +321,7 @@ class DoctorPaymentService
             }
 
             $subscription = $patient->subscription;
-            
+
             // Check if subscription is active
             if (!$subscription->isActive) {
                 \Log::warning('Patient subscription is not active for text session deduction', [
@@ -343,7 +344,7 @@ class DoctorPaymentService
 
             // Deduct one text session
             $subscription->decrement('text_sessions_remaining');
-            
+
             \Log::info('Successfully deducted text session from patient subscription', [
                 'session_id' => $session->id,
                 'patient_id' => $session->patient_id,
@@ -386,7 +387,7 @@ class DoctorPaymentService
             }
 
             $subscription = $patient->subscription;
-            
+
             // Check if subscription is active
             if (!$subscription->isActive) {
                 \Log::warning('Patient subscription is not active for appointment deduction', [
@@ -400,7 +401,7 @@ class DoctorPaymentService
             // Determine which session type to deduct based on appointment type
             $appointmentType = $appointment->appointment_type ?? 'text';
             $sessionsRemaining = 0;
-            
+
             // Use transaction for atomic update
             \DB::transaction(function () use ($subscription, $appointment, $appointmentType, &$sessionsRemaining) {
                 switch ($appointmentType) {
@@ -411,7 +412,7 @@ class DoctorPaymentService
                         $subscription->decrement('text_sessions_remaining');
                         $sessionsRemaining = $subscription->text_sessions_remaining;
                         break;
-                        
+
                     case 'audio':
                         if ($subscription->voice_calls_remaining <= 0) {
                             throw new \Exception('Insufficient voice calls');
@@ -419,7 +420,7 @@ class DoctorPaymentService
                         $subscription->decrement('voice_calls_remaining');
                         $sessionsRemaining = $subscription->voice_calls_remaining;
                         break;
-                        
+
                     case 'video':
                         if ($subscription->video_calls_remaining <= 0) {
                             throw new \Exception('Insufficient video calls');
@@ -427,15 +428,15 @@ class DoctorPaymentService
                         $subscription->decrement('video_calls_remaining');
                         $sessionsRemaining = $subscription->video_calls_remaining;
                         break;
-                        
+
                     default:
                         throw new \Exception('Unknown appointment type');
                 }
-                
+
                 // Mark appointment as deducted
                 $appointment->update(['sessions_deducted' => 1]);
             });
-            
+
             \Log::info('Successfully deducted session from patient subscription for appointment', [
                 'appointment_id' => $appointment->id,
                 'patient_id' => $appointment->patient_id,
@@ -471,7 +472,7 @@ class DoctorPaymentService
             }
 
             $subscription = $patient->subscription;
-            
+
             // Check if subscription is active
             if (!$subscription->isActive) {
                 \Log::warning('Patient subscription is not active for multiple text session deduction', [
@@ -506,7 +507,7 @@ class DoctorPaymentService
 
             // Deduct the specified number of sessions
             $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
-            
+
             \Log::info('Successfully deducted multiple text sessions from patient subscription', [
                 'session_id' => $session->id,
                 'patient_id' => $patient->id,
@@ -534,18 +535,18 @@ class DoctorPaymentService
         try {
             $elapsedMinutes = $session->getElapsedMinutes();
             $autoDeductions = floor($elapsedMinutes / 10);
-            
+
             // FIX: Check if we've already processed these deductions
             $alreadyProcessed = $session->auto_deductions_processed ?? 0;
             $newDeductions = $autoDeductions - $alreadyProcessed;
-            
+
             // Only process if there are new deductions to make
             if ($newDeductions > 0) {
                 // FIX: Use database transaction with atomic updates to prevent race conditions
                 return \DB::transaction(function () use ($session, $newDeductions, $autoDeductions, $alreadyProcessed, $elapsedMinutes) {
                     // Refresh session to get latest state inside transaction
                     $freshSession = TextSession::where('id', $session->id)->lockForUpdate()->first();
-                    
+
                     if (!$freshSession) {
                         return false;
                     }
@@ -562,7 +563,7 @@ class DoctorPaymentService
                     if ($patient && $patient->subscription) {
                         // Lock subscription for update to prevent race conditions
                         $subscription = $patient->subscription()->lockForUpdate()->first();
-                        
+
                         if (!$subscription) {
                             \Log::warning('Subscription not found during auto-deduction', [
                                 'session_id' => $freshSession->id,
@@ -570,7 +571,7 @@ class DoctorPaymentService
                             ]);
                             return false;
                         }
-                        
+
                         // SAFETY CHECK: Prevent negative sessions with locked record
                         if ($subscription->text_sessions_remaining < $freshNewDeductions) {
                             \Log::warning('Insufficient sessions remaining for auto-deduction', [
@@ -582,18 +583,18 @@ class DoctorPaymentService
                             ]);
                             return false;
                         }
-                        
+
                         // Atomic deduction from subscription
                         $subscription->text_sessions_remaining = max(0, $subscription->text_sessions_remaining - $freshNewDeductions);
                         $subscription->save();
-                        
+
                         // Award doctor earnings for new deductions only
                         $doctor = $freshSession->doctor;
                         if ($doctor) {
                             $wallet = DoctorWallet::getOrCreate($doctor->id);
                             $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $freshNewDeductions;
                             $wallet->credit($paymentAmount, "Auto-deduction for session {$freshSession->id} ({$freshNewDeductions} sessions)");
-                            
+
                             // Send notification to doctor about payment
                             $notificationService = new NotificationService();
                             $notificationService->sendWalletNotification(
@@ -602,13 +603,13 @@ class DoctorPaymentService
                                 "You received {$paymentAmount} for {$freshNewDeductions} session(s) from auto-deduction"
                             );
                         }
-                        
+
                         // Update session to track processed deductions
                         $freshSession->update([
                             'auto_deductions_processed' => $autoDeductions,
                             'sessions_used' => $freshSession->sessions_used + $freshNewDeductions
                         ]);
-                        
+
                         \Log::info("Auto-deducted {$freshNewDeductions} new sessions (total: {$autoDeductions})", [
                             'session_id' => $freshSession->id,
                             'elapsed_minutes' => $elapsedMinutes,
@@ -617,16 +618,16 @@ class DoctorPaymentService
                             'new_deductions' => $freshNewDeductions,
                             'sessions_remaining_after' => $subscription->text_sessions_remaining,
                         ]);
-                        
+
                         return true;
                     }
-                    
+
                     return false;
                 });
             }
-            
+
             return true; // No new deductions needed
-            
+
         } catch (\Exception $e) {
             \Log::error('Failed to process auto-deduction: ' . $e->getMessage(), [
                 'session_id' => $session->id,
@@ -662,7 +663,7 @@ class DoctorPaymentService
     {
         $rates = self::getPaymentRates($doctor);
         $currency = self::getCurrency($doctor);
-        
+
         return [
             'text' => $rates['text'],
             'audio' => $rates['audio'],
@@ -685,7 +686,7 @@ class DoctorPaymentService
                 ]);
                 return false;
             }
-            
+
             if (!$patient->subscription) {
                 \Log::error('No subscription found for manual end deduction', [
                     'session_id' => $session->id,
@@ -693,7 +694,7 @@ class DoctorPaymentService
                 ]);
                 return false;
             }
-            
+
             $subscription = $patient->subscription;
             if (!$subscription->isActive) {
                 \Log::warning('Inactive subscription for manual end deduction - allowing end anyway', [
@@ -702,10 +703,10 @@ class DoctorPaymentService
                 ]);
                 // Continue with deduction even if subscription is inactive
             }
-            
+
             // Calculate sessions to deduct (accounts for auto-deductions already processed)
             $sessionsToDeduct = $session->getSessionsToDeduct(true);
-            
+
             if ($sessionsToDeduct <= 0) {
                 \Log::info('No sessions to deduct for manual end (already processed via auto-deductions)', [
                     'session_id' => $session->id,
@@ -715,7 +716,7 @@ class DoctorPaymentService
                 ]);
                 return true; // Already deducted, nothing to do
             }
-            
+
             // More flexible safety check - allow ending even with 0 sessions
             if ($subscription->text_sessions_remaining < $sessionsToDeduct) {
                 \Log::warning('Insufficient sessions remaining - deducting what we can', [
@@ -727,18 +728,18 @@ class DoctorPaymentService
                 // Deduct what we can
                 $sessionsToDeduct = max(0, $subscription->text_sessions_remaining);
             }
-            
+
             // Deduct sessions (only what hasn't been auto-deducted)
             if ($sessionsToDeduct > 0) {
                 $subscription->decrement('text_sessions_remaining', $sessionsToDeduct);
-                
+
                 // Award doctor earnings for remaining sessions
                 $doctor = $session->doctor;
                 if ($doctor) {
                     $wallet = DoctorWallet::getOrCreate($doctor->id);
                     $paymentAmount = self::getPaymentAmountForDoctor('text', $doctor) * $sessionsToDeduct;
                     $currency = self::getCurrency($doctor);
-                    
+
                     $wallet->credit(
                         $paymentAmount,
                         "Manual end payment for session {$session->id} ({$sessionsToDeduct} session(s))",
@@ -759,7 +760,7 @@ class DoctorPaymentService
                     );
                 }
             }
-            
+
             \Log::info("Manual end deduction processed", [
                 'session_id' => $session->id,
                 'patient_id' => $session->patient_id,
@@ -769,9 +770,9 @@ class DoctorPaymentService
                 'sessions_remaining_after' => $subscription->text_sessions_remaining,
                 'end_type' => 'manual'
             ]);
-            
+
             return true;
-            
+
         } catch (\Exception $e) {
             \Log::error('Failed to process manual end deduction: ' . $e->getMessage(), [
                 'session_id' => $session->id,
@@ -780,4 +781,4 @@ class DoctorPaymentService
             return false;
         }
     }
-} 
+}

@@ -1,10 +1,11 @@
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     Dimensions,
     Platform,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Switch,
     Text,
@@ -14,6 +15,8 @@ import {
 import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import { useAuth } from '../contexts/AuthContext';
+import { useCustomTheme } from '../hooks/useCustomTheme';
+import { useThemedColors } from '../hooks/useThemedColors';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -43,10 +46,10 @@ interface Settings {
 export default function DoctorSettings() {
     return (
         <>
-            <Stack.Screen 
-                options={{ 
-                    headerShown: false 
-                }} 
+            <Stack.Screen
+                options={{
+                    headerShown: false
+                }}
             />
             <DoctorSettingsContent />
         </>
@@ -55,6 +58,9 @@ export default function DoctorSettings() {
 
 function DoctorSettingsContent() {
     const { user, userData } = useAuth();
+    const colors = useThemedColors();
+    const { isDark } = useCustomTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     const [loading, setLoading] = useState(false);
     const [settings, setSettings] = useState<Settings>({
         notifications: {
@@ -97,26 +103,28 @@ function DoctorSettingsContent() {
             ]);
 
             if (notificationsResponse.success && notificationsResponse.data) {
+                const data = notificationsResponse.data as any;
                 setSettings(prev => ({
                     ...prev,
                     notifications: {
-                        appointments: notificationsResponse.data.appointments?.reminders ?? true,
-                        messages: notificationsResponse.data.consultation?.newMessages ?? true,
-                        system: notificationsResponse.data.system?.securityAlerts ?? true,
+                        appointments: data.appointments?.reminders ?? true,
+                        messages: data.consultation?.newMessages ?? true,
+                        system: data.system?.securityAlerts ?? true,
                     }
                 }));
             }
 
             if (privacyResponse.success && privacyResponse.data) {
+                const data = privacyResponse.data as any;
                 setSettings(prev => ({
                     ...prev,
                     privacy: {
-                        profileVisibility: privacyResponse.data.profileVisibility?.showToPatients ?? true,
-                        dataSharing: privacyResponse.data.dataSharing?.allowAnalytics ?? true,
+                        profileVisibility: data.profileVisibility?.showToPatients ?? true,
+                        dataSharing: data.dataSharing?.allowAnalytics ?? true,
                     },
                     security: {
-                        loginNotifications: privacyResponse.data.security?.loginNotifications ?? true,
-                        sessionTimeout: privacyResponse.data.security?.sessionTimeout ?? 30,
+                        loginNotifications: data.security?.loginNotifications ?? true,
+                        sessionTimeout: data.security?.sessionTimeout ?? 30,
                     }
                 }));
             }
@@ -175,12 +183,12 @@ function DoctorSettingsContent() {
         const keys = path.split('.');
         const newSettings = { ...settings };
         let current = newSettings;
-        
+
         for (let i = 0; i < keys.length - 1; i++) {
             current = current[keys[i]];
         }
         current[keys[keys.length - 1]] = value;
-        
+
         setSettings(newSettings);
         saveSettings(newSettings);
     };
@@ -195,13 +203,14 @@ function DoctorSettingsContent() {
 
     return (
         <View style={styles.container}>
+            <StatusBar backgroundColor={colors.background} barStyle={isDark ? "light-content" : "dark-content"} />
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.backButton}
                     onPress={() => router.back()}
                 >
-                    <Icon name="arrow-left" size={20} color="#222" />
+                    <Icon name="back" size={20} color={colors.text} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Settings</Text>
                 <View style={styles.placeholder} />
@@ -211,7 +220,7 @@ function DoctorSettingsContent() {
                 {/* Notifications Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Notifications</Text>
-                    
+
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
                             <Icon name="calendar" size={20} color="#4CAF50" />
@@ -264,7 +273,7 @@ function DoctorSettingsContent() {
                 {/* Privacy Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Privacy & Security</Text>
-                    
+
                     <View style={styles.settingItem}>
                         <View style={styles.settingInfo}>
                             <Icon name="eye" size={20} color="#4CAF50" />
@@ -303,20 +312,20 @@ function DoctorSettingsContent() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.backgroundTertiary,
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F5F7FA',
+        backgroundColor: colors.backgroundTertiary,
     },
     loadingText: {
         fontSize: 16,
-        color: '#666',
+        color: colors.textSecondary,
     },
     header: {
         flexDirection: 'row',
@@ -324,20 +333,20 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 16,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.card,
         borderBottomWidth: 1,
-        borderBottomColor: '#E0E0E0',
+        borderBottomColor: colors.border,
         marginTop: 20,
     },
     backButton: {
         padding: 8,
         borderRadius: 8,
-        backgroundColor: '#F8F9FA',
+        backgroundColor: colors.surface,
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#222',
+        color: colors.text,
     },
     placeholder: {
         width: 40,
@@ -352,14 +361,14 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#222',
+        color: colors.text,
         marginBottom: 16,
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.card,
         borderRadius: 12,
         padding: 16,
         marginBottom: 8,
@@ -384,18 +393,18 @@ const styles = StyleSheet.create({
     settingLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: '#222',
+        color: colors.text,
         marginBottom: 2,
     },
     settingDescription: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
     },
     dangerItem: {
         borderWidth: 1,
-        borderColor: '#FFE6E6',
+        borderColor: colors.error + '40',
     },
     dangerText: {
-        color: '#FF3B30',
+        color: colors.error,
     },
 });

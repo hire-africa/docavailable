@@ -64,18 +64,43 @@ export function generateUserActivities(
     if (appointments && appointments.length > 0) {
       appointments.forEach((appointment, index) => {
         if (index < 5) { // Limit to recent 5 appointments
-          const status = appointment.status === 'confirmed' ? 'Confirmed' : 
-                        appointment.status === 'pending' ? 'Pending' : 
-                        appointment.status === 'cancelled' ? 'Cancelled' : 'Scheduled';
-          
+          // Handle both string and numeric statuses
+          const s = appointment.status;
+          const isConfirmed = s === 'confirmed' || s === 1;
+          const isPending = s === 'pending' || s === 0;
+          const isCancelled = s === 'cancelled' || s === 2;
+          const isInProgress = s === 'in_progress' || s === 7;
+
+          let statusLabel = 'Scheduled';
+          let icon = 'calendar';
+          let color = '#2196F3';
+
+          if (isInProgress) {
+            statusLabel = 'In Progress';
+            icon = 'calendarCheck';
+            color = '#4CAF50';
+          } else if (isConfirmed) {
+            statusLabel = 'Confirmed';
+            icon = 'calendarCheck';
+            color = '#4CAF50';
+          } else if (isPending) {
+            statusLabel = 'Pending';
+            icon = 'clock';
+            color = '#FF9800';
+          } else if (isCancelled) {
+            statusLabel = 'Cancelled';
+            icon = 'times';
+            color = '#F44336';
+          }
+
           activities.push({
             id: `appointment_${appointment.id || index}`,
             type: 'appointment',
-            title: `${status} Appointment`,
+            title: `${statusLabel} Appointment`,
             description: `Dr. ${appointment.doctor_name || 'Doctor'} - ${new Date(appointment.appointment_date || Date.now()).toLocaleDateString()}`,
             timestamp: new Date(appointment.created_at || Date.now()),
-            icon: status === 'Confirmed' ? 'calendarCheck' : status === 'Pending' ? 'clock' : status === 'Cancelled' ? 'times' : 'calendar',
-            color: status === 'Confirmed' ? '#4CAF50' : status === 'Pending' ? '#FF9800' : status === 'Cancelled' ? '#F44336' : '#2196F3'
+            icon: icon,
+            color: color
           });
         }
       });
@@ -101,9 +126,9 @@ export function generateUserActivities(
     if (appointments && appointments.length > 0) {
       appointments.forEach((appointment, index) => {
         if (index < 5) { // Limit to recent 5 appointments
-          const status = appointment.status === 'confirmed' ? 'Confirmed' : 
-                        appointment.status === 'pending' ? 'Pending' : 'New Request';
-          
+          const status = appointment.status === 'confirmed' ? 'Confirmed' :
+            appointment.status === 'pending' ? 'Pending' : 'New Request';
+
           activities.push({
             id: `appointment_${appointment.id || index}`,
             type: 'appointment',

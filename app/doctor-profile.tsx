@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     Dimensions,
     Platform,
@@ -14,6 +14,8 @@ import { apiService } from '../app/services/apiService';
 import { Icon } from '../components/Icon';
 import ProfilePictureDisplay from '../components/ProfilePictureDisplay';
 import { useAuth } from '../contexts/AuthContext';
+import { useCustomTheme } from '../hooks/useCustomTheme';
+import { useThemedColors } from '../hooks/useThemedColors';
 
 const { width } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
@@ -23,6 +25,9 @@ const isLargeScreen = width > 768;
 export default function DoctorProfile() {
     const { user, userData, refreshUserData } = useAuth();
     const insets = useSafeAreaInsets();
+    const colors = useThemedColors();
+    const { isDark } = useCustomTheme();
+    const styles = useMemo(() => createStyles(colors), [colors]);
     const [appointmentData, setAppointmentData] = useState<any[]>([]);
     const [weeklyData, setWeeklyData] = useState<any[]>([]);
     const [timeFrame, setTimeFrame] = useState<'monthly' | 'weekly'>('monthly');
@@ -42,7 +47,7 @@ export default function DoctorProfile() {
                 console.error('DoctorProfile: Error refreshing user data:', error);
             }
         };
-        
+
         refreshData();
     }, []);
 
@@ -56,7 +61,7 @@ export default function DoctorProfile() {
     const fetchAppointmentData = async () => {
         try {
             setLoading(true);
-            
+
             // Fetch monthly appointment data
             const monthlyResponse = await apiService.get('/appointments/statistics/monthly');
             if (monthlyResponse.success && Array.isArray(monthlyResponse.data)) {
@@ -184,7 +189,7 @@ export default function DoctorProfile() {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top','bottom']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}>
                 <View style={[styles.content, { maxWidth }]}>
                     {/* Header */}
@@ -295,7 +300,7 @@ export default function DoctorProfile() {
                     {/* Statistics Section */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Consultation Statistics</Text>
-                        
+
                         {/* Time Frame Toggle */}
                         <View style={styles.toggleContainer}>
                             <TouchableOpacity
@@ -367,10 +372,10 @@ export default function DoctorProfile() {
     );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: colors.backgroundTertiary,
     },
     scrollContent: {
         flexGrow: 1,
@@ -395,7 +400,7 @@ const styles = StyleSheet.create({
         left: 0,
         padding: 10,
         borderRadius: 8,
-        backgroundColor: '#fff',
+        backgroundColor: colors.card,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -405,14 +410,14 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#333',
+        color: colors.text,
     },
     editButton: {
         position: 'absolute',
         right: 0,
         padding: 10,
         borderRadius: 8,
-        backgroundColor: '#4CAF50',
+        backgroundColor: colors.primary,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -423,7 +428,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 30,
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: colors.card,
         borderRadius: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -437,13 +442,13 @@ const styles = StyleSheet.create({
     name: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: '#333',
+        color: colors.text,
         marginBottom: 5,
         textAlign: 'center',
     },
     specialization: {
         fontSize: 16,
-        color: '#666',
+        color: colors.textSecondary,
         marginBottom: 10,
         textAlign: 'center',
     },
@@ -455,8 +460,8 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     specializationChip: {
-        backgroundColor: '#E8F5E9',
-        borderColor: '#C8E6C9',
+        backgroundColor: colors.primaryLight + '20',
+        borderColor: colors.primaryLight,
         borderWidth: 1,
         paddingHorizontal: 10,
         paddingVertical: 6,
@@ -465,7 +470,7 @@ const styles = StyleSheet.create({
         marginVertical: 4,
     },
     specializationChipText: {
-        color: '#2E7D32',
+        color: colors.primary,
         fontSize: 14,
         fontWeight: '600',
     },
@@ -482,7 +487,7 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: 25,
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: colors.card,
         borderRadius: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -493,7 +498,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         fontSize: 20,
         fontWeight: 'bold',
-        color: '#333',
+        color: colors.text,
         marginBottom: 15,
     },
     infoGrid: {
@@ -506,23 +511,23 @@ const styles = StyleSheet.create({
     },
     infoText: {
         fontSize: 16,
-        color: '#666',
+        color: colors.textSecondary,
         flex: 1,
     },
     bioContainer: {
         marginTop: 15,
         padding: 15,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: colors.backgroundSecondary,
         borderRadius: 8,
     },
     bioText: {
         fontSize: 14,
-        color: '#666',
+        color: colors.textSecondary,
         lineHeight: 20,
     },
     toggleContainer: {
         flexDirection: 'row',
-        backgroundColor: '#f0f0f0',
+        backgroundColor: colors.backgroundTertiary,
         borderRadius: 8,
         padding: 4,
         marginBottom: 20,
@@ -535,12 +540,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     toggleButtonActive: {
-        backgroundColor: '#4CAF50',
+        backgroundColor: colors.primary,
     },
     toggleText: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#666',
+        color: colors.textSecondary,
     },
     toggleTextActive: {
         color: '#fff',
@@ -551,7 +556,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: 16,
-        color: '#666',
+        color: colors.textSecondary,
     },
     statsContainer: {
         flexDirection: 'row',
@@ -561,19 +566,19 @@ const styles = StyleSheet.create({
     statCard: {
         flex: 1,
         padding: 20,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: colors.backgroundSecondary,
         borderRadius: 12,
         alignItems: 'center',
     },
     statValue: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#4CAF50',
+        color: colors.primary,
         marginBottom: 5,
     },
     statLabel: {
         fontSize: 12,
-        color: '#666',
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     chartContainer: {
@@ -592,18 +597,18 @@ const styles = StyleSheet.create({
     },
     bar: {
         width: 20,
-        backgroundColor: '#4CAF50',
+        backgroundColor: colors.primary,
         borderRadius: 10,
         marginBottom: 8,
     },
     barLabel: {
         fontSize: 10,
-        color: '#666',
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     barValue: {
         fontSize: 10,
-        color: '#333',
+        color: colors.text,
         fontWeight: '600',
     },
     noDataContainer: {
@@ -612,7 +617,7 @@ const styles = StyleSheet.create({
     },
     noDataText: {
         fontSize: 16,
-        color: '#666',
+        color: colors.textSecondary,
         marginTop: 10,
     },
 }); 

@@ -4,7 +4,6 @@ import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { environment } from '../../config/environment';
 import {
   ActivityIndicator,
   Animated,
@@ -33,6 +32,7 @@ import SessionHeader from '../../components/SessionHeader';
 import { SwipeableMessage } from '../../components/SwipeableMessage';
 import VideoCallModal from '../../components/VideoCallModal';
 import VoiceMessagePlayer from '../../components/VoiceMessagePlayer';
+import { environment } from '../../config/environment';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
@@ -843,8 +843,15 @@ export default function ChatPage() {
   // Helper function to check if current time is within appointment time
   // IMPORTANT: This only affects scheduled appointments, NOT instant sessions
   const checkAppointmentTime = useCallback(() => {
-    // Skip time checking for instant sessions - they work differently
-    if (isInstantSession) {
+    // Skip time checking for instant sessions or if appointment is already in progress/active
+    // This ensures that if the status is active (7), we allow access regardless of time
+    const status = chatInfo?.status;
+    const isActiveStatus = status === 'in_progress' || status === 'active' || status === '7' || status === 7;
+
+    if (isInstantSession || isActiveStatus) {
+      if (isActiveStatus) {
+        console.log('✅ [AppointmentTime] Appointment is explicitly active/in_progress, bypassing time check');
+      }
       setIsAppointmentTime(true);
       setTimeUntilAppointment('');
       return;
@@ -1084,7 +1091,7 @@ export default function ChatPage() {
   // Fetch and sync session activation time from backend for instant sessions
   useEffect(() => {
     if (!isInstantSession || !sessionId || !hasDoctorResponded || sessionStartTime) return;
-    
+
     const fetchActivationTime = async () => {
       try {
         console.log('🔍 [SessionTimer] Fetching activation time from backend for session:', sessionId);
@@ -1098,14 +1105,14 @@ export default function ChatPage() {
         console.error('❌ [SessionTimer] Failed to fetch activation time:', error);
       }
     };
-    
+
     fetchActivationTime();
   }, [isInstantSession, sessionId, hasDoctorResponded, sessionStartTime]);
 
   // Calculate elapsed time from backend timestamp when session becomes active
   useEffect(() => {
     if (!isSessionActive) return;
-    
+
     // For instant sessions, calculate from sessionStartTime
     if (isInstantSession && sessionStartTime) {
       const elapsed = Math.floor((Date.now() - sessionStartTime.getTime()) / 1000);
@@ -2148,7 +2155,7 @@ export default function ChatPage() {
             // For text sessions, fetch session info
             const sessionId = appointmentId.replace('text_session_', '');
             console.log('📊 [InstantSession] Making API call to:', `/text-sessions/${sessionId}`);
-            
+
             // Wrap in try-catch to handle HTML error responses gracefully
             let sessionResponse;
             try {
@@ -2240,15 +2247,15 @@ export default function ChatPage() {
               // Extract names with better fallbacks
               const rawDoctorName = sessionData.doctor?.display_name ||
                 sessionData.doctor?.first_name && sessionData.doctor?.last_name
-                  ? `${sessionData.doctor.first_name} ${sessionData.doctor.last_name}`.trim()
-                  : sessionData.doctor?.first_name || sessionData.doctor?.last_name || 'Doctor';
-              
+                ? `${sessionData.doctor.first_name} ${sessionData.doctor.last_name}`.trim()
+                : sessionData.doctor?.first_name || sessionData.doctor?.last_name || 'Doctor';
+
               const doctorName = isPatient ? withDoctorPrefix(rawDoctorName) : rawDoctorName;
-              
+
               const patientName = sessionData.patient?.display_name ||
                 sessionData.patient?.first_name && sessionData.patient?.last_name
-                  ? `${sessionData.patient.first_name} ${sessionData.patient.last_name}`.trim()
-                  : sessionData.patient?.first_name || sessionData.patient?.last_name || 'Patient';
+                ? `${sessionData.patient.first_name} ${sessionData.patient.last_name}`.trim()
+                : sessionData.patient?.first_name || sessionData.patient?.last_name || 'Patient';
 
               console.log('📊 [Chat] Setting chat info with names:', {
                 isPatient,
@@ -2302,25 +2309,25 @@ export default function ChatPage() {
                 // Try to get the name from other fields or use a fallback
                 if (isPatient) {
                   // If current user is patient, other participant is doctor
-                  const doctorName = infoResponse.data?.doctor_name || 
-                                   infoResponse.data?.doctor_display_name ||
-                                   (infoResponse.data?.doctor_first_name && infoResponse.data?.doctor_last_name
-                                     ? `${infoResponse.data.doctor_first_name} ${infoResponse.data.doctor_last_name}`
-                                     : 'Doctor');
+                  const doctorName = infoResponse.data?.doctor_name ||
+                    infoResponse.data?.doctor_display_name ||
+                    (infoResponse.data?.doctor_first_name && infoResponse.data?.doctor_last_name
+                      ? `${infoResponse.data.doctor_first_name} ${infoResponse.data.doctor_last_name}`
+                      : 'Doctor');
                   chatInfoData.other_participant_name = withDoctorPrefix(doctorName);
                 } else {
                   // If current user is doctor, other participant is patient
                   const patientName = infoResponse.data?.patient_name ||
-                                    infoResponse.data?.patient_display_name ||
-                                    (infoResponse.data?.patient_first_name && infoResponse.data?.patient_last_name
-                                      ? `${infoResponse.data.patient_first_name} ${infoResponse.data.patient_last_name}`
-                                      : 'Patient');
+                    infoResponse.data?.patient_display_name ||
+                    (infoResponse.data?.patient_first_name && infoResponse.data?.patient_last_name
+                      ? `${infoResponse.data.patient_first_name} ${infoResponse.data.patient_last_name}`
+                      : 'Patient');
                   chatInfoData.other_participant_name = patientName;
                 }
               } else if (isPatient && chatInfoData.other_participant_name && chatInfoData.other_participant_name !== 'User') {
                 // Only add doctor prefix if it's not already there and not "User"
                 if (!chatInfoData.other_participant_name.startsWith('Dr.') && !chatInfoData.other_participant_name.startsWith('Dr ')) {
-                chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
+                  chatInfoData.other_participant_name = withDoctorPrefix(chatInfoData.other_participant_name);
                 }
               }
 
@@ -3043,7 +3050,7 @@ export default function ChatPage() {
       setEndingSession(false);
       setSessionEnded(true);
       setShowRatingModal(true); // Show immediately, no setTimeout needed
-      
+
       console.log('✅ [End Session] UI updated immediately - rating modal shown');
 
       // Now do backend call and message retrieval in background (completely non-blocking, fire and forget)
@@ -3079,7 +3086,7 @@ export default function ChatPage() {
         (async () => {
           // Use current messages from state (most reliable - already loaded and complete)
           let archiveMessages: ExtendedChatMessage[] = [...messages];
-          
+
           // Fallback: Try to get additional messages from WebRTC/API if available
           // But prioritize current state messages
           try {
@@ -3090,7 +3097,7 @@ export default function ChatPage() {
                 console.log('📦 [End Session] Retrieved messages from WebRTC service:', archiveMessages.length);
               }
             }
-            
+
             // If still no messages, try API as last resort
             if (archiveMessages.length === 0) {
               try {
@@ -3113,7 +3120,7 @@ export default function ChatPage() {
             const cleanedMessages = archiveMessages.map((m: any) => {
               // CRITICAL: Preserve FULL URLs for voice/image messages
               let mediaUrl = m.server_media_url || m.media_url || m.audio_url || m.voice_url || null;
-              
+
               // FORCE full URL for voice messages if we have any URL
               if ((m.message_type === 'voice' || m.message_type === 'audio') && mediaUrl) {
                 // If it's a relative URL, convert to full URL NOW before saving
@@ -3126,7 +3133,7 @@ export default function ChatPage() {
                   });
                 }
               }
-              
+
               const cleaned: any = {
                 id: m.id || m.temp_id || `msg_${Date.now()}_${Math.random()}`,
                 message: m.message || '',
@@ -3139,14 +3146,14 @@ export default function ChatPage() {
                 reactions: m.reactions || null,
                 replyTo: m.replyTo || null,
               };
-              
+
               if (m.temp_id) {
                 cleaned.temp_id = m.temp_id;
               }
-              
+
               return cleaned;
             });
-            
+
             console.log('📦 [End Session] Saving chat locally for offline access:', {
               messageCount: cleanedMessages.length,
               hasMediaMessages: cleanedMessages.filter(m => m.media_url).length,
@@ -3157,24 +3164,24 @@ export default function ChatPage() {
             const isPatientUser = user?.user_type === 'patient';
             const patientId = isPatientUser ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
             const doctorId = isPatientUser ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
-            
+
             // Get names - if current user is patient, other participant is doctor, and vice versa
-            const patientName = isPatientUser 
+            const patientName = isPatientUser
               ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
-              : (textSessionInfo?.patient?.display_name || 
-                 `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
-                 chatInfo?.other_participant_name || 'Patient');
-            
+              : (textSessionInfo?.patient?.display_name ||
+                `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+                chatInfo?.other_participant_name || 'Patient');
+
             const doctorName = isPatientUser
-              ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
-                 `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+              ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name ||
+                `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
               : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
 
             const endedSession: EndedSession = {
               appointment_id: getNumericAppointmentId(),
               doctor_id: doctorId,
               doctor_name: doctorName,
-              doctor_profile_picture_url: isPatientUser 
+              doctor_profile_picture_url: isPatientUser
                 ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
                 : (user?.profile_picture_url || user?.profile_picture),
               doctor_profile_picture: isPatientUser
@@ -3204,7 +3211,7 @@ export default function ChatPage() {
                 });
               } catch (e: any) {
                 console.error('❌ [End Session] Failed to store chat locally:', e);
-                
+
                 // Retry up to 3 times with exponential backoff
                 if (retryCount < 3) {
                   const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
@@ -3217,7 +3224,7 @@ export default function ChatPage() {
                 }
               }
             };
-            
+
             // Start storing (non-blocking)
             storeSession();
           } else {
@@ -3228,7 +3235,7 @@ export default function ChatPage() {
 
       // Clear messages in background (non-blocking) - but don't try to refresh status
       // The session is ended, so no need to fetch more data from backend
-        if (webrtcChatService) {
+      if (webrtcChatService) {
         setTimeout(() => {
           console.log('🧹 Clearing messages from WebRTC service after manual end.');
           webrtcChatService.clearMessages().catch((e: any) => {
@@ -3239,7 +3246,7 @@ export default function ChatPage() {
           webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
             console.error('❌ [End Session] Failed to send session end notification:', error);
           });
-          
+
           // DON'T call requestSessionStatus() - session is ended, no need to fetch status
           // This was causing the freeze when backend returns HTML error
         }, 100);
@@ -3253,7 +3260,7 @@ export default function ChatPage() {
       setEndingSession(false);
       setSessionEnded(true);
       setShowRatingModal(true); // Show immediately, no setTimeout needed
-      
+
       console.log('✅ [End Session] UI updated despite error - rating modal shown');
 
       // Even if there's an error, try to store the session locally in background
@@ -3265,68 +3272,68 @@ export default function ChatPage() {
           try {
             if (webrtcChatService) {
               archiveMessages = await webrtcChatService.getMessages();
-            console.log('📦 [End Session Error] Retrieved messages from WebRTC service:', archiveMessages.length);
-          }
-        } catch (webrtcError) {
-          console.warn('⚠️ [End Session Error] Failed to get messages from WebRTC:', webrtcError);
-        }
-        
-        // Fallback: try backend API
-        if (archiveMessages.length === 0) {
-          try {
-            const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
-            if (messagesResponse.success && messagesResponse.data) {
-              archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
-              console.log('📦 [End Session Error] Retrieved messages from backend API:', archiveMessages.length);
+              console.log('📦 [End Session Error] Retrieved messages from WebRTC service:', archiveMessages.length);
             }
-          } catch (apiError) {
-            console.warn('⚠️ [End Session Error] Failed to get messages from API:', apiError);
+          } catch (webrtcError) {
+            console.warn('⚠️ [End Session Error] Failed to get messages from WebRTC:', webrtcError);
           }
-        }
-        
-        const cleanedMessages = archiveMessages.map(m => {
-          const { temp_id, ...rest } = m as any;
-          return { ...rest, delivery_status: rest.delivery_status || 'sent' };
-        });
-        
-        console.log('📦 [End Session Error] Cleaned messages count:', cleanedMessages.length);
 
-        const isPatient = user?.user_type === 'patient';
-        const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
-        const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
-        
-        const patientName = isPatient 
-          ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
-          : (textSessionInfo?.patient?.display_name || 
-             `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
-             chatInfo?.other_participant_name || 'Patient');
-        
-        const doctorName = isPatient
-          ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
-             `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
-          : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+          // Fallback: try backend API
+          if (archiveMessages.length === 0) {
+            try {
+              const messagesResponse = await apiService.get(`/chat/${appointmentId}/messages`);
+              if (messagesResponse.success && messagesResponse.data) {
+                archiveMessages = Array.isArray(messagesResponse.data) ? messagesResponse.data : [];
+                console.log('📦 [End Session Error] Retrieved messages from backend API:', archiveMessages.length);
+              }
+            } catch (apiError) {
+              console.warn('⚠️ [End Session Error] Failed to get messages from API:', apiError);
+            }
+          }
 
-        const endedSession: EndedSession = {
-          appointment_id: getNumericAppointmentId(),
-          doctor_id: doctorId,
-          doctor_name: doctorName,
-          doctor_profile_picture_url: isPatient 
-            ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
-            : (user?.profile_picture_url || user?.profile_picture),
-          doctor_profile_picture: isPatient
-            ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
-            : (user?.profile_picture || user?.profile_picture_url),
-          patient_id: patientId,
-          patient_name: patientName,
-          appointment_date: chatInfo?.appointment_date,
-          appointment_time: chatInfo?.appointment_time,
-          ended_at: new Date().toISOString(),
-          session_duration: undefined,
-          session_summary: undefined,
-          reason: textSessionInfo?.reason || 'General Checkup',
-          messages: cleanedMessages,
-          message_count: cleanedMessages.length,
-        };
+          const cleanedMessages = archiveMessages.map(m => {
+            const { temp_id, ...rest } = m as any;
+            return { ...rest, delivery_status: rest.delivery_status || 'sent' };
+          });
+
+          console.log('📦 [End Session Error] Cleaned messages count:', cleanedMessages.length);
+
+          const isPatient = user?.user_type === 'patient';
+          const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
+          const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
+
+          const patientName = isPatient
+            ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+            : (textSessionInfo?.patient?.display_name ||
+              `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+              chatInfo?.other_participant_name || 'Patient');
+
+          const doctorName = isPatient
+            ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name ||
+              `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+            : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
+
+          const endedSession: EndedSession = {
+            appointment_id: getNumericAppointmentId(),
+            doctor_id: doctorId,
+            doctor_name: doctorName,
+            doctor_profile_picture_url: isPatient
+              ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
+              : (user?.profile_picture_url || user?.profile_picture),
+            doctor_profile_picture: isPatient
+              ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.doctor?.profile_picture)
+              : (user?.profile_picture || user?.profile_picture_url),
+            patient_id: patientId,
+            patient_name: patientName,
+            appointment_date: chatInfo?.appointment_date,
+            appointment_time: chatInfo?.appointment_time,
+            ended_at: new Date().toISOString(),
+            session_duration: undefined,
+            session_summary: undefined,
+            reason: textSessionInfo?.reason || 'General Checkup',
+            messages: cleanedMessages,
+            message_count: cleanedMessages.length,
+          };
 
           // Store session locally with retry
           endedSessionStorageService.storeEndedSessionForBoth(endedSession)
@@ -3364,24 +3371,24 @@ export default function ChatPage() {
       const isPatient = user?.user_type === 'patient';
       const patientId = isPatient ? (user?.id || 0) : (chatInfo?.patient_id || textSessionInfo?.patient_id || 0);
       const doctorId = isPatient ? (chatInfo?.doctor_id || textSessionInfo?.doctor_id) : (user?.id || 0);
-      
+
       // Get names - if current user is patient, other participant is doctor, and vice versa
-      const patientName = isPatient 
+      const patientName = isPatient
         ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
-        : (textSessionInfo?.patient?.display_name || 
-           `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
-           chatInfo?.other_participant_name || 'Patient');
-      
+        : (textSessionInfo?.patient?.display_name ||
+          `${textSessionInfo?.patient?.first_name || ''} ${textSessionInfo?.patient?.last_name || ''}`.trim() ||
+          chatInfo?.other_participant_name || 'Patient');
+
       const doctorName = isPatient
-        ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name || 
-           `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
+        ? (chatInfo?.other_participant_name || textSessionInfo?.doctor?.display_name ||
+          `${textSessionInfo?.doctor?.first_name || ''} ${textSessionInfo?.doctor?.last_name || ''}`.trim() || 'Doctor')
         : `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
 
       const endedSession: EndedSession = {
         appointment_id: getNumericAppointmentId(),
         doctor_id: doctorId,
         doctor_name: doctorName,
-        doctor_profile_picture_url: isPatient 
+        doctor_profile_picture_url: isPatient
           ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.doctor?.profile_picture_url)
           : (user?.profile_picture_url || user?.profile_picture),
         doctor_profile_picture: isPatient

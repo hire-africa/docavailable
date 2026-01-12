@@ -64,3 +64,4 @@ echo "  adb logcat | grep ScreenshotPrevention"
 echo ""
 echo -e "${GREEN}If you see a black screenshot, it's working! 🎉${NC}"
 
+

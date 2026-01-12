@@ -2,14 +2,14 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -73,7 +73,7 @@ export default function BookAppointmentFlow() {
       try {
         const response = await apiService.get(`/doctors/${doctorId}/availability`);
         console.log('🔍 [fetchWorkingHours] API response:', response);
-        
+
         if (response.success && response.data && (response.data as any).working_hours) {
           console.log('✅ [fetchWorkingHours] Setting working hours:', (response.data as any).working_hours);
           setWorkingHours((response.data as any).working_hours);
@@ -106,7 +106,7 @@ export default function BookAppointmentFlow() {
           // Preload/cache the image
           const toCache = getImageUrlForCache(url || pic);
           if (toCache) {
-            imageCacheService.downloadAndCache(toCache).catch(() => {});
+            imageCacheService.downloadAndCache(toCache).catch(() => { });
           }
         }
       } catch (e) {
@@ -139,7 +139,7 @@ export default function BookAppointmentFlow() {
       try {
         const resp = await apiService.get('/subscription');
         if (resp.success && resp.data) setSubscription(resp.data);
-      } catch {}
+      } catch { }
     })();
   }, [user, userSubscription, subscription]);
 
@@ -157,7 +157,7 @@ export default function BookAppointmentFlow() {
   const getAvailabilityInfo = () => {
     if (!selectedDate) return 'Please select a date to see availability.';
     if (!workingHours) return 'No availability info.';
-    const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayKey = days[selectedDate.getDay()];
     const dayHours = workingHours[dayKey];
     if (!dayHours || !dayHours.enabled) return `${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}: Not available`;
@@ -169,31 +169,31 @@ export default function BookAppointmentFlow() {
   const getAvailableSlots = () => {
     console.log('🔍 [getAvailableSlots] workingHours:', workingHours);
     console.log('🔍 [getAvailableSlots] selectedDate:', selectedDate);
-    
+
     if (!selectedDate) {
       console.log('❌ [getAvailableSlots] No selectedDate');
       return [];
     }
-    
+
     console.log('🔍 [getAvailableSlots] selectedDate.getDay():', selectedDate.getDay());
-    
+
     if (!workingHours) {
       console.log('❌ [getAvailableSlots] No workingHours data');
       return [];
     }
-    
-    const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayKey = days[selectedDate.getDay()];
     console.log('🔍 [getAvailableSlots] dayKey:', dayKey);
-    
+
     const dayHours = workingHours[dayKey];
     console.log('🔍 [getAvailableSlots] dayHours:', dayHours);
-    
+
     if (!dayHours || !dayHours.enabled) {
       console.log('❌ [getAvailableSlots] No dayHours or not enabled');
       return [];
     }
-    
+
     console.log('✅ [getAvailableSlots] Returning slots:', dayHours.slots);
     return dayHours.slots;
   };
@@ -208,7 +208,7 @@ export default function BookAppointmentFlow() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const isToday = selectedDateOnly.getTime() === today.getTime();
-    
+
     slots.forEach((slot: any) => {
       const [startHour, startMin] = slot.start.split(':').map(Number);
       const [endHour, endMin] = slot.end.split(':').map(Number);
@@ -216,14 +216,14 @@ export default function BookAppointmentFlow() {
       current.setHours(startHour, startMin, 0, 0);
       const end = new Date();
       end.setHours(endHour, endMin, 0, 0);
-      
+
       while (current <= end) {
         const h = current.getHours();
         const m = current.getMinutes();
         const ampm = h >= 12 ? 'PM' : 'AM';
         const hour12 = h % 12 === 0 ? 12 : h % 12;
         const label = `${hour12}:${m.toString().padStart(2, '0')} ${ampm}`;
-        
+
         // Filter out past times for today
         if (isToday) {
           const currentTime = new Date();
@@ -235,7 +235,7 @@ export default function BookAppointmentFlow() {
         } else {
           options.push(label);
         }
-        
+
         current.setMinutes(current.getMinutes() + 30);
       }
     });
@@ -259,25 +259,25 @@ export default function BookAppointmentFlow() {
     if (!isTimeSlotAvailable(timeStr)) {
       return 'booked';
     }
-    
+
     const now = new Date();
     const selectedDateOnly = new Date(selectedDate);
     selectedDateOnly.setHours(0, 0, 0, 0);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const isToday = selectedDateOnly.getTime() === today.getTime();
-    
+
     if (isToday) {
       const time24 = to24HourFormat(timeStr);
       const [hour, minute] = time24.split(':').map(Number);
       const slotTime = new Date();
       slotTime.setHours(hour, minute, 0, 0);
-      
+
       if (slotTime <= now) {
         return 'past';
       }
     }
-    
+
     return 'available';
   };
 
@@ -309,7 +309,7 @@ export default function BookAppointmentFlow() {
   const isTimeInAvailableSlots = (time: Date): boolean => {
     const slots = getAvailableSlots();
     const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}`;
-    
+
     return slots.some((slot: any) => {
       const startTime = slot.start;
       const endTime = slot.end;
@@ -372,7 +372,7 @@ export default function BookAppointmentFlow() {
           </View>
           <View style={styles.calendarContainer}>
             <Text style={styles.monthLabel}>{monthNames[currentMonth]} {currentYear}</Text>
-            
+
             {/* Day of week headers */}
             <View style={styles.calendarHeader}>
               {[...'SMTWTFS'].map((d, i) => (
@@ -381,7 +381,7 @@ export default function BookAppointmentFlow() {
                 </View>
               ))}
             </View>
-            
+
             {/* Calendar grid */}
             <View style={styles.calendarGrid}>
               {(() => {
@@ -390,12 +390,12 @@ export default function BookAppointmentFlow() {
                 const firstDayOfWeek = firstDayOfMonth.getDay(); // 0 = Sunday, 1 = Monday, etc.
                 const weeksArray = [];
                 let currentWeek = [];
-                
+
                 // Add empty cells for the first week to align dates with day headers
                 for (let i = 0; i < firstDayOfWeek; i++) {
                   currentWeek.push(<View key={`empty-${i}`} style={styles.calendarCell} />);
                 }
-                
+
                 // Add days of the month
                 for (let day = 1; day <= daysInMonth; day++) {
                   const currentDate = new Date();
@@ -403,13 +403,13 @@ export default function BookAppointmentFlow() {
                   const isToday = dayDate.toDateString() === currentDate.toDateString();
                   const isPast = dayDate < currentDate;
                   const isDisabled = isPast; // Only disable past dates, not today
-                  
+
                   // Check if this day is a working day
                   const dayOfWeek = dayDate.getDay();
-                  const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+                  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
                   const dayKey = days[dayOfWeek];
                   const isWorkingDay = workingHours && workingHours[dayKey] && workingHours[dayKey].enabled;
-                  
+
                   currentWeek.push(
                     <TouchableOpacity
                       key={day}
@@ -433,7 +433,7 @@ export default function BookAppointmentFlow() {
                       )}
                     </TouchableOpacity>
                   );
-                  
+
                   // If we have 7 days in the current week, start a new week
                   if (currentWeek.length === 7) {
                     weeksArray.push(
@@ -444,7 +444,7 @@ export default function BookAppointmentFlow() {
                     currentWeek = [];
                   }
                 }
-                
+
                 // Add remaining days if any
                 if (currentWeek.length > 0) {
                   // Fill remaining cells to make it 7
@@ -457,12 +457,12 @@ export default function BookAppointmentFlow() {
                     </View>
                   );
                 }
-                
+
                 return weeksArray;
               })()}
             </View>
           </View>
-          
+
           {/* Working Days Legend */}
           <View style={styles.workingDaysLegend}>
             <View style={styles.legendItem}>
@@ -489,30 +489,30 @@ export default function BookAppointmentFlow() {
             )}
           </View>
           <View style={styles.timePickerCard}>
-          {!selectedDate ? (
-            <View style={styles.noDateSelectedContainer}>
-              <FontAwesome name="calendar" size={24} color="#999" />
-              <Text style={styles.noDateSelectedText}>Please select a date first</Text>
-            </View>
-          ) : getAvailableSlots().length > 0 ? (
-            <>
-              <TouchableOpacity
-                style={styles.timePickerBtn}
-                onPress={showTimePickerModal}
-              >
-                <Text style={styles.timePickerBtnText}>{customTime ? `Change Time (${customTime})` : 'Pick a time'}</Text>
-              </TouchableOpacity>
-              {customTime ? (
-                <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
-              ) : null}
-            </>
-          ) : (
-            <View style={styles.noAvailabilityContainer}>
-              <Text style={styles.noAvailabilityText}>
-                {loadingHours ? 'Loading availability...' : 'No available time slots for this day'}
-              </Text>
-            </View>
-          )}
+            {!selectedDate ? (
+              <View style={styles.noDateSelectedContainer}>
+                <FontAwesome name="calendar" size={24} color="#999" />
+                <Text style={styles.noDateSelectedText}>Please select a date first</Text>
+              </View>
+            ) : getAvailableSlots().length > 0 ? (
+              <>
+                <TouchableOpacity
+                  style={styles.timePickerBtn}
+                  onPress={showTimePickerModal}
+                >
+                  <Text style={styles.timePickerBtnText}>{customTime ? `Change Time (${customTime})` : 'Pick a time'}</Text>
+                </TouchableOpacity>
+                {customTime ? (
+                  <Text style={styles.selectedTimeText}>Selected time: {customTime}</Text>
+                ) : null}
+              </>
+            ) : (
+              <View style={styles.noAvailabilityContainer}>
+                <Text style={styles.noAvailabilityText}>
+                  {loadingHours ? 'Loading availability...' : 'No available time slots for this day'}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
         {/* Enhanced Consultation Types Section */}
@@ -522,31 +522,31 @@ export default function BookAppointmentFlow() {
             <Text style={styles.sectionTitle}>Consultation Type</Text>
           </View>
           <View style={styles.consultationTypesContainer}>
-          {consultationTypes.map(type => {
-            const available = isTypeAvailable(type.key);
-            return (
-              <View key={type.key} style={styles.consultationTypeRow}>
-              <TouchableOpacity
-                  style={[styles.consultationTypeBtn, consultationType === type.key && styles.selectedConsultationTypeBtn, !available && { backgroundColor: '#E0E0E0' }]}
-                onPress={() => available && setConsultationType(type.key)}
-                disabled={!available}
-              >
-                  <FontAwesome 
-                    name={type.icon as any} 
-                    size={16} 
-                    color={consultationType === type.key ? '#fff' : (!available ? '#aaa' : '#222')} 
-                  />
-                </TouchableOpacity>
-                <View style={styles.consultationTypeTextContainer}>
-                  <Text style={[styles.consultationTypeText, !available && { color: '#aaa' }]}>{type.label}</Text>
-                {!available && (
-                    <Text style={styles.consultationTypeUnavailable}>(0 left)</Text>
-                )}
+            {consultationTypes.map(type => {
+              const available = isTypeAvailable(type.key);
+              return (
+                <View key={type.key} style={styles.consultationTypeRow}>
+                  <TouchableOpacity
+                    style={[styles.consultationTypeBtn, consultationType === type.key && styles.selectedConsultationTypeBtn, !available && { backgroundColor: '#E0E0E0' }]}
+                    onPress={() => available && setConsultationType(type.key)}
+                    disabled={!available}
+                  >
+                    <FontAwesome
+                      name={type.icon as any}
+                      size={16}
+                      color={consultationType === type.key ? '#fff' : (!available ? '#aaa' : '#222')}
+                    />
+                  </TouchableOpacity>
+                  <View style={styles.consultationTypeTextContainer}>
+                    <Text style={[styles.consultationTypeText, !available && { color: '#aaa' }]}>{type.label}</Text>
+                    {!available && (
+                      <Text style={styles.consultationTypeUnavailable}>(0 left)</Text>
+                    )}
+                  </View>
                 </View>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
         </View>
         {/* Enhanced Reason Section */}
         <View style={styles.reasonSection}>
@@ -644,7 +644,7 @@ export default function BookAppointmentFlow() {
             </View>
           </View>
         </View>
-        
+
         <View style={styles.confirmDetailsContainer}>
           <View style={styles.confirmDetailItem}>
             <View style={styles.confirmDetailIcon}>
@@ -657,7 +657,7 @@ export default function BookAppointmentFlow() {
               </Text>
             </View>
           </View>
-          
+
           <View style={styles.confirmDetailItem}>
             <View style={styles.confirmDetailIcon}>
               <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
@@ -667,7 +667,7 @@ export default function BookAppointmentFlow() {
               <Text style={styles.confirmValue}>{consultationTypes.find(t => t.key === consultationType)?.label || ''}</Text>
             </View>
           </View>
-          
+
           <View style={styles.confirmDetailItem}>
             <View style={styles.confirmDetailIcon}>
               <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
@@ -686,7 +686,7 @@ export default function BookAppointmentFlow() {
           </Text>
         </View>
       </View>
-      <View style={[styles.confirmBtnRow, { marginBottom: Math.max(12, insets.bottom) } ]}>
+      <View style={[styles.confirmBtnRow, { marginBottom: Math.max(12, insets.bottom) }]}>
         <TouchableOpacity style={styles.editBtn} onPress={() => setStep(1)}>
           <Text style={styles.editBtnText}>Edit</Text>
         </TouchableOpacity>
@@ -707,7 +707,7 @@ export default function BookAppointmentFlow() {
         <Text style={styles.headerTitle}>Request Sent</Text>
         <View style={{ width: 32 }} />
       </View>
-      
+
       <ScrollView contentContainerStyle={{ paddingBottom: Math.max(32, insets.bottom + 24) }}>
         {/* Success Animation Card */}
         <View style={styles.successAnimationCard}>
@@ -754,7 +754,7 @@ export default function BookAppointmentFlow() {
             <FontAwesome name="calendar-check-o" size={20} color="#4CAF50" />
             <Text style={styles.successDetailsTitle}>Appointment Details</Text>
           </View>
-          
+
           <View style={styles.successDetailsList}>
             <View style={styles.successDetailRow}>
               <View style={styles.successDetailIcon}>
@@ -767,7 +767,7 @@ export default function BookAppointmentFlow() {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.successDetailRow}>
               <View style={styles.successDetailIcon}>
                 <FontAwesome name="stethoscope" size={16} color="#4CAF50" />
@@ -779,7 +779,7 @@ export default function BookAppointmentFlow() {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.successDetailRow}>
               <View style={styles.successDetailIcon}>
                 <FontAwesome name="file-text-o" size={16} color="#4CAF50" />
@@ -811,19 +811,19 @@ export default function BookAppointmentFlow() {
   // Handle confirm booking
   async function handleConfirm() {
     // console.log('🔍 [BookAppointmentFlow] handleConfirm started');
-    
+
     if (!user) {
       // console.log('❌ [BookAppointmentFlow] No user found');
       Alert.alert('Error', 'Please login to book an appointment');
       return;
     }
-    
+
     if (!doctorId || !doctorName) {
       // console.log('❌ [BookAppointmentFlow] Missing doctor info:', { doctorId, doctorName });
       Alert.alert('Error', 'Doctor information not available');
       return;
     }
-    
+
     if (!selectedDate || !customTime || !consultationType || !reason) {
       // console.log('❌ [BookAppointmentFlow] Missing required fields:', { 
       //   selectedDate, customTime, consultationType, reason 
@@ -841,9 +841,9 @@ export default function BookAppointmentFlow() {
       Alert.alert('Error', 'Please select a future time for your appointment');
       return;
     }
-    
+
     setSubmitting(true);
-    
+
     try {
       // Determine if user has remaining sessions for selected type
       const hasQuota = isTypeAvailable(consultationType);
@@ -852,7 +852,7 @@ export default function BookAppointmentFlow() {
         const userTimezone = await detectUserTimezone();
         const payload: any = {
           doctor_id: Number(doctorId),
-          appointment_date: `${apptDateTime.getFullYear()}-${(apptDateTime.getMonth()+1).toString().padStart(2,'0')}-${apptDateTime.getDate().toString().padStart(2,'0')}`,
+          appointment_date: `${apptDateTime.getFullYear()}-${(apptDateTime.getMonth() + 1).toString().padStart(2, '0')}-${apptDateTime.getDate().toString().padStart(2, '0')}`,
           appointment_time: selectedTime,
           user_timezone: userTimezone, // Enhanced timezone detection
           appointment_type: consultationType,
@@ -867,7 +867,7 @@ export default function BookAppointmentFlow() {
             'Appointment Offer Sent',
             `Appointment offer sent to Dr. ${doctorName} for ${selectedDate} at ${customTime}`
           );
-          
+
           setStep(3);
           return;
         }
@@ -890,7 +890,7 @@ export default function BookAppointmentFlow() {
         data: error?.response?.data,
         stack: error?.stack
       });
-      
+
       // More specific error messages
       let errorMessage = 'Failed to book appointment. Please try again.';
       if (error?.response?.status === 401) {
@@ -900,7 +900,7 @@ export default function BookAppointmentFlow() {
       } else if (error?.response?.status === 500) {
         errorMessage = 'Server error. Please try again later.';
       }
-      
+
       Alert.alert('Error', errorMessage);
     } finally {
       setSubmitting(false);
@@ -912,7 +912,7 @@ export default function BookAppointmentFlow() {
       {step === 1 && renderStep1()}
       {step === 2 && renderStep2()}
       {step === 3 && renderStep3()}
-      
+
       {/* Custom Time Picker */}
       <CustomTimePicker
         visible={showCustomTimePicker}

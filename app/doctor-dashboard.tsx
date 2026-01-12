@@ -4,7 +4,7 @@ import authService from '@/services/authService';
 import { NotificationService } from '@/services/notificationService';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -27,13 +27,15 @@ import AppTour from '../components/AppTour';
 import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
 import OnboardingOverlay from '../components/OnboardingOverlay';
-import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 import appTourService from '../services/appTourService';
 import customAlertService from '../services/customAlertService';
-import { Activity, addRealtimeActivity, formatTimestamp, generateUserActivities } from '../utils/activityUtils';
+import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
+import { Activity, addRealtimeActivity, generateUserActivities } from '../utils/activityUtils';
 import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { getMissingFields } from '../utils/profileUtils';
-import { withDoctorPrefix, stripDoctorPrefix } from '../utils/name';
+
+import { useCustomTheme } from '@/hooks/useCustomTheme';
+import { useThemedColors } from '@/hooks/useThemedColors';
 
 import { FontAwesome } from '@expo/vector-icons';
 import { apiService } from '../app/services/apiService';
@@ -61,6 +63,7 @@ interface TabProps {
 interface BookingRequest {
   id: number;
   patient_name: string;
+  patientPhone?: string;
   patientProfilePictureUrl?: string;
   patientProfilePicture?: string;
   patientEmail?: string;
@@ -87,26 +90,21 @@ interface DoctorType {
   is_active: boolean;
 }
 
-const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
-  <TouchableOpacity
-    style={[styles.tab, isActive && styles.activeTab]}
-    onPress={onPress}
-  >
-    <Icon
-      name={icon}
-      size={24}
-      color={isActive ? '#4CAF50' : '#666'}
-    />
-    <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]} numberOfLines={1}>
-      {label}
-    </Text>
-  </TouchableOpacity>
-);
+// Tab component moved inside DoctorDashboard to access dynamic styles
 
 export default function DoctorDashboard() {
   const { user, userData, loading, refreshUserData } = useAuth();
   const { alertState, showAlert, hideAlert, showSuccess, showError, showProcessing } = useAlert();
+
+  // Theme support
+  const colors = useThemedColors();
+  const { theme, isDark } = useCustomTheme();
+
   const insets = useSafeAreaInsets();
+
+  // Create theme-aware styles
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const [activeTab, setActiveTab] = useState('home');
   const [showConfirm, setShowConfirm] = useState(false);
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -142,9 +140,26 @@ export default function DoctorDashboard() {
   // App Tour state
   const [showAppTour, setShowAppTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+  // Tab component definition
+  const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
+    <TouchableOpacity
+      style={[styles.tab, isActive && styles.activeTab]}
+      onPress={onPress}
+    >
+      <Icon
+        name={icon}
+        size={24}
+        color={isActive ? colors.primary : colors.textSecondary}
+      />
+      <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]} numberOfLines={1}>
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const appointmentsRequestsTabRef = React.createRef<View>();
   const appointmentsAcceptedTabRef = React.createRef<View>();
-  
+
   // Initialize refs for tour elements
   useEffect(() => {
     // Initialize bottom navigation tab refs for doctors
@@ -154,7 +169,7 @@ export default function DoctorDashboard() {
         tourTabRefs.current[key] = React.createRef<View>();
       }
     });
-    
+
     // Initialize refs for appointments sub-tabs
     tourTabRefs.current['appointments-requests-tab'] = appointmentsRequestsTabRef;
     tourTabRefs.current['appointments-accepted-tab'] = appointmentsAcceptedTabRef;
@@ -550,7 +565,29 @@ export default function DoctorDashboard() {
           });
         });
 
-        setBookingRequests(requests);
+        // Filter to only include pending appointments (status 0 or 'pending')
+        // AND match the UI logic: exclude expired appointments and reschedulePending ones
+        const pendingRequests = requests.filter((request: any) => {
+          // Check status first
+          const isPending = request.status === 'pending' || request.status === 0;
+          if (!isPending) return false;
+
+          // Check if reschedule is pending
+          if (request.reschedulePending) return false;
+
+          // Check for expiration
+          try {
+            const appointmentDateTime = new Date(`${request.date}T${request.time}`);
+            const now = new Date();
+            const isExpired = appointmentDateTime < now;
+            return !isExpired;
+          } catch (e) {
+            return true; // Keep if date check fails to be safe, or false? UI keeps it if check fails (returns false for isExpired catch block)
+          }
+        });
+
+        console.log(`📋 [fetchBookingRequests] Total: ${requests.length}, Pending (filtered): ${pendingRequests.length}`);
+        setBookingRequests(pendingRequests);
       }
     } catch (error) {
       console.error('Error fetching booking requests:', error);
@@ -579,7 +616,7 @@ export default function DoctorDashboard() {
         })));
 
         const confirmed = rawConfirmed
-          .filter((request: any) => request.status === 1 || request.status === 3) // Only confirmed (1) and completed (3)
+          .filter((request: any) => request.status === 1 || request.status === 3 || request.status === 7) // Confirmed (1), Completed (3), In Progress (7)
           .map((request: any) => ({
             id: request.id,
             patient_name: request.patientName || 'Patient',
@@ -598,7 +635,8 @@ export default function DoctorDashboard() {
             status: request.status === 0 ? 'pending' :
               request.status === 1 ? 'confirmed' :
                 request.status === 2 ? 'cancelled' :
-                  request.status === 3 ? 'completed' : 'pending',
+                  request.status === 3 ? 'completed' :
+                    request.status === 7 ? 'in_progress' : 'pending',
             createdAt: request.created_at || '',
             reschedulePending: false
           }));
@@ -624,23 +662,14 @@ export default function DoctorDashboard() {
 
     setLoadingTextSessions(true);
     try {
-      // Get both active and pending text sessions
-      const [activeResponse, pendingResponse] = await Promise.all([
-        apiService.get('/text-sessions/active-sessions'),
-        apiService.get('/text-sessions/pending-sessions')
-      ]);
-
-      let allSessions: any[] = [];
+      // Get active sessions (which includes waiting_for_doctor status)
+      const activeResponse = await apiService.get('/text-sessions/active-sessions');
 
       if (activeResponse.success && activeResponse.data) {
-        allSessions = [...allSessions, ...(activeResponse.data as any[])];
+        setActiveTextSessions(activeResponse.data as any[]);
+      } else {
+        setActiveTextSessions([]);
       }
-
-      if (pendingResponse.success && pendingResponse.data) {
-        allSessions = [...allSessions, ...(pendingResponse.data as any[])];
-      }
-
-      setActiveTextSessions(allSessions);
     } catch (error) {
       console.error('Error fetching text sessions:', error);
       setActiveTextSessions([]);
@@ -830,11 +859,8 @@ export default function DoctorDashboard() {
             'appointment_offer_accepted',
             'Appointment Accepted',
             `You accepted an appointment request from ${request.patient_name}`,
-            {
-              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-              patientName: request.patient_name,
-              appointmentType: request.appointment_type
-            }
+            'check',
+            colors.success
           )
         );
 
@@ -909,11 +935,8 @@ export default function DoctorDashboard() {
             'appointment_offer_rejected',
             'Appointment Rejected',
             `You rejected an appointment request from ${request.patient_name}`,
-            {
-              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-              patientName: request.patient_name,
-              appointmentType: request.appointment_type
-            }
+            'times-circle',
+            colors.error
           )
         );
 
@@ -1075,11 +1098,8 @@ export default function DoctorDashboard() {
             'withdrawal_requested',
             'Withdrawal Requested',
             `You requested a withdrawal of $${withdrawalAmount} via ${withdrawalMethod}`,
-            {
-              doctorName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-              amount: withdrawalAmount,
-              method: withdrawalMethod
-            }
+            'money',
+            colors.warning
           )
         );
 
@@ -1514,7 +1534,7 @@ export default function DoctorDashboard() {
           ) : user?.profile_picture ? (
             <Image source={{ uri: user.profile_picture }} style={{ width: 56, height: 56, borderRadius: 28 }} />
           ) : (
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
+            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
               <FontAwesome name="user-md" size={20} color="#4CAF50" />
             </View>
           )}
@@ -1523,7 +1543,7 @@ export default function DoctorDashboard() {
           style={{
             fontSize: 28,
             fontWeight: 'bold',
-            color: '#222',
+            color: colors.text,
             textAlign: 'center',
             marginBottom: 4,
             maxWidth: 220,
@@ -1538,7 +1558,7 @@ export default function DoctorDashboard() {
         <Text
           style={{
             fontSize: 16,
-            color: '#666',
+            color: colors.textSecondary,
             textAlign: 'center',
             maxWidth: 260,
             lineHeight: 22,
@@ -1590,7 +1610,7 @@ export default function DoctorDashboard() {
 
   const renderAppointmentsContent = () => (
     <ScrollView
-      style={{ ...styles.content, backgroundColor: '#F8F9FA' }}
+      style={{ ...styles.content, backgroundColor: colors.surface }}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -1610,7 +1630,7 @@ export default function DoctorDashboard() {
     >
 
       {/* Sub-tab button group */}
-      <View style={{ flexDirection: 'row', marginBottom: 24, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 4, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
+      <View style={{ flexDirection: 'row', marginBottom: 24, alignSelf: 'center', backgroundColor: colors.card, borderRadius: 16, padding: 4, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
         <View ref={appointmentsRequestsTabRef}>
           <TouchableOpacity
             style={{
@@ -1652,7 +1672,7 @@ export default function DoctorDashboard() {
             <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
               <Icon name="calendar" size={20} color="#666" />
             </View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222', marginBottom: 6 }}>No Pending Requests</Text>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text, marginBottom: 6 }}>No Pending Requests</Text>
             <Text style={{ fontSize: 15, color: '#7CB18F', textAlign: 'center' }}>When patients book appointments, they&apos;ll appear here for your review</Text>
           </View>
         ) : (
@@ -1671,7 +1691,7 @@ export default function DoctorDashboard() {
               return (
                 <TouchableOpacity
                   key={request.id}
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
                   onPress={() => { setSelectedRequest(request); setShowRequestModal(true); }}
                   activeOpacity={0.8}
                 >
@@ -1684,7 +1704,7 @@ export default function DoctorDashboard() {
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2 }} numberOfLines={1}>{request.patient_name}</Text>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, marginBottom: 2 }} numberOfLines={1}>{request.patient_name}</Text>
                     <Text style={{ color: '#7CB18F', fontSize: 14 }} numberOfLines={1}>{formatDate(request.date)} • {formatTime(request.time)}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
@@ -1715,7 +1735,7 @@ export default function DoctorDashboard() {
       {/* Booking Request Details Modal */}
       <Modal visible={showRequestModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+          <View style={{ backgroundColor: colors.card, borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
             <TouchableOpacity onPress={() => setShowRequestModal(false)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
               <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
             </TouchableOpacity>
@@ -1728,9 +1748,9 @@ export default function DoctorDashboard() {
                     size={72}
                     name={selectedRequest.patient_name}
                   />
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedRequest.patient_name}</Text>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, marginTop: 10 }} numberOfLines={1}>{selectedRequest.patient_name}</Text>
                   {selectedRequest.patientEmail ? (
-                    <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{selectedRequest.patientEmail}</Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>{selectedRequest.patientEmail}</Text>
                   ) : null}
                   {(selectedRequest.patientCountry || selectedRequest.patientCity || selectedRequest.patientDateOfBirth || selectedRequest.patientGender) ? (
                     <Text style={{ fontSize: 14, color: '#4CAF50', marginTop: 4 }} numberOfLines={1}>
@@ -1748,8 +1768,8 @@ export default function DoctorDashboard() {
                     </Text>
                   ) : null}
                 </View>
-                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+                <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
                   <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatDate(selectedRequest.date)} • {formatTime(selectedRequest.time)}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                     <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
@@ -1757,8 +1777,8 @@ export default function DoctorDashboard() {
                     </View>
                   </View>
                   <View style={{ marginTop: 8 }}>
-                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                    <Text style={{ color: '#666' }}>
+                    <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ color: colors.textSecondary }}>
                       {selectedRequest.reason && selectedRequest.reason.trim() !== ''
                         ? selectedRequest.reason
                         : 'No reason provided'}
@@ -1805,7 +1825,7 @@ export default function DoctorDashboard() {
       {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirm} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+          <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 24, width: 320 }}>
             <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
             <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
@@ -1823,7 +1843,7 @@ export default function DoctorDashboard() {
       {/* Cancel Reason Input Modal */}
       <Modal visible={showCancelReasonModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
+          <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 24, width: 320 }}>
             <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
             <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
             <TextInput
@@ -1848,13 +1868,13 @@ export default function DoctorDashboard() {
   );
 
   const renderMessagesContent = () => (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
 
       {/* Search Bar */}
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F5F5F5',
+        backgroundColor: colors.backgroundTertiary,
         borderRadius: 25,
         marginHorizontal: 20,
         marginBottom: 16,
@@ -1865,7 +1885,7 @@ export default function DoctorDashboard() {
       }}>
         <Icon name="search" size={20} color="#999" />
         <TextInput
-          style={{ flex: 1, fontSize: 16, color: '#333', backgroundColor: 'transparent', marginLeft: 12 }}
+          style={{ flex: 1, fontSize: 16, color: colors.text, backgroundColor: 'transparent', marginLeft: 12 }}
           placeholder="Search conversations..."
           placeholderTextColor="#999"
         />
@@ -1965,7 +1985,7 @@ export default function DoctorDashboard() {
                 <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                   <TouchableOpacity
                     style={{
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: colors.background,
                       borderRadius: 12,
                       marginHorizontal: 20,
                       marginBottom: 12,
@@ -1990,18 +2010,18 @@ export default function DoctorDashboard() {
                         justifyContent: 'center',
                         marginRight: 16
                       }}>
-                        <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>
                           {item.patient_name?.charAt(0) || 'P'}
                         </Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
                           {item.patient_name || 'Patient'}
                         </Text>
                         <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                           {item.reason || 'General Checkup'}
                         </Text>
-                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
                           Session ended • {formatDuration(item.session_duration || 0)}
                         </Text>
                       </View>
@@ -2027,7 +2047,7 @@ export default function DoctorDashboard() {
                       position: 'absolute',
                       right: 20,
                       top: 60,
-                      backgroundColor: '#fff',
+                      backgroundColor: colors.card,
                       borderRadius: 8,
                       paddingVertical: 4,
                       shadowColor: '#000',
@@ -2048,7 +2068,7 @@ export default function DoctorDashboard() {
                         onPress={() => handleExportEndedSession(item.appointmentId)}
                       >
                         <Icon name="export" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: '#222' }}>Export</Text>
+                        <Text style={{ fontSize: 14, color: colors.text }}>Export</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={{
@@ -2072,7 +2092,7 @@ export default function DoctorDashboard() {
                 <TouchableOpacity
                   key={`active_text_${item.id}`}
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: colors.background,
                     borderRadius: 12,
                     marginHorizontal: 20,
                     marginBottom: 12,
@@ -2118,13 +2138,13 @@ export default function DoctorDashboard() {
                       )}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
                         {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                         Text Session
                       </Text>
-                      <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                      <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
                         {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
                       </Text>
                     </View>
@@ -2140,7 +2160,7 @@ export default function DoctorDashboard() {
                 <TouchableOpacity
                   key={`confirmed_${item.id || item.patientId || 'unknown'}`}
                   style={{
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: colors.background,
                     borderRadius: 12,
                     marginHorizontal: 20,
                     marginBottom: 12,
@@ -2164,19 +2184,19 @@ export default function DoctorDashboard() {
                       justifyContent: 'center',
                       marginRight: 16
                     }}>
-                      <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>
                         {String(item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient').charAt(0) || 'P'}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
+                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
                         {String(item.patient_name || 'Unknown Patient')}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
                         {String(item.reason || 'Chat')}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
+                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
                           {item.consultationType === 'text' ? 'Text Chat' :
                             item.consultationType === 'voice' ? 'Voice Call' :
                               item.consultationType === 'video' ? 'Video Call' : 'Chat'}
@@ -2212,7 +2232,11 @@ export default function DoctorDashboard() {
   );
 
   const renderProfileContent = () => (
-    <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={{ ...styles.content, backgroundColor: colors.surface }}
+      contentContainerStyle={{ paddingBottom: 100 }}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Profile Header */}
       <View style={{ alignItems: 'center', marginBottom: 18 }}>
         {user?.profile_picture_url ? (
@@ -2220,64 +2244,62 @@ export default function DoctorDashboard() {
         ) : user?.profile_picture ? (
           <Image source={{ uri: user.profile_picture }} style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#F0F8FF', marginBottom: 10 }} />
         ) : (
-          <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#4CAF50' }}>
+          <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: 10, borderWidth: 3, borderColor: '#4CAF50' }}>
             <FontAwesome name="user-md" size={32} color="#4CAF50" />
           </View>
         )}
-        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222', textAlign: 'center' }}>{user?.display_name || user?.email?.split('@')[0] || 'Doctor'}</Text>
-        {userData?.status === 'approved' && <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 15, textAlign: 'center', marginBottom: 2 }}>Verified</Text>}
-        <Text style={{ color: '#4CAF50', fontSize: 15, textAlign: 'center', marginBottom: 2 }}>Joined {userData?.created_at ? new Date(userData.created_at).getFullYear() : '2021'}</Text>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: colors.text, textAlign: 'center' }}>{user?.display_name || user?.email?.split('@')[0] || 'Doctor'}</Text>
       </View>
 
       {/* Account Section */}
-      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Account</Text>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: colors.text, marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Account</Text>
       <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="email" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Email</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}>
+          <Icon name="email" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Email</Text>
           <Text style={{ color: '#4CAF50', fontSize: 15, textAlign: 'right', flex: 1.2 }}>{user?.email || 'Not provided'}</Text>
         </View>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/doctor-withdrawals')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><FontAwesome name="money" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Earnings</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/doctor-withdrawals')}>
+          <FontAwesome name="money" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Earnings</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
       </View>
 
       {/* Settings Section */}
-      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#222', marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Settings</Text>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: colors.text, marginTop: 18, marginBottom: 8, marginLeft: 18 }}>Settings</Text>
       <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 8 }}>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/doctor-profile')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="user" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>View Profile</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/doctor-profile')}>
+          <Icon name="user" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>View Profile</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/edit-doctor-profile')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="user" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Edit Profile</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/edit-doctor-profile')}>
+          <Icon name="user" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Edit Profile</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/privacy-settings')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="eye" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Privacy Settings</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/privacy-settings')}>
+          <Icon name="eye" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Privacy Settings</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/notifications-settings')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="bell" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Notifications</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => router.push('/notifications-settings')}>
+          <Icon name="bell" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Notifications</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => setActiveTab('home')}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="clock" size={20} color="#666" /></View>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }}>Working Hours</Text>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }} onPress={() => setActiveTab('home')}>
+          <Icon name="clock" size={20} color="#666" style={{ marginRight: 16 }} />
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }}>Working Hours</Text>
           <Icon name="chevronRight" size={20} color="#666" />
         </TouchableOpacity>
       </View>
 
       {/* Logout */}
-      <TouchableOpacity style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }, { marginTop: 20 }]} onPress={handleLogout}>
-        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}><Icon name="signOut" size={20} color="#666" /></View>
-        <Text style={[{ fontWeight: 'bold', fontSize: 16, color: '#222', flex: 1 }, { color: '#FF3B30' }]}>Logout</Text>
+      <TouchableOpacity style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 16, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }, { marginTop: 20 }]} onPress={handleLogout}>
+        <Icon name="signOut" size={20} color="#666" style={{ marginRight: 16 }} />
+        <Text style={[{ fontWeight: 'bold', fontSize: 16, color: colors.text, flex: 1 }, { color: '#FF3B30' }]}>Logout</Text>
         <Icon name="chevronRight" size={20} color="#666" />
       </TouchableOpacity>
     </ScrollView>
@@ -2308,7 +2330,7 @@ export default function DoctorDashboard() {
           {confirmedAppointments.map((appointment) => (
             <TouchableOpacity
               key={appointment.id}
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
               onPress={() => setSelectedAcceptedRequest(appointment)}
               activeOpacity={0.8}
             >
@@ -2321,15 +2343,28 @@ export default function DoctorDashboard() {
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2 }} numberOfLines={1}>{appointment.patient_name}</Text>
+                <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text, marginBottom: 2 }} numberOfLines={1}>{appointment.patient_name}</Text>
                 <Text style={{ color: '#7CB18F', fontSize: 14 }} numberOfLines={1}>
                   {formatAppointmentDateTimeTz(appointment)}
                 </Text>
-                <Text style={{ color: '#666', fontSize: 13, marginTop: 2 }} numberOfLines={1}>{appointment.appointment_type}</Text>
+                <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 2 }} numberOfLines={1}>{appointment.appointment_type}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
-                <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-                  <Text style={{ color: '#2E7D32', fontSize: 12, fontWeight: 'bold' }}>Accepted</Text>
+                <View style={{
+                  backgroundColor: appointment.status === 'in_progress' ? '#E3F2FD' : // Light Blue for In Progress
+                    appointment.status === 'completed' ? '#F5F5F5' : // Gray for Completed
+                      '#E8F5E8', // Green for Accepted/Confirmed
+                  borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8
+                }}>
+                  <Text style={{
+                    color: appointment.status === 'in_progress' ? '#1565C0' : // Blue for In Progress
+                      appointment.status === 'completed' ? '#616161' : // Gray for Completed
+                        '#2E7D32', // Green for Active
+                    fontSize: 12, fontWeight: 'bold'
+                  }}>
+                    {appointment.status === 'in_progress' ? 'In Progress' :
+                      appointment.status === 'completed' ? 'Completed' : 'Accepted'}
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -2349,7 +2384,7 @@ export default function DoctorDashboard() {
     return (
       <Modal visible={!!selectedAcceptedRequest} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
+          <View style={{ backgroundColor: colors.card, borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
             <TouchableOpacity onPress={() => setSelectedAcceptedRequest(null)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
               <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
             </TouchableOpacity>
@@ -2362,9 +2397,9 @@ export default function DoctorDashboard() {
                     size={72}
                     name={selectedAcceptedRequest.patient_name}
                   />
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedAcceptedRequest.patient_name}</Text>
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, marginTop: 10 }} numberOfLines={1}>{selectedAcceptedRequest.patient_name}</Text>
                   {selectedAcceptedRequest.patientEmail ? (
-                    <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>{selectedAcceptedRequest.patientEmail}</Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>{selectedAcceptedRequest.patientEmail}</Text>
                   ) : null}
                   {(selectedAcceptedRequest.patientCountry || selectedAcceptedRequest.patientCity || selectedAcceptedRequest.patientDateOfBirth || selectedAcceptedRequest.patientGender) ? (
                     <Text style={{ fontSize: 14, color: '#4CAF50', marginTop: 4 }} numberOfLines={1}>
@@ -2382,8 +2417,8 @@ export default function DoctorDashboard() {
                     </Text>
                   ) : null}
                 </View>
-                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
+                <View style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
                   <Text style={{ color: '#4CAF50', marginBottom: 4 }}>{formatAppointmentDateTimeTz(selectedAcceptedRequest)}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
                     <View style={{ backgroundColor: '#E8F5E8', borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
@@ -2391,8 +2426,8 @@ export default function DoctorDashboard() {
                     </View>
                   </View>
                   <View style={{ marginTop: 8 }}>
-                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                    <Text style={{ color: '#666' }}>{selectedAcceptedRequest.reason || 'No reason provided'}</Text>
+                    <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 4 }}>Reason</Text>
+                    <Text style={{ color: colors.textSecondary }}>{selectedAcceptedRequest.reason || 'No reason provided'}</Text>
                   </View>
                   <View style={{ marginTop: 12, backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
                     <Text style={{ color: '#8D6E63', fontSize: 12 }}>
@@ -2437,16 +2472,16 @@ export default function DoctorDashboard() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      <StatusBar backgroundColor={colors.background} barStyle={isDark ? "light-content" : "dark-content"} />
       {/* Header */}
       <View style={{
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         padding: 4,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: colors.background,
         borderBottomWidth: 1,
-        borderBottomColor: '#E0E0E0',
+        borderBottomColor: colors.border,
         zIndex: 10,
         marginBottom: 8,
       }}>
@@ -2545,10 +2580,7 @@ export default function DoctorDashboard() {
             label: "Appointments",
             isActive: activeTab === 'appointments',
             onPress: () => setActiveTab('appointments'),
-            badge: (() => {
-              const pendingRequests = bookingRequests.filter(req => req.status === 'pending' || req.status === 0);
-              return pendingRequests.length > 0 ? pendingRequests.length : undefined;
-            })()
+            badge: bookingRequests.length > 0 ? bookingRequests.length : undefined
           },
           {
             icon: "comments",
@@ -2611,7 +2643,7 @@ export default function DoctorDashboard() {
                   ) : user?.profile_picture ? (
                     <Image source={{ uri: user.profile_picture }} style={styles.sidebarProfileImage} />
                   ) : (
-                    <View style={[styles.sidebarProfileImage, { backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }]}>
+                    <View style={[styles.sidebarProfileImage, { backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }]}>
                       <FontAwesome name="user-md" size={24} color="#4CAF50" />
                     </View>
                   )}
@@ -2750,10 +2782,35 @@ export default function DoctorDashboard() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.backgroundTertiary,
+  },
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  activeTab: {
+    backgroundColor: colors.surface,
+    borderColor: colors.primary,
+  },
+  tabLabel: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+  activeTabLabel: {
+    color: colors.primary,
+    fontWeight: 'bold',
   },
   mainContent: {
     flex: 1,
@@ -2772,7 +2829,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#4CAF50',
+    color: colors.primary,
     marginTop: 16,
   },
   content: {
@@ -2786,12 +2843,12 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: isLargeScreen ? 32 : 28,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: isLargeScreen ? 18 : 16,
-    color: '#666',
+    color: colors.textSecondary,
   },
   quickActions: {
     marginBottom: 30,
@@ -2799,7 +2856,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: isLargeScreen ? 22 : 20,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 20,
   },
   actionGrid: {
@@ -2808,7 +2865,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   actionCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: isWeb ? 24 : 20,
     alignItems: 'center',
@@ -2835,13 +2892,13 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: isLargeScreen ? 16 : 14,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 4,
     textAlign: 'center',
   },
   actionSubtitle: {
     fontSize: isLargeScreen ? 14 : 12,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   statsContainer: {
@@ -2853,7 +2910,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   statCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: isWeb ? 24 : 20,
     alignItems: 'center',
@@ -2871,16 +2928,16 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: isLargeScreen ? 32 : 28,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: colors.primary,
     marginBottom: 8,
   },
   statLabel: {
     fontSize: isLargeScreen ? 14 : 12,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   addButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     borderRadius: 25,
     paddingVertical: 12,
     paddingHorizontal: 24,
@@ -2907,7 +2964,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   appointmentCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -2929,7 +2986,7 @@ const styles = StyleSheet.create({
   appointmentDate: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
   },
   appointmentTimeRow: {
     flexDirection: 'row',
@@ -2937,13 +2994,13 @@ const styles = StyleSheet.create({
   },
   appointmentType: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 8,
   },
   patientName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginLeft: 8,
   },
   appointmentStatus: {
@@ -2967,7 +3024,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   messageCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -2989,15 +3046,15 @@ const styles = StyleSheet.create({
   messageSender: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
   },
   messageTime: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textSecondary,
   },
   messagePreview: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     lineHeight: 20,
   },
   unreadIndicator: {
@@ -3017,7 +3074,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   profileCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 24,
     marginBottom: 20,
@@ -3037,16 +3094,16 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginTop: 12,
     marginBottom: 4,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   menuSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: {
@@ -3063,11 +3120,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   menuText: {
     fontSize: 16,
-    color: '#000',
+    color: colors.text,
     marginLeft: 12,
     flex: 1,
   },
@@ -3078,7 +3135,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   activityCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: 20,
     marginBottom: 12,
@@ -3099,16 +3156,16 @@ const styles = StyleSheet.create({
   activityTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginLeft: 8,
   },
   activityTime: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   activityDescription: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   emptyState: {
     flex: 1,
@@ -3122,13 +3179,13 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyStateSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,
@@ -3136,14 +3193,14 @@ const styles = StyleSheet.create({
   emptyStateAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
   emptyStateActionText: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.primary,
     fontWeight: '600',
     marginLeft: 8,
   },
@@ -3151,7 +3208,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   bookingRequestCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -3190,7 +3247,7 @@ const styles = StyleSheet.create({
   },
   detailText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   reasonSection: {
     marginBottom: 8,
@@ -3198,11 +3255,11 @@ const styles = StyleSheet.create({
   reasonLabel: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
   },
   reasonText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   requestActions: {
     flexDirection: 'row',
@@ -3236,9 +3293,9 @@ const styles = StyleSheet.create({
   },
   messagesHeader: {
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   messagesHeaderContent: {
     flexDirection: 'column',
@@ -3251,12 +3308,12 @@ const styles = StyleSheet.create({
   messagesTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginLeft: 12,
   },
   messagesSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 16,
   },
   messagesStats: {
@@ -3264,7 +3321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statItem: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -3276,7 +3333,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   patientCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
@@ -3332,7 +3389,7 @@ const styles = StyleSheet.create({
   consultationTypeText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: colors.primary,
     marginLeft: 4,
   },
   appointmentTime: {
@@ -3341,7 +3398,7 @@ const styles = StyleSheet.create({
   },
   appointmentTimeText: {
     fontSize: 13,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   patientCardRight: {
@@ -3364,7 +3421,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   rescheduleButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -3381,7 +3438,7 @@ const styles = StyleSheet.create({
   },
   balanceText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 8,
   },
   ratingsSection: {
@@ -3391,7 +3448,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   ratingCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -3415,12 +3472,12 @@ const styles = StyleSheet.create({
   },
   ratingDate: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 8,
   },
   ratingComment: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   noRatingsContainer: {
     flex: 1,
@@ -3431,17 +3488,17 @@ const styles = StyleSheet.create({
   noRatingsText: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#666',
+    color: colors.textSecondary,
     marginBottom: 12,
   },
   noRatingsSubtext: {
     fontSize: 16,
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   moreRatingsText: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.primary,
     textAlign: 'center',
     fontWeight: '600',
   },
@@ -3449,7 +3506,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   profileCardBox: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
@@ -3465,7 +3522,7 @@ const styles = StyleSheet.create({
   profileCardNew: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 22,
     padding: 22,
     marginBottom: 22,
@@ -3499,7 +3556,7 @@ const styles = StyleSheet.create({
   profileNameNew: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 2,
   },
   profileEmailNew: {
@@ -3508,13 +3565,13 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   profileTypeNew: {
-    color: '#4CAF50',
+    color: colors.primary,
     fontWeight: 'bold',
     fontSize: 15,
     marginBottom: 2,
   },
   earningsCard: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     padding: 18,
     marginBottom: 18,
@@ -3523,17 +3580,17 @@ const styles = StyleSheet.create({
   earningsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 8,
   },
   earningsAmount: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: colors.primary,
     marginBottom: 4,
   },
   earningsButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 28,
@@ -3549,11 +3606,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   welcomeHeader: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: colors.border,
   },
   welcomeContent: {
     flexDirection: 'row',
@@ -3565,7 +3622,7 @@ const styles = StyleSheet.create({
   },
   sidebarWelcomeText: {
     fontSize: 16,
-    color: '#666666',
+    color: colors.textSecondary,
   },
   userName: {
     fontSize: 24,
@@ -3575,7 +3632,7 @@ const styles = StyleSheet.create({
   },
   userRole: {
     fontSize: 14,
-    color: '#4CAF50',
+    color: colors.primary,
     marginTop: 2,
   },
   profileButton: {
@@ -3584,7 +3641,7 @@ const styles = StyleSheet.create({
   hamburgerButton: {
     padding: 6,
     borderRadius: 16,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -3636,14 +3693,14 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 300,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 18,
-    borderBottomLeftRadius: 18,
+    backgroundColor: colors.card,
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
+    shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowRadius: 12,
+    elevation: 8,
   },
   sidebarScrollView: {
     flex: 1,
@@ -3657,7 +3714,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
     marginBottom: 20,
   },
   sidebarProfileImage: {
@@ -3669,22 +3726,22 @@ const styles = StyleSheet.create({
   sidebarUserName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 4,
   },
   sidebarUserEmail: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   sectionHeader: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#000',
+    color: colors.text,
     marginBottom: 16,
   },
   sectionGroup: {
     marginBottom: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 16,
     overflow: 'hidden',
     alignSelf: 'center',
@@ -3697,13 +3754,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: colors.border,
   },
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#E8F5E8',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -3718,7 +3775,7 @@ const styles = StyleSheet.create({
   },
   sidebarMenuItemText: {
     fontSize: 16,
-    color: '#222',
+    color: colors.text,
     marginLeft: 4,
     fontWeight: '600',
     flex: 1,
@@ -3735,7 +3792,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   requestCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -3763,7 +3820,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderRadius: 12,
     padding: 20,
     width: '90%',
@@ -3778,7 +3835,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.surface,
   },
   modalHeader: {
     alignItems: 'center',
@@ -3787,7 +3844,7 @@ const styles = StyleSheet.create({
   modalPatientName: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 8,
   },
   patientDemographics: {
@@ -3797,7 +3854,7 @@ const styles = StyleSheet.create({
   },
   demographicText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
     marginLeft: 4,
   },
   modalDetails: {
@@ -3806,19 +3863,19 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     marginBottom: 4,
   },
   detailValue: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   modalNote: {
     marginBottom: 16,
   },
   noteText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   modalActions: {
     flexDirection: 'row',
@@ -3832,7 +3889,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   cancelButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -3845,13 +3902,13 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#666',
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#222',
+    color: colors.text,
     textAlign: 'center',
     height: 60,
     lineHeight: 60,
@@ -3860,7 +3917,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',

@@ -46,12 +46,12 @@ const MyAppointments = () => {
       if (response.success) {
         // Handle different response structures
         let appointmentsData = response.data;
-        
+
         // Check if data is nested (Laravel pagination structure)
         if (response.data && response.data.data) {
           appointmentsData = response.data.data;
         }
-        
+
         // Ensure we have an array
         if (Array.isArray(appointmentsData)) {
           // Sort appointments by most recent first
@@ -83,7 +83,7 @@ const MyAppointments = () => {
     if (typeof status === 'string') {
       return status.toLowerCase();
     }
-    
+
     // Convert numeric status to string
     switch (Number(status)) {
       case 0: return 'pending';
@@ -93,6 +93,7 @@ const MyAppointments = () => {
       case 4: return 'reschedule_proposed';
       case 5: return 'reschedule_accepted';
       case 6: return 'reschedule_rejected';
+      case 7: return 'in_progress';
       default: return 'unknown';
     }
   };
@@ -102,7 +103,7 @@ const MyAppointments = () => {
     const status = getStatusString(appt.status);
     const appointmentDateTime = new Date(`${appt.appointment_date || appt.date} ${appt.appointment_time || appt.time}`);
     const now = new Date();
-    
+
     const canCancel = (status === 'pending' || status === 'confirmed') && appointmentDateTime > now;
     console.log('🔍 canCancelAppointment check:', {
       appointmentId: appt.id,
@@ -111,7 +112,7 @@ const MyAppointments = () => {
       now: now.toISOString(),
       canCancel
     });
-    
+
     // Can cancel if status is pending or confirmed AND appointment hasn't started yet
     return canCancel;
   };
@@ -170,6 +171,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return '#FF9500';
       case 'confirmed': return '#4CAF50';
+      case 'in_progress': return '#4CAF50';
       case 'cancelled': return '#FF3B30';
       case 'completed': return '#007AFF';
       case 'reschedule_proposed': return '#FF9500';
@@ -184,6 +186,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'clock-o';
       case 'confirmed': return 'check-circle';
+      case 'in_progress': return 'play-circle';
       case 'cancelled': return 'times-circle';
       case 'completed': return 'check-square';
       case 'reschedule_proposed': return 'clock-o';
@@ -198,6 +201,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
+      case 'in_progress': return 'In Progress';
       case 'cancelled': return 'Cancelled';
       case 'completed': return 'Completed';
       case 'reschedule_proposed': return 'Reschedule Proposed';
@@ -238,15 +242,15 @@ const MyAppointments = () => {
     const statusStr = getStatusString(appt.status);
     const statusLabel = getStatusLabel(appt.status);
     const canCancel = canCancelAppointment(appt);
-    
+
     return (
       <TouchableOpacity
         key={`${keyPrefix}${appt.id}`}
-        style={{flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1}}
+        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
         onPress={() => setSelectedAppointment(appt)}
         activeOpacity={0.8}
       >
-        <View style={{width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16}}>
+        <View style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
           <DoctorProfilePicture
             profilePictureUrl={appt.doctor?.profile_picture_url}
             profilePicture={appt.doctor?.profile_picture}
@@ -254,15 +258,15 @@ const MyAppointments = () => {
             name={appt.doctorName}
           />
         </View>
-        <View style={{flex: 1}}>
-          <Text style={{fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2}} numberOfLines={1}>{appt.doctorName}</Text>
-          <Text style={{color: '#7CB18F', fontSize: 14}} numberOfLines={1}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2 }} numberOfLines={1}>{appt.doctorName}</Text>
+          <Text style={{ color: '#7CB18F', fontSize: 14 }} numberOfLines={1}>
             {formatDateTime(appt)}
           </Text>
         </View>
-        <View style={{alignItems: 'flex-end'}}>
-          <View style={{backgroundColor: getStatusColor(appt.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8}}>
-            <Text style={{color: '#fff', fontSize: 12, fontWeight: 'bold'}}>{statusLabel}</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <View style={{ backgroundColor: getStatusColor(appt.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{statusLabel}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -279,8 +283,8 @@ const MyAppointments = () => {
   }
 
   return (
-    <ScrollView 
-      style={styles.container} 
+    <ScrollView
+      style={styles.container}
       showsVerticalScrollIndicator={false}
       refreshControl={
         <RefreshControl
@@ -311,7 +315,7 @@ const MyAppointments = () => {
           </Text>
         </View>
       ) : (
-        <View style={{backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2}}>
+        <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2 }}>
           {appointments.map((appt) => renderAppointment(appt, 'appt-'))}
         </View>
       )}
@@ -353,13 +357,13 @@ const MyAppointments = () => {
                   <View style={{ marginTop: 8 }}>
                     <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
                     <Text style={{ color: '#666' }}>
-                      {selectedAppointment.reason && selectedAppointment.reason.trim() !== '' 
-                        ? selectedAppointment.reason 
+                      {selectedAppointment.reason && selectedAppointment.reason.trim() !== ''
+                        ? selectedAppointment.reason
                         : 'No reason provided'}
                     </Text>
                   </View>
                 </View>
-                
+
                 {/* Cancel Button - Only show for cancellable appointments */}
                 {canCancelAppointment(selectedAppointment) && (
                   <TouchableOpacity
@@ -372,9 +376,9 @@ const MyAppointments = () => {
                     <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
                   </TouchableOpacity>
                 )}
-                
+
                 {console.log('🔍 Rendering cancel button section, canCancel:', canCancelAppointment(selectedAppointment), 'selectedAppointment:', selectedAppointment?.id)}
-                
+
                 {/* Cancellation Note */}
                 <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
                   <Text style={{ color: '#8D6E63', fontSize: 12 }}>

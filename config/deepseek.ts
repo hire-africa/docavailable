@@ -7,9 +7,9 @@ export const DEEPSEEK_CONFIG = {
   apiKey: environment.DEEPSEEK_API_KEY,
   baseURL: 'https://api.deepseek.com/v1',
   model: 'deepseek-chat',
-  maxTokens: 800, // Increased for better responses
-  temperature: 0.8, // Slightly higher for more natural, conversational responses
-  
+  maxTokens: 300, // Reduced for concise responses
+  temperature: 0.6, // Lower for more focused, consistent responses
+
   // Response customization
   responseStyle: {
     tone: 'friendly_professional', // 'formal', 'casual', 'friendly_professional'
@@ -18,7 +18,7 @@ export const DEEPSEEK_CONFIG = {
     includeAppFeatures: false, // Only include when relevant
     includeLocalContext: true,
   },
-  
+
   // Urgency thresholds
   urgencyKeywords: {
     high: ['chest pain', 'severe', 'bleeding', 'unconscious', 'difficulty breathing', 'can\'t breathe', 'suicide', 'overdose'],

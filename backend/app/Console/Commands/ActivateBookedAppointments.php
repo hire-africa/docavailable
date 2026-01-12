@@ -87,11 +87,17 @@ class ActivateBookedAppointments extends Command
      */
     private function activateAppointment(Appointment $appointment): void
     {
-        // Update appointment status to in_progress
-        $appointment->update([
-            'status' => Appointment::STATUS_IN_PROGRESS,
-            'actual_start_time' => now(),
-        ]);
+        // For text appointments, we need to create the associated TextSession and ChatRoom
+        // This ensures the "Active Session" banner appears on the frontend and chat works
+        if ($appointment->appointment_type === 'text') {
+            $this->activateTextSession($appointment);
+        } else {
+            // Standard activation for other types
+            $appointment->update([
+                'status' => Appointment::STATUS_IN_PROGRESS,
+                'actual_start_time' => now(),
+            ]);
+        }
 
         Log::info("Activated booked appointment", [
             'appointment_id' => $appointment->id,
@@ -105,6 +111,129 @@ class ActivateBookedAppointments extends Command
 
         // Send notifications to both parties
         $this->sendActivationNotifications($appointment);
+    }
+
+    /**
+     * Activate a text session
+     */
+    private function activateTextSession(Appointment $appointment): void
+    {
+        try {
+            // Check for valid subscription
+            $subscription = \App\Models\Subscription::where('user_id', $appointment->patient_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (!$subscription) {
+                Log::warning("Skipping text session activation: No active subscription", [
+                    'appointment_id' => $appointment->id,
+                    'patient_id' => $appointment->patient_id
+                ]);
+                return;
+            }
+
+            // Note: We allow activation even if sessions_remaining is 0,
+            // as billing will be handled by auto-deduction (duration) or manual end (base fee).
+            // This aligns with instant session behavior.
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $subscription) {
+                // Check if session already exists
+                $existingSession = \App\Models\TextSession::where('appointment_id', $appointment->id)->first();
+
+                if ($existingSession) {
+                    $this->info("   Text session already exists for appointment {$appointment->id}");
+                    $session = $existingSession;
+
+                    // Ensure status is correct if it was just scheduled
+                    if ($session->status === 'scheduled') {
+                        $session->update([
+                            'status' => 'waiting_for_doctor',
+                            'started_at' => now(),
+                            'activated_at' => now(),
+                            'doctor_response_deadline' => now()->addSeconds(90),
+                        ]);
+                    }
+                } else {
+                    // Create new TextSession
+                    // NO UPFRONT DEDUCTION: sessions_used starts at 0
+                    $session = \App\Models\TextSession::create([
+                        'appointment_id' => $appointment->id,
+                        'patient_id' => $appointment->patient_id,
+                        'doctor_id' => $appointment->doctor_id,
+                        'status' => 'waiting_for_doctor', // Initial status
+                        'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
+                        'doctor_response_deadline' => now()->addSeconds(90),
+                        'started_at' => now(),
+                        'activated_at' => now(), // Important for auto-deduction timer
+                        'last_activity_at' => now(),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                        'sessions_used' => 0 // Explicitly 0, billing happens later
+                    ]);
+
+                    $this->info("   Created text session {$session->id}");
+                }
+
+                // Create Chat Room if needed
+                if (!$session->chat_id) {
+                    $chatRoomName = "text_session_{$session->id}";
+
+                    // Check if room exists by name first
+                    $existingRoom = \Illuminate\Support\Facades\DB::table('chat_rooms')
+                        ->where('name', $chatRoomName)
+                        ->where('type', 'text_session')
+                        ->first();
+
+                    if ($existingRoom) {
+                        $roomId = $existingRoom->id;
+                    } else {
+                        $roomId = \Illuminate\Support\Facades\DB::table('chat_rooms')->insertGetId([
+                            'name' => $chatRoomName,
+                            'type' => 'text_session',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+
+                    $session->update(['chat_id' => $roomId]);
+
+                    // Add Participants
+                    // Use insertOrIgnore to prevent duplicates
+                    \Illuminate\Support\Facades\DB::table('chat_room_participants')->insertOrIgnore([
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $appointment->patient_id,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ],
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $appointment->doctor_id,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]
+                    ]);
+
+                    $this->info("   Created/Linked chat room {$roomId}");
+                }
+
+                // Finally update appointment status
+                $appointment->update([
+                    'status' => Appointment::STATUS_IN_PROGRESS, // 7
+                    'actual_start_time' => now(),
+                ]);
+            });
+
+        } catch (\Exception $e) {
+            Log::error("Failed to activate text session infrastructure", [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage()
+            ]);
+            // Throw to be caught by main loop
+            throw $e;
+        }
     }
 
     /**

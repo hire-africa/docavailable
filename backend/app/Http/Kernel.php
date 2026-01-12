@@ -22,6 +22,7 @@ class Kernel extends HttpKernel
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
         \App\Http\Middleware\ProcessQueueJobs::class, // Auto-process queue jobs
+        \App\Http\Middleware\SecurityHeadersMiddleware::class, // Security headers
     ];
 
     /**
@@ -40,7 +41,7 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
-            \Illuminate\Routing\Middleware\ThrottleRequests::class.':api',
+            \Illuminate\Routing\Middleware\ThrottleRequests::class . ':api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
         ],
     ];
@@ -66,5 +67,6 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'process.queue' => \App\Http\Middleware\ProcessQueueJobs::class,
         'role' => \App\Http\Middleware\RoleMiddleware::class,
+        'admin.ip' => \App\Http\Middleware\AdminIpWhitelistMiddleware::class,
     ];
-} 
+}

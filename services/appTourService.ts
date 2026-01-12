@@ -223,6 +223,27 @@ export const DOCTOR_TOUR_STEPS: TourStep[] = [
     position: 'top',
   },
   {
+    id: 'display-over-apps',
+    title: 'IMPORTANT: Display Over Other Apps ⚠️',
+    description: 'To ensure you receive incoming call notifications effectively:\n\n1. Go to your phone Settings > Apps\n2. Find "DocAvailable Doctor"\n3. Tap "Display over other apps" (or "Appear on top")\n4. Enable this permission\n\nThis ensures calls ring even when you\'re using other apps.',
+    target: 'display-over-apps', // Generic target, will center if not found
+    position: 'center',
+  },
+  {
+    id: 'background-activity',
+    title: 'IMPORTANT: Background Activity 🔋',
+    description: 'To prevent the system from killing the app in the background:\n\n1. Go to Settings > Apps > DocAvailable Doctor\n2. Tap "Battery" or "App Battery Usage"\n3. Select "Unrestricted" or "No restrictions"',
+    target: 'background-activity', // Generic target
+    position: 'center',
+  },
+  {
+    id: 'lockscreen-display',
+    title: 'IMPORTANT: Lock Screen Display 🔓',
+    description: 'To see calls when your phone is locked:\n\n1. Go to Settings > Apps > DocAvailable Doctor\n2. Tap "Notifications" or "Permissions"\n3. Ensure "Show on Lock Screen" is enabled',
+    target: 'lockscreen-display', // Generic target
+    position: 'center',
+  },
+  {
     id: 'complete',
     title: 'You\'re All Set! 🎉',
     description: 'You\'re ready to start receiving appointments! Make sure to set your working hours and online status so patients can book with you.',
@@ -268,7 +289,7 @@ export const DOCTOR_WALLET_TOUR_STEPS: TourStep[] = [
     description: 'You now know how to manage your earnings. Start earning by completing consultations, and withdraw your funds whenever you\'re ready!',
     target: 'wallet-complete',
     position: 'center',
-    imagePath: require('../assets/images/ai-doc2.png'),
+    // Image removed as requested
   },
 ];
 

@@ -168,3 +168,4 @@ adb logcat | grep Screenshot
 
 **That's it!** Just rebuild and test. Screenshots will be blocked only where you want them blocked. 🎯
 
+

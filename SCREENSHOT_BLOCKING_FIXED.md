@@ -173,3 +173,4 @@ After rebuild:
 - [ ] Verify recording shows black screen
 - [ ] Check logs for ✅ messages
 
+

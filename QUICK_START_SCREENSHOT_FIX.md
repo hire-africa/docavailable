@@ -128,3 +128,4 @@ function MySecureScreen() {
 
 **That's it!** Just rebuild and screenshots will be blocked. 🎉
 
+

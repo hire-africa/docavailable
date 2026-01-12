@@ -2,20 +2,20 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
-import { NotificationService } from '../services/notificationService';
+import { Notification as ApiNotification, notificationApiService } from '../services/notificationApiService';
 import { RealTimeEventService } from '../services/realTimeEventService';
 
 const { width } = Dimensions.get('window');
@@ -27,18 +27,19 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'appointment' | 'message' | 'system' | 'payment' | 'reminder';
+  type: string;
   isRead: boolean;
   timestamp: Date;
+  data?: Record<string, any>;
 }
 
 export default function Notifications() {
   return (
     <>
-      <Stack.Screen 
-        options={{ 
-          headerShown: false 
-        }} 
+      <Stack.Screen
+        options={{
+          headerShown: false
+        }}
       />
       <NotificationsContent />
     </>
@@ -60,7 +61,7 @@ function NotificationsContent() {
   useEffect(() => {
     const unsubscribe = RealTimeEventService.subscribe((event) => {
       console.log('📡 [Notifications] Received real-time event:', event);
-      
+
       // Reload notifications when new events arrive
       loadNotifications();
     });
@@ -78,33 +79,48 @@ function NotificationsContent() {
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      
+
       if (!user || !userData) {
         setNotifications([]);
         return;
       }
 
-      // Clear old notifications first
-      await NotificationService.clearOldNotifications();
+      console.log('🔔 Loading notifications from backend API...');
+      const response = await notificationApiService.getNotifications(1, 50, false);
+      console.log('🔔 API response:', response);
 
-      // Load notifications from service filtered by user type
-      const userType = userData.role === 'doctor' ? 'doctor' : 'patient';
-      console.log('🔔 Loading notifications for user type:', userType, 'user ID:', userData.id);
-      let serviceNotifications = await NotificationService.getNotificationsForUser(userType, userData.id?.toString());
-      console.log('🔔 Service notifications received:', serviceNotifications.length, serviceNotifications);
-      
-      // Only show real notifications from the service, no mock data
-      const allNotifications = [...serviceNotifications];
+      if (response.success && response.data) {
+        // Transform API notifications to our interface format
+        const apiNotifications: Notification[] = response.data.notifications.map((n: ApiNotification) => {
+          // Extract type from notification data or use default
+          const notificationType = n.data?.type || n.type || 'system';
 
-      // Sort by timestamp (newest first)
-      allNotifications.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+          return {
+            id: n.id.toString(),
+            title: n.title || n.data?.title || 'Notification',
+            message: n.body || n.data?.body || n.data?.message || '',
+            type: notificationType,
+            isRead: !!n.read_at,
+            timestamp: new Date(n.created_at),
+            data: n.data
+          };
+        });
 
-      console.log('🔔 Final notifications (real-time only):', allNotifications.length, allNotifications);
+        // Filter out chat message notifications
+        const filteredNotifications = apiNotifications.filter(n =>
+          !['message', 'new_message', 'chat_message'].includes(n.type)
+        );
 
-      setNotifications(allNotifications);
+        console.log('🔔 Transformed notifications:', apiNotifications.length, 'Filtered:', filteredNotifications.length);
+        setNotifications(filteredNotifications);
+      } else {
+        console.log('🔔 No notifications found or API error');
+        setNotifications([]);
+      }
     } catch (error) {
       console.error('Error loading notifications:', error);
-      Alert.alert('Error', 'Failed to load notifications. Please try again.');
+      // Don't show alert for auth errors - just show empty list
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -120,8 +136,8 @@ function NotificationsContent() {
 
   const markAllAsRead = async () => {
     try {
-      await NotificationService.markAllAsRead();
-      setNotifications(prev => 
+      await notificationApiService.markAllAsRead();
+      setNotifications(prev =>
         prev.map(notification => ({ ...notification, isRead: true }))
       );
     } catch (error) {
@@ -138,10 +154,21 @@ function NotificationsContent() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setNotifications(prev => 
-              prev.filter(notification => notification.id !== notificationId)
-            );
+          onPress: async () => {
+            try {
+              // Call API to delete from backend
+              await notificationApiService.deleteNotification(parseInt(notificationId));
+              // Update local state
+              setNotifications(prev =>
+                prev.filter(notification => notification.id !== notificationId)
+              );
+            } catch (error) {
+              console.error('Error deleting notification:', error);
+              // Still remove from local state even if API fails
+              setNotifications(prev =>
+                prev.filter(notification => notification.id !== notificationId)
+              );
+            }
           }
         }
       ]
@@ -149,93 +176,193 @@ function NotificationsContent() {
   };
 
   const getNotificationIcon = (type: string) => {
-    console.log('🔔 Getting icon for notification type:', type);
+    // Map notification types to appropriate FontAwesome icons
     switch (type) {
+      // Appointment notifications
       case 'appointment':
-        return 'calendar';
-      case 'message':
-        return 'comments';
-      case 'payment':
-        return 'dollar';
-      case 'wallet':
-        return 'dollar';
-      case 'reminder':
-        return 'clock-o';
-      case 'system':
-        return 'info-circle';
-      case 'general':
-        return 'bell';
-      case 'alert':
-        return 'exclamation-triangle';
-      case 'info':
-        return 'info-circle';
-      case 'success':
-        return 'check-circle';
-      case 'health':
-        return 'heart';
-      case 'security':
-        return 'shield';
-      case 'appointment_booked':
+      case 'appointment_created':
+      case 'appointment_confirmed':
         return 'calendar-check-o';
       case 'appointment_cancelled':
         return 'calendar-times-o';
-      case 'new_message':
-        return 'envelope';
+      case 'appointment_reminder':
+      case 'reminder':
+        return 'clock-o';
+      case 'appointment_reschedule':
+      case 'reschedule_proposed':
+      case 'reschedule_accepted':
+      case 'reschedule_rejected':
+        return 'calendar';
+      case 'appointment_expired':
+        return 'calendar-minus-o';
+
+      // Wallet/Payment notifications
+      case 'wallet':
+      case 'payment':
       case 'payment_received':
-        return 'money';
-      case 'wallet_transaction':
-        return 'wallet';
+        return 'dollar';
+      case 'withdrawal_requested':
+      case 'withdrawal_processed':
+        return 'bank';
+      case 'withdrawal_failed':
+        return 'exclamation-circle';
+      case 'bonus_received':
+        return 'gift';
+
+      // Subscription notifications
+      case 'subscription':
+      case 'subscription_purchased':
+      case 'subscription_activated':
+        return 'star';
+      case 'subscription_expired':
+      case 'subscription_expiring':
+        return 'star-half-o';
+      case 'subscription_renewed':
+        return 'refresh';
+
+      // Text session notifications
+      case 'text_session':
+      case 'text_session_started':
+      case 'session_started':
+        return 'comments';
+      case 'text_session_ended':
+      case 'session_ended':
+        return 'comment-o';
+      case 'session_warning':
+      case 'session_reminder':
+        return 'hourglass-half';
+
+      // Message notifications
+      case 'message':
+      case 'new_message':
+      case 'chat_message':
+        return 'envelope';
+
+      // Call notifications
+      case 'call':
+      case 'incoming_call':
+        return 'phone';
+      case 'call_failed':
+      case 'missed_call':
+        return 'phone-square';
+      case 'video_call':
+        return 'video-camera';
+
+      // Welcome/System notifications
+      case 'welcome':
+        return 'hand-peace-o';
+      case 'system':
+      case 'custom':
+        return 'info-circle';
+      case 'security':
+        return 'shield';
+      case 'alert':
+        return 'exclamation-triangle';
+      case 'success':
+        return 'check-circle';
+
       default:
-        console.log('🔔 Using default bell icon for type:', type);
         return 'bell';
     }
   };
 
   const getNotificationColor = (type: string) => {
+    // Vibrant color palette for different notification types
     switch (type) {
+      // Appointment notifications - Green shades
       case 'appointment':
-        return '#4CAF50';
-      case 'message':
-        return '#2196F3';
-      case 'payment':
-        return '#FF9800';
-      case 'wallet':
-        return '#FF9800';
-      case 'reminder':
-        return '#9C27B0';
-      case 'system':
-        return '#607D8B';
-      case 'general':
-        return '#666';
-      case 'alert':
-        return '#F44336';
-      case 'info':
-        return '#2196F3';
-      case 'success':
-        return '#4CAF50';
-      case 'health':
-        return '#E91E63';
-      case 'security':
-        return '#FF5722';
-      case 'appointment_booked':
-        return '#4CAF50';
+      case 'appointment_created':
+      case 'appointment_confirmed':
+        return '#10B981'; // Emerald green
       case 'appointment_cancelled':
-        return '#F44336';
-      case 'new_message':
-        return '#2196F3';
+        return '#EF4444'; // Red
+      case 'appointment_reminder':
+      case 'reminder':
+        return '#8B5CF6'; // Purple
+      case 'appointment_reschedule':
+      case 'reschedule_proposed':
+      case 'reschedule_accepted':
+        return '#F59E0B'; // Amber
+      case 'reschedule_rejected':
+      case 'appointment_expired':
+        return '#EF4444'; // Red
+
+      // Wallet/Payment notifications - Gold/Orange shades
+      case 'wallet':
+      case 'payment':
       case 'payment_received':
-        return '#4CAF50';
-      case 'wallet_transaction':
-        return '#FF9800';
+        return '#F59E0B'; // Amber gold
+      case 'withdrawal_requested':
+      case 'withdrawal_processed':
+        return '#3B82F6'; // Blue
+      case 'withdrawal_failed':
+        return '#EF4444'; // Red
+      case 'bonus_received':
+        return '#10B981'; // Green
+
+      // Subscription notifications - Premium purple/gold
+      case 'subscription':
+      case 'subscription_purchased':
+      case 'subscription_activated':
+        return '#8B5CF6'; // Purple (premium feel)
+      case 'subscription_expired':
+      case 'subscription_expiring':
+        return '#F59E0B'; // Amber warning
+      case 'subscription_renewed':
+        return '#10B981'; // Green success
+
+      // Text session notifications - Blue shades
+      case 'text_session':
+      case 'text_session_started':
+      case 'session_started':
+        return '#3B82F6'; // Blue
+      case 'text_session_ended':
+      case 'session_ended':
+        return '#6B7280'; // Gray
+      case 'session_warning':
+      case 'session_reminder':
+        return '#F59E0B'; // Amber warning
+
+      // Message notifications - Blue shades
+      case 'message':
+      case 'new_message':
+      case 'chat_message':
+        return '#06B6D4'; // Cyan
+
+      // Call notifications - Teal shades
+      case 'call':
+      case 'incoming_call':
+        return '#14B8A6'; // Teal
+      case 'call_failed':
+      case 'missed_call':
+        return '#EF4444'; // Red
+      case 'video_call':
+        return '#8B5CF6'; // Purple
+
+      // Welcome notification - Special teal
+      case 'welcome':
+        return '#14B8A6'; // Teal (brand color)
+
+      // System notifications
+      case 'system':
+      case 'custom':
+        return '#6B7280'; // Gray
+      case 'security':
+        return '#EC4899'; // Pink
+      case 'alert':
+        return '#EF4444'; // Red
+      case 'success':
+        return '#10B981'; // Green
+
       default:
-        return '#666';
+        return '#6B7280'; // Gray
     }
   };
 
   const formatTimestamp = (timestamp: Date) => {
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) {
       return 'Just now';
     } else if (diffInMinutes < 60) {
@@ -250,9 +377,9 @@ function NotificationsContent() {
   };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
-  
+
   // Filter notifications based on active filter
-  const filteredNotifications = activeFilter === 'unread' 
+  const filteredNotifications = activeFilter === 'unread'
     ? notifications.filter(n => !n.isRead)
     : notifications;
 
@@ -260,7 +387,7 @@ function NotificationsContent() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
@@ -281,22 +408,22 @@ function NotificationsContent() {
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
           <FontAwesome name="arrow-left" size={20} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.headerRightButton}
           onPress={markAllAsRead}
           disabled={unreadCount === 0}
         >
-          <FontAwesome 
-            name="check" 
-            size={18} 
-            color={unreadCount > 0 ? "#4CAF50" : "#999"} 
+          <FontAwesome
+            name="check"
+            size={18}
+            color={unreadCount > 0 ? "#4CAF50" : "#999"}
           />
         </TouchableOpacity>
       </View>
@@ -318,7 +445,7 @@ function NotificationsContent() {
               All ({notifications.length})
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               styles.filterTab,
@@ -335,8 +462,8 @@ function NotificationsContent() {
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
-          style={styles.content} 
+        <ScrollView
+          style={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -365,11 +492,11 @@ function NotificationsContent() {
                         styles.notificationIcon,
                         { backgroundColor: getNotificationColor(notification.type) + '20' }
                       ]}>
-        <FontAwesome 
-          name={getNotificationIcon(notification.type) as any} 
-          size={16} 
-          color={getNotificationColor(notification.type)} 
-        />
+                        <FontAwesome
+                          name={getNotificationIcon(notification.type) as any}
+                          size={22}
+                          color={getNotificationColor(notification.type)}
+                        />
                       </View>
                       <View style={styles.notificationText}>
                         <Text style={[
@@ -390,7 +517,7 @@ function NotificationsContent() {
                       )}
                     </View>
                   </View>
-                  
+
                   <TouchableOpacity
                     style={styles.deleteButton}
                     onPress={() => deleteNotification(notification.id)}
@@ -407,8 +534,8 @@ function NotificationsContent() {
                 {activeFilter === 'unread' ? 'No Unread Notifications' : 'No Notifications'}
               </Text>
               <Text style={styles.emptySubtitle}>
-                {activeFilter === 'unread' 
-                  ? 'You\'re all caught up! No unread notifications.' 
+                {activeFilter === 'unread'
+                  ? 'You\'re all caught up! No unread notifications.'
                   : 'You\'re all caught up! New notifications will appear here.'
                 }
               </Text>
@@ -531,9 +658,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   notificationIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

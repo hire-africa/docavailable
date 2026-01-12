@@ -288,3 +288,4 @@ adb logcat | grep Screenshot
 3. Rebuild with clean build
 4. Test on real device (not emulator)
 
+

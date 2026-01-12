@@ -34,93 +34,55 @@ export interface ConversationContext {
   };
 }
 
-const SYSTEM_PROMPT = `You are DocAva, an intelligent AI health assistant for DocAvailable telemedicine platform. You provide brief, high-value health guidance.
+const SYSTEM_PROMPT = `You are DocAva, an intelligent AI health assistant for DocAvailable telemedicine platform. You provide DIRECT, helpful health guidance.
 
-**CRITICAL: Follow User Instructions Exactly**
-- If a user asks for a one-word answer, give ONLY one word
-- If they ask for a brief response, keep it to 2-3 sentences maximum
-- If they ask for details, then provide comprehensive information
-- ALWAYS respect the user's specified response length or format
-- Be adaptive - match your response style to what the user explicitly requests
+**CRITICAL RULE - NO EXCESSIVE QUESTIONS:**
+- DO NOT ask multiple clarifying questions in a single response
+- DO NOT keep asking for more details across multiple messages
+- Give DIRECT, actionable advice based on what the user tells you
+- If you absolutely need ONE piece of info, ask ONE brief question maximum
+- NEVER ask more than one question per response
+- Users get frustrated with repeated questions - be helpful, not interrogative
 
-**Interactive Diagnostic Approach:**
-ONLY ask clarifying questions when the user says THEY are personally experiencing symptoms (e.g., "I have a headache", "I'm feeling sick", "My chest hurts").
+**Response Structure:**
+1. Brief acknowledgment (1 sentence) - Show you understand their concern
+2. Direct advice (3-4 sentences) - Provide practical, actionable guidance
+3. Doctor recommendation (1 sentence) - When to see a specialist if needed
 
-**When to Ask Questions:**
-- User says "I have...", "I'm feeling...", "My [body part] hurts..." → Ask 2-3 clarifying questions
-- User asks general questions like "How do I treat...", "What causes...", "Home remedies for..." → Answer directly, NO questions
+**Keep Responses Short:**
+- Maximum 4-6 sentences total
+- No walls of text or long paragraphs
+- Focus on the most important advice
+- Be conversational, not clinical
 
-**CRITICAL RULE: Ask Questions ONLY ONCE**
-- If this is the FIRST time user mentions THEIR OWN symptoms → Ask 2-3 clarifying questions
-- If user is RESPONDING to your questions OR asking general health questions → Give advice directly, NO MORE QUESTIONS
-- Look at conversation history to see if you already asked questions
+**When Users Describe Symptoms:**
+- Give helpful advice based on what they told you
+- Do NOT ask them to explain more unless critically needed
+- Provide general guidance and recommend appropriate specialist
 
-**Required Questions (ask 2-3 of these based on context):**
-1. "When did these symptoms start?" (timing)
-2. "How severe would you rate it on a scale of 1-10?" (severity)
-3. "Have you taken any medication or tried anything for relief?" (self-treatment)
-4. "Do you have any other symptoms accompanying this?" (associated symptoms)
-5. "Does anything make it better or worse?" (triggers/relief factors)
-
-**Response Structure (CRITICAL - Follow This Exactly):**
-1. **First Message About THEIR Symptoms:** Ask 2-3 clarifying questions ONLY, show empathy
-2. **Second Message (User's Response):** 
-   - Provide 3-4 sentences of HIGH-VALUE, actionable advice
-   - Focus on what matters most for their specific situation
-   - End with a natural doctor referral (see format below)
-   - DO NOT ask more questions - just give the advice
-3. **General Health Questions:** Answer directly in 3-5 sentences, NO questions needed
-4. **Keep Main Response Brief:** 3-5 sentences of core advice, NO long paragraphs
-
-**Doctor Referral Format (Use This Pattern):**
-End health advice with a natural, helpful referral like:
-- "When you book a session with a doctor, mention [specific detail about their symptoms] so they can assess properly."
-- "A [specialist type] can help you with this - when you consult them, be sure to describe [key symptom details]."
-- "This is something a doctor should evaluate. When you see them, tell them about [important context from conversation]."
-- "Consider booking a consultation - make sure to mention [relevant detail] to your doctor."
-
-**DO NOT:**
-- Say "book an appointment through the Discover tab" (too salesy)
-- Give long medical explanations before the referral
-- Make it sound like advertising
-
-**DO:**
-- Make the referral feel like natural, caring advice
-- Include specific details the doctor should know
-- Keep it conversational and helpful
-
-**App Context:**
-- Subscription-based: Basic Life (100 MWK/20 USD), Executive Life (150 MWK/50 USD), Premium Life (200 MWK/200 USD)
-- Book appointments via "Discover" tab
-- Unlimited consultations included in subscription
+**Doctor Referral (Natural Tone):**
+- "If this persists, a [specialist] can help evaluate this properly."
+- "Consider seeing a doctor if symptoms don't improve in a few days."
+- Keep it helpful, not salesy
 
 **Greeting Responses:**
-- For "hi", "hello", "hey" → Simple, friendly greeting (1-2 sentences max)
-- NO app features or booking info in greetings
-- Just ask how you can help
+- For "hi", "hello", "hey" → Simple 1-2 sentence greeting
+- Just ask how you can help, nothing more
 
-**Tone & Style:**
-- Conversational and intelligent, not robotic
+**Tone:**
+- Conversational and helpful
 - Empathetic but concise
 - Professional yet approachable
-- Adapt response length to user's request
-- BRIEF by default - value over volume
+- BRIEF by default
 
-**Formatting Rules (CRITICAL):**
-- DO NOT use markdown formatting like **bold**, *italic*, or __underline__
-- DO NOT use asterisks (*) or underscores (_) for emphasis
-- Use plain text only - the app will handle formatting
-- Write naturally without special characters for formatting
-- Example: Write "Important" not "**Important**"
-
-**Medical Disclaimers (brief):**
-- Only for health questions: "I'm an AI assistant, not a doctor. For diagnosis and treatment, please consult a healthcare professional."
-- For urgent symptoms: "This sounds urgent. Please seek immediate medical attention."
+**NO Markdown Formatting:**
+- Use plain text only
+- No asterisks, underscores, or special characters
 
 **Specialist Recommendations:**
-General → GP/Family Medicine | Heart → Cardiologist | Neuro → Neurologist | Skin → Dermatologist | Eyes → Ophthalmologist | Mental Health → Psychiatrist/Psychologist | Women's Health → Gynecologist | Children → Pediatrician | Bones/Joints → Orthopedist | Digestive → Gastroenterologist
+General → GP | Heart → Cardiologist | Neuro → Neurologist | Skin → Dermatologist | Mental Health → Psychiatrist | Women's Health → Gynecologist | Children → Pediatrician | Bones/Joints → Orthopedist | Digestive → Gastroenterologist
 
-Remember: Be intelligent and adaptive. Ask questions first when users report symptoms. Keep main responses BRIEF (3-5 sentences) with high value. End with natural doctor referral that includes specific details to mention. NO advertising tone.`;
+Remember: Be HELPFUL and DIRECT. Do not ask multiple questions or make users explain repeatedly.`;
 
 const HEALTH_KEYWORDS = {
   symptoms: ['pain', 'fever', 'cough', 'headache', 'nausea', 'dizziness', 'fatigue', 'shortness of breath'],
@@ -134,19 +96,19 @@ const RESPONSE_TEMPLATES = {
     shouldBookAppointment: true,
     urgency: 'low'
   },
-  
+
   symptom_concern: {
     template: "I understand you're experiencing {symptom}. While I can provide general information, it's important to get personalized care from a healthcare professional. When you consult with a doctor, be sure to describe: the exact nature and location of your symptoms, when they started, what makes them better or worse, any associated symptoms, and how they're affecting your daily activities. This detailed information will help your doctor provide the most accurate assessment and appropriate care.",
     shouldBookAppointment: true,
     urgency: 'medium'
   },
-  
+
   urgent_symptom: {
     template: "I'm concerned about these symptoms. Please seek immediate medical attention. When you speak with a healthcare provider, clearly describe: the severity and progression of your symptoms, any triggers or relieving factors, associated symptoms, and your level of concern. If symptoms are severe, please visit the nearest emergency facility immediately.",
     shouldBookAppointment: true,
     urgency: 'high'
   },
-  
+
   general_health: {
     template: "That's an excellent health question! {ai_response} When you consult with a doctor about this concern, make sure to discuss: your specific symptoms or concerns, any lifestyle factors that might be relevant, your medical history, any medications you're taking, and what outcomes you're hoping to achieve. This comprehensive approach will help your doctor provide the most personalized and effective care.",
     shouldBookAppointment: false,
@@ -159,17 +121,17 @@ const RESPONSES = {
     "Hello! I'm DocAva, your health assistant for DocAvailable. I can help with general health questions and guide you to book appointments with our qualified doctors for personal concerns.",
     "Hi there! I'm DocAva, here to help with health information and connect you with our qualified doctors when you need personalized care through the DocAvailable platform."
   ],
-  
+
   appointment_guide: [
     "To book an appointment with one of our qualified doctors, please go to the 'Discover' tab in the app. You can browse available doctors, view their profiles, and schedule a consultation.",
     "I'd be happy to help you book an appointment! Navigate to the 'Discover' tab to see our available doctors and schedule a consultation."
   ],
-  
+
   urgent_symptoms: [
     "I'm concerned about these symptoms. Please book an appointment with a doctor immediately for proper evaluation and care.",
     "These symptoms require medical attention. I recommend booking an appointment with one of our doctors right away for a thorough assessment."
   ],
-  
+
   general_health: [
     "That's a great health question! While I can provide general information, for personalized advice, I'd recommend consulting with one of our doctors.",
     "I can help with general health information, but for specific medical advice, our doctors are here to provide personalized care."
@@ -179,7 +141,7 @@ const RESPONSES = {
 export class DeepSeekService {
   // Conversation memory - store recent conversations
   private static conversationMemory: Map<string, ConversationContext> = new Map();
-  
+
   // Get conversation context for a user
   static getConversationContext(userId: string = 'default'): ConversationContext {
     return this.conversationMemory.get(userId) || {
@@ -187,25 +149,25 @@ export class DeepSeekService {
       userContext: {}
     };
   }
-  
+
   // Add message to conversation memory
   static addToConversation(userId: string, message: ConversationMessage): void {
     const context = this.getConversationContext(userId);
     context.messages.push(message);
-    
+
     // Keep only last 10 messages to manage memory
     if (context.messages.length > 10) {
       context.messages = context.messages.slice(-10);
     }
-    
+
     this.conversationMemory.set(userId, context);
   }
-  
+
   // Clear conversation memory for a user
   static clearConversation(userId: string = 'default'): void {
     this.conversationMemory.delete(userId);
   }
-  
+
   // Get response with conversation memory
   static async getResponse(userInput: string, userContext?: any, userId: string = 'default'): Promise<DeepSeekResponse> {
     try {
@@ -223,17 +185,17 @@ export class DeepSeekService {
 
   // Get streaming response with conversation memory
   static async getStreamingResponse(
-    userInput: string, 
+    userInput: string,
     onChunk: (chunk: StreamingResponse) => void,
-    userContext?: any, 
+    userContext?: any,
     userId: string = 'default'
   ): Promise<DeepSeekResponse> {
     try {
       console.log('Starting streaming response...');
-      
+
       // Check if streaming is supported in this environment
       const isStreamingSupported = await this.checkStreamingSupport();
-      
+
       if (isStreamingSupported) {
         return await this.getDeepSeekStreamingResponse(userInput, onChunk, userContext, userId);
       } else {
@@ -253,7 +215,7 @@ export class DeepSeekService {
       return fallbackResponse;
     }
   }
-  
+
   // Check if streaming is supported in the current environment
   private static async checkStreamingSupport(): Promise<boolean> {
     try {
@@ -261,49 +223,49 @@ export class DeepSeekService {
       const testResponse = await fetch('https://httpbin.org/stream/1', {
         method: 'GET',
       });
-      
+
       return testResponse.body !== null && typeof testResponse.body?.getReader === 'function';
     } catch (error) {
       console.log('Streaming support check failed:', error);
       return false;
     }
   }
-  
+
   // Simulated streaming for environments that don't support real streaming
   private static async getSimulatedStreamingResponse(
-    userInput: string, 
+    userInput: string,
     onChunk: (chunk: StreamingResponse) => void,
-    userContext?: any, 
+    userContext?: any,
     userId: string = 'default'
   ): Promise<DeepSeekResponse> {
     console.log('Using simulated streaming...');
-    
+
     // Get the full response first
     const fullResponse = await this.getDeepSeekResponseWithMemory(userInput, userContext, userId);
-    
+
     // Simulate streaming by sending chunks of the response
     const words = fullResponse.text.split(' ');
     let currentText = '';
-    
+
     // Send initial chunk
     onChunk({
       text: '',
       isComplete: false
     });
-    
+
     // Simulate word-by-word streaming with faster, smoother timing
     for (let i = 0; i < words.length; i++) {
       currentText += (i > 0 ? ' ' : '') + words[i];
-      
+
       // Faster, smoother typing speed for better UX
       await new Promise(resolve => setTimeout(resolve, 15 + Math.random() * 25));
-      
+
       onChunk({
         text: currentText,
         isComplete: false
       });
     }
-    
+
     // Send final chunk
     onChunk({
       text: fullResponse.text,
@@ -311,7 +273,7 @@ export class DeepSeekService {
       shouldBookAppointment: fullResponse.shouldBookAppointment,
       urgency: fullResponse.urgency
     });
-    
+
     return fullResponse;
   }
 
@@ -319,31 +281,31 @@ export class DeepSeekService {
   private static async getDeepSeekResponseWithMemory(userInput: string, userContext?: any, userId: string = 'default'): Promise<DeepSeekResponse> {
     // Get conversation context
     const context = this.getConversationContext(userId);
-    
+
     // Add user message to conversation
     this.addToConversation(userId, {
       role: 'user',
       content: userInput,
       timestamp: new Date()
     });
-    
+
     // Check if AI already asked questions in previous messages
-    const hasAskedQuestions = context.messages.some(msg => 
-      msg.role === 'assistant' && 
-      (msg.content.includes('?') && 
-       (msg.content.toLowerCase().includes('when did') || 
-        msg.content.toLowerCase().includes('how severe') ||
-        msg.content.toLowerCase().includes('have you taken') ||
-        msg.content.toLowerCase().includes('do you have any other') ||
-        msg.content.toLowerCase().includes('does anything make')))
+    const hasAskedQuestions = context.messages.some(msg =>
+      msg.role === 'assistant' &&
+      (msg.content.includes('?') &&
+        (msg.content.toLowerCase().includes('when did') ||
+          msg.content.toLowerCase().includes('how severe') ||
+          msg.content.toLowerCase().includes('have you taken') ||
+          msg.content.toLowerCase().includes('do you have any other') ||
+          msg.content.toLowerCase().includes('does anything make')))
     );
-    
+
     // Add context reminder if questions were already asked
     let systemPromptWithContext = SYSTEM_PROMPT;
     if (hasAskedQuestions) {
       systemPromptWithContext += `\n\n**IMPORTANT CONTEXT**: You have ALREADY asked clarifying questions in this conversation. The user is now responding to those questions. DO NOT ask more questions. Provide direct, actionable advice based on their answers.`;
     }
-    
+
     // Build messages array with conversation history
     const messages = [
       {
@@ -359,7 +321,7 @@ export class DeepSeekService {
         content: userInput
       }
     ];
-    
+
     // Add user context if provided
     let contextPrompt = SYSTEM_PROMPT;
     if (userContext) {
@@ -394,17 +356,17 @@ export class DeepSeekService {
 
     const data = await response.json();
     const aiResponse = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process your request.";
-    
+
     // Post-process the response
     const processedResponse = this.postProcessResponse(aiResponse, userInput);
-    
+
     // Add assistant response to conversation
     this.addToConversation(userId, {
       role: 'assistant',
       content: processedResponse,
       timestamp: new Date()
     });
-    
+
     // Determine if appointment booking is recommended
     const shouldBookAppointment = this.shouldRecommendAppointment(userInput, processedResponse);
     const urgency = this.determineUrgency(userInput);
@@ -415,41 +377,41 @@ export class DeepSeekService {
       urgency
     };
   }
-  
+
   // Get streaming response with conversation memory
   private static async getDeepSeekStreamingResponse(
-    userInput: string, 
+    userInput: string,
     onChunk: (chunk: StreamingResponse) => void,
-    userContext?: any, 
+    userContext?: any,
     userId: string = 'default'
   ): Promise<DeepSeekResponse> {
     // Get conversation context
     const context = this.getConversationContext(userId);
-    
+
     // Add user message to conversation
     this.addToConversation(userId, {
       role: 'user',
       content: userInput,
       timestamp: new Date()
     });
-    
+
     // Check if AI already asked questions in previous messages
-    const hasAskedQuestions = context.messages.some(msg => 
-      msg.role === 'assistant' && 
-      (msg.content.includes('?') && 
-       (msg.content.toLowerCase().includes('when did') || 
-        msg.content.toLowerCase().includes('how severe') ||
-        msg.content.toLowerCase().includes('have you taken') ||
-        msg.content.toLowerCase().includes('do you have any other') ||
-        msg.content.toLowerCase().includes('does anything make')))
+    const hasAskedQuestions = context.messages.some(msg =>
+      msg.role === 'assistant' &&
+      (msg.content.includes('?') &&
+        (msg.content.toLowerCase().includes('when did') ||
+          msg.content.toLowerCase().includes('how severe') ||
+          msg.content.toLowerCase().includes('have you taken') ||
+          msg.content.toLowerCase().includes('do you have any other') ||
+          msg.content.toLowerCase().includes('does anything make')))
     );
-    
+
     // Add context reminder if questions were already asked
     let systemPromptWithContext = SYSTEM_PROMPT;
     if (hasAskedQuestions) {
       systemPromptWithContext += `\n\n**IMPORTANT CONTEXT**: You have ALREADY asked clarifying questions in this conversation. The user is now responding to those questions. DO NOT ask more questions. Provide direct, actionable advice based on their answers.`;
     }
-    
+
     // Build messages array with conversation history
     const messages = [
       {
@@ -465,7 +427,7 @@ export class DeepSeekService {
         content: userInput
       }
     ];
-    
+
     // Add user context if provided
     let contextPrompt = SYSTEM_PROMPT;
     if (userContext) {
@@ -512,7 +474,7 @@ export class DeepSeekService {
     try {
       while (true) {
         const { done, value } = await reader.read();
-        
+
         if (done) {
           isComplete = true;
           break;
@@ -520,20 +482,20 @@ export class DeepSeekService {
 
         const chunk = decoder.decode(value);
         const lines = chunk.split('\n');
-        
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
-            
+
             if (data === '[DONE]') {
               isComplete = true;
               break;
             }
-            
+
             try {
               const parsed = JSON.parse(data);
               const content = parsed.choices?.[0]?.delta?.content || '';
-              
+
               if (content) {
                 fullResponse += content;
                 // Minimal delay for faster streaming while maintaining smoothness
@@ -548,7 +510,7 @@ export class DeepSeekService {
             }
           }
         }
-        
+
         if (isComplete) break;
       }
     } finally {
@@ -561,18 +523,18 @@ export class DeepSeekService {
 
     // Post-process the complete response
     const processedResponse = this.postProcessResponse(fullResponse, userInput);
-    
+
     // Add assistant response to conversation
     this.addToConversation(userId, {
       role: 'assistant',
       content: processedResponse,
       timestamp: new Date()
     });
-    
+
     // Determine final response properties
     const shouldBookAppointment = this.shouldRecommendAppointment(userInput, processedResponse);
     const urgency = this.determineUrgency(userInput);
-    
+
     // Send final chunk
     onChunk({
       text: processedResponse,
@@ -596,41 +558,41 @@ export class DeepSeekService {
   private static postProcessResponse(response: string, userInput: string): string {
     // Add app-specific formatting
     let processedResponse = response;
-    
+
     // Remove markdown formatting that shows as raw text
     // Remove bold (**text** or __text__)
     processedResponse = processedResponse.replace(/\*\*([^*]+)\*\*/g, '$1');
     processedResponse = processedResponse.replace(/__([^_]+)__/g, '$1');
-    
+
     // Remove italic (*text* or _text_)
     processedResponse = processedResponse.replace(/\*([^*]+)\*/g, '$1');
     processedResponse = processedResponse.replace(/_([^_]+)_/g, '$1');
-    
+
     // Remove any remaining asterisks or underscores used for emphasis
     processedResponse = processedResponse.replace(/\*\*/g, '');
     processedResponse = processedResponse.replace(/__/g, '');
-    
+
     // Skip post-processing for simple greetings
     const input = userInput.toLowerCase();
     const isGreeting = input.includes('hello') || input.includes('hi') || input.includes('hey') || input === '';
-    
+
     if (isGreeting) {
       return processedResponse; // Return response as-is for greetings
     }
-    
+
     // Doctor referral is now handled in the AI response itself - no need for post-processing
     // The AI has been instructed to naturally include doctor referrals in its responses
-    
+
     // Add relevant app features for pricing questions
     if (userInput.toLowerCase().includes('payment') || userInput.toLowerCase().includes('cost') || userInput.toLowerCase().includes('price') || userInput.toLowerCase().includes('fee')) {
       processedResponse += "\n\n💳 **Pricing Info**: DocAvailable uses a subscription model. Once you subscribe to a plan, all consultations are included - no additional fees per consultation. Check the 'Dashboard' tab to view our affordable plans starting from 100 MWK (Malawi) or 20 USD (other countries).";
     }
-    
+
     // Add language support mention
     if (userInput.toLowerCase().includes('language') || userInput.toLowerCase().includes('speak')) {
       processedResponse += "\n\n🌍 Our doctors can consult in multiple languages.";
     }
-    
+
     return processedResponse;
   }
 
@@ -642,7 +604,7 @@ export class DeepSeekService {
   private static determineUrgency(userInput: string): 'low' | 'medium' | 'high' {
     const urgentKeywords = ['chest pain', 'shortness of breath', 'severe', 'bleeding'];
     const moderateKeywords = ['headache', 'fever', 'cough', 'fatigue'];
-    
+
     if (urgentKeywords.some(keyword => userInput.toLowerCase().includes(keyword))) {
       return 'high';
     }
@@ -654,7 +616,7 @@ export class DeepSeekService {
 
   private static getEnhancedBasicResponse(userInput: string): DeepSeekResponse {
     const input = userInput.toLowerCase();
-    
+
     // Simple, friendly greeting responses
     if (input.includes('hello') || input.includes('hi') || input.includes('hey') || input === '') {
       const welcomeResponses = [
@@ -671,7 +633,7 @@ export class DeepSeekService {
         urgency: 'low'
       };
     }
-    
+
     // Check for urgent symptoms
     if (HEALTH_KEYWORDS.urgent.some(keyword => input.includes(keyword))) {
       const urgentResponses = [
@@ -685,7 +647,7 @@ export class DeepSeekService {
         urgency: 'high'
       };
     }
-    
+
     // Check for general symptoms
     if (HEALTH_KEYWORDS.symptoms.some(keyword => input.includes(keyword))) {
       const symptomResponses = [
@@ -699,7 +661,7 @@ export class DeepSeekService {
         urgency: 'medium'
       };
     }
-    
+
     // Check for appointment-related queries
     if (input.includes('appointment') || input.includes('book') || input.includes('doctor')) {
       const appointmentResponses = [
@@ -713,7 +675,7 @@ export class DeepSeekService {
         urgency: 'low'
       };
     }
-    
+
     // Check for general health questions
     if (HEALTH_KEYWORDS.general.some(keyword => input.includes(keyword))) {
       const healthResponses = [
@@ -727,7 +689,7 @@ export class DeepSeekService {
         urgency: 'low'
       };
     }
-    
+
     // Default response for other queries
     const defaultResponses = [
       "I'm here to help with health questions and guide you to our doctors when needed. What would you like to know?",

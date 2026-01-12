@@ -17,7 +17,7 @@ class ChatbotController extends Controller
     {
         // Try multiple ways to get the API key
         $this->openaiApiKey = env('OPENAI_API_KEY') ?: config('app.openai_api_key') ?: $_ENV['OPENAI_API_KEY'] ?? null;
-        
+
         // Debug logging
         \Log::info('ChatbotController initialized', [
             'has_openai_key' => !empty($this->openaiApiKey),
@@ -48,9 +48,9 @@ class ChatbotController extends Controller
 
             // Check prompt limit for authenticated users
             if ($userId !== 'default' && is_numeric($userId)) {
-                $canMakePrompt = PromptLimitService::canMakePrompt((int)$userId);
+                $canMakePrompt = PromptLimitService::canMakePrompt((int) $userId);
                 if (!$canMakePrompt) {
-                    $limitStatus = PromptLimitService::getPromptLimitStatus((int)$userId);
+                    $limitStatus = PromptLimitService::getPromptLimitStatus((int) $userId);
                     return response()->json([
                         'success' => false,
                         'message' => 'Daily prompt limit reached',
@@ -86,7 +86,7 @@ class ChatbotController extends Controller
 
             // Record prompt usage for authenticated users
             if ($userId !== 'default' && is_numeric($userId)) {
-                $limitStatus = PromptLimitService::recordPromptUsage((int)$userId);
+                $limitStatus = PromptLimitService::recordPromptUsage((int) $userId);
                 $response['prompt_limit_status'] = $limitStatus;
             }
 
@@ -97,7 +97,7 @@ class ChatbotController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Chatbot error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error generating response',
@@ -143,7 +143,7 @@ class ChatbotController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Chatbot streaming error: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error generating streaming response',
@@ -163,20 +163,26 @@ class ChatbotController extends Controller
             'api_key_starts_with_sk' => str_starts_with($this->openaiApiKey, 'sk-')
         ]);
 
-        $systemPrompt = "You are DocBot, a professional AI health assistant for DocAvailable, a telemedicine platform. Your role is to provide engaging, interactive health guidance that helps users understand their conditions and guides them to appropriate care.
+        $systemPrompt = "You are DocBot, a professional AI health assistant for DocAvailable, a telemedicine platform. Your role is to provide DIRECT, helpful health guidance without excessive questioning.
+
+**CRITICAL RULE - NO EXCESSIVE QUESTIONS:**
+- DO NOT ask multiple clarifying questions
+- DO NOT reply multiple times asking for more details
+- Give DIRECT, actionable advice based on what the user tells you
+- If you truly need ONE piece of critical info, ask ONE brief question AT MOST
+- NEVER ask more than one question per response
+- Users get frustrated when asked repeated questions - be helpful, not interrogative
 
 **Response Structure for Health Questions:**
-When users ask about health concerns, structure your response as follows:
+1. **Brief Acknowledgment (1 sentence):** Show you understand their concern
+2. **Direct Advice (3-5 sentences):** Provide practical, actionable guidance
+3. **Doctor Recommendation (1 sentence):** Suggest when/if to see a specialist
 
-1. **Quick Assessment (1-2 sentences):** Give a brief, reassuring initial response
-2. **Follow-up Questions:** Ask 2-3 specific questions to better understand their condition
-3. **Detailed Information:** Provide comprehensive medical information (300-400 words) including:
-   - Possible causes and conditions
-   - Symptoms to watch for
-   - General management strategies
-   - When to seek immediate care
-4. **Doctor Recommendation:** Suggest the most appropriate type of doctor/specialist
-5. **Consultation Guidance:** Provide specific advice on how to explain the issue to their doctor
+**Keep Responses Concise:**
+- Maximum 4-6 sentences total
+- No long paragraphs or walls of text
+- Focus on the most important advice
+- Be conversational, not clinical
 
 **Doctor Specialization Recommendations:**
 - General symptoms: General Practitioner or Family Medicine
@@ -191,22 +197,16 @@ When users ask about health concerns, structure your response as follows:
 - Digestive issues: Gastroenterologist
 
 **Professional Guidelines:**
-- Be highly knowledgeable, empathetic, and culturally sensitive to diverse healthcare contexts
-- Use precise medical terminology while remaining accessible to patients
-- Show deep understanding of various health concerns and healthcare access challenges
-- Be encouraging and supportive, especially for users who might be hesitant about seeking care
-- Maintain the highest level of professionalism in all medical discussions
-- For urgent symptoms (chest pain, severe bleeding, unconsciousness), strongly recommend immediate medical attention
-- For chronic conditions, provide comprehensive information about management and monitoring
-- For general health questions, offer detailed educational content with practical advice
+- Be helpful, empathetic, and to-the-point
+- For urgent symptoms (chest pain, severe bleeding), strongly recommend immediate medical attention
+- For general health questions, give brief educational content with practical advice
+- Avoid medical jargon - speak in plain language
 
-**Medical Disclaimers:**
-- Clearly state you are not a doctor and cannot replace professional medical care
-- Emphasize the importance of professional evaluation for accurate diagnosis
-- Encourage users to seek timely medical attention when appropriate
-- Never provide specific treatment recommendations or diagnoses
+**Medical Disclaimer (brief):**
+- Briefly mention you're an AI assistant, not a doctor
+- Recommend seeing a healthcare professional for proper diagnosis
 
-Remember: You are a knowledgeable health assistant providing educational support, not a replacement for professional medical care.";
+Remember: Be HELPFUL and DIRECT. Do not ask multiple questions or require users to explain repeatedly.";
 
         $messages = [
             [
@@ -223,11 +223,11 @@ Remember: You are a knowledgeable health assistant providing educational support
             'Authorization' => 'Bearer ' . $this->openaiApiKey,
             'Content-Type' => 'application/json',
         ])->timeout(30)->post($this->openaiBaseUrl . '/chat/completions', [
-            'model' => 'gpt-3.5-turbo',
-            'messages' => $messages,
-            'max_tokens' => 600,
-            'temperature' => 0.7,
-        ]);
+                    'model' => 'gpt-3.5-turbo',
+                    'messages' => $messages,
+                    'max_tokens' => 300,
+                    'temperature' => 0.6,
+                ]);
 
         Log::info('OpenAI API request completed', [
             'status_code' => $response->status(),
@@ -335,13 +335,13 @@ Remember: You are a knowledgeable health assistant providing educational support
     {
         $keywords = ['appointment', 'book', 'schedule', 'consultation', 'doctor', 'medical'];
         $text = strtolower($userInput . ' ' . $aiResponse);
-        
+
         foreach ($keywords as $keyword) {
             if (strpos($text, $keyword) !== false) {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -352,20 +352,20 @@ Remember: You are a knowledgeable health assistant providing educational support
     {
         $urgentKeywords = ['emergency', 'urgent', 'severe', 'critical', 'immediately', '911'];
         $text = strtolower($userInput);
-        
+
         foreach ($urgentKeywords as $keyword) {
             if (strpos($text, $keyword) !== false) {
                 return 'high';
             }
         }
-        
+
         $mediumKeywords = ['pain', 'hurt', 'sick', 'fever', 'symptom'];
         foreach ($mediumKeywords as $keyword) {
             if (strpos($text, $keyword) !== false) {
                 return 'medium';
             }
         }
-        
+
         return 'low';
     }
 
@@ -375,22 +375,22 @@ Remember: You are a knowledgeable health assistant providing educational support
     private function generateSuggestions(string $userInput, string $aiResponse): array
     {
         $suggestions = [];
-        
+
         if (strpos(strtolower($userInput), 'pain') !== false) {
             $suggestions[] = 'Describe your pain in detail';
         }
-        
+
         if (strpos(strtolower($aiResponse), 'appointment') !== false) {
             $suggestions[] = 'Book an appointment';
         }
-        
+
         if (strpos(strtolower($userInput), 'symptom') !== false) {
             $suggestions[] = 'Track your symptoms';
         }
-        
+
         $suggestions[] = 'Ask another question';
         $suggestions[] = 'Get health tips';
-        
+
         return array_slice($suggestions, 0, 3);
     }
 }

@@ -29,15 +29,15 @@ const isLargeScreen = width > 768;
 // Payment rates based on currency
 const PAYMENT_RATES = {
   MWK: {
-    text_session: 4000,
-    audio_call: 5000,
-    video_call: 6000,
+    text_session: 3500,
+    audio_call: 3500,
+    video_call: 3500,
     currency: 'MWK'
   },
   USD: {
-    text_session: 4,
-    audio_call: 5,
-    video_call: 6,
+    text_session: 3,
+    audio_call: 3,
+    video_call: 3,
     currency: 'USD'
   }
 };
@@ -45,10 +45,10 @@ const PAYMENT_RATES = {
 export default function DoctorWithdrawals() {
   return (
     <>
-      <Stack.Screen 
-        options={{ 
-          headerShown: false 
-        }} 
+      <Stack.Screen
+        options={{
+          headerShown: false
+        }}
       />
       <DoctorWithdrawalsContent />
     </>
@@ -64,18 +64,18 @@ function DoctorWithdrawalsContent() {
   const [withdrawalMethod, setWithdrawalMethod] = useState('bank');
   const [mobileMoneyProvider, setMobileMoneyProvider] = useState('airtel');
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Wallet tour state
   const [showWalletTour, setShowWalletTour] = useState(false);
-  
+
   // Bank fields
   const [bankName, setBankName] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [bankBranch, setBankBranch] = useState('');
-  
+
   // Mobile money fields
   const [phoneNumber, setPhoneNumber] = useState('');
-  
+
   // Mzunguko fields
   const [mzungukoFullName, setMzungukoFullName] = useState('');
   const [mzungukoEmail, setMzungukoEmail] = useState('');
@@ -117,7 +117,7 @@ function DoctorWithdrawalsContent() {
     try {
       setLoading(true);
       console.log('[DoctorWithdrawals] Loading wallet data...');
-      
+
       // Load wallet information
       const walletResponse = await walletApiService.getWallet();
       console.log('[DoctorWithdrawals] Wallet response:', walletResponse);
@@ -172,13 +172,13 @@ function DoctorWithdrawalsContent() {
         return;
       }
     }
-    
+
     try {
       setSubmitting(true);
-      
+
       const withdrawalData = {
         amount: amount,
-        payment_method: withdrawalMethod === 'bank' ? 'bank_transfer' : 'mobile_money',
+        payment_method: (withdrawalMethod === 'bank' ? 'bank_transfer' : 'mobile_money') as 'bank_transfer' | 'mobile_money',
         payment_details: {
           bank_name: withdrawalMethod === 'bank' ? bankName : '',
           account_number: withdrawalMethod === 'bank' ? accountNumber : '',
@@ -189,7 +189,7 @@ function DoctorWithdrawalsContent() {
       };
 
       const response = await walletApiService.requestWithdrawal(withdrawalData);
-      
+
       if (response.success) {
         customAlertService.success(
           'Withdrawal Request Submitted',
@@ -218,7 +218,7 @@ function DoctorWithdrawalsContent() {
     const currency = userCurrency;
     const locale = currency === 'MWK' ? 'en-MW' : 'en-US';
     const currencyCode = currency === 'MWK' ? 'MWK' : 'USD';
-    
+
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: currencyCode
@@ -286,29 +286,29 @@ function DoctorWithdrawalsContent() {
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
           <FontAwesome name="arrow-left" size={20} color="#222" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Earnings & Withdrawals</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.refreshButton}
           onPress={loadWalletData}
           disabled={loading}
         >
-          <FontAwesome 
-            name="refresh" 
-            size={18} 
-            color={loading ? "#999" : "#4CAF50"} 
+          <FontAwesome
+            name="refresh"
+            size={18}
+            color={loading ? "#999" : "#4CAF50"}
           />
         </TouchableOpacity>
       </View>
 
       <View style={styles.mainContent}>
-        <ScrollView 
-          style={styles.content} 
+        <ScrollView
+          style={styles.content}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -327,40 +327,40 @@ function DoctorWithdrawalsContent() {
                 <FontAwesome name="credit-card" size={20} color="#fff" />
               </View>
               <Text style={styles.earningsCardTitle}>Available Balance</Text>
-          </View>
-
-             <Text style={styles.modernEarningsAmount}>{formatCurrency(wallet?.balance || 0)}</Text>
-             <Text style={styles.modernEarningsSubtitle}>Ready for withdrawal</Text>
             </View>
+
+            <Text style={styles.modernEarningsAmount}>{formatCurrency(wallet?.balance || 0)}</Text>
+            <Text style={styles.modernEarningsSubtitle}>Ready for withdrawal</Text>
+          </View>
 
           {/* Modern Payment Rates */}
           <View style={styles.modernPaymentRatesCard}>
             <View style={styles.sectionHeader}>
               <FontAwesome name="money" size={20} color="#4CAF50" />
               <Text style={styles.modernSectionTitle}>Payment Rates ({userCurrency})</Text>
-              </View>
-            
+            </View>
+
             <View style={styles.ratesContainer}>
               <View style={styles.modernRateItem}>
                 <View style={styles.rateIconContainer}>
                   <FontAwesome name="comment" size={16} color="#4CAF50" />
-              </View>
+                </View>
                 <View style={styles.rateInfo}>
                   <Text style={styles.modernRateLabel}>Text Session</Text>
                   <Text style={styles.modernRateValue}>{formatCurrency(paymentRates.text_session)}</Text>
-            </View>
-          </View>
+                </View>
+              </View>
 
               <View style={styles.modernRateItem}>
                 <View style={styles.rateIconContainer}>
                   <FontAwesome name="phone" size={16} color="#4CAF50" />
-            </View>
+                </View>
                 <View style={styles.rateInfo}>
                   <Text style={styles.modernRateLabel}>Audio Call</Text>
                   <Text style={styles.modernRateValue}>{formatCurrency(paymentRates.audio_call)}</Text>
-            </View>
+                </View>
               </View>
-              
+
               <View style={styles.modernRateItem}>
                 <View style={styles.rateIconContainer}>
                   <FontAwesome name="video-camera" size={16} color="#4CAF50" />
@@ -374,64 +374,64 @@ function DoctorWithdrawalsContent() {
           </View>
 
 
-           {/* Modern Withdrawal Form */}
+          {/* Modern Withdrawal Form */}
           <View style={styles.modernWithdrawalCard}>
             <View style={styles.sectionHeader}>
               <FontAwesome name="credit-card" size={20} color="#4CAF50" />
               <Text style={styles.modernSectionTitle}>Request Withdrawal</Text>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.modernInputLabel}>Amount ({userCurrency})</Text>
               <View style={styles.amountInputContainer}>
                 <FontAwesome name="dollar" size={16} color="#666" style={styles.inputIcon} />
-            <TextInput
+                <TextInput
                   style={styles.modernAmountInput}
-              value={withdrawalAmount}
-              onChangeText={setWithdrawalAmount}
-              placeholder={`Enter withdrawal amount in ${userCurrency}`}
-              keyboardType="numeric"
-              placeholderTextColor="#999"
-            />
+                  value={withdrawalAmount}
+                  onChangeText={setWithdrawalAmount}
+                  placeholder={`Enter withdrawal amount in ${userCurrency}`}
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                />
               </View>
             </View>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.modernInputLabel}>Payment Method</Text>
               <View style={styles.modernPaymentMethodContainer}>
-              <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.modernPaymentMethod, withdrawalMethod === 'bank' && styles.modernPaymentMethodActive]}
-                onPress={() => setWithdrawalMethod('bank')}
-              >
+                  onPress={() => setWithdrawalMethod('bank')}
+                >
                   <View style={styles.paymentMethodIcon}>
                     <FontAwesome name="bank" size={18} color={withdrawalMethod === 'bank' ? '#4CAF50' : '#666'} />
                   </View>
                   <Text style={[styles.modernPaymentMethodText, withdrawalMethod === 'bank' && styles.modernPaymentMethodTextActive]}>
-                  Bank Transfer
-                </Text>
-              </TouchableOpacity>
-              
-              {/* Mobile Money only for Malawian users */}
-              {isMalawiUser && (
-                <TouchableOpacity 
+                    Bank Transfer
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Mobile Money only for Malawian users */}
+                {isMalawiUser && (
+                  <TouchableOpacity
                     style={[styles.modernPaymentMethod, withdrawalMethod === 'mobile' && styles.modernPaymentMethodActive]}
-                  onPress={() => setWithdrawalMethod('mobile')}
-                >
+                    onPress={() => setWithdrawalMethod('mobile')}
+                  >
                     <View style={styles.paymentMethodIcon}>
                       <FontAwesome name="mobile" size={18} color={withdrawalMethod === 'mobile' ? '#4CAF50' : '#666'} />
                     </View>
                     <Text style={[styles.modernPaymentMethodText, withdrawalMethod === 'mobile' && styles.modernPaymentMethodTextActive]}>
-                    Mobile Money
-                  </Text>
-                </TouchableOpacity>
-              )}
-                
+                      Mobile Money
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
               </View>
             </View>
 
             {/* Mzunguko Payment Method - Separate Row */}
             <View style={styles.paymentMethodContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.modernPaymentMethod, styles.mzungukoPaymentMethod, withdrawalMethod === 'mzunguko' && styles.modernPaymentMethodActive]}
                 onPress={() => setWithdrawalMethod('mzunguko')}
               >
@@ -448,43 +448,43 @@ function DoctorWithdrawalsContent() {
                   <Text style={styles.modernInputLabel}>Bank Name</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="university" size={16} color="#666" style={styles.inputIcon} />
-                <TextInput
+                    <TextInput
                       style={styles.modernTextInput}
-                  value={bankName}
-                  onChangeText={setBankName}
-                  placeholder="Enter bank name"
-                  placeholderTextColor="#999"
-                />
+                      value={bankName}
+                      onChangeText={setBankName}
+                      placeholder="Enter bank name"
+                      placeholderTextColor="#999"
+                    />
                   </View>
                 </View>
-                
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.modernInputLabel}>Account Number</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="hashtag" size={16} color="#666" style={styles.inputIcon} />
-                <TextInput
+                    <TextInput
                       style={styles.modernTextInput}
-                  value={accountNumber}
-                  onChangeText={setAccountNumber}
-                  placeholder="Enter account number"
-                  keyboardType="numeric"
-                  placeholderTextColor="#999"
-                />
+                      value={accountNumber}
+                      onChangeText={setAccountNumber}
+                      placeholder="Enter account number"
+                      keyboardType="numeric"
+                      placeholderTextColor="#999"
+                    />
                   </View>
                 </View>
-                
+
                 {isMalawiUser && (
                   <View style={styles.inputGroup}>
                     <Text style={styles.modernInputLabel}>Bank Branch</Text>
                     <View style={styles.modernInputContainer}>
                       <FontAwesome name="building" size={16} color="#666" style={styles.inputIcon} />
-                    <TextInput
+                      <TextInput
                         style={styles.modernTextInput}
-                      value={bankBranch}
-                      onChangeText={setBankBranch}
-                      placeholder="Enter bank branch name"
-                      placeholderTextColor="#999"
-                    />
+                        value={bankBranch}
+                        onChangeText={setBankBranch}
+                        placeholder="Enter bank branch name"
+                        placeholderTextColor="#999"
+                      />
                     </View>
                   </View>
                 )}
@@ -497,40 +497,40 @@ function DoctorWithdrawalsContent() {
                 <View style={styles.inputGroup}>
                   <Text style={styles.modernInputLabel}>Mobile Money Provider</Text>
                   <View style={styles.modernProviderContainer}>
-                  <TouchableOpacity 
+                    <TouchableOpacity
                       style={[styles.modernProviderOption, mobileMoneyProvider === 'airtel' && styles.modernProviderOptionActive]}
-                    onPress={() => setMobileMoneyProvider('airtel')}
-                  >
+                      onPress={() => setMobileMoneyProvider('airtel')}
+                    >
                       <FontAwesome name="mobile" size={16} color={mobileMoneyProvider === 'airtel' ? '#4CAF50' : '#666'} />
                       <Text style={[styles.modernProviderText, mobileMoneyProvider === 'airtel' && styles.modernProviderTextActive]}>
-                      Airtel Money
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
+                        Airtel Money
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
                       style={[styles.modernProviderOption, mobileMoneyProvider === 'tnm' && styles.modernProviderOptionActive]}
-                    onPress={() => setMobileMoneyProvider('tnm')}
-                  >
+                      onPress={() => setMobileMoneyProvider('tnm')}
+                    >
                       <FontAwesome name="mobile" size={16} color={mobileMoneyProvider === 'tnm' ? '#4CAF50' : '#666'} />
                       <Text style={[styles.modernProviderText, mobileMoneyProvider === 'tnm' && styles.modernProviderTextActive]}>
-                      TNM Mpamba
-                    </Text>
-                  </TouchableOpacity>
+                        TNM Mpamba
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
-                
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.modernInputLabel}>Phone Number</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="phone" size={16} color="#666" style={styles.inputIcon} />
-                <TextInput
+                    <TextInput
                       style={styles.modernTextInput}
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  placeholder="Enter phone number"
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#999"
-                />
+                      value={phoneNumber}
+                      onChangeText={setPhoneNumber}
+                      placeholder="Enter phone number"
+                      keyboardType="phone-pad"
+                      placeholderTextColor="#999"
+                    />
                   </View>
                 </View>
               </View>
@@ -552,7 +552,7 @@ function DoctorWithdrawalsContent() {
                     />
                   </View>
                 </View>
-                
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.modernInputLabel}>Email Address</Text>
                   <View style={styles.modernInputContainer}>
@@ -570,8 +570,8 @@ function DoctorWithdrawalsContent() {
               </View>
             )}
 
-            <TouchableOpacity 
-              style={[styles.modernWithdrawButton, (!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko') && styles.modernWithdrawButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.modernWithdrawButton, (!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko') && styles.modernWithdrawButtonDisabled]}
               onPress={withdrawalMethod === 'mzunguko' ? () => customAlertService.info('Coming Soon', 'Mzunguko payment method is coming soon!') : handleWithdrawal}
               disabled={!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko'}
             >
@@ -595,32 +595,32 @@ function DoctorWithdrawalsContent() {
                 {transactions.map((transaction) => (
                   <View key={transaction.id} style={styles.modernTransactionItem}>
                     <View style={styles.transactionIconContainer}>
-                      <FontAwesome 
-                        name={transaction.type === 'credit' ? 'arrow-up' : 'arrow-down'} 
-                        size={16} 
-                        color={transaction.type === 'credit' ? '#34C759' : '#FF3B30'} 
+                      <FontAwesome
+                        name={transaction.type === 'credit' ? 'arrow-up' : 'arrow-down'}
+                        size={16}
+                        color={transaction.type === 'credit' ? '#34C759' : '#FF3B30'}
                       />
                     </View>
-                     <View style={styles.transactionInfo}>
-                       <Text style={styles.modernTransactionAmount}>
-                      {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                    </Text>
-                       <Text style={styles.modernTransactionDescription}>
-                         {transaction.type === 'credit' 
-                           ? `Paid from ${transaction.patient_name || 'Patient'}` 
-                           : `Withdrawal to ${transaction.payment_method === 'bank_transfer' ? 'Bank Account' : 'Mobile Money'}`
-                         }
-                       </Text>
-                       <Text style={styles.modernTransactionDate}>
-                      {new Date(transaction.created_at).toLocaleDateString()}
-                    </Text>
-                  </View>
+                    <View style={styles.transactionInfo}>
+                      <Text style={styles.modernTransactionAmount}>
+                        {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                      </Text>
+                      <Text style={styles.modernTransactionDescription}>
+                        {transaction.type === 'credit'
+                          ? `Paid from ${transaction.patient_name || 'Patient'}`
+                          : `Withdrawal to ${transaction.payment_method === 'bank_transfer' ? 'Bank Account' : 'Mobile Money'}`
+                        }
+                      </Text>
+                      <Text style={styles.modernTransactionDate}>
+                        {new Date(transaction.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
                     <View style={styles.transactionStatusContainer}>
                       <Text style={[styles.modernStatusText, { color: getStatusColor(transaction.status) }]}>
-                      {getStatusText(transaction.status)}
-                    </Text>
+                        {getStatusText(transaction.status)}
+                      </Text>
+                    </View>
                   </View>
-                </View>
                 ))}
               </View>
             ) : (
@@ -679,18 +679,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: isWeb ? 40 : 20,
     paddingTop: 20,
   },
-   // Header Styles
-   header: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     justifyContent: 'space-between',
-     paddingHorizontal: 20,
-     paddingVertical: 16,
-     backgroundColor: '#fff',
-     borderBottomWidth: 1,
-     borderBottomColor: '#E0E0E0',
-     marginTop: 20,
-   },
+  // Header Styles
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    marginTop: 20,
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -826,16 +826,16 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 24,
   },
-   modernWalletStats: {
-     marginBottom: 12,
-   },
-   modernStatItem: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     backgroundColor: '#F8F9FA',
+  modernWalletStats: {
+    marginBottom: 12,
+  },
+  modernStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
     borderRadius: 12,
     padding: 16,
-   },
+  },
   statIconContainer: {
     width: 32,
     height: 32,
@@ -916,33 +916,33 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#222',
   },
-   modernRateValue: {
-     fontSize: 16,
-     fontWeight: 'bold',
-     color: '#4CAF50',
-   },
-   legendItem: {
-     flexDirection: 'row',
-     alignItems: 'center',
-     paddingVertical: 8,
-   },
-   legendColor: {
-     width: 16,
-     height: 16,
-     borderRadius: 8,
-     marginRight: 12,
-   },
-   legendLabel: {
-     fontSize: 14,
-     fontWeight: '600',
-     color: '#222',
-     flex: 1,
-   },
-   legendValue: {
-     fontSize: 14,
-     fontWeight: 'bold',
-     color: '#222',
-   },
+  modernRateValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  legendColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  legendLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#222',
+    flex: 1,
+  },
+  legendValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#222',
+  },
   // Modern Withdrawal Form Styles
   modernWithdrawalCard: {
     backgroundColor: '#fff',
@@ -991,17 +991,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-   modernPaymentMethod: {
-     flex: 1,
-     flexDirection: 'row',
-     alignItems: 'center',
-     backgroundColor: '#F8F9FA',
-     borderRadius: 12,
-     padding: 12,
-     borderWidth: 1,
-     borderColor: '#E0E0E0',
-     minHeight: 50,
-   },
+  modernPaymentMethod: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    minHeight: 50,
+  },
   modernPaymentMethodActive: {
     borderColor: '#4CAF50',
     backgroundColor: '#E8F5E8',
@@ -1015,13 +1015,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-   modernPaymentMethodText: {
-     fontSize: 12,
-     fontWeight: '600',
-     color: '#666',
-     flex: 1,
-     textAlign: 'center',
-   },
+  modernPaymentMethodText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    flex: 1,
+    textAlign: 'center',
+  },
   modernPaymentMethodTextActive: {
     color: '#4CAF50',
   },
