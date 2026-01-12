@@ -96,21 +96,8 @@ class ActivateBookedAppointments extends Command
     {
         $this->info("   Activating appointment {$appointment->id} ({$appointment->appointment_type})");
 
-        // PERFORM UPFRONT BILLING: Deduct 1 session from patient's subscription immediately
-        // This ensures the patient is charged for the start of the session.
-        $paymentService = new \App\Services\DoctorPaymentService();
-        $deducted = $paymentService->deductFromPatientSubscriptionForAppointment($appointment);
-
-        if (!$deducted) {
-            Log::warning("⚠️ [ActivateBookedAppointments] Unable to deduct session for appointment {$appointment->id}. Aborting activation.", [
-                'appointment_id' => $appointment->id,
-                'patient_id' => $appointment->patient_id
-            ]);
-            $this->error("   ❌ Subscription deduction failed for appointment {$appointment->id}");
-            return;
-        }
-
-        Log::info("💰 [ActivateBookedAppointments] Successfully deducted 1 session for appointment {$appointment->id}");
+        // Note: No upfront billing here. Billing is deferred to auto-deduction (duration-based)
+        // or manual session end (base fee), matching the instant session model.
 
         // For text appointments, we need to create the associated TextSession and ChatRoom
         // This ensures the "Active Session" banner appears on the frontend and chat works
@@ -164,12 +151,12 @@ class ActivateBookedAppointments extends Command
                             'started_at' => now(),
                             'activated_at' => now(),
                             'doctor_response_deadline' => now()->addSeconds(90),
-                            'sessions_used' => 1 // Mark as 1 used since we deducted at activation
+                            'sessions_used' => 0 // Reverted to 0: billing is deferred
                         ]);
                     }
                 } else {
                     // Create new TextSession
-                    // SET UPFRONT DEDUCTION: sessions_used starts at 1
+                    // NO UPFRONT DEDUCTION: sessions_used starts at 0
                     $session = \App\Models\TextSession::create([
                         'appointment_id' => $appointment->id,
                         'patient_id' => $appointment->patient_id,
@@ -182,7 +169,7 @@ class ActivateBookedAppointments extends Command
                         'last_activity_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),
-                        'sessions_used' => 1 // 1 session is consumed immediately
+                        'sessions_used' => 0 // Explicitly 0, billing happens later
                     ]);
 
                     $this->info("   Created text session {$session->id}");
