@@ -1,14 +1,20 @@
 {
   "expo": {
     "name": "DocAvailable",
-    "slug": "docavailable",
-    "owner": "xee777",
-    "workflow": "managed",
-    "platforms": ["ios", "android"],
+    "slug": "Doc_available",
+    "owner": "sleeky77",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/2eb40af4-b32e-462e-b070-a1b171e65485"
+    },
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
@@ -34,6 +40,7 @@
     },
     "android": {
       "package": "com.docavailable.app",
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -69,6 +76,7 @@
     },
     "scheme": "com.docavailable.app",
     "plugins": [
+      "expo-updates",
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",

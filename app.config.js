@@ -3,13 +3,16 @@ require('dotenv').config();
 module.exports = {
   expo: {
     name: "DocAvailable",
-    slug: "docavailable",
-    owner: "xee777",
-    workflow: "managed",
+    slug: "Doc_available",
+    owner: "sleeky77",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "light",
+    runtimeVersion: "1.0.0",
+    updates: {
+      url: "https://u.expo.dev/2eb40af4-b32e-462e-b070-a1b171e65485"
+    },
     splash: {
       image: "./assets/images/icon.png",
       resizeMode: "contain",
@@ -25,6 +28,7 @@ module.exports = {
     },
     android: {
       package: "com.docavailable.app",
+      usesCleartextTraffic: true,
       adaptiveIcon: {
         foregroundImage: "./assets/images/adaptive-icon.png",
         backgroundColor: "#ffffff"
@@ -60,6 +64,7 @@ module.exports = {
     },
     scheme: "com.docavailable.app",
     plugins: [
+      "expo-updates",
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
@@ -68,7 +73,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "12737d94-2401-4ad9-992c-4f7a3635db77"
+        projectId: "2eb40af4-b32e-462e-b070-a1b171e65485"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

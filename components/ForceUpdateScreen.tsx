@@ -26,7 +26,7 @@ export default function ForceUpdateScreen({ title, message, storeUrl }: ForceUpd
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.iconContainer}>
-                    <MaterialCommunityIcons name="rocket" size={60} color="#2196F3" />
+                    <MaterialCommunityIcons name="rocket" size={60} color="#4CAF50" />
                 </View>
 
                 <Text style={styles.title}>{title}</Text>
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
         width: 120,
         height: 120,
         borderRadius: 60,
-        backgroundColor: '#E3F2FD',
+        backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 30,
@@ -82,12 +82,12 @@ const styles = StyleSheet.create({
         lineHeight: 24,
     },
     button: {
-        backgroundColor: '#2196F3', // Primary blue
+        backgroundColor: '#4CAF50', // Primary Green
         paddingVertical: 16,
         paddingHorizontal: 40,
         borderRadius: 12,
         width: '100%',
-        shadowColor: "#2196F3",
+        shadowColor: "#4CAF50",
         shadowOffset: {
             width: 0,
             height: 4,
