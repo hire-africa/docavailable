@@ -222,7 +222,7 @@ class FileUploadController extends Controller
     {
         try {
             // Use Intervention Image v3 (Laravel 12 compatible)
-            if (class_exists('Intervention\\Image\\ImageManager')) {
+            if (class_exists(\Intervention\Image\ImageManager::class)) {
                 $manager = app(\Intervention\Image\ImageManager::class);
                 $image = $manager->read($imageData);
 
