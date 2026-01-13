@@ -18,11 +18,11 @@ export const LocationService = {
       country: ''
     };
   },
-  
+
   requestLocationPermission: async (): Promise<boolean> => {
     return true;
   },
-  
+
   getLocationPermissionStatus: async (): Promise<string> => {
     return 'granted';
   },
@@ -36,7 +36,7 @@ export const LocationService = {
         timezone: 'Africa/Blantyre'
       },
       'Zambia': {
-        country: 'Zambia', 
+        country: 'Zambia',
         currency: 'ZMW',
         timezone: 'Africa/Lusaka'
       },
@@ -47,7 +47,7 @@ export const LocationService = {
       },
       'Tanzania': {
         country: 'Tanzania',
-        currency: 'TZS', 
+        currency: 'TZS',
         timezone: 'Africa/Dar_es_Salaam'
       },
       'Kenya': {
@@ -90,13 +90,8 @@ export const LocationService = {
         currency: 'MZN',
         timezone: 'Africa/Maputo'
       },
-      'Zambia': {
-        country: 'Zambia',
-        currency: 'ZMW',
-        timezone: 'Africa/Lusaka'
-      }
     };
-    
+
     return locationData[country] || locationData['Malawi'];
   },
 
@@ -125,7 +120,7 @@ export const LocationService = {
     if (formatter) {
       return formatter.format(amount);
     }
-    
+
     // Fallback for unsupported currencies
     return `${currency} ${amount.toLocaleString()}`;
   },
@@ -139,7 +134,7 @@ export const LocationService = {
   getCurrencySymbol: (currency: string) => {
     switch (currency) {
       case 'MWK':
-        return 'mk';
+        return 'MK';
       case 'USD':
         return '$';
       case 'ZMW':
