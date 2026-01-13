@@ -153,14 +153,12 @@ export default function EditPatientProfile() {
             const token = await apiService.getAuthToken();
             console.log('EditPatientProfile: Auth token available:', !!token);
 
-            // Create form data for image upload
-            const formData = new FormData();
-
-            // Convert image to base64 (same approach as signup forms)
+            // Convert image to base64 and send as JSON (same approach as signup forms)
+            let base64: string;
             try {
-                const response = await fetch(imageUri);
-                const blob = await response.blob();
-                const base64 = await new Promise<string>((resolve) => {
+                const fetchResponse = await fetch(imageUri);
+                const blob = await fetchResponse.blob();
+                base64 = await new Promise<string>((resolve) => {
                     const reader = new FileReader();
                     reader.onloadend = () => {
                         const base64String = reader.result as string;
@@ -168,15 +166,17 @@ export default function EditPatientProfile() {
                     };
                     reader.readAsDataURL(blob);
                 });
-                formData.append('profile_picture', base64);
             } catch (conversionError) {
                 console.error('Profile picture conversion failed:', conversionError);
                 throw new Error('Failed to process profile picture. Please try again.');
             }
 
-            // console.log('EditPatientProfile: FormData created, making API request...');
+            // console.log('EditPatientProfile: Base64 created, making API request...');
 
-            const response = await apiService.uploadFile('/upload/profile-picture', formData);
+            // Send as JSON body (same as signup) instead of FormData
+            const response = await apiService.post('/upload/profile-picture', {
+                profile_picture: base64
+            });
 
             // console.log('EditPatientProfile: Upload response:', response);
 

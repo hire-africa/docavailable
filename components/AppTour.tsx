@@ -59,7 +59,7 @@ export default function AppTour({
   // Measure element position when step changes
   useEffect(() => {
     if (!visible || !currentStep) return;
-    
+
     // Ensure width and height are valid
     if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
       console.warn('AppTour: Invalid dimensions, skipping measurement');
@@ -69,6 +69,12 @@ export default function AppTour({
     const measureElement = () => {
       // For center/welcome/complete steps, don't highlight anything
       if (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') {
+        setHighlightLayout(null);
+        animateTooltip();
+        return;
+      }
+
+      if (!elementRefs) {
         setHighlightLayout(null);
         animateTooltip();
         return;
@@ -87,9 +93,9 @@ export default function AppTour({
                 const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
                 const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
                 const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
-                
+
                 console.log(`🎯 [AppTour] Measured ${currentStep.target}:`, { safeX, safeY, safeWidth, safeHeight });
-                
+
                 setHighlightLayout({
                   x: safeX,
                   y: safeY,
@@ -108,7 +114,7 @@ export default function AppTour({
                     const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
                     const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
                     const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
-                    
+
                     setHighlightLayout({
                       x: safeX,
                       y: safeY,
@@ -123,7 +129,7 @@ export default function AppTour({
           }, 500); // Increased delay to ensure tab switch completes
           return;
         }
-        
+
         // First scroll to the element, then measure
         const scrollAndMeasure = () => {
           // Get initial position to calculate scroll
@@ -171,8 +177,8 @@ export default function AppTour({
 
               // Wait for scroll to complete, then measure in window
               // Use longer delay to ensure scroll animation completes
-              const delay = currentStep.target === 'discover-doctors-list' ? 800 : 
-                          (currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') ? 600 : 500;
+              const delay = currentStep.target === 'discover-doctors-list' ? 800 :
+                (currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') ? 600 : 500;
               setTimeout(() => {
                 ref.current?.measureInWindow((winX, winY, winW, winH) => {
                   // Ensure all values are valid numbers
@@ -180,7 +186,7 @@ export default function AppTour({
                   let safeY = isNaN(winY) ? 0 : Math.max(0, winY);
                   const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
                   const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
-                  
+
                   // For doctor profile buttons, verify they're on screen
                   // If they're still too low, adjust scroll
                   if ((currentStep.target === 'book-appt-btn' || currentStep.target === 'talk-now-btn') && safeY > height * 0.7) {
@@ -197,7 +203,7 @@ export default function AppTour({
                         const safeY2 = isNaN(winY2) ? 0 : Math.max(0, winY2);
                         const safeWidth2 = isNaN(winW2) || winW2 <= 0 ? 200 : winW2;
                         const safeHeight2 = isNaN(winH2) || winH2 <= 0 ? 50 : winH2;
-                        
+
                         setHighlightLayout({
                           x: safeX2,
                           y: safeY2,
@@ -209,7 +215,7 @@ export default function AppTour({
                     }, 400);
                     return;
                   }
-                  
+
                   setHighlightLayout({
                     x: safeX,
                     y: safeY,
@@ -227,7 +233,7 @@ export default function AppTour({
                 const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
                 const safeWidth = isNaN(winW) || winW <= 0 ? 200 : winW;
                 const safeHeight = isNaN(winH) || winH <= 0 ? 50 : winH;
-                
+
                 setHighlightLayout({
                   x: safeX,
                   y: safeY,
@@ -254,7 +260,7 @@ export default function AppTour({
                 const safeY = isNaN(winY) ? 0 : Math.max(0, winY);
                 const safeWidth = isNaN(winW) || winW <= 0 ? 80 : winW;
                 const safeHeight = isNaN(winH) || winH <= 0 ? 60 : winH;
-                
+
                 setHighlightLayout({
                   x: safeX,
                   y: safeY,
@@ -266,12 +272,12 @@ export default function AppTour({
             }, 100);
             return;
           }
-          
+
           // Fallback to calculated position if ref is not available
           const tabIndex = getTabIndex(currentStep.target);
           if (tabIndex !== -1) {
             const tabCount = getTabCount();
-            
+
             // Calculate bottom nav position accurately based on BottomNavigation styles
             // Bottom nav is absolutely positioned at bottom: 0
             const navTopPadding = 16;
@@ -282,30 +288,30 @@ export default function AppTour({
             const tabBottomPadding = 10;
             const navBottomPadding = Math.max(insets.bottom || 0, 12);
             const navHorizontalPadding = 20;
-            
+
             // Total height of the bottom navigation bar
             const navTotalHeight = navTopPadding + tabTopPadding + iconSize + labelMarginTop + labelHeight + tabBottomPadding + navBottomPadding;
-            
+
             // Tab content height (the actual clickable/highlightable area)
             const tabContentHeight = tabTopPadding + iconSize + labelMarginTop + labelHeight + tabBottomPadding;
-            
+
             // Since bottom nav is at bottom: 0, calculate Y from top of screen
             // Tab content starts after navTopPadding
             const bottomNavTopY = height - navTotalHeight;
             const tabY = bottomNavTopY + navTopPadding;
-            
+
             // Tab X position (accounting for nav paddingHorizontal: 20)
             // Tabs are evenly distributed across available width
             const availableWidth = width - (navHorizontalPadding * 2);
             const tabWidth = availableWidth / tabCount;
             const tabX = navHorizontalPadding + (tabIndex * tabWidth);
-            
+
             // Ensure all values are valid numbers
             const safeX = isNaN(tabX) ? 0 : Math.max(0, tabX);
             const safeY = isNaN(tabY) ? Math.max(0, height - 100) : Math.max(0, tabY);
             const safeWidth = isNaN(tabWidth) ? 80 : Math.max(50, tabWidth);
             const safeHeight = isNaN(tabContentHeight) ? 60 : Math.max(40, tabContentHeight);
-            
+
             setHighlightLayout({
               x: safeX,
               y: safeY,
@@ -324,10 +330,10 @@ export default function AppTour({
 
     // No delay for center steps, minimal delay for others
     // Add extra delay for discover-doctors-list and appointments sub-tabs to ensure page is ready
-    const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') 
-      ? 0 
-      : (currentStep.target === 'discover-doctors-list' ? 200 : 
-         (currentStep.target === 'appointments-requests-tab' || currentStep.target === 'appointments-accepted-tab') ? 400 : 50);
+    const delay = (currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete')
+      ? 0
+      : (currentStep.target === 'discover-doctors-list' ? 200 :
+        (currentStep.target === 'appointments-requests-tab' || currentStep.target === 'appointments-accepted-tab') ? 400 : 50);
     const timer = setTimeout(measureElement, delay);
     return () => clearTimeout(timer);
   }, [currentStepIndex, visible, currentStep, elementRefs, insets.bottom]);
@@ -434,11 +440,12 @@ export default function AppTour({
     onComplete();
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    await appTourService.markTourCompleted(userType);
     if (onSkip) {
       onSkip();
     } else {
-      handleComplete();
+      onComplete();
     }
   };
 
@@ -475,7 +482,7 @@ export default function AppTour({
     }
 
     const { x, y, width: w, height: h } = highlightLayout;
-    
+
     // Ensure all values are valid numbers
     const safeX = isNaN(x) ? 0 : x;
     const safeY = isNaN(y) ? 0 : y;

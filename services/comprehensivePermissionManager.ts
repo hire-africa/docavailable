@@ -1,11 +1,11 @@
-import { Platform, PermissionsAndroid, Linking, Alert, NativeModules } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
-import * as Contacts from 'expo-contacts';
-import * as Calendar from 'expo-calendar';
 import notifee, { AndroidImportance, AndroidVisibility } from '@notifee/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Calendar from 'expo-calendar';
+import * as Contacts from 'expo-contacts';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import { Alert, Linking, PermissionsAndroid, Platform } from 'react-native';
+import { PermissionUtils } from '../utils/PermissionUtils';
 
 interface PermissionStatus {
   granted: boolean;
@@ -54,7 +54,7 @@ class ComprehensivePermissionManager {
    */
   async requestAllPermissionsOnFirstLaunch(): Promise<PermissionResult> {
     const isFirst = await this.isFirstLaunch();
-    
+
     if (!isFirst) {
       return {
         success: true,
@@ -66,13 +66,13 @@ class ComprehensivePermissionManager {
     }
 
     console.log('🚀 First app launch detected - requesting all permissions...');
-    
+
     const result = await this.requestAllPermissions();
-    
+
     if (result.success) {
       await this.markFirstLaunchComplete();
     }
-    
+
     return result;
   }
 
@@ -126,7 +126,7 @@ class ComprehensivePermissionManager {
       needsManualSetup.push(...notifResult.needsManualSetup);
 
       const success = denied.length === 0 && needsManualSetup.length === 0;
-      
+
       let message = `✅ Granted: ${granted.length} permissions`;
       if (denied.length > 0) {
         message += `\n❌ Denied: ${denied.length} permissions`;
@@ -178,7 +178,7 @@ class ComprehensivePermissionManager {
         ];
 
         const results = await PermissionsAndroid.requestMultiple(permissions);
-        
+
         Object.entries(results).forEach(([permission, result]) => {
           if (result === PermissionsAndroid.RESULTS.GRANTED) {
             granted.push(permission);
@@ -267,7 +267,7 @@ class ComprehensivePermissionManager {
         ];
 
         const results = await PermissionsAndroid.requestMultiple(phonePermissions);
-        
+
         Object.entries(results).forEach(([permission, result]) => {
           const name = permission.includes('CALL_PHONE') ? 'Call Phone' : 'Read Phone State';
           if (result === PermissionsAndroid.RESULTS.GRANTED) {
@@ -369,12 +369,11 @@ class ComprehensivePermissionManager {
         alert: true,
         badge: true,
         sound: true,
-        lockScreen: true,
         notificationCenter: true,
         carPlay: true,
         criticalAlert: false,
         announcement: true,
-      });
+      } as any);
 
       if (permission.authorizationStatus >= 1) {
         granted.push('Notifications');
@@ -463,30 +462,14 @@ class ComprehensivePermissionManager {
    * Check if app has System Alert Window permission
    */
   private async checkSystemAlertWindow(): Promise<boolean> {
-    if (Platform.OS !== 'android') return true;
-    
-    try {
-      // This is a best-effort check - actual permission needs to be granted in settings
-      return false; // Always assume we need manual setup for this critical permission
-    } catch (error) {
-      console.error('Error checking system alert window:', error);
-      return false;
-    }
+    return PermissionUtils.checkOverlayPermission();
   }
 
   /**
    * Check battery optimization status
    */
   private async checkBatteryOptimization(): Promise<boolean> {
-    if (Platform.OS !== 'android') return true;
-    
-    try {
-      // This is a best-effort check - actual permission needs to be granted in settings
-      return false; // Always assume we need manual setup for this critical permission
-    } catch (error) {
-      console.error('Error checking battery optimization:', error);
-      return false;
-    }
+    return PermissionUtils.checkBatteryOptimizationExempt();
   }
 
   /**
@@ -494,7 +477,7 @@ class ComprehensivePermissionManager {
    */
   private async checkDoNotDisturbBypass(): Promise<boolean> {
     if (Platform.OS !== 'android') return true;
-    
+
     try {
       const settings = await notifee.getNotificationSettings();
       return settings.android?.alarm === 1; // 1 = ENABLED
@@ -586,7 +569,7 @@ Would you like to open Settings now to complete the setup?
     `;
 
     console.log(guide);
-    
+
     // Show alert to user
     Alert.alert(
       '🏥 Critical Permissions Setup Required',
@@ -639,7 +622,7 @@ Would you like to open Settings now to complete the setup?
       // Check media permissions
       const cameraStatus = await ImagePicker.getCameraPermissionsAsync();
       const libraryStatus = await ImagePicker.getMediaLibraryPermissionsAsync();
-      
+
       if (cameraStatus.status !== 'granted' || libraryStatus.status !== 'granted') {
         canAccessMedia = false;
         missing.push('Camera/Photos');
@@ -666,15 +649,15 @@ Would you like to open Settings now to complete the setup?
         case 'camera':
           const cameraResult = await ImagePicker.requestCameraPermissionsAsync();
           return cameraResult.status === 'granted';
-          
+
         case 'location':
           const locationResult = await Location.requestForegroundPermissionsAsync();
           return locationResult.status === 'granted';
-          
+
         case 'contacts':
           const contactsResult = await Contacts.requestPermissionsAsync();
           return contactsResult.status === 'granted';
-          
+
         case 'calls':
           if (Platform.OS === 'android') {
             const result = await PermissionsAndroid.request(
@@ -683,7 +666,7 @@ Would you like to open Settings now to complete the setup?
             return result === PermissionsAndroid.RESULTS.GRANTED;
           }
           return true;
-          
+
         default:
           return false;
       }

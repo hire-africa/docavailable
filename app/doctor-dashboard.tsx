@@ -2,12 +2,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
 import { NotificationService } from '@/services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  AppState,
   BackHandler,
   Dimensions,
   Image,
@@ -27,11 +29,13 @@ import AppTour from '../components/AppTour';
 import BottomNavigation from '../components/BottomNavigation';
 import DoctorActivationModal from '../components/DoctorActivationModal';
 import OnboardingOverlay from '../components/OnboardingOverlay';
+import PermissionsWalkthrough from '../components/PermissionsWalkthrough';
 import appTourService from '../services/appTourService';
 import customAlertService from '../services/customAlertService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
 import { Activity, addRealtimeActivity, generateUserActivities } from '../utils/activityUtils';
 import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
+import { PermissionUtils } from '../utils/PermissionUtils';
 import { getMissingFields } from '../utils/profileUtils';
 
 import { useCustomTheme } from '@/hooks/useCustomTheme';
@@ -139,7 +143,55 @@ export default function DoctorDashboard() {
 
   // App Tour state
   const [showAppTour, setShowAppTour] = useState(false);
+  const [hasCheckedTour, setHasCheckedTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+
+  // Permissions Walkthrough state
+  const [showPermissionsWalkthrough, setShowPermissionsWalkthrough] = useState(false);
+  const [permissionsDismissed, setPermissionsDismissed] = useState(false);
+  const [loadingPersistentStates, setLoadingPersistentStates] = useState(true);
+  useEffect(() => {
+    const loadPersistentStates = async () => {
+      try {
+        setLoadingPersistentStates(true);
+        const dismissed = await AsyncStorage.getItem('@DocAvailable:permissions_dismissed');
+        console.log('💾 [DoctorDashboard] Loaded permissions_dismissed:', dismissed);
+        if (dismissed === 'true') {
+          setPermissionsDismissed(true);
+        }
+      } catch (error) {
+        console.error('Error loading persistent states:', error);
+      } finally {
+        setLoadingPersistentStates(false);
+      }
+    };
+    loadPersistentStates();
+  }, []);
+
+  const handleDismissPermissions = async () => {
+    try {
+      setPermissionsDismissed(true);
+      setShowPermissionsWalkthrough(false);
+      await AsyncStorage.setItem('@DocAvailable:permissions_dismissed', 'true');
+    } catch (error) {
+      console.error('Error saving permissions dismissal:', error);
+    }
+  };
+
+  // App State listener for permission refresh
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (nextAppState === 'active' && showPermissionsWalkthrough) {
+        // Refresh checkProfileCompletion which now includes permission check
+        refreshUserData();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [showPermissionsWalkthrough]);
+
   // Tab component definition
   const Tab: React.FC<TabProps> = ({ icon, label, isActive, onPress }) => (
     <TouchableOpacity
@@ -178,13 +230,16 @@ export default function DoctorDashboard() {
   // Check if app tour should be shown
   useEffect(() => {
     const checkTourStatus = async () => {
-      if (!userData || userData.user_type !== 'doctor') return;
+      if (!userData || userData.user_type !== 'doctor' || hasCheckedTour) return;
 
-      // Don't show tour if onboarding overlay is showing
-      if (showOnboarding) return;
+      // Don't show tour if onboarding overlay or permissions walkthrough is showing
+      if (showOnboarding || showPermissionsWalkthrough) return;
 
       // Check if tour has been completed
+      setHasCheckedTour(true);
       const hasCompleted = await appTourService.hasCompletedTour('doctor');
+      console.log('🏁 [DoctorDashboard] Tour completion status:', hasCompleted);
+
       if (!hasCompleted && !showAppTour) {
         // Ensure we're on home tab for tour
         setActiveTab('home');
@@ -196,7 +251,7 @@ export default function DoctorDashboard() {
     };
 
     checkTourStatus();
-  }, [userData, showOnboarding]);
+  }, [userData, showOnboarding, showPermissionsWalkthrough, hasCheckedTour]);
 
   // Approval status state
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
@@ -376,8 +431,7 @@ export default function DoctorDashboard() {
   // Check profile completion for onboarding
   useEffect(() => {
     const checkProfileCompletion = () => {
-
-      if (userData) {
+      if (userData && !loadingPersistentStates) {
         const missing = getMissingFields(userData);
         console.log('🔍 [DoctorDashboard] Missing fields result:', missing);
 
@@ -406,7 +460,28 @@ export default function DoctorDashboard() {
             setShowOnboarding(true);
           }
         } else {
-          console.log('🔍 [DoctorDashboard] Profile is complete, hiding overlays');
+          console.log('🔍 [DoctorDashboard] Profile is complete, checking permissions. dismissed:', permissionsDismissed);
+
+          // Check permissions if profile is complete
+          const checkPermissions = async () => {
+            // IF ALREADY DISMISSED, DON'T EVEN CHECK
+            if (permissionsDismissed) {
+              return;
+            }
+
+            const status = await PermissionUtils.getStatus();
+            const needsPermissions = !status.overlay || !status.notifications;
+
+            if (needsPermissions &&
+              !showPermissionsWalkthrough &&
+              !showActivationModal &&
+              !showOnboarding) {
+              console.log('🔍 [DoctorDashboard] Showing permissions walkthrough');
+              setShowPermissionsWalkthrough(true);
+            }
+          };
+
+          checkPermissions();
           setShowOnboarding(false);
           setShowApprovalBanner(false);
         }
@@ -414,7 +489,7 @@ export default function DoctorDashboard() {
     };
 
     checkProfileCompletion();
-  }, [userData, showOnboarding, onboardingDismissed]);
+  }, [userData, showOnboarding, onboardingDismissed, permissionsDismissed, loadingPersistentStates]);
 
   const updateEnabledDaysCount = async () => {
     try {
@@ -2566,6 +2641,13 @@ export default function DoctorDashboard() {
         {renderContent()}
       </View>
 
+      {/* Permissions Walkthrough */}
+      <PermissionsWalkthrough
+        visible={showPermissionsWalkthrough}
+        onComplete={handleDismissPermissions}
+        onSkip={handleDismissPermissions}
+      />
+
       <BottomNavigation
         tabRefs={tourTabRefs.current}
         tabs={[
@@ -2745,13 +2827,15 @@ export default function DoctorDashboard() {
 
       {/* App Tour */}
       <AppTour
-        visible={showAppTour && !showOnboarding}
+        visible={showAppTour && !showOnboarding && !showPermissionsWalkthrough}
         userType="doctor"
-        onComplete={() => {
+        onComplete={async () => {
           setShowAppTour(false);
+          await appTourService.markTourCompleted('doctor');
         }}
-        onSkip={() => {
+        onSkip={async () => {
           setShowAppTour(false);
+          await appTourService.markTourCompleted('doctor');
         }}
         elementRefs={tourTabRefs.current}
         onTabChange={(tab) => {

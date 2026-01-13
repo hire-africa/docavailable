@@ -126,32 +126,33 @@ export class NotificationService {
     try {
       // Get all notifications from local storage
       const localNotifications = await this.getNotifications();
-      
+
       // Don't filter by time - show all notifications
       const recentNotifications = localNotifications;
-      
+
       // Try to get admin notifications from API
       let adminNotifications: Notification[] = [];
       try {
         console.log('🔔 Fetching admin notifications from docavailable.com...');
-        
-        const response = await fetch(`https://docavailable.com/api/notifications?userType=${userType}&userId=${userId || ''}`);
+
+        // Add a timeout to the fetch request to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+        const response = await fetch(`https://docavailable.com/api/notifications?userType=${userType}&userId=${userId || ''}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         console.log('🔔 Admin API response status:', response.status);
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('🔔 Admin API response data:', data);
-          
+
           if (data.success && data.notifications) {
             // Convert API notifications to our format
             adminNotifications = data.notifications.map((n: any) => {
-              console.log('🔔 Processing admin notification:', {
-                id: n.id,
-                title: n.title,
-                type: n.type,
-                originalType: n.type
-              });
-              
               return {
                 id: n.id,
                 title: n.title,
@@ -165,20 +166,20 @@ export class NotificationService {
                 sentBy: n.sentBy
               };
             });
-            console.log('🔔 Admin notifications loaded:', adminNotifications.length, adminNotifications);
-          } else {
-            console.log('🔔 No admin notifications found in response');
+            console.log('🔔 Admin notifications loaded:', adminNotifications.length);
           }
-        } else {
-          console.log('🔔 Admin API error:', response.status, response.statusText);
         }
-      } catch (apiError) {
-        console.log('🔔 Admin API not available, using local storage only:', apiError);
+      } catch (apiError: any) {
+        if (apiError.name === 'AbortError') {
+          console.log('🔔 Admin API fetch timed out');
+        } else {
+          console.log('🔔 Admin API not available:', apiError.message);
+        }
       }
 
       // Combine recent local notifications and admin notifications
       const allNotifications = [...recentNotifications, ...adminNotifications];
-      
+
       // Remove duplicates based on ID
       const uniqueNotifications = allNotifications.reduce((acc, current) => {
         const existing = acc.find(item => item.id === current.id);
@@ -195,7 +196,7 @@ export class NotificationService {
       const filteredNotifications = uniqueNotifications.filter(notification => {
         // If no recipient type specified, show to all (real-time notifications)
         if (!notification.recipientType) return true;
-        
+
         // Filter based on recipient type (admin notifications)
         switch (notification.recipientType) {
           case 'all':
@@ -212,7 +213,7 @@ export class NotificationService {
       });
 
       console.log('🔔 Final filtered notifications (real-time only):', filteredNotifications.length, filteredNotifications);
-      
+
       return filteredNotifications;
     } catch (error) {
       console.error('Error getting notifications for user:', error);
@@ -225,7 +226,7 @@ export class NotificationService {
       // Clear all notifications older than 30 days (keep notification history)
       const notifications = await this.getNotifications();
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const recentNotifications = notifications.filter(notification => 
+      const recentNotifications = notifications.filter(notification =>
         notification.timestamp > thirtyDaysAgo
       );
       await this.saveNotifications(recentNotifications);

@@ -10,7 +10,7 @@ class PushNotificationService {
   private pushToken: string | null = null;
 
   // Request permission (iOS) and obtain FCM token
-  async registerForPushNotifications(): Promise<string | null> {
+  async registerForPushNotifications(requestIfNecessary: boolean = true): Promise<string | null> {
     try {
       console.log('🔔 [PushNotificationService] Registering for FCM...');
       console.log('🔔 [PushNotificationService] Platform:', Platform.OS);
@@ -31,20 +31,26 @@ class PushNotificationService {
       }
 
       // Ensure FCM auto-init is on (Android). iOS ignores this.
-      try { 
-        await messaging().setAutoInitEnabled(true); 
+      try {
+        await messaging().setAutoInitEnabled(true);
         console.log('✅ [PushNotificationService] FCM auto-init enabled');
       } catch (error) {
         console.error('❌ [PushNotificationService] Failed to enable FCM auto-init:', error);
         // Continue anyway, as this might not be critical
       }
 
-      console.log('🔔 [PushNotificationService] Requesting notification permission...');
-      const authStatus = await messaging().requestPermission();
-      console.log('🔔 [PushNotificationService] Permission status:', authStatus);
-      
-      const enabled = authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-                      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      let enabled = true;
+      if (requestIfNecessary) {
+        console.log('🔔 [PushNotificationService] Requesting notification permission...');
+        const authStatus = await messaging().requestPermission();
+        console.log('🔔 [PushNotificationService] Permission status:', authStatus);
+
+        enabled = authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+      } else {
+        console.log('🔔 [PushNotificationService] Skipping notification permission request as per flag');
+      }
+
       if (!enabled && Platform.OS === 'ios') {
         console.warn('❌ [PushNotificationService] Notification permission not granted');
         return null;
@@ -86,19 +92,19 @@ class PushNotificationService {
       console.log('📤 [PushNotificationService] Sending token to backend...');
       console.log('📤 [PushNotificationService] Token length:', token.length);
       console.log('📤 [PushNotificationService] API base URL:', apiService.getBaseURL());
-      
+
       const response = await apiService.post('/notifications/push-token', {
         push_token: token,
         provider: 'fcm'
       });
-      
+
       console.log('📤 [PushNotificationService] Backend response:', response);
-      
+
       if (!response.success) {
         console.warn('⚠️ [PushNotificationService] Backend rejected token:', response.message);
         return false;
       }
-      
+
       console.log('✅ [PushNotificationService] Token sent successfully to backend');
       return true;
     } catch (error: any) {
@@ -109,7 +115,7 @@ class PushNotificationService {
         data: error?.response?.data,
         url: error?.config?.url
       });
-      
+
       // Common case: 401 when not authenticated yet
       const status = error?.response?.status;
       if (status === 401) {
@@ -138,11 +144,11 @@ class PushNotificationService {
     try {
       console.log('🔄 [PushNotificationService] Checking for pending push token...');
       const pending = await AsyncStorage.getItem('pending_push_token');
-      
+
       if (pending) {
         console.log('🔄 [PushNotificationService] Found pending token, attempting to sync...');
         console.log('🔄 [PushNotificationService] Pending token length:', pending.length);
-        
+
         const sent = await this.trySendTokenToBackend(pending);
         if (sent) {
           await AsyncStorage.removeItem('pending_push_token');

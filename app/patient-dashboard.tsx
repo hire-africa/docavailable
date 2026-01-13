@@ -179,6 +179,7 @@ export default function PatientDashboard() {
 
   // App Tour state
   const [showAppTour, setShowAppTour] = useState(false);
+  const [hasCheckedTour, setHasCheckedTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
   const discoverScrollViewRef = useRef<ScrollView>(null);
 
@@ -204,12 +205,13 @@ export default function PatientDashboard() {
   // Check if app tour should be shown
   useEffect(() => {
     const checkTourStatus = async () => {
-      if (!userData || userData.user_type !== 'patient') return;
+      if (!userData || userData.user_type !== 'patient' || hasCheckedTour) return;
 
       // Don't show tour if onboarding overlay is showing
       if (showOnboarding) return;
 
       // Check if tour has been completed
+      setHasCheckedTour(true);
       const hasCompleted = await appTourService.hasCompletedTour('patient');
       if (!hasCompleted && !showAppTour) {
         // Ensure we're on home tab for tour
@@ -222,7 +224,7 @@ export default function PatientDashboard() {
     };
 
     checkTourStatus();
-  }, [userData, showOnboarding]);
+  }, [userData, showOnboarding, hasCheckedTour]);
 
   // Animate bottom nav
   const animateBottomNav = (hide: boolean) => {
@@ -719,7 +721,7 @@ export default function PatientDashboard() {
 
           if (response.success && response.data) {
             console.log('PatientDashboard: Setting subscription data:', response.data);
-            setCurrentSubscription(response.data);
+            setCurrentSubscription(response.data as UserSubscription);
           } else {
             console.log('PatientDashboard: No subscription data in response, setting to null');
             setCurrentSubscription(null);
@@ -1160,7 +1162,7 @@ export default function PatientDashboard() {
     }
   };
 
-  // Text appointment converter hook
+  // Text appointment converter hook - must be placed after getSafeAppointments and refreshMessagesTab are defined
   const { triggerConversionCheck } = useTextAppointmentConverter({
     appointments: getSafeAppointments(),
     onTextSessionCreated: (textSession) => {
@@ -1335,7 +1337,6 @@ export default function PatientDashboard() {
       // console.log('🔄 Manual refresh of profile tab...');
 
       // Refresh user data
-      const { refreshUserData } = useAuth();
       await refreshUserData().catch(err => console.error('Error refreshing user data:', err));
     } catch (error) {
       console.error('PatientDashboard: Profile refresh - Error:', error);
@@ -4500,35 +4501,7 @@ export default function PatientDashboard() {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 14,
-                      paddingHorizontal: 16,
-                      borderRadius: 8,
-                      backgroundColor: '#1A1C1F',
-                      borderWidth: 1,
-                      borderColor: '#2A2D32',
-                    }}
-                    onPress={() => {
-                      closeSidebar();
-                      router.push('/patient-settings');
-                    }}
-                  >
-                    <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: '#222528', justifyContent: 'center', alignItems: 'center' }}>
-                      <Icon name="lock" size={18} color="#A8AAAE" />
-                    </View>
-                    <Text style={{
-                      marginLeft: 14,
-                      fontSize: 14,
-                      color: '#E8E8E8',
-                      fontWeight: '500',
-                      letterSpacing: 0.3
-                    }}>
-                      Privacy & Notifications
-                    </Text>
-                  </TouchableOpacity>
+
 
                   <TouchableOpacity
                     style={{
@@ -6349,10 +6322,6 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     fontSize: 14,
     color: '#4CAF50',
     fontWeight: 'bold',
-  },
-  tabIcon: {
-    fontSize: 24,
-    marginBottom: 4,
   },
   hamburgerButton: {
     padding: 6,

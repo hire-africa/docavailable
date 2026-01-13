@@ -31,14 +31,14 @@ export class WebRTCChatService {
       sessionType: config.sessionType,
       webrtcConfig: config.webrtcConfig
     });
-    
+
     this.config = config;
     this.events = events;
     // Include session type in storage key to prevent conflicts between text sessions and appointments
     const sessionType = config.sessionType || 'appointment';
     this.storageKey = `webrtc_messages_${sessionType}_${config.appointmentId}`;
     this.processedMessageHashes = new Set();
-    
+
     console.log('✅ [WebRTCChat] Constructor completed successfully');
   }
 
@@ -73,7 +73,7 @@ export class WebRTCChatService {
       console.log('⚠️ [WebRTCChat] Message already exists, skipping duplicate:', message.id);
       return;
     }
-    
+
     this.messages.push(message);
     await this.saveMessages();
   }
@@ -83,36 +83,50 @@ export class WebRTCChatService {
       try {
         // Load existing messages first
         await this.loadMessages();
-        
+
         // Initialize media upload queue service
         await mediaUploadQueueService.initialize();
-        
+
         const token = await this.getAuthToken();
-const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
+        const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
-        
-        this.websocket = new WebSocket(wsUrl);
-        
+
+        // Cleanup existing websocket handlers before replacing
+        if (this.websocket) {
+          console.log('🧹 [WebRTCChat] Cleaning up old websocket handlers');
+          this.websocket.onopen = null;
+          this.websocket.onmessage = null;
+          this.websocket.onerror = null;
+          this.websocket.onclose = null;
+        }
+
+        const currentWs = new WebSocket(wsUrl);
+        this.websocket = currentWs;
+
         // Set connection timeout
         const connectionTimeoutId = setTimeout(() => {
-          if (!this.isConnected) {
+          if (this.websocket === currentWs && !this.isConnected) {
             console.error('❌ [WebRTCChat] Connection timeout after', this.connectionTimeout, 'ms');
-            this.websocket?.close();
+            currentWs.close();
             reject(new Error('WebSocket connection timeout'));
           }
         }, this.connectionTimeout);
-        
-        this.websocket.onopen = async () => {
+
+        currentWs.onopen = async () => {
+          if (this.websocket !== currentWs) {
+            console.log('🔌 [WebRTCChat] Stale websocket onopen ignored');
+            return;
+          }
           clearTimeout(connectionTimeoutId);
           console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
           this.isConnected = true;
           this.reconnectAttempts = 0;
-          
+
           // Start health monitoring
           this.startHealthCheck();
-          
+
           // Auto-sync with server when connecting to ensure we have latest messages
           try {
             console.log('🔄 [WebRTCChat] Auto-syncing with server on connect...');
@@ -120,14 +134,18 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           } catch (error) {
             console.error('❌ [WebRTCChat] Auto-sync failed on connect:', error);
           }
-          
+
           resolve();
         };
-        
-        this.websocket.onmessage = async (event) => {
+
+        currentWs.onmessage = async (event) => {
+          if (this.websocket !== currentWs) {
+            console.log('📨 [WebRTCChat] Stale websocket onmessage ignored');
+            return;
+          }
           try {
             const data = JSON.parse(event.data);
-            
+
             // Only log non-ping/pong messages to reduce spam
             if (data.type !== 'ping' && data.type !== 'pong') {
               console.log('📨 [WebRTCChat] Message received:', data.type);
@@ -136,39 +154,39 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
                 console.log('📨 [WebRTCChat] Message data:', JSON.stringify(data, null, 2));
               }
             }
-            
+
             // Handle session-ended messages for real-time notifications
             if (data.type === 'session-ended') {
               console.log('🏁 [WebRTCChat] Session ended message received:', data);
               if (this.events.onSessionEnded) {
                 const sessionType = this.config.sessionType === 'text_session' ? 'instant' : (this.config.sessionType || 'appointment');
                 this.events.onSessionEnded(
-                  this.config.appointmentId, 
-                  data.reason || 'manual_end', 
+                  this.config.appointmentId,
+                  data.reason || 'manual_end',
                   sessionType
                 );
               }
               return;
             }
-            
+
             // Ignore other session-related messages - these should be handled by the session service
-            if (data.type === 'session-end-request' || 
-                data.type === 'session-end-success' || 
-                data.type === 'session-end-error' ||
-                data.type === 'session-activated' ||
-                data.type === 'session-expired' ||
-                data.type === 'session-deduction' ||
-                data.type === 'session-status-request' ||
-                data.type === 'session-status') {
+            if (data.type === 'session-end-request' ||
+              data.type === 'session-end-success' ||
+              data.type === 'session-end-error' ||
+              data.type === 'session-activated' ||
+              data.type === 'session-expired' ||
+              data.type === 'session-deduction' ||
+              data.type === 'session-status-request' ||
+              data.type === 'session-status') {
               console.log('📨 [WebRTCChat] Ignoring session-related message:', data.type);
               return;
             }
-            
+
             if (data.type === 'chat-message' && (data.message || data.content)) {
               // Normalize shape whether nested under message or flattened
               const raw = data.message ? data.message : data;
               const messageId = String(raw.id ?? raw.temp_id ?? raw.tempId ?? `ws_${Date.now()}`);
-              
+
               console.log('📨 [WebRTCChat] Processing WebSocket message:', {
                 messageId,
                 type: data.type,
@@ -178,7 +196,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
                 rawTempId: raw.temp_id,
                 rawTempId2: raw.tempId
               });
-              
+
               const normalized: ChatMessage = {
                 id: messageId,
                 sender_id: Number(raw.sender_id ?? raw.senderId ?? 0),
@@ -197,31 +215,31 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
                 created_at: normalized.created_at,
               } as any);
               console.log('📨 [WebRTCChat] Processing chat message:', normalized.id, 'hash:', messageHash);
-              
+
               // Ensure processedMessageHashes is initialized
               if (!this.processedMessageHashes) {
                 this.processedMessageHashes = new Set();
               }
-              
+
               // Check if we've already processed this message (by hash)
               if (this.processedMessageHashes.has(messageHash)) {
                 console.log('⚠️ [WebRTCChat] Message already processed, skipping duplicate:', messageHash);
                 return;
               }
-              
+
               console.log('📨 [WebRTCChat] Message sender ID:', normalized.sender_id, 'type:', typeof normalized.sender_id);
               console.log('📨 [WebRTCChat] Current user ID:', this.config.userId, 'type:', typeof this.config.userId);
-              
+
               // Convert both IDs to numbers for reliable comparison
               const senderIdNum = Number(normalized.sender_id);
               const userIdNum = Number(this.config.userId);
-              
+
               console.log('🔍 [WebRTCChat] Debug - senderIdNum:', senderIdNum, 'userIdNum:', userIdNum);
               console.log('🔍 [WebRTCChat] Debug - comparison result:', senderIdNum === userIdNum);
-              
+
               // Mark message as processed (by hash)
               this.processedMessageHashes.add(messageHash);
-              
+
               // Check if this is our own message
               if (senderIdNum === userIdNum) {
                 console.log('🔄 [WebRTCChat] Received own message echo - triggering onMessage to update delivery status');
@@ -230,7 +248,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
                 this.events.onMessage(normalized);
               } else {
                 console.log('✅ [WebRTCChat] Received message from other participant');
-                
+
                 // Store the message and trigger event for other participants' messages
                 await this.addMessage(normalized);
                 console.log('📨 [WebRTCChat] Triggering onMessage event for message:', normalized.id);
@@ -258,7 +276,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             console.error('❌ Error parsing WebRTC chat message:', error);
           }
         };
-        
+
         this.websocket.onerror = (error) => {
           console.error('❌ [WebRTCChat] WebRTC chat error:', error);
           console.error('❌ [WebRTCChat] Error details:', {
@@ -266,10 +284,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             target: (error as any).target?.url,
             readyState: (error as any).target?.readyState
           });
-          
+
           // Clear connection timeout on error
           clearTimeout(connectionTimeoutId);
-          
+
           // Check if it's a connection error (HTTP 200 instead of 101)
           const errorMessage = (error as any).message;
           if (errorMessage && errorMessage.includes('Expected HTTP 101')) {
@@ -279,18 +297,19 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             reject(new Error('WebSocket server not properly configured'));
             return;
           }
-          
+
           // Handle SSL/TLS connection errors with retry logic
           if (errorMessage && (
             errorMessage.includes('Connection reset by peer') ||
             errorMessage.includes('ssl') ||
             errorMessage.includes('TLS') ||
             errorMessage.includes('SSL') ||
+            errorMessage.includes('Chain validation failed') ||
             errorMessage.includes('Connection closed by peer')
           )) {
             console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected, will retry...');
             this.events.onError('Connection error, retrying...');
-            
+
             // Don't reject immediately for SSL errors, let reconnection handle it
             setTimeout(() => {
               if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -301,27 +320,27 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             }, 3000); // Increased delay from 2000ms to 3000ms
             return;
           }
-          
+
           // For other errors, don't reject immediately if we're already connected
           if (this.isConnected) {
             console.warn('⚠️ [WebRTCChat] Connection error but already connected, continuing...');
             return;
           }
-          
+
           this.events.onError('WebRTC connection error');
           reject(error);
         };
-        
+
         this.websocket.onclose = (event) => {
           console.log('🔌 WebRTC chat disconnected:', event.code);
           this.isConnected = false;
           this.stopHealthCheck();
-          
+
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.handleReconnect();
           }
         };
-        
+
       } catch (error) {
         console.error('❌ Error creating WebRTC chat connection:', error);
         reject(error);
@@ -337,7 +356,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       websocketState: this.websocket?.readyState,
       isWebSocketOpen: this.websocket?.readyState === WebSocket.OPEN
     });
-    
+
     if (!this.isConnected || !this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
       console.error('❌ [WebRTCChat] WebRTC chat not connected - cannot send message', {
         isConnected: this.isConnected,
@@ -350,10 +369,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
     // Generate a more unique message ID
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // Get auth token for API calls
     const authToken = await this.getAuthToken();
-    
+
     const messageData: any = {
       type: 'chat-message',
       content: message,
@@ -364,7 +383,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       createdAt: new Date().toISOString(),
       deliveryStatus: 'sending'
     };
-    
+
     // Include replyTo if provided
     if (replyTo) {
       messageData.replyTo = replyTo;
@@ -375,20 +394,20 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       console.log('📤 [WebRTCChat] Message data being sent:', JSON.stringify(messageData, null, 2));
       console.log('📤 [WebRTCChat] WebSocket readyState before send:', this.websocket.readyState);
       console.log('📤 [WebRTCChat] WebSocket URL:', this.websocket.url);
-      
+
       this.websocket.send(JSON.stringify(messageData));
       console.log('✅ [WebRTCChat] Message sent to WebSocket successfully');
       console.log('📤 [WebRTCChat] Message sent to server, waiting for forwarding to other participants...');
-      
+
       // Ensure processedMessageHashes is initialized
       if (!this.processedMessageHashes) {
         this.processedMessageHashes = new Set();
       }
-      
+
       // Mark message as processed to prevent duplicates (by hash)
       const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
-      
+
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
@@ -399,10 +418,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         created_at: new Date().toISOString(),
         delivery_status: 'sending'
       };
-      
+
       // Store the sent message locally and save to AsyncStorage
       await this.addMessage(chatMessage);
-      
+
       // CRITICAL: Always persist to backend API to ensure timer starts and messages are stored
       // This is especially important for text sessions where the first patient message must trigger the 90-second timer
       try {
@@ -416,7 +435,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             message: message.substring(0, 50),
             messageId: messageId
           });
-          
+
           const resp = await fetch(apiUrl, {
             method: 'POST',
             headers: {
@@ -429,7 +448,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               temp_id: messageId,
             }),
           });
-          
+
           if (!resp.ok) {
             const errorText = await resp.text();
             console.error('❌ [WebRTCChat] Backend persist failed:', resp.status, errorText);
@@ -459,7 +478,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       } catch (persistErr) {
         console.error('❌ [WebRTCChat] Failed to persist message to backend - timer may not start!', persistErr);
       }
-      
+
       // Trigger the onMessage event so the sender can see their own message immediately
       console.log('📤 [WebRTCChat] Triggering onMessage event for sent message:', messageId);
       if (this.events.onMessage) {
@@ -468,7 +487,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       } else {
         console.error('❌ [WebRTCChat] onMessage function is not defined!');
       }
-      
+
       console.log('📤 [WebRTCChat] Message sent successfully:', messageId);
       return chatMessage;
     } catch (error) {
@@ -508,9 +527,9 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         try {
           uploadAttempts++;
           console.log(`📤 [WebRTCChat] Voice upload attempt ${uploadAttempts}/${maxUploadAttempts}`);
-          
+
           mediaUrl = await voiceRecordingService.uploadVoiceMessage(numericAppointmentId, audioUri);
-          
+
           if (mediaUrl) {
             console.log('✅ [WebRTCChat] Voice upload successful:', mediaUrl);
             break;
@@ -519,7 +538,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           }
         } catch (uploadError: any) {
           console.error(`❌ [WebRTCChat] Voice upload attempt ${uploadAttempts} failed:`, uploadError);
-          
+
           if (uploadAttempts >= maxUploadAttempts) {
             // Create a failed message for UI feedback
             const failedMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -533,13 +552,13 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
               created_at: new Date().toISOString(),
               delivery_status: 'failed'
             };
-            
+
             await this.addMessage(failedMessage);
             this.events.onMessage(failedMessage);
-            
+
             throw new Error(`Failed to upload voice message after ${maxUploadAttempts} attempts: ${uploadError.message}`);
           }
-          
+
           // Wait before retry (exponential backoff)
           const retryDelay = 1000 * Math.pow(2, uploadAttempts - 1);
           console.log(`🔄 [WebRTCChat] Retrying voice upload in ${retryDelay}ms...`);
@@ -553,7 +572,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const authToken = await this.getAuthToken();
-      
+
       const messageData = {
         type: 'chat-message',
         content: '🎤 Voice message', // Voice message indicator
@@ -568,10 +587,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
       console.log('📤 [WebRTCChat] Sending voice message via WebSocket:', messageId);
       this.websocket.send(JSON.stringify(messageData));
-      
+
       const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
-      
+
       // Convert to ChatMessage format for storage
       const chatMessage: ChatMessage = {
         id: messageId,
@@ -583,13 +602,13 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         created_at: new Date().toISOString(),
         delivery_status: 'sending'
       };
-      
+
       console.log('✅ [WebRTCChat] Voice message prepared for storage:', {
         id: messageId,
         media_url: mediaUrl,
         is_full_url: mediaUrl?.startsWith('http')
       });
-      
+
       await this.addMessage(chatMessage);
       this.events.onMessage(chatMessage);
 
@@ -629,10 +648,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         // Update message status
         chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
       }
-      
+
       // Update the message in storage with final status
       await this.addMessage(chatMessage);
-      
+
       console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
       return chatMessage;
     } catch (error) {
@@ -662,7 +681,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       }
 
       const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       // Show image IMMEDIATELY with local URI and 'sending' status
       const immediateMessage: ChatMessage = {
         id: messageId,
@@ -674,19 +693,19 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         created_at: new Date().toISOString(),
         delivery_status: 'sending' // Show uploading status
       };
-      
+
       console.log('📤 [WebRTCChat] Showing image immediately:', messageId);
       this.events.onMessage(immediateMessage);
 
       // Upload the image in background
       const uploadResult = await imageService.uploadImage(numericAppointmentId, imageUri);
-      
+
       if (!uploadResult.success || !uploadResult.mediaUrl) {
         throw new Error(uploadResult.error || 'Failed to upload image');
       }
 
       const authToken = await this.getAuthToken();
-      
+
       const messageData = {
         type: 'chat-message',
         content: '🖼️ Image',
@@ -701,10 +720,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
       console.log('📤 [WebRTCChat] Sending image message after upload:', messageId, 'URL:', uploadResult.mediaUrl);
       this.websocket.send(JSON.stringify(messageData));
-      
+
       const messageHash = this.createMessageHash(messageData);
       this.processedMessageHashes.add(messageHash);
-      
+
       // Update message with server URL and 'sent' status
       const uploadedMessage: ChatMessage = {
         id: messageId,
@@ -716,7 +735,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         created_at: new Date().toISOString(),
         delivery_status: 'sent'
       };
-      
+
       await this.addMessage(uploadedMessage);
       // Trigger onMessage again to update the existing message
       console.log('✅ [WebRTCChat] Image uploaded, updating message:', messageId);
@@ -756,9 +775,9 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         console.warn('⚠️ [WebRTCChat] Failed to persist image message to backend:', persistErr);
         uploadedMessage.delivery_status = 'sent'; // Still sent via WebSocket
       }
-      
+
       // Message already added and updated above
-      
+
       console.log('📤 [WebRTCChat] Image message sent successfully:', messageId);
       return uploadedMessage;
     } catch (error) {
@@ -782,10 +801,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
       // Import enhanced image service
       const { enhancedImageService } = await import('./enhancedImageService');
-      
+
       // Add to upload queue
       const result = await enhancedImageService.pickAndQueueImage(numericAppointmentId);
-      
+
       if (result.success && result.tempId) {
         // Create temporary message for immediate UI feedback
         const tempMessage: ChatMessage = {
@@ -798,16 +817,16 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           created_at: new Date().toISOString(),
           delivery_status: 'sending'
         };
-        
+
         await this.addMessage(tempMessage);
         this.events.onMessage(tempMessage);
-        
+
         // Subscribe to upload progress
         enhancedImageService.subscribeToImageProgress(result.tempId, (progress) => {
           this.handleUploadProgress(result.tempId!, progress);
         });
       }
-      
+
       return result;
     } catch (error: any) {
       console.error('❌ [WebRTCChat] Failed to send image with queue:', error);
@@ -833,10 +852,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
       // Import enhanced voice service
       const { enhancedVoiceService } = await import('./enhancedVoiceService');
-      
+
       // Add to upload queue
       const result = await enhancedVoiceService.stopRecordingAndQueue(numericAppointmentId);
-      
+
       if (result.success && result.tempId) {
         // Create temporary message for immediate UI feedback
         const tempMessage: ChatMessage = {
@@ -849,16 +868,16 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           created_at: new Date().toISOString(),
           delivery_status: 'sending'
         };
-        
+
         await this.addMessage(tempMessage);
         this.events.onMessage(tempMessage);
-        
+
         // Subscribe to upload progress
         enhancedVoiceService.subscribeToVoiceProgress(result.tempId, (progress) => {
           this.handleUploadProgress(result.tempId!, progress);
         });
       }
-      
+
       return result;
     } catch (error: any) {
       console.error('❌ [WebRTCChat] Failed to send voice with queue:', error);
@@ -876,10 +895,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     try {
       // Find the temporary message and update its status
       const messageIndex = this.messages.findIndex(msg => msg.id === tempId);
-      
+
       if (messageIndex !== -1) {
         const message = this.messages[messageIndex];
-        
+
         switch (progress.status) {
           case 'uploading':
             message.delivery_status = 'sending';
@@ -896,10 +915,10 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
             message.message = `Upload failed: ${progress.error || 'Unknown error'}`;
             break;
         }
-        
+
         // Save updated messages
         this.saveMessages();
-        
+
         // Notify UI of the update
         this.events.onMessage(message);
       }
@@ -919,7 +938,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
       console.log('⚠️ [WebRTCChat] Already syncing with server, skipping duplicate call');
       return this.messages;
     }
-    
+
     try {
       this.isSyncing = true;
       console.log('🔄 [WebRTCChat] Syncing with server...', {
@@ -927,14 +946,14 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         appointmentId: this.config.appointmentId,
         userId: this.config.userId
       });
-      
+
       // Get auth token for API calls
       const authToken = await this.getAuthToken();
       if (!authToken) {
         console.error('❌ [WebRTCChat] No auth token available for server sync');
         return this.messages;
       }
-      
+
       // Fetch messages from server
       const response = await fetch(`${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`, {
         headers: {
@@ -942,12 +961,12 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         console.error('❌ [WebRTCChat] Server sync failed with status:', response.status);
         return this.messages;
       }
-      
+
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
@@ -962,15 +981,15 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         console.error('❌ [WebRTCChat] Server sync returned invalid data');
         return this.messages;
       }
-      
+
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages');
-      
+
       // Replace local messages with server messages to ensure consistency
       // This prevents duplicates when navigating back to chat
       this.messages = serverMessages;
       await this.saveMessages();
-      
+
       console.log('✅ [WebRTCChat] Messages synced and saved to storage:', this.messages.length);
       return this.messages;
     } catch (error) {
@@ -1001,14 +1020,14 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
   async refreshMessagesFromServer(): Promise<ChatMessage[]> {
     try {
       console.log('🔄 [WebRTCChat] Force refreshing messages from server...');
-      
+
       // Get auth token for API calls
       const authToken = await this.getAuthToken();
       if (!authToken) {
         console.error('❌ [WebRTCChat] No auth token available for refresh');
         return this.messages;
       }
-      
+
       // Fetch messages from server
       const response = await fetch(`${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`, {
         headers: {
@@ -1016,25 +1035,25 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (!response.ok) {
         console.error('❌ [WebRTCChat] Server refresh failed with status:', response.status);
         return this.messages;
       }
-      
+
       const data = await response.json();
       if (!data.success || !data.data) {
         console.error('❌ [WebRTCChat] Server refresh returned invalid data');
         return this.messages;
       }
-      
+
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages on refresh');
-      
+
       // Replace local messages with server messages
       this.messages = serverMessages;
       await this.saveMessages();
-      
+
       console.log('✅ [WebRTCChat] Messages refreshed from server');
       return this.messages;
     } catch (error) {
@@ -1045,13 +1064,13 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
 
   async disconnect(): Promise<void> {
     this.stopHealthCheck();
-    
+
     // Clear any pending reconnection attempts
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;
     }
-    
+
     if (this.websocket) {
       this.websocket.close(1000, 'Normal closure');
       this.websocket = null;
@@ -1074,20 +1093,20 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     }
 
     this.reconnectAttempts++;
-    
+
     // Exponential backoff with jitter for better reconnection
     const baseDelay = this.reconnectDelay;
     const exponentialDelay = baseDelay * Math.pow(2, this.reconnectAttempts - 1);
     const jitter = Math.random() * 2000; // Increased jitter from 1000ms to 2000ms
     const finalDelay = Math.min(exponentialDelay + jitter, 60000); // Increased cap from 30s to 60s
-    
+
     console.log(`🔄 [WebRTCChat] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${Math.round(finalDelay)}ms...`);
-    
+
     // Clear any existing reconnection timeout
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
     }
-    
+
     this.reconnectTimeoutId = setTimeout(() => {
       this.connect().catch(error => {
         console.error('❌ WebRTC chat reconnection failed:', error);
@@ -1105,7 +1124,7 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
   private startHealthCheck(): void {
     this.stopHealthCheck();
     this.lastPingTime = Date.now();
-    
+
     this.healthCheckInterval = setInterval(() => {
       // Only check if we have a websocket and it's in a valid state
       if (this.websocket && (this.websocket.readyState === WebSocket.OPEN || this.websocket.readyState === WebSocket.CONNECTING)) {
@@ -1186,11 +1205,11 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
     const content = message.content || message.message || '';
     const senderId = message.senderId || message.sender_id || '';
     const timestamp = message.createdAt || message.created_at || message.timestamp || '';
-    
+
     // Create a hash based on content, sender, and timestamp (rounded to nearest minute to handle small time differences)
     const timeRounded = new Date(timestamp).setSeconds(0, 0).toString();
     const hash = `${senderId}_${content}_${timeRounded}`;
-    
+
     console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.tempId || message.id);
     return hash;
   }
