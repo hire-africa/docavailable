@@ -41,7 +41,7 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL', 'http://172.20.10.11:8000').'/storage',
+            'url' => env('APP_URL', 'http://172.20.10.11:8000') . '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
@@ -69,9 +69,10 @@ return [
             'endpoint' => env('DO_SPACES_ENDPOINT'),
             'use_path_style_endpoint' => false,
             'visibility' => 'public',
-            'throw' => false,
+            'throw' => true,
             'report' => false,
             'url' => 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION', 'fra1') . '.digitaloceanspaces.com',
+            'verify' => file_exists('/usr/local/etc/ca-certificates/cert.pem') ? '/usr/local/etc/ca-certificates/cert.pem' : (file_exists('/etc/ssl/cert.pem') ? '/etc/ssl/cert.pem' : true),
         ],
 
         'spaces_private' => [
@@ -83,9 +84,10 @@ return [
             'endpoint' => env('DO_SPACES_ENDPOINT'),
             'use_path_style_endpoint' => false,
             'visibility' => 'private',
-            'throw' => false,
+            'throw' => true,
             'report' => false,
             'url' => 'https://' . env('DO_SPACES_BUCKET') . '.' . env('DO_SPACES_REGION', 'fra1') . '.digitaloceanspaces.com',
+            'verify' => file_exists('/usr/local/etc/ca-certificates/cert.pem') ? '/usr/local/etc/ca-certificates/cert.pem' : (file_exists('/etc/ssl/cert.pem') ? '/etc/ssl/cert.pem' : true),
         ],
 
     ],

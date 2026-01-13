@@ -221,20 +221,18 @@ class FileUploadController extends Controller
     private function compressImage($imageData, $quality = 75, $maxWidth = 800, $maxHeight = 800)
     {
         try {
-            // If Intervention Image is available, use it for compression
-            if (class_exists('Intervention\Image\Facades\Image')) {
-                $image = \Intervention\Image\Facades\Image::make($imageData);
+            // Use Intervention Image v3 (Laravel 12 compatible)
+            if (class_exists('Intervention\\Image\\ImageManager')) {
+                $manager = app(\Intervention\Image\ImageManager::class);
+                $image = $manager->read($imageData);
 
                 // Resize if too large
                 if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
-                    $image->resize($maxWidth, $maxHeight, function ($constraint) {
-                        $constraint->aspectRatio();
-                        $constraint->upsize();
-                    });
+                    $image->scaleDown($maxWidth, $maxHeight);
                 }
 
                 // Compress and return as JPEG
-                return $image->encode('jpg', $quality);
+                return $image->toJpeg($quality)->toString();
             } else {
                 // Fallback: basic compression using GD (if available)
                 if (!function_exists('imagecreatefromstring') || !function_exists('imagejpeg')) {
