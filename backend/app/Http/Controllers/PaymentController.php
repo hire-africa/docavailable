@@ -16,7 +16,7 @@ class PaymentController extends Controller
     {
         try {
             Log::info('Payment webhook received', ['headers' => $request->headers->all()]);
-            
+
             // Step 1: Verify webhook signature (CRITICAL SECURITY REQUIREMENT)
             $payload = $request->getContent();
             // Accept common header variants just in case the provider changes casing/name
@@ -28,13 +28,13 @@ class PaymentController extends Controller
                 ?? $request->header('paychangu-signature');
             $webhookSecret = config('services.paychangu.webhook_secret');
             $apiSecret = config('services.paychangu.secret_key');
-            
+
             Log::info('Webhook verification details', [
                 'has_signature' => !empty($signature),
                 'has_webhook_secret' => !empty($webhookSecret),
                 'payload_length' => strlen($payload)
             ]);
-            
+
             if (!$signature || (!$webhookSecret && !$apiSecret)) {
                 Log::error('Missing signature or webhook secret', [
                     'signature' => !empty($signature),
@@ -43,7 +43,7 @@ class PaymentController extends Controller
                 ]);
                 return response()->json(['error' => 'Unauthorized - missing signature or secret'], 200);
             }
-            
+
             // Compute HMAC using API secret first (PayChangu confirmed this is correct)
             $computedWithApiSecret = $apiSecret ? hash_hmac('sha256', $payload, $apiSecret) : null;
             $verified = $computedWithApiSecret && hash_equals($computedWithApiSecret, $signature);
@@ -67,13 +67,13 @@ class PaymentController extends Controller
                 ]);
                 return response()->json(['error' => 'Invalid signature'], 200);
             }
-            
+
             Log::info('Webhook signature verified successfully');
-            
+
             // Step 2: Parse webhook data
             $data = $request->all();
             Log::info('Webhook payload parsed', ['data' => $data]);
-            
+
             // Step 3: Check event type (Paychangu specific)
             if (!isset($data['event_type'])) {
                 Log::error('Missing event_type in webhook payload', ['data' => $data]);
@@ -87,7 +87,7 @@ class PaymentController extends Controller
                 return response()->json(['message' => 'Event type not supported'], 200);
             }
             $data['event_type'] = $event;
-            
+
             // Step 4: Parse meta data (Paychangu sends this as JSON string)
             $meta = [];
             if (isset($data['meta'])) {
@@ -97,14 +97,14 @@ class PaymentController extends Controller
                     $meta = $data['meta'];
                 }
             }
-            
+
             Log::info('Parsed meta data', ['meta' => $meta]);
-            
+
             if (empty($meta['user_id'])) {
                 Log::error('Payment webhook missing user_id in meta', ['data' => $data, 'meta' => $meta]);
                 return response()->json(['error' => 'Missing user_id in meta data'], 200);
             }
-            
+
             // Step 5: Check payment status
             if ($data['status'] === 'success') {
                 // Step 6: ALWAYS RE-QUERY - Verify with PayChangu API before processing
@@ -112,10 +112,10 @@ class PaymentController extends Controller
                 $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
                 if ($transactionId) {
                     Log::info('Verifying payment with PayChangu API', ['transaction_id' => $transactionId]);
-                    
+
                     $payChanguService = new \App\Services\PayChanguService();
                     $verification = $payChanguService->verify($transactionId);
-                    
+
                     if (!$verification['ok'] || ($verification['data']['status'] ?? '') !== 'success') {
                         Log::error('Payment verification failed', [
                             'transaction_id' => $transactionId,
@@ -123,19 +123,19 @@ class PaymentController extends Controller
                         ]);
                         return response()->json(['message' => 'Payment verification failed'], 200);
                     }
-                    
+
                     Log::info('Payment verified successfully with PayChangu API', [
                         'transaction_id' => $transactionId,
                         'verification_data' => $verification['data']
                     ]);
                 }
-                
+
                 return $this->processSuccessfulPayment($data, $meta);
             }
-            
+
             Log::info('Payment status not success', ['status' => $data['status']]);
             return response()->json(['message' => 'Payment status not success'], 200);
-            
+
         } catch (\Exception $e) {
             Log::error('Payment webhook error', [
                 'error' => $e->getMessage(),
@@ -149,20 +149,20 @@ class PaymentController extends Controller
     {
         try {
             Log::info('Starting payment processing with Paychangu data', ['data' => $data, 'meta' => $meta]);
-            
+
             $userId = $meta['user_id'];
             $planId = $meta['plan_id'] ?? null;
             $amount = $data['amount'];
             $currency = $data['currency'];
-            
+
             // Use correct Paychangu transaction ID fields
             $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
-            
+
             if (!$transactionId) {
                 Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
                 throw new \Exception('Missing transaction ID');
             }
-            
+
             // Find plan either by ID or by amount/currency
             $plan = null;
             if ($planId) {
@@ -171,15 +171,15 @@ class PaymentController extends Controller
             }
             if (!$plan) {
                 $plan = Plan::where('price', $amount)
-                          ->where('currency', $currency)
-                          ->first();
+                    ->where('currency', $currency)
+                    ->first();
                 Log::info('Looking up plan by amount/currency', [
                     'amount' => $amount,
                     'currency' => $currency,
                     'found' => !is_null($plan)
                 ]);
             }
-            
+
             // Build payment metadata using correct Paychangu fields
             $paymentMetadata = [
                 'transaction_id' => $transactionId,
@@ -195,26 +195,26 @@ class PaymentController extends Controller
                 'mode' => $data['mode'] ?? null,
                 'type' => $data['type'] ?? null
             ];
-            
+
             // Add bank payment details if present
             if (isset($data['authorization']['bank_payment_details'])) {
                 $paymentMetadata['bank_details'] = $data['authorization']['bank_payment_details'];
             }
-            
+
             // Add mobile money details if present
             if (isset($data['authorization']['mobile_money'])) {
                 $paymentMetadata['mobile_money'] = $data['authorization']['mobile_money'];
             }
-            
+
             // Add card details if present
             if (isset($data['authorization']['card_details'])) {
                 $paymentMetadata['card_details'] = $data['authorization']['card_details'];
             }
-            
+
             // Use the centralized activatePlanForUser method
             if ($plan) {
                 $subscription = $this->activatePlanForUser($userId, $plan->id, $transactionId);
-                
+
                 // Update with payment metadata
                 $subscription->update([
                     'payment_metadata' => $paymentMetadata,
@@ -229,12 +229,12 @@ class PaymentController extends Controller
                 ]);
                 throw new \Exception('No plan found for payment processing');
             }
-            
+
             Log::info('Payment processed successfully', [
                 'subscription_id' => $subscription->id,
                 'transaction_id' => $transactionId
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment processed successfully',
@@ -247,13 +247,13 @@ class PaymentController extends Controller
                 'data' => $data,
                 'meta' => $meta
             ]);
-            
+
             if (strpos($e->getMessage(), 'constraint') !== false) {
                 return response()->json([
                     'error' => 'Database constraint violation - check subscription table structure'
                 ], 500);
             }
-            
+
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
@@ -262,7 +262,7 @@ class PaymentController extends Controller
     {
         try {
             Log::info('Payment initiation request received', ['data' => $request->all()]);
-            
+
             // Get authenticated user
             $user = auth()->user();
             if (!$user) {
@@ -271,29 +271,29 @@ class PaymentController extends Controller
                     'message' => 'User not authenticated'
                 ], 401);
             }
-            
+
             // Validate required fields
             $request->validate([
                 'plan_id' => 'required|integer|exists:plans,id'
             ]);
-            
+
             // Get plan
             $plan = \App\Models\Plan::findOrFail($request->plan_id);
-            
+
             // Use plan data for payment
             $amount = $plan->price;
             $currency = $plan->currency ?? 'MWK';
-            
+
             // Get user data from authenticated user
             $email = $user->email;
             $firstName = $user->first_name ?? explode(' ', $user->display_name ?? $user->name ?? 'User')[0];
             $lastName = $user->last_name ?? (count(explode(' ', $user->display_name ?? $user->name ?? 'User')) > 1 ? explode(' ', $user->display_name ?? $user->name ?? 'User')[1] : 'User');
             $phone = $user->phone ?? '+265000000000'; // Default phone if not set
-            
+
             // Generate unique transaction ID with microtime for better uniqueness
             $timestamp = microtime(true);
             $transactionId = 'TXN_' . str_replace('.', '', $timestamp) . '_' . $user->id;
-            
+
             // Create transaction record
             $transaction = \App\Models\PaymentTransaction::create([
                 'transaction_id' => $transactionId,
@@ -310,7 +310,7 @@ class PaymentController extends Controller
                     'user_name' => $user->display_name
                 ]
             ]);
-            
+
             // Prepare PayChangu payload
             $payload = [
                 'amount' => $amount,
@@ -328,11 +328,11 @@ class PaymentController extends Controller
                     'transaction_id' => $transaction->id
                 ]
             ];
-            
+
             // Initialize PayChangu service
             $payChanguService = new \App\Services\PayChanguService();
             $result = $payChanguService->initiate($payload);
-            
+
             if (!$result['ok']) {
                 Log::error('PayChangu initiation failed', ['result' => $result]);
                 return response()->json([
@@ -341,7 +341,7 @@ class PaymentController extends Controller
                     'error' => $result['error'] ?? 'Unknown error'
                 ], 500);
             }
-            
+
             // Update transaction with checkout URL
             $transaction->update([
                 'gateway_reference' => $result['tx_ref'] ?? $transaction->reference,
@@ -350,7 +350,7 @@ class PaymentController extends Controller
                     'gateway_response' => $result['response'] ?? $result
                 ])
             ]);
-            
+
             if (!$result['checkout_url']) {
                 Log::error('No checkout URL in PayChangu response', ['result' => $result]);
                 return response()->json([
@@ -359,7 +359,7 @@ class PaymentController extends Controller
                     'error' => 'No checkout URL in response'
                 ], 500);
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Payment initiated successfully',
@@ -369,7 +369,7 @@ class PaymentController extends Controller
                     'reference' => $transaction->reference
                 ]
             ]);
-            
+
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Payment initiation validation error', ['errors' => $e->errors()]);
             return response()->json([
@@ -394,38 +394,38 @@ class PaymentController extends Controller
     {
         try {
             Log::info('PayChangu callback received', ['data' => $request->all()]);
-            
+
             $txRef = $request->query('tx_ref');
             $status = $request->query('status');
-            
+
             if (!$txRef) {
                 return response()->json(['error' => 'Missing tx_ref parameter'], 400);
             }
-            
+
             Log::info('PayChangu callback parameters', [
                 'tx_ref' => $txRef,
                 'status' => $status,
                 'all_params' => $request->all()
             ]);
-            
+
             // Find transaction
             $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
                 ->orWhere('gateway_reference', $txRef)
                 ->first();
-                
+
             if (!$transaction) {
                 Log::error('Transaction not found for callback', ['tx_ref' => $txRef]);
                 return response()->json(['error' => 'Transaction not found'], 404);
             }
-            
+
             // Check status from PayChangu callback first
             if ($status === 'success') {
                 Log::info('PayChangu callback indicates success', ['tx_ref' => $txRef]);
-                
+
                 // Verify payment with PayChangu API to be sure
                 $payChanguService = new \App\Services\PayChanguService();
                 $verification = $payChanguService->verify($txRef);
-                
+
                 if ($verification['ok'] && ($verification['data']['status'] ?? '') === 'success') {
                     $transaction->update([
                         'status' => 'completed',
@@ -435,11 +435,11 @@ class PaymentController extends Controller
                             'completed_at' => now()->toISOString()
                         ])
                     ]);
-                    
+
                     // Process the successful payment
                     $meta = json_decode($verification['data']['meta'] ?? '{}', true);
                     $this->processSuccessfulPayment($verification['data'], $meta);
-                    
+
                     // Return success response to PayChangu
                     return response()->json([
                         'success' => true,
@@ -455,7 +455,7 @@ class PaymentController extends Controller
                 }
             } else {
                 Log::info('PayChangu callback indicates failure', ['tx_ref' => $txRef, 'status' => $status]);
-                
+
                 $transaction->update([
                     'status' => 'failed',
                     'metadata' => array_merge($transaction->metadata ?? [], [
@@ -463,10 +463,10 @@ class PaymentController extends Controller
                         'failed_at' => now()->toISOString()
                     ])
                 ]);
-                
+
                 return response()->json(['error' => 'Payment failed'], 400);
             }
-            
+
         } catch (\Exception $e) {
             Log::error('PayChangu callback error', [
                 'error' => $e->getMessage(),
@@ -480,32 +480,32 @@ class PaymentController extends Controller
     {
         try {
             Log::info('PayChangu return handler received', ['data' => $request->all()]);
-            
+
             $txRef = $request->query('tx_ref');
             $status = $request->query('status');
-            
+
             if (!$txRef) {
                 Log::warning('Return handler missing tx_ref parameter');
                 return response()->json(['error' => 'Missing tx_ref parameter'], 400);
             }
-            
+
             // Find transaction
             $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
                 ->orWhere('gateway_reference', $txRef)
                 ->first();
-                
+
             if (!$transaction) {
                 Log::error('Transaction not found for return handler', ['tx_ref' => $txRef]);
                 return response()->json(['error' => 'Transaction not found'], 404);
             }
-            
+
             // Update transaction status based on return status
             if ($status === 'success') {
                 $transaction->update(['status' => 'completed']);
             } else {
                 $transaction->update(['status' => 'failed']);
             }
-            
+
             // Return a simple HTML page that the WebView can handle
             $html = '<!DOCTYPE html>
 <html>
@@ -571,7 +571,16 @@ class PaymentController extends Controller
             console.log("Performing redirect...");
             countdownEl.textContent = "Redirecting now...";
             
-            // Send close window message to WebView
+            // 1. Try Deep Link Redirect (Primary fallback)
+            // This attempts to open the app directly via custom scheme
+            const deepLink = "com.docavailable.app://payment-result?status=" + 
+                encodeURIComponent("' . $transaction->status . '") + 
+                "&tx_ref=" + encodeURIComponent("' . $txRef . '");
+                
+            console.log("Attempting deep link redirect:", deepLink);
+            window.location.href = deepLink;
+            
+            // 2. Send close window message to WebView (Standard method)
             if (window.ReactNativeWebView) {
                 console.log("Sending close_window message to WebView");
                 try {
@@ -588,7 +597,7 @@ class PaymentController extends Controller
                 console.log("ReactNativeWebView not available");
             }
             
-            // Fallback: try to go back in history after a short delay
+            // 3. Last resort fallback: try to go back in history or close
             setTimeout(() => {
                 console.log("Executing fallback redirect");
                 if (window.history.length > 1) {
@@ -598,7 +607,7 @@ class PaymentController extends Controller
                     console.log("Attempting to close window");
                     window.close();
                 }
-            }, 500);
+            }, 1000);
         }
         
         // Countdown with proper display of 0
@@ -642,9 +651,9 @@ class PaymentController extends Controller
     </script>
 </body>
 </html>';
-            
+
             return response($html)->header('Content-Type', 'text/html');
-            
+
         } catch (\Exception $e) {
             Log::error('PayChangu return handler error', [
                 'error' => $e->getMessage(),
@@ -658,20 +667,20 @@ class PaymentController extends Controller
     {
         try {
             $txRef = $request->query('tx_ref') ?? $request->query('transaction_id');
-            
+
             if (!$txRef) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Missing tx_ref or transaction_id parameter'
                 ], 400);
             }
-            
+
             Log::info('Payment status check requested', ['tx_ref' => $txRef]);
-            
+
             // Verify payment with PayChangu
             $payChanguService = new \App\Services\PayChanguService();
             $verification = $payChanguService->verify($txRef);
-            
+
             if (!$verification['ok']) {
                 return response()->json([
                     'success' => false,
@@ -679,9 +688,9 @@ class PaymentController extends Controller
                     'error' => $verification['error'] ?? 'Unknown error'
                 ], 400);
             }
-            
+
             $data = $verification['data'];
-            
+
             // Verify critical fields as per PayChangu documentation
             if (!$data || !isset($data['status'])) {
                 return response()->json([
@@ -689,14 +698,14 @@ class PaymentController extends Controller
                     'message' => 'Invalid verification response'
                 ], 400);
             }
-            
+
             // Check if payment is successful
             if ($data['status'] === 'success') {
                 // Find our transaction record
                 $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
                     ->orWhere('gateway_reference', $txRef)
                     ->first();
-                
+
                 if ($transaction) {
                     $transaction->update([
                         'status' => 'completed',
@@ -706,7 +715,7 @@ class PaymentController extends Controller
                         ])
                     ]);
                 }
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Payment verified successfully',
@@ -729,7 +738,7 @@ class PaymentController extends Controller
                     ]
                 ], 400);
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Payment status check error', [
                 'error' => $e->getMessage(),
@@ -774,15 +783,15 @@ class PaymentController extends Controller
                     'plan_id' => $request->input('plan_id')
                 ])
             ];
-            
+
             Log::info('Test webhook data created', ['test_data' => $testData]);
-            
+
             // Create a new request with the test data
             $testRequest = new Request($testData);
-            
+
             // Call the webhook method directly
             return $this->webhook($testRequest);
-            
+
         } catch (\Exception $e) {
             Log::error('Test webhook error', [
                 'error' => $e->getMessage(),
@@ -804,18 +813,18 @@ class PaymentController extends Controller
         try {
             $plan = Plan::findOrFail($planId);
             $user = User::findOrFail($userId);
-            
+
             Log::info('Activating plan for user', [
                 'user_id' => $userId,
                 'plan_id' => $planId,
                 'transaction_id' => $transactionId
             ]);
-            
+
             // Check for existing active subscription
             $existingSubscription = Subscription::where('user_id', $userId)
                 ->where('is_active', true)
                 ->first();
-                
+
             if ($existingSubscription) {
                 // Update existing subscription with new sessions
                 $subscriptionData = [
@@ -835,15 +844,15 @@ class PaymentController extends Controller
                     'is_active' => true,
                     'activated_at' => now()
                 ];
-                
+
                 $existingSubscription->update($subscriptionData);
-                
+
                 Log::info('Updated existing subscription', [
                     'subscription_id' => $existingSubscription->id,
                     'user_id' => $userId,
                     'plan_id' => $planId
                 ]);
-                
+
                 // Send subscription activated notification
                 try {
                     $notificationService = new \App\Services\NotificationService();
@@ -865,7 +874,7 @@ class PaymentController extends Controller
                         'error' => $notificationError->getMessage()
                     ]);
                 }
-                
+
                 return $existingSubscription;
             } else {
                 // Create new subscription - Handle potential constraint issues
@@ -889,22 +898,22 @@ class PaymentController extends Controller
                     'total_video_calls' => $plan->video_calls,
                     'activated_at' => now()
                 ];
-                
+
                 // First, deactivate any existing inactive subscriptions for this user
                 Subscription::where('user_id', $userId)
                     ->where('is_active', false)
                     ->update(['is_active' => false]);
-                
+
                 // Try to create the subscription
                 try {
                     $subscription = Subscription::create($subscriptionData);
-                    
+
                     Log::info('Created new subscription', [
                         'subscription_id' => $subscription->id,
                         'user_id' => $userId,
                         'plan_id' => $planId
                     ]);
-                    
+
                     // Send subscription activated notification
                     try {
                         $notificationService = new \App\Services\NotificationService();
@@ -926,38 +935,40 @@ class PaymentController extends Controller
                             'error' => $notificationError->getMessage()
                         ]);
                     }
-                    
+
                     return $subscription;
                 } catch (\Illuminate\Database\QueryException $e) {
                     // Handle potential unique constraint violations
-                    if (strpos($e->getMessage(), 'duplicate key') !== false || 
+                    if (
+                        strpos($e->getMessage(), 'duplicate key') !== false ||
                         strpos($e->getMessage(), 'unique constraint') !== false ||
-                        strpos($e->getMessage(), 'UNIQUE constraint') !== false) {
-                        
+                        strpos($e->getMessage(), 'UNIQUE constraint') !== false
+                    ) {
+
                         Log::warning('Unique constraint violation, attempting to find existing subscription', [
                             'user_id' => $userId,
                             'plan_id' => $planId,
                             'error' => $e->getMessage()
                         ]);
-                        
+
                         // Try to find and update existing subscription
                         $existingSubscription = Subscription::where('user_id', $userId)
                             ->where('plan_id', $planId)
                             ->first();
-                            
+
                         if ($existingSubscription) {
                             $existingSubscription->update($subscriptionData);
-                            
+
                             Log::info('Updated existing subscription after constraint violation', [
                                 'subscription_id' => $existingSubscription->id,
                                 'user_id' => $userId,
                                 'plan_id' => $planId
                             ]);
-                            
+
                             return $existingSubscription;
                         }
                     }
-                    
+
                     // Re-throw if it's not a constraint issue
                     throw $e;
                 }

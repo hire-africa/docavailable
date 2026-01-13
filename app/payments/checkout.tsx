@@ -8,7 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 export default function PayChanguCheckout() {
   const params = useLocalSearchParams();
   const { refreshUserData } = useAuth();
-  
+
   // Get parameters from route params
   const checkoutUrl = (params.url as string) || '';
   const txRef = (params.tx_ref as string) || '';
@@ -31,12 +31,12 @@ export default function PayChanguCheckout() {
     console.log('🔄 WebView loading started');
     setIsLoading(true);
     setWebViewError(null);
-    
+
     // Clear any existing timeout
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
     }
-    
+
     // Set a longer timeout to prevent infinite loading
     const timeout = setTimeout(() => {
       console.log('⏰ WebView loading timeout - checking if page actually loaded');
@@ -50,7 +50,7 @@ export default function PayChanguCheckout() {
         setIsLoading(false);
       }
     }, 45000); // 45 seconds timeout - more reasonable
-    
+
     setLoadingTimeout(timeout);
   }, [loadingTimeout]);
 
@@ -69,22 +69,22 @@ export default function PayChanguCheckout() {
     console.log('🔍 Checking payment status for transaction:', txRef);
     try {
       const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${txRef}`);
-      
+
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         console.log('⚠️ API returned non-JSON response, treating as payment not ready');
         return { success: false, status: 'pending' };
       }
-      
+
       const data = await response.json();
       console.log('📊 Payment status response:', data);
-      
+
       if (data && data.success) {
         // Refresh user data to get updated subscription
         await handlePaymentSuccess();
       }
-      
+
       return data;
     } catch (error) {
       console.error('❌ Error checking payment status:', error);
@@ -101,7 +101,7 @@ export default function PayChanguCheckout() {
     console.log('✅ WebView loading completed');
     setIsLoading(false);
     setHasLoaded(true);
-    
+
     // Clear the timeout since loading completed
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
@@ -116,9 +116,9 @@ export default function PayChanguCheckout() {
   const handleWebViewError = useCallback((syntheticEvent: any) => {
     const { nativeEvent } = syntheticEvent;
     console.error('❌ WebView error:', nativeEvent);
-    
+
     let errorMessage = 'Failed to load payment page';
-    
+
     if (nativeEvent.description) {
       if (nativeEvent.description.includes('net::ERR_INTERNET_DISCONNECTED')) {
         errorMessage = 'No internet connection. Please check your network and try again.';
@@ -130,10 +130,10 @@ export default function PayChanguCheckout() {
         errorMessage = `Failed to load payment page: ${nativeEvent.description}`;
       }
     }
-    
+
     setWebViewError(errorMessage);
     setIsLoading(false);
-    
+
     // Clear the timeout since we have an error
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
@@ -162,24 +162,24 @@ export default function PayChanguCheckout() {
     // Detect if we're on the return URL (success page)
     if (navState.url && navState.url.includes('/api/paychangu/return')) {
       console.log('✅ Detected return URL - payment completed, setting up auto-redirect');
-      
+
       if (!hasDetectedPayment) {
         setHasDetectedPayment(true);
-        
+
         // Refresh user data immediately
         handlePaymentSuccess().then(() => {
           console.log('✅ User data refreshed on return URL');
         }).catch((error) => {
           console.error('❌ Error refreshing user data:', error);
         });
-        
+
         // Set aggressive 4-second timer to redirect (1 second buffer after backend 3-second countdown)
         const timer = setTimeout(() => {
           console.log('⏰ Return URL auto-redirect triggered (fallback)');
           router.replace('/');
         }, 4000);
         setAutoRedirectTimer(timer);
-        
+
         // Additional safety: Force redirect after 8 seconds if still on page
         setTimeout(() => {
           console.log('🚨 Emergency redirect triggered - forcing navigation back');
@@ -191,20 +191,20 @@ export default function PayChanguCheckout() {
     // or when user navigates away from PayChangu domain
     else if (navState.url && !hasDetectedPayment) {
       const url = navState.url.toLowerCase();
-      
+
       // Check if we're leaving PayChangu domain (user completed payment)
       if (!url.includes('paychangu.com') && !url.includes('checkout.paychangu.com')) {
         console.log('✅ User navigated away from PayChangu - payment likely completed');
-        
+
         // Check payment status before showing success
         checkPaymentStatus().then(async (statusData) => {
           if (statusData && statusData.success) {
             console.log('✅ Payment confirmed successful after navigation');
             setHasDetectedPayment(true);
-            
+
             // Refresh user data
             await handlePaymentSuccess();
-            
+
             // Auto-redirect after 2 seconds
             setTimeout(() => {
               router.back();
@@ -233,7 +233,7 @@ export default function PayChanguCheckout() {
         console.log('🔄 Fallback: Auto-hiding loading indicator after 10 seconds');
         setIsLoading(false);
       }, 10000);
-      
+
       return () => clearTimeout(fallbackTimeout);
     }
   }, [isLoading, webViewError]);
@@ -362,30 +362,38 @@ export default function PayChanguCheckout() {
         userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
         onShouldStartLoadWithRequest={(request) => {
           console.log('🔄 WebView navigation request:', request.url);
-          
+
           // Allow all Paychangu and payment-related domains
-          if (request.url.includes('paychangu.com') || 
-              request.url.includes('checkout.paychangu.com') ||
-              request.url.includes('api.paychangu.com') ||
-              request.url.includes('secure.paychangu.com')) {
+          if (request.url.includes('paychangu.com') ||
+            request.url.includes('checkout.paychangu.com') ||
+            request.url.includes('api.paychangu.com') ||
+            request.url.includes('secure.paychangu.com')) {
             return true;
           }
-          
+
           // Handle callback URL - this should not be navigated to in WebView
-          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/paychangu/callback')) {
+          if (request.url.includes('/api/paychangu/callback')) {
             console.log('🚫 Blocking callback URL navigation - this is for server-to-server communication');
             return false;
           }
-          
+
           // Handle return URL - this is where PayChangu redirects after payment
-          if (request.url.includes('docavailable-3vbdv.ondigitalocean.app/api/paychangu/return')) {
-            console.log('✅ Payment return URL detected, checking payment status');
+          // Check for both the full URL and the deep link
+          if (request.url.includes('/api/paychangu/return') ||
+            request.url.startsWith('com.docavailable.app://')) {
+            console.log('✅ Payment return URL or Deep Link detected:', request.url);
+
+            // If it's the deep link, parses parameters
+            if (request.url.startsWith('com.docavailable.app://')) {
+              console.log('🔗 Deep link intercepted directly');
+            }
+
             // Check payment status and handle accordingly
             checkPaymentStatus().then(async (statusData) => {
               if (statusData && statusData.success) {
                 // Refresh user data to get updated subscription
                 await handlePaymentSuccess();
-                
+
                 Alert.alert(
                   'Payment Successful!',
                   'Your payment has been completed successfully.',
@@ -394,46 +402,56 @@ export default function PayChanguCheckout() {
                   ]
                 );
               } else {
+                // Even if status check matches pending (race condition), if we are on return page with success
+                // we should assume success or at least close the webview
+                console.log('⚠️ Status check pending/failed but on return page');
                 Alert.alert(
-                  'Payment Status Unknown',
-                  'Please check your payment status in the app.',
+                  'Payment Completed',
+                  'Payment process finished. Updating your subscription...',
                   [
-                    { text: 'OK', onPress: () => router.back() }
+                    {
+                      text: 'OK', onPress: () => {
+                        handlePaymentSuccess(); // Attempt refresh anyway
+                        router.back();
+                      }
+                    }
                   ]
                 );
               }
             });
             return false;
           }
-          
+
           // Handle payment completion redirects with success indicators
           // Only show success if we're leaving PayChangu domain
-          if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) && 
-              !hasDetectedPayment && 
-              !request.url.includes('paychangu.com')) {
+          if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) &&
+            !hasDetectedPayment &&
+            !request.url.includes('paychangu.com')) {
             console.log('✅ Success URL detected outside PayChangu domain:', request.url);
             setHasDetectedPayment(true);
-            
+
             // Refresh user data to get updated subscription
             handlePaymentSuccess().then(() => {
               console.log('✅ User data refreshed after payment success');
             }).catch((error) => {
               console.error('❌ Error refreshing user data after payment success:', error);
             });
-            
+
             Alert.alert(
               'Payment Successful!',
               'Your payment has been completed successfully.',
               [
-                { text: 'OK', onPress: () => {
-                  checkPaymentStatus();
-                  router.back();
-                }}
+                {
+                  text: 'OK', onPress: () => {
+                    checkPaymentStatus();
+                    router.back();
+                  }
+                }
               ]
             );
             return false;
           }
-          
+
           if (request.url.includes('cancel') || request.url.includes('failed') || request.url.includes('error')) {
             Alert.alert(
               'Payment Cancelled',
@@ -444,7 +462,7 @@ export default function PayChanguCheckout() {
             );
             return false;
           }
-          
+
           // Allow navigation to continue for other URLs (like PayChangu's success page)
           console.log('✅ Allowing navigation to:', request.url);
           return true;
@@ -452,41 +470,41 @@ export default function PayChanguCheckout() {
         onHttpError={(syntheticEvent) => {
           const { nativeEvent } = syntheticEvent;
           console.error('❌ WebView HTTP error:', nativeEvent);
-          
+
           // Don't show error for callback URLs (400 errors are expected)
           if (nativeEvent.url && nativeEvent.url.includes('callback')) {
             console.log('ℹ️ Ignoring HTTP error for callback URL (expected behavior)');
             return;
           }
-          
+
           // Don't show error for return URLs (they might return 400 but we handle them in onShouldStartLoadWithRequest)
           if (nativeEvent.url && nativeEvent.url.includes('return')) {
             console.log('ℹ️ Ignoring HTTP error for return URL (handled in navigation)');
             return;
           }
-          
+
           setWebViewError(`HTTP Error: ${nativeEvent.statusCode} - ${nativeEvent.description}`);
         }}
         onMessage={(event) => {
           console.log('📨 WebView message:', event.nativeEvent.data);
-          
+
           try {
             const message = JSON.parse(event.nativeEvent.data);
-            
+
             // Handle payment status notification (sent immediately when page loads)
             if (message.type === 'payment_status') {
               console.log('📊 Payment status notification received:', message);
-              
+
               if (message.status === 'completed' && !hasDetectedPayment) {
                 setHasDetectedPayment(true);
-                
+
                 // Refresh user data in background
                 handlePaymentSuccess().then(() => {
                   console.log('✅ User data refreshed after payment status notification');
                 }).catch((error) => {
                   console.error('❌ Error refreshing user data:', error);
                 });
-                
+
                 // Set a fallback timer to auto-redirect after 6 seconds if messages fail
                 const timer = setTimeout(() => {
                   console.log('⏰ Auto-redirect timer triggered - forcing navigation back');
@@ -498,13 +516,13 @@ export default function PayChanguCheckout() {
             // Handle close window message (sent after countdown completes)
             else if (message.type === 'close_window') {
               console.log('🔄 Close window message received, redirecting back to app');
-              
+
               // Clear auto-redirect timer since we got the message
               if (autoRedirectTimer) {
                 clearTimeout(autoRedirectTimer);
                 setAutoRedirectTimer(null);
               }
-              
+
               // Ensure user data is refreshed before going back
               if (message.status === 'completed' || message.status === 'success') {
                 handlePaymentSuccess().then(() => {
@@ -528,13 +546,13 @@ export default function PayChanguCheckout() {
             // Legacy: Handle old payment_complete messages for backward compatibility
             else if (message.type === 'payment_complete') {
               console.log('✅ Legacy payment completion message received:', message);
-              
+
               // Clear auto-redirect timer
               if (autoRedirectTimer) {
                 clearTimeout(autoRedirectTimer);
                 setAutoRedirectTimer(null);
               }
-              
+
               if (message.status === 'completed') {
                 handlePaymentSuccess().then(() => {
                   console.log('✅ User data refreshed after legacy payment message');
