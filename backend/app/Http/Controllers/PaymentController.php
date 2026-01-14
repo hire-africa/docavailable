@@ -618,7 +618,6 @@ class PaymentController extends Controller
 
         return response($html);
     }
-    }
 
     public function checkStatus(Request $request)
     {
