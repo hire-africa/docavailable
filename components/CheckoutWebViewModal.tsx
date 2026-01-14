@@ -40,8 +40,22 @@ export default function CheckoutWebViewModal({
 
     const isSuccessUrl = (url: string) => {
         return url.includes('/api/paychangu/return') ||
+            url.includes('/api/paychangu/callback') ||
             url.includes('payments/status') ||
             url.startsWith('com.docavailable.app://');
+    };
+
+    const handleMessage = (event: any) => {
+        try {
+            const data = JSON.parse(event.nativeEvent.data);
+            console.log('📨 WebView message received:', data);
+            if (data.type === 'close_window' || data.status === 'completed' || data.status === 'success') {
+                console.log('✅ Close signal received from WebView message');
+                onPaymentDetected?.();
+            }
+        } catch (e) {
+            // Not a JSON message or not for us, ignore
+        }
     };
 
     const handleError = (syntheticEvent: any) => {
@@ -140,6 +154,7 @@ export default function CheckoutWebViewModal({
                             onLoadEnd={handleLoadEnd}
                             onError={handleError}
                             onNavigationStateChange={handleNavigationStateChange}
+                            onMessage={handleMessage}
                             onShouldStartLoadWithRequest={(request) => {
                                 console.log('🔄 Checking if should load:', request.url);
 
