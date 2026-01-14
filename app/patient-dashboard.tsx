@@ -271,6 +271,10 @@ export default function PatientDashboard() {
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [availableSpecializations, setAvailableSpecializations] = useState<string[]>([]);
   const [isPurchasing, setIsPurchasing] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
+  const [checkoutTxRef, setCheckoutTxRef] = useState('');
+  const paymentPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -1484,28 +1488,11 @@ export default function PatientDashboard() {
       const res = await paymentsService.initiatePlanPurchase(parseInt(plan.id));
       console.log('Payment API response:', res);
       if (res?.success && res.data?.checkout_url) {
-        console.log('Navigating to checkout with URL:', res.data.checkout_url);
-        console.log('Router object:', router);
-        console.log('Navigation params:', {
-          path: '/checkout',
-          params: { url: res.data.checkout_url, tx_ref: res.data.reference }
-        });
-
-        try {
-          // Navigate to checkout screen
-          console.log('🔄 Attempting router.navigate to checkout...');
-          console.log('🔄 URL being passed:', res.data.checkout_url);
-          console.log('🔄 Reference being passed:', res.data.reference);
-
-          router.push('/payments/checkout?url=' + encodeURIComponent(res.data.checkout_url) + '&tx_ref=' + encodeURIComponent(res.data.reference || ''));
-          console.log('✅ Navigation command sent successfully');
-
-
-
-        } catch (error) {
-          console.error('❌ Navigation failed:', error);
-          showError('Navigation Error', 'Failed to open payment page. Please try again.');
-        }
+        console.log('✅ Got checkout URL, opening modal...');
+        setCheckoutUrl(res.data.checkout_url);
+        setCheckoutTxRef(res.data.reference || '');
+        setShowCheckoutModal(true);
+        setIsPurchasing(false);
         return;
       }
       console.log('Payment failed - no checkout URL in response');
@@ -1517,6 +1504,52 @@ export default function PatientDashboard() {
       setIsPurchasing(false);
     }
   };
+
+  // Polling for payment status while checkout modal is open
+  useEffect(() => {
+    if (!showCheckoutModal || !checkoutTxRef) return;
+
+    console.log('🔄 Starting payment polling for tx_ref:', checkoutTxRef);
+
+    const pollPaymentStatus = async () => {
+      try {
+        const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}`);
+        const data = await response.json();
+        console.log('📡 Poll result:', data);
+
+        if (data && data.success) {
+          console.log('✅ Payment confirmed! Closing modal...');
+          // Stop polling
+          if (paymentPollingRef.current) {
+            clearInterval(paymentPollingRef.current);
+            paymentPollingRef.current = null;
+          }
+          // Close modal
+          setShowCheckoutModal(false);
+          // Refresh user data
+          await refreshUserData();
+          // Show success
+          Alert.alert('Payment Successful!', 'Your subscription has been activated.');
+        }
+      } catch (error) {
+        console.error('❌ Poll error:', error);
+      }
+    };
+
+    // Initial check after 5 seconds
+    const initialTimeout = setTimeout(pollPaymentStatus, 5000);
+
+    // Then poll every 3 seconds
+    paymentPollingRef.current = setInterval(pollPaymentStatus, 3000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      if (paymentPollingRef.current) {
+        clearInterval(paymentPollingRef.current);
+        paymentPollingRef.current = null;
+      }
+    };
+  }, [showCheckoutModal, checkoutTxRef, refreshUserData]);
 
   const handlePaymentSuccess = async (transactionId?: string) => {
     // Deprecated: real activation now happens via PayChangu callback/webhook
@@ -4313,6 +4346,20 @@ export default function PatientDashboard() {
       <ChatbotModal
         visible={showChatbot}
         onClose={() => setShowChatbot(false)}
+      />
+
+      {/* Payment Checkout Modal */}
+      <CheckoutWebViewModal
+        visible={showCheckoutModal}
+        checkoutUrl={checkoutUrl}
+        onClose={() => {
+          setShowCheckoutModal(false);
+          // Stop polling when manually closed
+          if (paymentPollingRef.current) {
+            clearInterval(paymentPollingRef.current);
+            paymentPollingRef.current = null;
+          }
+        }}
       />
 
       {/* Cache Management Modal */}
