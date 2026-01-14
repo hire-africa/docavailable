@@ -709,7 +709,28 @@ class PaymentController extends Controller
 
             Log::info('Payment status check requested', ['tx_ref' => $txRef]);
 
-            // Verify payment with PayChangu
+            // STEP 1: Check DigitalOcean database FIRST (webhook may have already marked it completed)
+            $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
+                ->orWhere('gateway_reference', $txRef)
+                ->first();
+
+            if ($transaction && $transaction->status === 'completed') {
+                Log::info('Payment already confirmed in database', ['tx_ref' => $txRef, 'status' => $transaction->status]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Payment verified from database',
+                    'data' => [
+                        'status' => 'success',
+                        'tx_ref' => $txRef,
+                        'transaction_id' => $transaction->id,
+                        'amount' => $transaction->amount,
+                        'currency' => $transaction->currency
+                    ]
+                ]);
+            }
+
+            // STEP 2: Fallback to PayChangu verify API (for fresh transactions not yet processed by webhook)
+            Log::info('Transaction not yet completed in database, checking PayChangu API', ['tx_ref' => $txRef]);
             $payChanguService = new \App\Services\PayChanguService();
             $verification = $payChanguService->verify($txRef);
 
