@@ -481,12 +481,12 @@ class PaymentController extends Controller
         try {
             Log::info('PayChangu return handler received', ['data' => $request->all()]);
 
-            $txRef = $request->query('tx_ref');
+            $txRef = $request->query('tx_ref') ?? $request->query('transaction_id') ?? $request->query('reference');
             $status = $request->query('status');
 
             if (!$txRef) {
-                Log::warning('Return handler missing tx_ref parameter');
-                return response()->json(['error' => 'Missing tx_ref parameter'], 400);
+                Log::warning('Return handler missing transaction reference parameter', ['query' => $request->query()]);
+                return response()->json(['error' => 'Missing transaction reference parameter (tx_ref, transaction_id, or reference)'], 400);
             }
 
             // Find transaction
