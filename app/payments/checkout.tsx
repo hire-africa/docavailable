@@ -281,304 +281,376 @@ export default function PayChanguCheckout() {
   // If WebView error, show error
   if (webViewError) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-        <Text style={{ fontSize: 18, marginBottom: 20, textAlign: 'center', color: '#FF3B30' }}>
-          Payment Error
-        </Text>
-        <Text style={{ fontSize: 14, marginBottom: 30, textAlign: 'center', color: '#666' }}>
-          {webViewError}
-        </Text>
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#007AFF',
-            paddingHorizontal: 20,
-            paddingVertical: 10,
-            borderRadius: 8,
-            marginBottom: 10,
-          }}
-          onPress={() => {
-            setWebViewError(null);
-            setIsLoading(true);
-          }}
-        >
-          <Text style={{ color: 'white', fontSize: 16 }}>Retry</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#8E8E93',
-            paddingHorizontal: 20,
-            paddingVertical: 10,
-            borderRadius: 8,
-          }}
-          onPress={() => router.back()}
-        >
-          <Text style={{ color: 'white', fontSize: 16 }}>Go Back</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        {/* Header for Error Screen */}
+        <View style={{
+          height: 60,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 20,
+          borderBottomWidth: 1,
+          borderBottomColor: '#eee'
+        }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Payment Error</Text>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={{ color: '#007AFF', fontSize: 16 }}>Close</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 14, marginBottom: 30, textAlign: 'center', color: '#666' }}>
+            {webViewError}
+          </Text>
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#007AFF',
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderRadius: 8,
+              marginBottom: 10,
+            }}
+            onPress={() => {
+              setWebViewError(null);
+              setIsLoading(true);
+            }}
+          >
+            <Text style={{ color: 'white', fontSize: 16 }}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              backgroundColor: '#8E8E93',
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderRadius: 8,
+            }}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: 'white', fontSize: 16 }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
-
-      {/* Loading Indicator */}
-      {isLoading && (
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(255, 255, 255, 0.9)',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000,
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      {/* Header with Cancel and Done Buttons */}
+      <View style={{
+        height: 60,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        zIndex: 10
+      }}>
+        <TouchableOpacity onPress={() => {
+          Alert.alert(
+            'Cancel Payment?',
+            'Are you sure you want to go back? If you already paid, your status will update shortly.',
+            [
+              { text: 'No, stay here', style: 'cancel' },
+              { text: 'Yes, go back', onPress: () => router.back() }
+            ]
+          );
         }}>
-          <ActivityIndicator size="large" color="#007AFF" />
-          <Text style={{ marginTop: 10, fontSize: 16, color: '#007AFF' }}>
-            Loading payment page...
-          </Text>
-        </View>
-      )}
+          <Text style={{ color: '#FF3B30', fontSize: 16 }}>Cancel</Text>
+        </TouchableOpacity>
 
-      {/* WebView */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: checkoutUrl }}
-        style={{ flex: 1 }}
-        onLoadStart={handleWebViewLoadStart}
-        onLoadEnd={handleWebViewLoadEnd}
-        onError={handleWebViewError}
-        onNavigationStateChange={handleWebViewNavigationStateChange}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        startInLoadingState={false}
-        scalesPageToFit={true}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={false}
-        mixedContentMode="compatibility"
-        thirdPartyCookiesEnabled={true}
-        allowsBackForwardNavigationGestures={true}
-        userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
-        onShouldStartLoadWithRequest={(request) => {
-          console.log('🔄 WebView navigation request:', request.url);
+        <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Secure Payment</Text>
 
-          // Allow all Paychangu and payment-related domains
-          if (request.url.includes('paychangu.com') ||
-            request.url.includes('checkout.paychangu.com') ||
-            request.url.includes('api.paychangu.com') ||
-            request.url.includes('secure.paychangu.com')) {
-            return true;
-          }
+        <TouchableOpacity
+          style={{
+            backgroundColor: '#28a745',
+            paddingHorizontal: 15,
+            paddingVertical: 8,
+            borderRadius: 8
+          }}
+          onPress={async () => {
+            console.log('🔘 manual "Done" pressed');
+            const statusData = await checkPaymentStatus();
+            if (statusData && statusData.success) {
+              Alert.alert('Success', 'Payment confirmed! Returning to dashboard.');
+              router.replace('/');
+            } else {
+              Alert.alert(
+                'Status Check',
+                'We couldn\'t confirm your payment yet. If you just finished paying, please wait a few seconds and try again.',
+                [
+                  { text: 'Wait' },
+                  { text: 'Go Back Anyway', onPress: () => router.back(), style: 'destructive' }
+                ]
+              );
+            }
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Done</Text>
+        </TouchableOpacity>
+      </View>
 
-          // Handle callback URL - this should not be navigated to in WebView
-          if (request.url.includes('/api/paychangu/callback')) {
-            console.log('🚫 Blocking callback URL navigation - this is for server-to-server communication');
-            return false;
-          }
+      <View style={{ flex: 1 }}>
+        {/* Loading Indicator */}
+        {isLoading && (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+          }}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text style={{ marginTop: 10, fontSize: 16, color: '#007AFF' }}>
+              Loading payment page...
+            </Text>
+          </View>
+        )}
 
-          // Handle return URL - this is where PayChangu redirects after payment
-          // Check for both the full URL and the deep link
-          if (request.url.includes('/api/paychangu/return') ||
-            request.url.startsWith('com.docavailable.app://')) {
-            console.log('🎯 Payment return detected!', {
-              url: request.url,
-              isDeepLink: request.url.startsWith('com.docavailable.app://'),
-              isApiReturn: request.url.includes('/api/paychangu/return')
-            });
+        {/* WebView */}
+        <WebView
+          ref={webViewRef}
+          source={{ uri: checkoutUrl }}
+          style={{ flex: 1 }}
+          onLoadStart={handleWebViewLoadStart}
+          onLoadEnd={handleWebViewLoadEnd}
+          onError={handleWebViewError}
+          onNavigationStateChange={handleWebViewNavigationStateChange}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          startInLoadingState={false}
+          scalesPageToFit={true}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="compatibility"
+          thirdPartyCookiesEnabled={true}
+          allowsBackForwardNavigationGestures={true}
+          userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+          onShouldStartLoadWithRequest={(request) => {
+            console.log('🔄 WebView navigation request:', request.url);
 
-            // If it's the deep link, parses parameters
-            if (request.url.startsWith('com.docavailable.app://')) {
-              console.log('🔗 Deep link intercepted directly');
+            // Allow all Paychangu and payment-related domains
+            if (request.url.includes('paychangu.com') ||
+              request.url.includes('checkout.paychangu.com') ||
+              request.url.includes('api.paychangu.com') ||
+              request.url.includes('secure.paychangu.com')) {
+              return true;
             }
 
-            // Check payment status and handle accordingly
-            checkPaymentStatus().then(async (statusData) => {
-              if (statusData && statusData.success) {
-                // Refresh user data to get updated subscription
-                await handlePaymentSuccess();
+            // Handle callback URL - this should not be navigated to in WebView
+            if (request.url.includes('/api/paychangu/callback')) {
+              console.log('🚫 Blocking callback URL navigation - this is for server-to-server communication');
+              return false;
+            }
 
-                Alert.alert(
-                  'Payment Successful!',
-                  'Your payment has been completed successfully.',
-                  [
-                    { text: 'OK', onPress: () => router.back() }
-                  ]
-                );
-              } else {
-                // Even if status check matches pending (race condition), if we are on return page with success
-                // we should assume success or at least close the webview
-                console.log('⚠️ Status check pending/failed but on return page');
-                Alert.alert(
-                  'Payment Completed',
-                  'Payment process finished. Updating your subscription...',
-                  [
-                    {
-                      text: 'OK', onPress: () => {
-                        handlePaymentSuccess(); // Attempt refresh anyway
-                        router.back();
+            // Handle return URL - this is where PayChangu redirects after payment
+            // Check for both the full URL and the deep link
+            if (request.url.includes('/api/paychangu/return') ||
+              request.url.startsWith('com.docavailable.app://')) {
+              console.log('🎯 Payment return detected!', {
+                url: request.url,
+                isDeepLink: request.url.startsWith('com.docavailable.app://'),
+                isApiReturn: request.url.includes('/api/paychangu/return')
+              });
+
+              // If it's the deep link, parses parameters
+              if (request.url.startsWith('com.docavailable.app://')) {
+                console.log('🔗 Deep link intercepted directly');
+              }
+
+              // Check payment status and handle accordingly
+              checkPaymentStatus().then(async (statusData) => {
+                if (statusData && statusData.success) {
+                  // Refresh user data to get updated subscription
+                  await handlePaymentSuccess();
+
+                  Alert.alert(
+                    'Payment Successful!',
+                    'Your payment has been completed successfully.',
+                    [
+                      { text: 'OK', onPress: () => router.back() }
+                    ]
+                  );
+                } else {
+                  // Even if status check matches pending (race condition), if we are on return page with success
+                  // we should assume success or at least close the webview
+                  console.log('⚠️ Status check pending/failed but on return page');
+                  Alert.alert(
+                    'Payment Completed',
+                    'Payment process finished. Updating your subscription...',
+                    [
+                      {
+                        text: 'OK', onPress: () => {
+                          handlePaymentSuccess(); // Attempt refresh anyway
+                          router.back();
+                        }
                       }
-                    }
-                  ]
-                );
-              }
-            });
-            return false;
-          }
-
-          // Handle payment completion redirects with success indicators
-          // Only show success if we're leaving PayChangu domain
-          if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) &&
-            !hasDetectedPayment &&
-            !request.url.includes('paychangu.com')) {
-            console.log('✅ Success URL detected outside PayChangu domain:', request.url);
-            setHasDetectedPayment(true);
-
-            // Refresh user data to get updated subscription
-            handlePaymentSuccess().then(() => {
-              console.log('✅ User data refreshed after payment success');
-            }).catch((error) => {
-              console.error('❌ Error refreshing user data after payment success:', error);
-            });
-
-            Alert.alert(
-              'Payment Successful!',
-              'Your payment has been completed successfully.',
-              [
-                {
-                  text: 'OK', onPress: () => {
-                    checkPaymentStatus();
-                    router.back();
-                  }
+                    ]
+                  );
                 }
-              ]
-            );
-            return false;
-          }
+              });
+              return false;
+            }
 
-          if (request.url.includes('cancel') || request.url.includes('failed') || request.url.includes('error')) {
-            Alert.alert(
-              'Payment Cancelled',
-              'Your payment was cancelled or failed. Please try again.',
-              [
-                { text: 'OK', onPress: () => router.back() }
-              ]
-            );
-            return false;
-          }
+            // Handle payment completion redirects with success indicators
+            // Only show success if we're leaving PayChangu domain
+            if ((request.url.includes('success') || request.url.includes('completed') || request.url.includes('paid')) &&
+              !hasDetectedPayment &&
+              !request.url.includes('paychangu.com')) {
+              console.log('✅ Success URL detected outside PayChangu domain:', request.url);
+              setHasDetectedPayment(true);
 
-          // Allow navigation to continue for other URLs (like PayChangu's success page)
-          console.log('✅ Allowing navigation to:', request.url);
-          return true;
-        }}
-        onHttpError={(syntheticEvent) => {
-          const { nativeEvent } = syntheticEvent;
-          console.error('❌ WebView HTTP error:', nativeEvent);
+              // Refresh user data to get updated subscription
+              handlePaymentSuccess().then(() => {
+                console.log('✅ User data refreshed after payment success');
+              }).catch((error) => {
+                console.error('❌ Error refreshing user data after payment success:', error);
+              });
 
-          // Don't show error for callback URLs (400 errors are expected)
-          if (nativeEvent.url && nativeEvent.url.includes('callback')) {
-            console.log('ℹ️ Ignoring HTTP error for callback URL (expected behavior)');
-            return;
-          }
+              Alert.alert(
+                'Payment Successful!',
+                'Your payment has been completed successfully.',
+                [
+                  {
+                    text: 'OK', onPress: () => {
+                      checkPaymentStatus();
+                      router.back();
+                    }
+                  }
+                ]
+              );
+              return false;
+            }
 
-          // Don't show error for return URLs (they might return 400 but we handle them in onShouldStartLoadWithRequest)
-          if (nativeEvent.url && nativeEvent.url.includes('return')) {
-            console.log('ℹ️ Ignoring HTTP error for return URL (handled in navigation)');
-            return;
-          }
+            if (request.url.includes('cancel') || request.url.includes('failed') || request.url.includes('error')) {
+              Alert.alert(
+                'Payment Cancelled',
+                'Your payment was cancelled or failed. Please try again.',
+                [
+                  { text: 'OK', onPress: () => router.back() }
+                ]
+              );
+              return false;
+            }
 
-          setWebViewError(`HTTP Error: ${nativeEvent.statusCode} - ${nativeEvent.description}`);
-        }}
-        onMessage={(event) => {
-          console.log('📨 WebView message received:', event.nativeEvent.data);
+            // Allow navigation to continue for other URLs (like PayChangu's success page)
+            console.log('✅ Allowing navigation to:', request.url);
+            return true;
+          }}
+          onHttpError={(syntheticEvent) => {
+            const { nativeEvent } = syntheticEvent;
+            console.error('❌ WebView HTTP error:', nativeEvent);
 
-          try {
-            const message = JSON.parse(event.nativeEvent.data);
-            console.log('📦 Parsed WebView message:', message);
+            // Don't show error for callback URLs (400 errors are expected)
+            if (nativeEvent.url && nativeEvent.url.includes('callback')) {
+              console.log('ℹ️ Ignoring HTTP error for callback URL (expected behavior)');
+              return;
+            }
 
-            // Handle payment status notification (sent immediately when page loads)
-            if (message.type === 'payment_status') {
-              console.log('📊 Payment status notification received:', message);
+            // Don't show error for return URLs (they might return 400 but we handle them in onShouldStartLoadWithRequest)
+            if (nativeEvent.url && nativeEvent.url.includes('return')) {
+              console.log('ℹ️ Ignoring HTTP error for return URL (handled in navigation)');
+              return;
+            }
 
-              if (message.status === 'completed' && !hasDetectedPayment) {
-                setHasDetectedPayment(true);
+            setWebViewError(`HTTP Error: ${nativeEvent.statusCode} - ${nativeEvent.description}`);
+          }}
+          onMessage={(event) => {
+            console.log('📨 WebView message received:', event.nativeEvent.data);
 
-                // Refresh user data in background
-                handlePaymentSuccess().then(() => {
-                  console.log('✅ User data refreshed after payment status notification');
-                }).catch((error) => {
-                  console.error('❌ Error refreshing user data:', error);
-                });
+            try {
+              const message = JSON.parse(event.nativeEvent.data);
+              console.log('📦 Parsed WebView message:', message);
 
-                // Set a fallback timer to auto-redirect after 6 seconds if messages fail
-                const timer = setTimeout(() => {
-                  console.log('⏰ Auto-redirect timer triggered - forcing navigation back');
+              // Handle payment status notification (sent immediately when page loads)
+              if (message.type === 'payment_status') {
+                console.log('📊 Payment status notification received:', message);
+
+                if (message.status === 'completed' && !hasDetectedPayment) {
+                  setHasDetectedPayment(true);
+
+                  // Refresh user data in background
+                  handlePaymentSuccess().then(() => {
+                    console.log('✅ User data refreshed after payment status notification');
+                  }).catch((error) => {
+                    console.error('❌ Error refreshing user data:', error);
+                  });
+
+                  // Set a fallback timer to auto-redirect after 6 seconds if messages fail
+                  const timer = setTimeout(() => {
+                    console.log('⏰ Auto-redirect timer triggered - forcing navigation back');
+                    router.back();
+                  }, 6000);
+                  setAutoRedirectTimer(timer);
+                }
+              }
+              // Handle close window message (sent after countdown completes)
+              else if (message.type === 'close_window') {
+                console.log('🔄 Close window message received, redirecting back to app');
+
+                // Clear auto-redirect timer since we got the message
+                if (autoRedirectTimer) {
+                  clearTimeout(autoRedirectTimer);
+                  setAutoRedirectTimer(null);
+                }
+
+                // Ensure user data is refreshed before going back
+                if (message.status === 'completed' || message.status === 'success') {
+                  handlePaymentSuccess().then(() => {
+                    console.log('✅ User data refreshed, navigating back after delay');
+                    // Add small delay to ensure auth state is updated
+                    setTimeout(() => {
+                      router.replace('/');
+                    }, 500);
+                  }).catch((error) => {
+                    console.error('❌ Error refreshing user data, navigating back anyway:', error);
+                    setTimeout(() => {
+                      router.replace('/');
+                    }, 500);
+                  });
+                } else {
+                  // Failed payment, just go back
+                  console.log('⚠️ Payment failed, going back to previous screen');
                   router.back();
-                }, 6000);
-                setAutoRedirectTimer(timer);
+                }
               }
+              // Legacy: Handle old payment_complete messages for backward compatibility
+              else if (message.type === 'payment_complete') {
+                console.log('✅ Legacy payment completion message received:', message);
+
+                // Clear auto-redirect timer
+                if (autoRedirectTimer) {
+                  clearTimeout(autoRedirectTimer);
+                  setAutoRedirectTimer(null);
+                }
+
+                if (message.status === 'completed') {
+                  handlePaymentSuccess().then(() => {
+                    console.log('✅ User data refreshed after legacy payment message');
+                    setTimeout(() => {
+                      router.replace('/');
+                    }, 500);
+                  }).catch((error) => {
+                    console.error('❌ Error refreshing user data:', error);
+                    setTimeout(() => {
+                      router.replace('/');
+                    }, 500);
+                  });
+                } else {
+                  router.back();
+                }
+              }
+            } catch (error) {
+              console.log('📨 Non-JSON WebView message:', event.nativeEvent.data);
             }
-            // Handle close window message (sent after countdown completes)
-            else if (message.type === 'close_window') {
-              console.log('🔄 Close window message received, redirecting back to app');
-
-              // Clear auto-redirect timer since we got the message
-              if (autoRedirectTimer) {
-                clearTimeout(autoRedirectTimer);
-                setAutoRedirectTimer(null);
-              }
-
-              // Ensure user data is refreshed before going back
-              if (message.status === 'completed' || message.status === 'success') {
-                handlePaymentSuccess().then(() => {
-                  console.log('✅ User data refreshed, navigating back after delay');
-                  // Add small delay to ensure auth state is updated
-                  setTimeout(() => {
-                    router.replace('/');
-                  }, 500);
-                }).catch((error) => {
-                  console.error('❌ Error refreshing user data, navigating back anyway:', error);
-                  setTimeout(() => {
-                    router.replace('/');
-                  }, 500);
-                });
-              } else {
-                // Failed payment, just go back
-                console.log('⚠️ Payment failed, going back to previous screen');
-                router.back();
-              }
-            }
-            // Legacy: Handle old payment_complete messages for backward compatibility
-            else if (message.type === 'payment_complete') {
-              console.log('✅ Legacy payment completion message received:', message);
-
-              // Clear auto-redirect timer
-              if (autoRedirectTimer) {
-                clearTimeout(autoRedirectTimer);
-                setAutoRedirectTimer(null);
-              }
-
-              if (message.status === 'completed') {
-                handlePaymentSuccess().then(() => {
-                  console.log('✅ User data refreshed after legacy payment message');
-                  setTimeout(() => {
-                    router.replace('/');
-                  }, 500);
-                }).catch((error) => {
-                  console.error('❌ Error refreshing user data:', error);
-                  setTimeout(() => {
-                    router.replace('/');
-                  }, 500);
-                });
-              } else {
-                router.back();
-              }
-            }
-          } catch (error) {
-            console.log('📨 Non-JSON WebView message:', event.nativeEvent.data);
-          }
-        }}
-      />
-    </View>
+          }}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
