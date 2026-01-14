@@ -57,6 +57,7 @@ import authService from '@/services/authService';
 import { LocationInfo, LocationService } from '@/services/locationService';
 import { NotificationService } from '@/services/notificationService';
 import AppTour from '../components/AppTour';
+import CheckoutWebViewModal from '../components/CheckoutWebViewModal';
 import FilterModal from '../components/FilterModal';
 import IncompleteProfileBlock from '../components/IncompleteProfileBlock';
 import OnboardingOverlay from '../components/OnboardingOverlay';
@@ -129,6 +130,74 @@ export default function PatientDashboard() {
   const colors = useThemedColors();
   const { theme, isDark } = useCustomTheme();
   const isDarkMode = isAnonymousModeEnabled && isDark;
+
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
+  const [checkoutTxRef, setCheckoutTxRef] = useState('');
+  const paymentPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name');
+  const [showSortOptions, setShowSortOptions] = useState(false);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [messageSearchQuery, setMessageSearchQuery] = useState('');
+  const [pendingLogout, setPendingLogout] = useState(false);
+  const [showSubscriptions, setShowSubscriptions] = useState(false);
+  const [showCacheManagement, setShowCacheManagement] = useState(false);
+  const [isDocBotBottomHidden, setIsDocBotBottomHidden] = useState(false);
+
+  const { triggerConversionCheck } = useTextAppointmentConverter({
+    appointments: appointments || [],
+    onTextSessionCreated: (textSession) => {
+      console.log('🔄 [PatientDashboard] Text session created from appointment:', textSession);
+      // Call the refresh function (using the function defined later)
+      refreshMessagesTab();
+    },
+    onAppointmentUpdated: (appointmentId) => {
+      console.log('🔄 [PatientDashboard] Appointment updated:', appointmentId);
+      // Refresh appointments to get updated status
+      refreshMessagesTab();
+    },
+  });
+
+  const pollPaymentStatus = useCallback(async () => {
+    if (!checkoutTxRef) return;
+    try {
+      console.log(`📡 Polling status for tx_ref: ${checkoutTxRef}`);
+      const timestamp = new Date().getTime();
+      const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}&t=${timestamp}`);
+      const data = await response.json();
+      console.log('📡 Poll result:', data);
+
+      if (data && data.success) {
+        console.log('✅ Payment confirmed! Closing modal...');
+        // Stop polling
+        if (paymentPollingRef.current) {
+          clearInterval(paymentPollingRef.current);
+          paymentPollingRef.current = null;
+        }
+        // Close modal
+        setShowCheckoutModal(false);
+        setShowSubscriptions(false);
+        // Refresh user data
+        await refreshUserData();
+
+        // Small delay before alert to ensure modal is closed
+        setTimeout(() => {
+          Alert.alert('Payment Successful!', 'Your subscription has been activated.');
+        }, 500);
+      }
+    } catch (error) {
+      console.error('❌ Poll error:', error);
+    }
+  }, [checkoutTxRef, refreshUserData]);
   const params = useLocalSearchParams<{ tab?: string; sessionId?: string }>();
   const insets = useSafeAreaInsets();
 
@@ -152,22 +221,7 @@ export default function PatientDashboard() {
 
 
 
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
-  const [doctors, setDoctors] = useState<any[]>([]);
-  const [loadingDoctors, setLoadingDoctors] = useState(false);
-  const [currentSubscription, setCurrentSubscription] = useState<UserSubscription | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('name');
-  const [showSortOptions, setShowSortOptions] = useState(false);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [messageSearchQuery, setMessageSearchQuery] = useState('');
-  const [pendingLogout, setPendingLogout] = useState(false);
-  const [showSubscriptions, setShowSubscriptions] = useState(false);
-  const [showCacheManagement, setShowCacheManagement] = useState(false);
-  const [isDocBotBottomHidden, setIsDocBotBottomHidden] = useState(false);
+
   const bottomNavAnim = useRef(new Animated.Value(0)).current;
   const [pressedPill, setPressedPill] = useState<string | null>(null);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -271,10 +325,7 @@ export default function PatientDashboard() {
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [availableSpecializations, setAvailableSpecializations] = useState<string[]>([]);
   const [isPurchasing, setIsPurchasing] = useState(false);
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState('');
-  const [checkoutTxRef, setCheckoutTxRef] = useState('');
-  const paymentPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [loadingSpecializations, setLoadingSpecializations] = useState(false);
   const [showSpecializationModal, setShowSpecializationModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -1166,20 +1217,8 @@ export default function PatientDashboard() {
     }
   };
 
-  // Text appointment converter hook - must be placed after getSafeAppointments and refreshMessagesTab are defined
-  const { triggerConversionCheck } = useTextAppointmentConverter({
-    appointments: getSafeAppointments(),
-    onTextSessionCreated: (textSession) => {
-      console.log('🔄 [PatientDashboard] Text session created from appointment:', textSession);
-      // Refresh messages tab to load the new text session
-      refreshMessagesTab();
-    },
-    onAppointmentUpdated: (appointmentId) => {
-      console.log('🔄 [PatientDashboard] Appointment updated:', appointmentId);
-      // Refresh appointments to get updated status
-      refreshMessagesTab();
-    }
-  });
+
+
 
   // Manual refresh function for home tab
   const refreshHomeTab = async () => {
@@ -1505,41 +1544,13 @@ export default function PatientDashboard() {
     }
   };
 
-  // Polling for payment status while checkout modal is open
+
+
+  // Polling logic
   useEffect(() => {
     if (!showCheckoutModal || !checkoutTxRef) return;
 
     console.log('🔄 Starting payment polling for tx_ref:', checkoutTxRef);
-
-    const pollPaymentStatus = async () => {
-      try {
-        console.log(`📡 Polling status for tx_ref: ${checkoutTxRef}`);
-        const timestamp = new Date().getTime();
-        const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}&t=${timestamp}`);
-        const data = await response.json();
-        console.log('📡 Poll result:', data);
-
-        if (data && data.success) {
-          console.log('✅ Payment confirmed! Closing modal...');
-          // Stop polling
-          if (paymentPollingRef.current) {
-            clearInterval(paymentPollingRef.current);
-            paymentPollingRef.current = null;
-          }
-          // Close modal
-          setShowCheckoutModal(false);
-          // Refresh user data
-          await refreshUserData();
-
-          // Small delay before alert to ensure modal is closed
-          setTimeout(() => {
-            Alert.alert('Payment Successful!', 'Your subscription has been activated.');
-          }, 500);
-        }
-      } catch (error) {
-        console.error('❌ Poll error:', error);
-      }
-    };
 
     // Initial check after 5 seconds
     const initialTimeout = setTimeout(pollPaymentStatus, 5000);
@@ -1554,7 +1565,7 @@ export default function PatientDashboard() {
         paymentPollingRef.current = null;
       }
     };
-  }, [showCheckoutModal, checkoutTxRef, refreshUserData]);
+  }, [showCheckoutModal, checkoutTxRef, pollPaymentStatus]);
 
   const handlePaymentSuccess = async (transactionId?: string) => {
     // Deprecated: real activation now happens via PayChangu callback/webhook
@@ -3323,83 +3334,28 @@ export default function PatientDashboard() {
                 </View>
               </TouchableOpacity>
 
-              {/* Centered content based on active tab */}
-              {activeTab === 'home' && (
-                <Image
-                  source={require('../assets/images/DA logo green.png')}
-                  style={styles.headerLogo}
-                  resizeMode="contain"
-                />
-              )}
-              {activeTab === 'discover' && (
-                <View
+              {/* Centered content - Always Blogs for this branch */}
+              <View
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  height: 60,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Text
                   style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    height: 60,
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    fontSize: 22,
+                    fontWeight: 'bold',
+                    color: '#222',
+                    textAlign: 'center',
                   }}
                 >
-                  <Text
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 'bold',
-                      color: '#222',
-                      textAlign: 'center',
-                    }}
-                  >
-                    Find Doctors
-                  </Text>
-                </View>
-              )}
-              {activeTab === 'messages' && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    height: 60,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 'bold',
-                      color: '#222',
-                      textAlign: 'center',
-                    }}
-                  >
-                    Messages
-                  </Text>
-                </View>
-              )}
-              {activeTab === 'blogs' && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    height: 60,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 22,
-                      fontWeight: 'bold',
-                      color: '#222',
-                      textAlign: 'center',
-                    }}
-                  >
-                    Blogs
-                  </Text>
-                </View>
-              )}
+                  Blogs
+                </Text>
+              </View>
 
               {/* Search button (for Blogs, Messages, Discover) */}
               {['blogs', 'messages', 'discover'].includes(activeTab) && (
@@ -3477,674 +3433,676 @@ export default function PatientDashboard() {
         paddingTop: insets.top,
         paddingBottom: insets.bottom,
       }}>
-        {/* Modern Header with gradient background */}
-        <View style={{
-          backgroundColor: '#FFFFFF',
-          paddingHorizontal: 20,
-          paddingTop: 16,
-          paddingBottom: 16,
-          borderBottomLeftRadius: 24,
-          borderBottomRightRadius: 24,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          elevation: 4,
-          marginBottom: 20,
-        }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-            <TouchableOpacity
-              onPress={() => setShowSubscriptions(false)}
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                padding: 8,
-                backgroundColor: '#F8F9FA',
-                borderRadius: 12,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.05,
-                shadowRadius: 2,
-                elevation: 1,
-              }}
-            >
-              <Icon name="arrowLeft" size={20} color="#666" />
-            </TouchableOpacity>
-            <Text style={{
-              fontSize: 24,
-              fontWeight: 'bold',
-              color: '#222',
-              textAlign: 'center'
-            }}>
-              {currentSubscription ? 'Add Sessions' : 'Health Plans'}
-            </Text>
-          </View>
-          <Text style={{
-            fontSize: 16,
-            color: '#666',
-            textAlign: 'center',
-            marginTop: 4,
+        <View style={{ flex: 1 }}>
+          {/* Modern Header with gradient background */}
+          <View style={{
+            backgroundColor: '#FFFFFF',
+            paddingHorizontal: 20,
+            paddingTop: 16,
+            paddingBottom: 16,
+            borderBottomLeftRadius: 24,
+            borderBottomRightRadius: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.08,
+            shadowRadius: 8,
+            elevation: 4,
+            marginBottom: 20,
           }}>
-            {currentSubscription ? 'Choose a plan to add more sessions' : 'Select the perfect plan for your health needs'}
-          </Text>
-
-          {/* Clean Location Indicator */}
-          {currentLocationInfo && (
-            <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginTop: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              backgroundColor: '#F8F9FA',
-              borderRadius: 20,
-              alignSelf: 'center',
-            }}>
-              <Icon
-                name={(currentLocationInfo as any).source === 'gps' ? "mapMarker" : "user"}
-                size={16}
-                color="#4CAF50"
-              />
-              <Text style={{
-                fontSize: 12,
-                color: '#666',
-                marginLeft: 6,
-                fontWeight: '500'
-              }}>
-                {(currentLocationInfo as any).country} • {(currentLocationInfo as any).currency}
-              </Text>
-            </View>
-          )}
-        </View>
-        <ScrollView
-          style={{ flex: 1, paddingHorizontal: 12 }}
-          contentContainerStyle={{ paddingBottom: Math.max(100, insets.bottom + 24) }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshingSubscriptions}
-              onRefresh={refreshSubscriptionsTab}
-              colors={['#4CAF50']}
-              tintColor="#4CAF50"
-            />
-          }
-        >
-          {/* Active Plan Card - Modern Design */}
-          {activePlan && (
-            <View style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 20,
-              borderWidth: 2,
-              borderColor: '#4CAF50',
-              marginBottom: 24,
-              padding: 24,
-              shadowColor: '#4CAF50',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.15,
-              shadowRadius: 12,
-              elevation: 6,
-              position: 'relative',
-            }}>
-              {/* Active Badge */}
-              <View style={{
-                position: 'absolute',
-                top: -8,
-                right: 20,
-                backgroundColor: '#4CAF50',
-                paddingHorizontal: 16,
-                paddingVertical: 6,
-                borderRadius: 16,
-                shadowColor: '#4CAF50',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.3,
-                shadowRadius: 4,
-                elevation: 3,
-              }}>
-                <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFFFFF' }}>CURRENT PLAN</Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                <View style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  backgroundColor: '#E8F5E8',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginRight: 16,
-                }}>
-                  <Icon name="check" size={24} color="#4CAF50" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 4 }}>
-                    {activePlan.name}
-                  </Text>
-                  <Text style={{ fontSize: 14, color: '#4CAF50', fontWeight: '600' }}>
-                    Active Subscription
-                  </Text>
-                </View>
-              </View>
-
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 }}>
-                <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
-                  {LocationService.getCurrencySymbol(activePlan.currency)}{activePlan.price.toLocaleString()}
-                </Text>
-                <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
-              </View>
-
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
               <TouchableOpacity
+                onPress={() => setShowSubscriptions(false)}
                 style={{
-                  backgroundColor: '#4CAF50',
-                  borderRadius: 16,
-                  paddingVertical: 16,
-                  alignItems: 'center',
-                  marginBottom: 20,
-                  shadowColor: '#4CAF50',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 8,
-                  elevation: 4,
-                  opacity: isPurchasing ? 0.7 : 1,
-                }}
-                onPress={() => handlePurchaseSubscription(activePlan)}
-                activeOpacity={0.85}
-                disabled={isPurchasing}
-              >
-                {isPurchasing ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
-                    <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#fff' }}>Processing...</Text>
-                  </View>
-                ) : (
-                  <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#fff' }}>Renew Plan</Text>
-                )}
-              </TouchableOpacity>
-              {/* Session Details - Modern Grid Layout */}
-              <View style={{ marginBottom: 16 }}>
-                <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>Plan Benefits</Text>
-
-                <View style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  padding: 8,
                   backgroundColor: '#F8F9FA',
                   borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 12,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 2,
+                  elevation: 1,
+                }}
+              >
+                <Icon name="arrowLeft" size={20} color="#666" />
+              </TouchableOpacity>
+              <Text style={{
+                fontSize: 24,
+                fontWeight: 'bold',
+                color: '#222',
+                textAlign: 'center'
+              }}>
+                {currentSubscription ? 'Add Sessions' : 'Health Plans'}
+              </Text>
+            </View>
+            <Text style={{
+              fontSize: 16,
+              color: '#666',
+              textAlign: 'center',
+              marginTop: 4,
+            }}>
+              {currentSubscription ? 'Choose a plan to add more sessions' : 'Select the perfect plan for your health needs'}
+            </Text>
+
+            {/* Clean Location Indicator */}
+            {currentLocationInfo && (
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginTop: 12,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                backgroundColor: '#F8F9FA',
+                borderRadius: 20,
+                alignSelf: 'center',
+              }}>
+                <Icon
+                  name={(currentLocationInfo as any).source === 'gps' ? "mapMarker" : "user"}
+                  size={16}
+                  color="#4CAF50"
+                />
+                <Text style={{
+                  fontSize: 12,
+                  color: '#666',
+                  marginLeft: 6,
+                  fontWeight: '500'
                 }}>
-                  {/* Text Sessions */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: '#E8F5E8',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 12,
-                    }}>
-                      <Icon name="message" size={16} color="#4CAF50" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                        {activePlan.textSessions} Text Sessions
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                        10 minutes each
-                      </Text>
-                    </View>
-                  </View>
+                  {(currentLocationInfo as any).country} • {(currentLocationInfo as any).currency}
+                </Text>
+              </View>
+            )}
+          </View>
+          <ScrollView
+            style={{ flex: 1, paddingHorizontal: 12 }}
+            contentContainerStyle={{ paddingBottom: Math.max(100, insets.bottom + 24) }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshingSubscriptions}
+                onRefresh={refreshSubscriptionsTab}
+                colors={['#4CAF50']}
+                tintColor="#4CAF50"
+              />
+            }
+          >
+            {/* Active Plan Card - Modern Design */}
+            {activePlan && (
+              <View style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 20,
+                borderWidth: 2,
+                borderColor: '#4CAF50',
+                marginBottom: 24,
+                padding: 24,
+                shadowColor: '#4CAF50',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 12,
+                elevation: 6,
+                position: 'relative',
+              }}>
+                {/* Active Badge */}
+                <View style={{
+                  position: 'absolute',
+                  top: -8,
+                  right: 20,
+                  backgroundColor: '#4CAF50',
+                  paddingHorizontal: 16,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  shadowColor: '#4CAF50',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }}>
+                  <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFFFFF' }}>CURRENT PLAN</Text>
+                </View>
 
-                  {/* Voice Calls */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: '#E8F5E8',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 12,
-                    }}>
-                      <Icon name="voice" size={16} color="#4CAF50" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                        {activePlan.voiceCalls} Voice Calls
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                        Audio consultations
-                      </Text>
-                    </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: '#E8F5E8',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 16,
+                  }}>
+                    <Icon name="check" size={24} color="#4CAF50" />
                   </View>
-
-                  {/* Video Calls */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: '#E8F5E8',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 12,
-                    }}>
-                      <Icon name="video" size={16} color="#4CAF50" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                        {activePlan.videoCalls} Video Calls
-                      </Text>
-                      <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                        Face-to-face consultations
-                      </Text>
-                    </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 4 }}>
+                      {activePlan.name}
+                    </Text>
+                    <Text style={{ fontSize: 14, color: '#4CAF50', fontWeight: '600' }}>
+                      Active Subscription
+                    </Text>
                   </View>
                 </View>
-              </View>
 
-              {/* Additional Features */}
-              {activePlan.features && activePlan.features.length > 0 && (
-                <View>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: 20 }}>
+                  <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
+                    {LocationService.getCurrencySymbol(activePlan.currency)}{activePlan.price.toLocaleString()}
+                  </Text>
+                  <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
+                </View>
+
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#4CAF50',
+                    borderRadius: 16,
+                    paddingVertical: 16,
+                    alignItems: 'center',
+                    marginBottom: 20,
+                    shadowColor: '#4CAF50',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 4,
+                    opacity: isPurchasing ? 0.7 : 1,
+                  }}
+                  onPress={() => handlePurchaseSubscription(activePlan)}
+                  activeOpacity={0.85}
+                  disabled={isPurchasing}
+                >
+                  {isPurchasing ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
+                      <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#fff' }}>Processing...</Text>
+                    </View>
+                  ) : (
+                    <Text style={{ fontWeight: 'bold', fontSize: 18, color: '#fff' }}>Renew Plan</Text>
+                  )}
+                </TouchableOpacity>
+                {/* Session Details - Modern Grid Layout */}
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>Plan Benefits</Text>
+
                   <View style={{
                     backgroundColor: '#F8F9FA',
                     borderRadius: 12,
                     padding: 16,
+                    marginBottom: 12,
                   }}>
-                    {activePlan.features.map((feature: string, idx: number) => (
-                      <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                        <View style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 10,
-                          backgroundColor: '#4CAF50',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}>
-                          <Icon name="check" size={12} color="#FFFFFF" />
-                        </View>
-                        <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
+                    {/* Text Sessions */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <View style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: '#E8F5E8',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}>
+                        <Icon name="message" size={16} color="#4CAF50" />
                       </View>
-                    ))}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                          {activePlan.textSessions} Text Sessions
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                          10 minutes each
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Voice Calls */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                      <View style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: '#E8F5E8',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}>
+                        <Icon name="voice" size={16} color="#4CAF50" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                          {activePlan.voiceCalls} Voice Calls
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                          Audio consultations
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Video Calls */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: '#E8F5E8',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}>
+                        <Icon name="video" size={16} color="#4CAF50" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                          {activePlan.videoCalls} Video Calls
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                          Face-to-face consultations
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 </View>
-              )}
-            </View>
-          )}
 
-
-
-
-
-          {plansError ? (
-            <View style={styles.errorContainer}>
-              <Icon name="warning" size={20} color="#666" />
-              <Text style={styles.errorText}>Unable to Load Plans</Text>
-              <Text style={styles.errorSubtext}>{plansError}</Text>
-              <TouchableOpacity
-                style={styles.retryButton}
-                onPress={() => {
-                  setPlansError(null);
-                  // Retry loading plans
-                  const loadPlans = async () => {
-                    try {
-                      const response = await apiService.get('/plans');
-                      if (response.success && (response as any).plans) {
-                        const userCurrency = LocationService.getCurrencyForCountry(userCountry);
-                        const filteredPlans = (response as any).plans.filter((plan: any) => plan.currency === userCurrency);
-
-                        const transformedPlans = filteredPlans.map((plan: any) => ({
-                          id: plan.id.toString(),
-                          name: plan.name,
-                          price: plan.price,
-                          currency: plan.currency,
-                          textSessions: plan.text_sessions || 0,
-                          voiceCalls: plan.voice_calls || 0,
-                          videoCalls: plan.video_calls || 0,
-                          features: Array.isArray(plan.features) ? plan.features : [],
-                          popular: plan.name.toLowerCase().includes('executive'),
-                          bestValue: plan.name.toLowerCase().includes('premium')
-                        }));
-                        setSubscriptionPlans(transformedPlans);
-                      } else {
-                        setPlansError('Unable to load subscription plans. Please try again later.');
-                        setSubscriptionPlans([]);
-                      }
-                    } catch (error) {
-                      console.error('Error retrying plans fetch:', error);
-                      setPlansError('Failed to load subscription plans. Please try again later.');
-                      setSubscriptionPlans([]);
-                    }
-                  };
-                  loadPlans();
-                }}
-              >
-                <Text style={styles.retryButtonText}>Try Again</Text>
-              </TouchableOpacity>
-            </View>
-          ) : subscriptionPlans.length === 0 ? (
-            <View style={styles.noResultsContainer}>
-              <Icon name="infoCircle" size={20} color="#666" />
-              <Text style={styles.noResultsText}>No Plans Available</Text>
-              <Text style={styles.noResultsSubtext}>Please check back later for available subscription plans</Text>
-            </View>
-          ) : (
-            subscriptionPlans.map((plan) => {
-              const isSelected = selectedPlanId === plan.id;
-              const isActivePlan = currentSubscription && currentSubscription.plan_id === plan.id;
-
-              return (
-                <View key={plan.id} style={{
-                  backgroundColor: isActivePlan ? '#F8FFF8' : '#FFFFFF',
-                  borderRadius: 20,
-                  borderWidth: 2,
-                  borderColor: isActivePlan ? '#4CAF50' : isSelected ? '#4CAF50' : '#E6ECE3',
-                  marginBottom: 20,
-                  padding: 24,
-                  shadowColor: isActivePlan ? '#4CAF50' : '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: isActivePlan ? 0.15 : 0.08,
-                  shadowRadius: isActivePlan ? 12 : 8,
-                  elevation: isActivePlan ? 6 : 3,
-                  position: 'relative',
-                }}>
-                  {/* Active Plan Badge - Highest Priority */}
-                  {isActivePlan && (
-                    <View style={{
-                      position: 'absolute',
-                      top: -8,
-                      right: 16,
-                      backgroundColor: '#4CAF50',
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      zIndex: 3,
-                    }}>
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>ACTIVE</Text>
-                    </View>
-                  )}
-
-                  {/* Popular Badge - Only show if not active */}
-                  {plan.popular && !isActivePlan && (
-                    <View style={{
-                      position: 'absolute',
-                      top: -8,
-                      right: 16,
-                      backgroundColor: '#FF6B35',
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      zIndex: 1,
-                    }}>
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>POPULAR</Text>
-                    </View>
-                  )}
-
-                  {/* Best Value Badge - Only show if not active */}
-                  {plan.bestValue && !isActivePlan && (
-                    <View style={{
-                      position: 'absolute',
-                      top: -8,
-                      right: 16,
-                      backgroundColor: '#4CAF50',
-                      paddingHorizontal: 12,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      zIndex: 1,
-                    }}>
-                      <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>BEST VALUE</Text>
-                    </View>
-                  )}
-                  {/* Plan Header */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                    <View style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: isActivePlan ? '#E8F5E8' : '#F8F9FA',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 16,
-                    }}>
-                      <Icon
-                        name={isActivePlan ? "check" : "heart"}
-                        size={24}
-                        color={isActivePlan ? "#4CAF50" : "#666"}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{
-                        fontSize: 20,
-                        fontWeight: 'bold',
-                        color: isActivePlan ? '#4CAF50' : '#222',
-                        marginBottom: 4
-                      }}>
-                        {plan.name}
-                      </Text>
-                      <Text style={{
-                        fontSize: 14,
-                        color: isActivePlan ? '#4CAF50' : '#666',
-                        fontWeight: '600'
-                      }}>
-                        {isActivePlan ? 'Your Current Plan' : 'Health Plan'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Price Section */}
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'flex-end',
-                    marginBottom: 20,
-                    paddingVertical: 16,
-                    paddingHorizontal: 20,
-                    backgroundColor: '#F8F9FA',
-                    borderRadius: 12,
-                  }}>
-                    <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
-                      {LocationService.getCurrencySymbol(plan.currency)}{plan.price.toLocaleString()}
-                    </Text>
-                    <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
-                  </View>
-
-                  {/* Action Button */}
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: isActivePlan ? '#E8F5E8' : isSelected ? '#4CAF50' : '#F5F8F3',
-                      borderRadius: 16,
-                      paddingVertical: 16,
-                      alignItems: 'center',
-                      marginBottom: 20,
-                      borderWidth: isActivePlan ? 2 : isSelected ? 0 : 1,
-                      borderColor: isActivePlan ? '#4CAF50' : isSelected ? 'transparent' : '#E0E0E0',
-                      shadowColor: isSelected ? '#4CAF50' : 'transparent',
-                      shadowOffset: { width: 0, height: 4 },
-                      shadowOpacity: isSelected ? 0.3 : 0,
-                      shadowRadius: 8,
-                      elevation: isSelected ? 4 : 0,
-                    }}
-                    onPress={() => !isActivePlan && setSelectedPlanId(plan.id)}
-                    activeOpacity={isActivePlan ? 1 : 0.85}
-                    disabled={isActivePlan}
-                  >
-                    <Text style={{
-                      fontWeight: 'bold',
-                      fontSize: 18,
-                      color: isActivePlan ? '#4CAF50' : isSelected ? '#FFFFFF' : '#222'
-                    }}>
-                      {isActivePlan ? `Current Plan` : currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
-                    </Text>
-                  </TouchableOpacity>
-                  {/* Session Details - Modern Grid */}
-                  <View style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>What's Included</Text>
-
+                {/* Additional Features */}
+                {activePlan.features && activePlan.features.length > 0 && (
+                  <View>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
                     <View style={{
                       backgroundColor: '#F8F9FA',
                       borderRadius: 12,
                       padding: 16,
-                      marginBottom: 12,
                     }}>
-                      {/* Text Sessions */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                        <View style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: '#E8F5E8',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}>
-                          <Icon name="message" size={16} color="#4CAF50" />
+                      {activePlan.features.map((feature: string, idx: number) => (
+                        <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                          <View style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 10,
+                            backgroundColor: '#4CAF50',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}>
+                            <Icon name="check" size={12} color="#FFFFFF" />
+                          </View>
+                          <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                            {plan.textSessions} Text Sessions
-                          </Text>
-                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                            10 minutes each
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Voice Calls */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                        <View style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: '#E8F5E8',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}>
-                          <Icon name="voice" size={16} color="#4CAF50" />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                            {plan.voiceCalls} Voice Calls
-                          </Text>
-                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                            Audio consultations
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Video Calls */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: '#E8F5E8',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          marginRight: 12,
-                        }}>
-                          <Icon name="video" size={16} color="#4CAF50" />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
-                            {plan.videoCalls} Video Calls
-                          </Text>
-                          <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
-                            Face-to-face consultations
-                          </Text>
-                        </View>
-                      </View>
+                      ))}
                     </View>
                   </View>
+                )}
+              </View>
+            )}
 
-                  {/* Additional Features */}
-                  {plan.features && plan.features.length > 0 && (
-                    <View>
-                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
+
+
+
+
+            {plansError ? (
+              <View style={styles.errorContainer}>
+                <Icon name="warning" size={20} color="#666" />
+                <Text style={styles.errorText}>Unable to Load Plans</Text>
+                <Text style={styles.errorSubtext}>{plansError}</Text>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => {
+                    setPlansError(null);
+                    // Retry loading plans
+                    const loadPlans = async () => {
+                      try {
+                        const response = await apiService.get('/plans');
+                        if (response.success && (response as any).plans) {
+                          const userCurrency = LocationService.getCurrencyForCountry(userCountry);
+                          const filteredPlans = (response as any).plans.filter((plan: any) => plan.currency === userCurrency);
+
+                          const transformedPlans = filteredPlans.map((plan: any) => ({
+                            id: plan.id.toString(),
+                            name: plan.name,
+                            price: plan.price,
+                            currency: plan.currency,
+                            textSessions: plan.text_sessions || 0,
+                            voiceCalls: plan.voice_calls || 0,
+                            videoCalls: plan.video_calls || 0,
+                            features: Array.isArray(plan.features) ? plan.features : [],
+                            popular: plan.name.toLowerCase().includes('executive'),
+                            bestValue: plan.name.toLowerCase().includes('premium')
+                          }));
+                          setSubscriptionPlans(transformedPlans);
+                        } else {
+                          setPlansError('Unable to load subscription plans. Please try again later.');
+                          setSubscriptionPlans([]);
+                        }
+                      } catch (error) {
+                        console.error('Error retrying plans fetch:', error);
+                        setPlansError('Failed to load subscription plans. Please try again later.');
+                        setSubscriptionPlans([]);
+                      }
+                    };
+                    loadPlans();
+                  }}
+                >
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : subscriptionPlans.length === 0 ? (
+              <View style={styles.noResultsContainer}>
+                <Icon name="infoCircle" size={20} color="#666" />
+                <Text style={styles.noResultsText}>No Plans Available</Text>
+                <Text style={styles.noResultsSubtext}>Please check back later for available subscription plans</Text>
+              </View>
+            ) : (
+              subscriptionPlans.map((plan) => {
+                const isSelected = selectedPlanId === plan.id;
+                const isActivePlan = currentSubscription && currentSubscription.plan_id === plan.id;
+
+                return (
+                  <View key={plan.id} style={{
+                    backgroundColor: isActivePlan ? '#F8FFF8' : '#FFFFFF',
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    borderColor: isActivePlan ? '#4CAF50' : isSelected ? '#4CAF50' : '#E6ECE3',
+                    marginBottom: 20,
+                    padding: 24,
+                    shadowColor: isActivePlan ? '#4CAF50' : '#000',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: isActivePlan ? 0.15 : 0.08,
+                    shadowRadius: isActivePlan ? 12 : 8,
+                    elevation: isActivePlan ? 6 : 3,
+                    position: 'relative',
+                  }}>
+                    {/* Active Plan Badge - Highest Priority */}
+                    {isActivePlan && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -8,
+                        right: 16,
+                        backgroundColor: '#4CAF50',
+                        paddingHorizontal: 12,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        zIndex: 3,
+                      }}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>ACTIVE</Text>
+                      </View>
+                    )}
+
+                    {/* Popular Badge - Only show if not active */}
+                    {plan.popular && !isActivePlan && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -8,
+                        right: 16,
+                        backgroundColor: '#FF6B35',
+                        paddingHorizontal: 12,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        zIndex: 1,
+                      }}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>POPULAR</Text>
+                      </View>
+                    )}
+
+                    {/* Best Value Badge - Only show if not active */}
+                    {plan.bestValue && !isActivePlan && (
+                      <View style={{
+                        position: 'absolute',
+                        top: -8,
+                        right: 16,
+                        backgroundColor: '#4CAF50',
+                        paddingHorizontal: 12,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        zIndex: 1,
+                      }}>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#fff' }}>BEST VALUE</Text>
+                      </View>
+                    )}
+                    {/* Plan Header */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                      <View style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 24,
+                        backgroundColor: isActivePlan ? '#E8F5E8' : '#F8F9FA',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 16,
+                      }}>
+                        <Icon
+                          name={isActivePlan ? "check" : "heart"}
+                          size={24}
+                          color={isActivePlan ? "#4CAF50" : "#666"}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{
+                          fontSize: 20,
+                          fontWeight: 'bold',
+                          color: isActivePlan ? '#4CAF50' : '#222',
+                          marginBottom: 4
+                        }}>
+                          {plan.name}
+                        </Text>
+                        <Text style={{
+                          fontSize: 14,
+                          color: isActivePlan ? '#4CAF50' : '#666',
+                          fontWeight: '600'
+                        }}>
+                          {isActivePlan ? 'Your Current Plan' : 'Health Plan'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Price Section */}
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'flex-end',
+                      marginBottom: 20,
+                      paddingVertical: 16,
+                      paddingHorizontal: 20,
+                      backgroundColor: '#F8F9FA',
+                      borderRadius: 12,
+                    }}>
+                      <Text style={{ fontSize: 36, fontWeight: 'bold', color: '#222' }}>
+                        {LocationService.getCurrencySymbol(plan.currency)}{plan.price.toLocaleString()}
+                      </Text>
+                      <Text style={{ fontSize: 18, color: '#666', marginBottom: 4, marginLeft: 4 }}>/month</Text>
+                    </View>
+
+                    {/* Action Button */}
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: isActivePlan ? '#E8F5E8' : isSelected ? '#4CAF50' : '#F5F8F3',
+                        borderRadius: 16,
+                        paddingVertical: 16,
+                        alignItems: 'center',
+                        marginBottom: 20,
+                        borderWidth: isActivePlan ? 2 : isSelected ? 0 : 1,
+                        borderColor: isActivePlan ? '#4CAF50' : isSelected ? 'transparent' : '#E0E0E0',
+                        shadowColor: isSelected ? '#4CAF50' : 'transparent',
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: isSelected ? 0.3 : 0,
+                        shadowRadius: 8,
+                        elevation: isSelected ? 4 : 0,
+                      }}
+                      onPress={() => !isActivePlan && setSelectedPlanId(plan.id)}
+                      activeOpacity={isActivePlan ? 1 : 0.85}
+                      disabled={isActivePlan}
+                    >
+                      <Text style={{
+                        fontWeight: 'bold',
+                        fontSize: 18,
+                        color: isActivePlan ? '#4CAF50' : isSelected ? '#FFFFFF' : '#222'
+                      }}>
+                        {isActivePlan ? `Current Plan` : currentSubscription ? `Add ${plan.name} Sessions` : `Select ${plan.name}`}
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Session Details - Modern Grid */}
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 16 }}>What's Included</Text>
+
                       <View style={{
                         backgroundColor: '#F8F9FA',
                         borderRadius: 12,
                         padding: 16,
+                        marginBottom: 12,
                       }}>
-                        {plan.features.map((feature: string, idx: number) => (
-                          <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                            <View style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: 10,
-                              backgroundColor: '#4CAF50',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginRight: 12,
-                            }}>
-                              <Icon name="check" size={12} color="#FFFFFF" />
-                            </View>
-                            <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
+                        {/* Text Sessions */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                          <View style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                            backgroundColor: '#E8F5E8',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}>
+                            <Icon name="message" size={16} color="#4CAF50" />
                           </View>
-                        ))}
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                              {plan.textSessions} Text Sessions
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                              10 minutes each
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Voice Calls */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                          <View style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                            backgroundColor: '#E8F5E8',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}>
+                            <Icon name="voice" size={16} color="#4CAF50" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                              {plan.voiceCalls} Voice Calls
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                              Audio consultations
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Video Calls */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <View style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 16,
+                            backgroundColor: '#E8F5E8',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: 12,
+                          }}>
+                            <Icon name="video" size={16} color="#4CAF50" />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, color: '#222', fontWeight: '600' }}>
+                              {plan.videoCalls} Video Calls
+                            </Text>
+                            <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                              Face-to-face consultations
+                            </Text>
+                          </View>
+                        </View>
                       </View>
                     </View>
-                  )}
-                </View>
-              );
-            })
-          )}
-          <View style={{ height: 32 }} />
-        </ScrollView>
-        {/* Modern Bottom Action Button */}
-        <View style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: '#FFFFFF',
-          paddingTop: 20,
-          paddingBottom: insets.bottom + 24,
-          paddingHorizontal: 20,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-          elevation: 8,
-        }}>
-          <TouchableOpacity
-            style={{
-              backgroundColor: selectedPlanId && !isPurchasing ? '#4CAF50' : '#E0E0E0',
-              borderRadius: 16,
-              paddingVertical: 18,
-              width: '100%',
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: selectedPlanId ? '#4CAF50' : 'transparent',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: selectedPlanId ? 0.3 : 0,
-              shadowRadius: 8,
-              elevation: selectedPlanId ? 4 : 0,
-              opacity: isPurchasing ? 0.7 : 1,
-            }}
-            disabled={!selectedPlanId || isPurchasing}
-            onPress={() => {
-              if (selectedPlan) handlePurchaseSubscription(selectedPlan);
-            }}
-          >
-            {isPurchasing ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <ActivityIndicator size="small" color="white" style={{ marginRight: 12 }} />
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
-                  Processing...
-                </Text>
-              </View>
-            ) : (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Icon name="shopping-cart" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
-                  {currentSubscription ? 'Add Sessions' : 'Purchase Plan'}
-                </Text>
-              </View>
+
+                    {/* Additional Features */}
+                    {plan.features && plan.features.length > 0 && (
+                      <View>
+                        <Text style={{ fontSize: 16, fontWeight: '600', color: '#222', marginBottom: 12 }}>Additional Benefits</Text>
+                        <View style={{
+                          backgroundColor: '#F8F9FA',
+                          borderRadius: 12,
+                          padding: 16,
+                        }}>
+                          {plan.features.map((feature: string, idx: number) => (
+                            <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                              <View style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 10,
+                                backgroundColor: '#4CAF50',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                marginRight: 12,
+                              }}>
+                                <Icon name="check" size={12} color="#FFFFFF" />
+                              </View>
+                              <Text style={{ fontSize: 14, color: '#222', flex: 1 }}>{feature}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })
             )}
-          </TouchableOpacity>
+            <View style={{ height: 32 }} />
+          </ScrollView>
+          {/* Modern Bottom Action Button */}
+          <View style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: '#FFFFFF',
+            paddingTop: 20,
+            paddingBottom: insets.bottom + 24,
+            paddingHorizontal: 20,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.1,
+            shadowRadius: 12,
+            elevation: 8,
+          }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: selectedPlanId && !isPurchasing ? '#4CAF50' : '#E0E0E0',
+                borderRadius: 16,
+                paddingVertical: 18,
+                width: '100%',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: selectedPlanId ? '#4CAF50' : 'transparent',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: selectedPlanId ? 0.3 : 0,
+                shadowRadius: 8,
+                elevation: selectedPlanId ? 4 : 0,
+                opacity: isPurchasing ? 0.7 : 1,
+              }}
+              disabled={!selectedPlanId || isPurchasing}
+              onPress={() => {
+                if (selectedPlan) handlePurchaseSubscription(selectedPlan);
+              }}
+            >
+              {isPurchasing ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="white" style={{ marginRight: 12 }} />
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
+                    Processing...
+                  </Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="shopping-cart" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>
+                    {currentSubscription ? 'Add Sessions' : 'Purchase Plan'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     );
@@ -4364,6 +4322,11 @@ export default function PatientDashboard() {
             clearInterval(paymentPollingRef.current);
             paymentPollingRef.current = null;
           }
+        }}
+        onPaymentDetected={() => {
+          console.log('✅ Payment detected via navigation! Forcing poll...');
+          // Trigger immediate poll
+          pollPaymentStatus();
         }}
       />
 

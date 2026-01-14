@@ -5,15 +5,15 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 interface CheckoutWebViewModalProps {
     visible: boolean;
     checkoutUrl: string;
     onClose: () => void;
+    onPaymentDetected?: () => void;
 }
 
 /**
@@ -24,6 +24,7 @@ export default function CheckoutWebViewModal({
     visible,
     checkoutUrl,
     onClose,
+    onPaymentDetected,
 }: CheckoutWebViewModalProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -46,6 +47,16 @@ export default function CheckoutWebViewModal({
 
     const handleNavigationStateChange = (navState: any) => {
         console.log('📍 CheckoutWebViewModal navigation:', navState.url);
+
+        // Intercept navigation to return URL (success/return)
+        if (navState.url && (
+            navState.url.includes('/api/paychangu/return') ||
+            navState.url.includes('payments/status') ||
+            navState.url.includes('com.docavailable.app://')
+        )) {
+            console.log('✅ Success navigation detected, triggering payment check');
+            onPaymentDetected?.();
+        }
     };
 
     // Reset state when modal opens
@@ -61,74 +72,109 @@ export default function CheckoutWebViewModal({
     return (
         <Modal
             visible={visible}
-            animationType="slide"
-            presentationStyle="pageSheet"
+            animationType="fade"
+            transparent={true}
             onRequestClose={onClose}
         >
-            <SafeAreaView style={styles.container} edges={['top']}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <Text style={styles.closeText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Secure Payment</Text>
-                    <View style={styles.placeholder} />
+            <View style={styles.overlay}>
+                <View style={styles.modalContainer}>
+                    {/* Modal Handle Line */}
+                    <View style={styles.modalHandle} />
+
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <Text style={styles.closeText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.title}>Secure Payment</Text>
+                        <View style={styles.placeholder} />
+                    </View>
+
+                    {/* Loading Overlay */}
+                    {isLoading && (
+                        <View style={styles.loadingOverlay}>
+                            <ActivityIndicator size="large" color="#4CAF50" />
+                            <Text style={styles.loadingText}>Loading payment page...</Text>
+                        </View>
+                    )}
+
+                    {/* Error State */}
+                    {error ? (
+                        <View style={styles.errorContainer}>
+                            <Text style={styles.errorTitle}>Payment Error</Text>
+                            <Text style={styles.errorText}>{error}</Text>
+                            <TouchableOpacity
+                                style={styles.retryButton}
+                                onPress={() => {
+                                    setError(null);
+                                    setIsLoading(true);
+                                    webViewRef.current?.reload();
+                                }}
+                            >
+                                <Text style={styles.retryText}>Retry</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={onClose}
+                            >
+                                <Text style={styles.cancelText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        /* WebView */
+                        <WebView
+                            ref={webViewRef}
+                            source={{ uri: checkoutUrl }}
+                            style={styles.webview}
+                            onLoadStart={handleLoadStart}
+                            onLoadEnd={handleLoadEnd}
+                            onError={handleError}
+                            onNavigationStateChange={handleNavigationStateChange}
+                            javaScriptEnabled={true}
+                            domStorageEnabled={true}
+                            thirdPartyCookiesEnabled={true}
+                            mixedContentMode="compatibility"
+                            allowsBackForwardNavigationGestures={true}
+                            userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
+                        />
+                    )}
                 </View>
-
-                {/* Loading Overlay */}
-                {isLoading && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size="large" color="#4CAF50" />
-                        <Text style={styles.loadingText}>Loading payment page...</Text>
-                    </View>
-                )}
-
-                {/* Error State */}
-                {error ? (
-                    <View style={styles.errorContainer}>
-                        <Text style={styles.errorTitle}>Payment Error</Text>
-                        <Text style={styles.errorText}>{error}</Text>
-                        <TouchableOpacity
-                            style={styles.retryButton}
-                            onPress={() => {
-                                setError(null);
-                                setIsLoading(true);
-                                webViewRef.current?.reload();
-                            }}
-                        >
-                            <Text style={styles.retryText}>Retry</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.cancelButton}
-                            onPress={onClose}
-                        >
-                            <Text style={styles.cancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                    </View>
-                ) : (
-                    /* WebView */
-                    <WebView
-                        ref={webViewRef}
-                        source={{ uri: checkoutUrl }}
-                        style={styles.webview}
-                        onLoadStart={handleLoadStart}
-                        onLoadEnd={handleLoadEnd}
-                        onError={handleError}
-                        onNavigationStateChange={handleNavigationStateChange}
-                        javaScriptEnabled={true}
-                        domStorageEnabled={true}
-                        thirdPartyCookiesEnabled={true}
-                        mixedContentMode="compatibility"
-                        allowsBackForwardNavigationGestures={true}
-                        userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36"
-                    />
-                )}
-            </SafeAreaView>
+            </View>
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)', // Darker backdrop for better modal contrast
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContainer: {
+        width: '100%',
+        maxWidth: 550,
+        height: '80%',
+        maxHeight: 750,
+        backgroundColor: '#fff',
+        borderRadius: 30,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 20,
+    },
+    modalHandle: {
+        width: 40,
+        height: 5,
+        backgroundColor: '#E0E0E0',
+        borderRadius: 2.5,
+        alignSelf: 'center',
+        marginTop: 10,
+        marginBottom: 2,
+    },
     container: {
         flex: 1,
         backgroundColor: '#fff',
