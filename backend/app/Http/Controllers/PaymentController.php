@@ -539,7 +539,7 @@ class PaymentController extends Controller
     <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     <script>
         function doRedirect() {
-            // 1. Signal WebView via postMessage
+            // 1. Signal WebView via postMessage (Primary closure mechanism)
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: "close_window",
@@ -548,19 +548,21 @@ class PaymentController extends Controller
                 }));
             }
             
-            // 2. Trigger Deep Link
+            // Note: We no longer auto-redirect to window.location.href = deepLink 
+            // because it causes "Page not found" flicker in WebViews.
+            // The postMessage above handles closure for the mobile app.
+        }
+
+        // Execute closure signal immediately
+        doRedirect();
+        
+        // Manual fallback for deep link if needed
+        function manualDeepLink() {
             const deepLink = "com.docavailable.app://payment-result?status=" + 
                 encodeURIComponent("' . $final_status . '") + 
                 "&tx_ref=" + encodeURIComponent("' . $txRef . '");
-            
             window.location.href = deepLink;
         }
-
-        // Execute immediately
-        doRedirect();
-        
-        // Safety Fallback
-        setTimeout(doRedirect, 500);
     </script>
 </body>
 </html>';

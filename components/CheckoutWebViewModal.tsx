@@ -28,6 +28,7 @@ export default function CheckoutWebViewModal({
 }: CheckoutWebViewModalProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isClosing, setIsClosing] = useState(false);
     const webViewRef = useRef<WebView>(null);
 
     const handleLoadStart = () => {
@@ -63,6 +64,7 @@ export default function CheckoutWebViewModal({
                 data.status === 'success' ||
                 data.type === 'payment_success') {
                 console.log('✅ Success signal received from WebView message! Closing modal...');
+                setIsClosing(true);
                 onPaymentDetected?.();
             }
         } catch (e) {
@@ -76,6 +78,7 @@ export default function CheckoutWebViewModal({
         // If the error is on a success URL or local redirect, ignore it
         if (nativeEvent.url && isSuccessUrl(nativeEvent.url)) {
             console.log('✅ Success path detected, ignoring WebView error:', nativeEvent.description);
+            setIsClosing(true);
             onPaymentDetected?.(); // Treat as success if we reached the success path
             return;
         }
@@ -91,6 +94,7 @@ export default function CheckoutWebViewModal({
         // Intercept navigation to any known success-related keyword
         if (navState.url && isSuccessUrl(navState.url)) {
             console.log('✅ Success navigation keyword detected, triggering closure');
+            setIsClosing(true);
             onPaymentDetected?.();
         }
     };
@@ -99,6 +103,7 @@ export default function CheckoutWebViewModal({
     React.useEffect(() => {
         if (visible) {
             setIsLoading(true);
+            setIsClosing(false);
             setError(null);
         }
     }, [visible]);
@@ -161,7 +166,7 @@ export default function CheckoutWebViewModal({
                         <WebView
                             ref={webViewRef}
                             source={{ uri: checkoutUrl }}
-                            style={styles.webview}
+                            style={[styles.webview, isClosing && { opacity: 0 }]}
                             onLoadStart={handleLoadStart}
                             onLoadEnd={handleLoadEnd}
                             onError={handleError}
