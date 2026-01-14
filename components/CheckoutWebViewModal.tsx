@@ -39,32 +39,39 @@ export default function CheckoutWebViewModal({
     };
 
     const isSuccessUrl = (url: string) => {
-        return url.includes('/api/paychangu/return') ||
-            url.includes('/api/paychangu/callback') ||
-            url.includes('payments/status') ||
-            url.startsWith('com.docavailable.app://');
+        const lowerUrl = url.toLowerCase();
+        return lowerUrl.includes('paychangu/return') ||
+            lowerUrl.includes('paychangu/callback') ||
+            lowerUrl.includes('payments/status') ||
+            lowerUrl.includes('payment-result') ||
+            lowerUrl.startsWith('com.docavailable.app://');
     };
 
     const handleMessage = (event: any) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
             console.log('📨 WebView message received:', data);
-            if (data.type === 'close_window' || data.status === 'completed' || data.status === 'success') {
-                console.log('✅ Close signal received from WebView message');
+
+            // Instantly detect success from backend's close_window message
+            if (data.type === 'close_window' ||
+                data.status === 'completed' ||
+                data.status === 'success' ||
+                data.type === 'payment_success') {
+                console.log('✅ Success signal received from WebView message! Closing modal...');
                 onPaymentDetected?.();
             }
         } catch (e) {
-            // Not a JSON message or not for us, ignore
+            // Not a JSON message or not for us
         }
     };
 
     const handleError = (syntheticEvent: any) => {
         const { nativeEvent } = syntheticEvent;
 
-        // If the error is on a success URL, ignore it
+        // If the error is on a success URL or local redirect, ignore it
         if (nativeEvent.url && isSuccessUrl(nativeEvent.url)) {
-            console.log('✅ Ignoring error on success/return URL');
-            onPaymentDetected?.();
+            console.log('✅ Success path detected, ignoring WebView error:', nativeEvent.description);
+            onPaymentDetected?.(); // Treat as success if we reached the success path
             return;
         }
 
@@ -76,9 +83,9 @@ export default function CheckoutWebViewModal({
     const handleNavigationStateChange = (navState: any) => {
         console.log('📍 CheckoutWebViewModal navigation:', navState.url);
 
-        // Intercept navigation to return URL (success/return)
+        // Intercept navigation to any known success-related keyword
         if (navState.url && isSuccessUrl(navState.url)) {
-            console.log('✅ Success navigation detected, triggering payment check');
+            console.log('✅ Success navigation keyword detected, triggering closure');
             onPaymentDetected?.();
         }
     };
