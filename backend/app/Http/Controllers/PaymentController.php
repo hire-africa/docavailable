@@ -522,65 +522,24 @@ class PaymentController extends Controller
      */
     private function renderRedirectPage($transaction, $txRef, $status)
     {
-        $status_text = $status === 'success' ? 'Payment Successful!' : 'Payment Failed';
         $final_status = $transaction ? $transaction->status : $status;
 
+        // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
 <html>
 <head>
-    <title>Payment Complete</title>
+    <title>Processing Result...</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            padding: 50px; 
-            background: #f5f5f5;
-        }
-        .container { 
-            background: white; 
-            padding: 30px; 
-            border-radius: 10px; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            max-width: 400px;
-            margin: 0 auto;
-        }
-        .success { color: #28a745; }
-        .error { color: #dc3545; }
-        .countdown { 
-            font-size: 24px; 
-            font-weight: bold; 
-            margin: 20px 0; 
-            color: #007bff;
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
-        <h2 class="' . ($status === 'success' ? 'success' : 'error') . '">
-            ' . $status_text . '
-        </h2>
-        <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
-        ' . ($transaction ? '<p>Status: ' . htmlspecialchars($transaction->status) . '</p>' : '') . '
-        <div class="countdown" id="countdown">Redirecting in 3 seconds...</div>
-        
-        <button id="btn-manual" style="
-            background: #28a745; 
-            color: white; 
-            border: none; 
-            padding: 12px 24px; 
-            border-radius: 6px; 
-            font-size: 16px; 
-            font-weight: bold; 
-            cursor: pointer;
-            margin-top: 10px;
-            display: none;
-        " onclick="performRedirect()">Return to App Now</button>
+<body style="background: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif;">
+    <div style="text-align: center;">
+        <div style="border: 4px solid #f3f3f3; border-top: 4px solid #28a745; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; margin: 0 auto 10px;"></div>
+        <p style="color: #666; font-size: 14px;">Returning to app...</p>
     </div>
+    <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     <script>
-        const btnManual = document.getElementById("btn-manual");
-        
-        function performRedirect() {
+        function doRedirect() {
+            // 1. Signal WebView via postMessage
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: "close_window",
@@ -589,6 +548,7 @@ class PaymentController extends Controller
                 }));
             }
             
+            // 2. Trigger Deep Link
             const deepLink = "com.docavailable.app://payment-result?status=" + 
                 encodeURIComponent("' . $final_status . '") + 
                 "&tx_ref=" + encodeURIComponent("' . $txRef . '");
@@ -596,22 +556,11 @@ class PaymentController extends Controller
             window.location.href = deepLink;
         }
 
-        // Auto-redirect countdown
-        let count = 3;
-        const countdownEl = document.getElementById("countdown");
-        const interval = setInterval(() => {
-            count--;
-            countdownEl.textContent = "Redirecting in " + count + " seconds...";
-            if (count <= 0) {
-                clearInterval(interval);
-                performRedirect();
-            }
-        }, 1000);
-
-        // Show manual button as fallback
-        setTimeout(() => {
-            btnManual.style.display = "inline-block";
-        }, 1000);
+        // Execute immediately
+        doRedirect();
+        
+        // Safety Fallback
+        setTimeout(doRedirect, 500);
     </script>
 </body>
 </html>';
