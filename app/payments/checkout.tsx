@@ -238,6 +238,37 @@ export default function PayChanguCheckout() {
     }
   }, [isLoading, webViewError]);
 
+  // Active background polling to detect payment success even if WebView hangs
+  useEffect(() => {
+    if (!txRef || hasDetectedPayment || !hasLoaded) return;
+
+    console.log('🔄 Starting background status polling for tx_ref:', txRef);
+
+    // Poll every 4 seconds to avoid overwhelming the server but stay responsive
+    const interval = setInterval(async () => {
+      console.log('📡 Background status check...');
+      const statusData = await checkPaymentStatus();
+
+      if (statusData && statusData.success) {
+        console.log('✅ Background check confirms: Payment successful!');
+        setHasDetectedPayment(true);
+
+        // Give a moment for the user to see the success state if they are on it
+        // and for the backend data refresh to complete
+        setTimeout(() => {
+          console.log('🚀 Force reloading to dashboard');
+          router.replace('/');
+        }, 1500);
+      }
+    }, 4000);
+
+    setPaymentCheckTimer(interval);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [txRef, hasDetectedPayment, hasLoaded, checkPaymentStatus]);
+
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
@@ -335,12 +366,11 @@ export default function PayChanguCheckout() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      {/* Header with Cancel and Done Buttons */}
+      {/* Header with Cancel Button Only (as requested no "Done" buttons) */}
       <View style={{
         height: 60,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
         paddingHorizontal: 20,
         backgroundColor: '#fff',
         borderBottomWidth: 1,
@@ -360,35 +390,9 @@ export default function PayChanguCheckout() {
           <Text style={{ color: '#FF3B30', fontSize: 16 }}>Cancel</Text>
         </TouchableOpacity>
 
-        <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Secure Payment</Text>
-
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#28a745',
-            paddingHorizontal: 15,
-            paddingVertical: 8,
-            borderRadius: 8
-          }}
-          onPress={async () => {
-            console.log('🔘 manual "Done" pressed');
-            const statusData = await checkPaymentStatus();
-            if (statusData && statusData.success) {
-              Alert.alert('Success', 'Payment confirmed! Returning to dashboard.');
-              router.replace('/');
-            } else {
-              Alert.alert(
-                'Status Check',
-                'We couldn\'t confirm your payment yet. If you just finished paying, please wait a few seconds and try again.',
-                [
-                  { text: 'Wait' },
-                  { text: 'Go Back Anyway', onPress: () => router.back(), style: 'destructive' }
-                ]
-              );
-            }
-          }}
-        >
-          <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>Done</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', marginRight: 40 }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold' }}>Secure Payment</Text>
+        </View>
       </View>
 
       <View style={{ flex: 1 }}>
