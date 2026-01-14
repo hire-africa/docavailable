@@ -343,6 +343,22 @@ class AuthenticationController extends Controller
                 ]);
             }
 
+            // Send notification to admin
+            try {
+                \Illuminate\Support\Facades\Notification::route('mail', 'docavailable01@gmail.com')
+                    ->notify(new \App\Notifications\NewUserRegisteredNotification($user));
+
+                Log::info('Admin notification sent for new user', [
+                    'user_id' => $user->id,
+                    'admin_email' => 'docavailable01@gmail.com'
+                ]);
+            } catch (\Exception $adminNotificationError) {
+                Log::error('Failed to send admin notification', [
+                    'user_id' => $user->id,
+                    'error' => $adminNotificationError->getMessage()
+                ]);
+            }
+
             // Generate full URLs for images if they exist
             $userData = $this->generateImageUrls($user);
 
