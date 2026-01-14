@@ -1513,7 +1513,9 @@ export default function PatientDashboard() {
 
     const pollPaymentStatus = async () => {
       try {
-        const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}`);
+        console.log(`📡 Polling status for tx_ref: ${checkoutTxRef}`);
+        const timestamp = new Date().getTime();
+        const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}&t=${timestamp}`);
         const data = await response.json();
         console.log('📡 Poll result:', data);
 
@@ -1528,8 +1530,11 @@ export default function PatientDashboard() {
           setShowCheckoutModal(false);
           // Refresh user data
           await refreshUserData();
-          // Show success
-          Alert.alert('Payment Successful!', 'Your subscription has been activated.');
+
+          // Small delay before alert to ensure modal is closed
+          setTimeout(() => {
+            Alert.alert('Payment Successful!', 'Your subscription has been activated.');
+          }, 500);
         }
       } catch (error) {
         console.error('❌ Poll error:', error);
