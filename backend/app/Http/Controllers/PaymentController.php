@@ -440,7 +440,12 @@ class PaymentController extends Controller
                     $meta = json_decode($verification['data']['meta'] ?? '{}', true);
                     $this->processSuccessfulPayment($verification['data'], $meta);
 
-                    // Return success response to PayChangu
+                    // If this is a browser redirect (GET), return the HTML redirect page
+                    if ($request->isMethod('get')) {
+                        return $this->renderRedirectPage($transaction, $txRef, 'success');
+                    }
+
+                    // Return success response to PayChangu (Webhooks)
                     return response()->json([
                         'success' => true,
                         'message' => 'Payment processed successfully',
@@ -451,6 +456,11 @@ class PaymentController extends Controller
                         'tx_ref' => $txRef,
                         'verification' => $verification
                     ]);
+
+                    if ($request->isMethod('get')) {
+                        return $this->renderRedirectPage($transaction, $txRef, 'error');
+                    }
+
                     return response()->json(['error' => 'Payment verification failed'], 400);
                 }
             } else {
@@ -464,50 +474,58 @@ class PaymentController extends Controller
                     ])
                 ]);
 
+                if ($request->isMethod('get')) {
+                    return $this->renderRedirectPage($transaction, $txRef, 'error');
+                }
+
                 return response()->json(['error' => 'Payment failed'], 400);
             }
-
         } catch (\Exception $e) {
             Log::error('PayChangu callback error', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            if ($request->isMethod('get')) {
+                return $this->renderRedirectPage(null, $request->query('tx_ref', 'unknown'), 'error');
+            }
+
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 
     public function returnHandler(Request $request)
     {
-        try {
-            Log::info('PayChangu return handler received', ['data' => $request->all()]);
+        Log::info('PayChangu return handler received', ['data' => $request->all()]);
 
-            $txRef = $request->query('tx_ref') ?? $request->query('transaction_id') ?? $request->query('reference');
-            $status = $request->query('status');
+        $txRef = $request->query('tx_ref') ?? $request->query('transaction_id') ?? $request->query('reference');
+        $status = $request->query('status');
 
-            if (!$txRef) {
-                Log::warning('Return handler missing transaction reference parameter', ['query' => $request->query()]);
-                return response()->json(['error' => 'Missing transaction reference parameter (tx_ref, transaction_id, or reference)'], 400);
-            }
+        if (!$txRef) {
+            return $this->renderRedirectPage(null, 'unknown', 'error');
+        }
 
-            // Find transaction
-            $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
-                ->orWhere('gateway_reference', $txRef)
-                ->first();
+        $transaction = \App\Models\PaymentTransaction::where('reference', $txRef)
+            ->orWhere('gateway_reference', $txRef)
+            ->first();
 
-            if (!$transaction) {
-                Log::error('Transaction not found for return handler', ['tx_ref' => $txRef]);
-                return response()->json(['error' => 'Transaction not found'], 404);
-            }
+        // Update transaction status if it exists and status is provided
+        if ($transaction && $status) {
+            $transaction->update(['status' => ($status === 'success' ? 'completed' : 'failed')]);
+        }
 
-            // Update transaction status based on return status
-            if ($status === 'success') {
-                $transaction->update(['status' => 'completed']);
-            } else {
-                $transaction->update(['status' => 'failed']);
-            }
+        return $this->renderRedirectPage($transaction, $txRef, $status === 'success' ? 'success' : 'error');
+    }
 
-            // Return a simple HTML page that the WebView can handle
-            $html = '<!DOCTYPE html>
+    /**
+     * Common helper to render the HTML redirect page for WebView
+     */
+    private function renderRedirectPage($transaction, $txRef, $status)
+    {
+        $status_text = $status === 'success' ? 'Payment Successful!' : 'Payment Failed';
+        $final_status = $transaction ? $transaction->status : $status;
+
+        $html = '<!DOCTYPE html>
 <html>
 <head>
     <title>Payment Complete</title>
@@ -529,7 +547,6 @@ class PaymentController extends Controller
         }
         .success { color: #28a745; }
         .error { color: #dc3545; }
-        .loading { color: #007bff; }
         .countdown { 
             font-size: 24px; 
             font-weight: bold; 
@@ -541,10 +558,10 @@ class PaymentController extends Controller
 <body>
     <div class="container">
         <h2 class="' . ($status === 'success' ? 'success' : 'error') . '">
-            ' . ($status === 'success' ? 'Payment Successful!' : 'Payment Failed') . '
+            ' . $status_text . '
         </h2>
         <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
-        <p>Status: ' . htmlspecialchars($transaction->status) . '</p>
+        ' . ($transaction ? '<p>Status: ' . htmlspecialchars($transaction->status) . '</p>' : '') . '
         <div class="countdown" id="countdown">Redirecting in 3 seconds...</div>
         
         <button id="btn-manual" style="
@@ -559,140 +576,48 @@ class PaymentController extends Controller
             margin-top: 10px;
             display: none;
         " onclick="performRedirect()">Return to App Now</button>
-        
-        <p style="font-size: 12px; color: #999; margin-top: 20px;" id="debug-info"></p>
     </div>
     <script>
-        const debugInfo = document.getElementById("debug-info");
         const btnManual = document.getElementById("btn-manual");
         
-        function log(msg) {
-            console.log(msg);
-            const time = new Date().toLocaleTimeString();
-            debugInfo.innerHTML += "[" + time + "] " + msg + "<br>";
+        function performRedirect() {
+            if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: "close_window",
+                    status: "' . $final_status . '",
+                    tx_ref: "' . $txRef . '"
+                }));
+            }
+            
+            const deepLink = "com.docavailable.app://payment-result?status=" + 
+                encodeURIComponent("' . $final_status . '") + 
+                "&tx_ref=" + encodeURIComponent("' . $txRef . '");
+            
+            window.location.href = deepLink;
         }
 
-        log("Payment return page loaded");
-        log("Status: ' . $transaction->status . '");
-        log("Has ReactNativeWebView: " + (!!window.ReactNativeWebView));
-        
-        // Countdown and redirect
+        // Auto-redirect countdown
         let count = 3;
         const countdownEl = document.getElementById("countdown");
-        let redirected = false;
-        
-        // Show button after 1 second as fallback
+        const interval = setInterval(() => {
+            count--;
+            countdownEl.textContent = "Redirecting in " + count + " seconds...";
+            if (count <= 0) {
+                clearInterval(interval);
+                performRedirect();
+            }
+        }, 1000);
+
+        // Show manual button as fallback
         setTimeout(() => {
             btnManual.style.display = "inline-block";
         }, 1000);
-        
-        // Function to handle redirect
-        function performRedirect() {
-            try {
-                if (redirected) {
-                    log("Already redirected, skipping");
-                    return;
-                }
-                
-                log("Performing redirect...");
-                countdownEl.textContent = "Redirecting now...";
-                
-                // 1. Send close window message to WebView (Standard method)
-                // We do this BEFORE href change as href change might halt JS execution
-                if (window.ReactNativeWebView) {
-                    log("Sending close_window message to WebView");
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                        type: "close_window",
-                        status: "' . $transaction->status . '",
-                        tx_ref: "' . $txRef . '"
-                    }));
-                    log("Message sent");
-                }
-                
-                // 2. Try Deep Link Redirect (Primary fallback)
-                const deepLink = "com.docavailable.app://payment-result?status=" + 
-                    encodeURIComponent("' . $transaction->status . '") + 
-                    "&tx_ref=" + encodeURIComponent("' . $txRef . '");
-                    
-                log("Attempting deep link: " + deepLink);
-                
-                // Use a slight delay before href change to ensure postMessage has a chance
-                setTimeout(() => {
-                    redirected = true;
-                    window.location.href = deepLink;
-                }, 100);
-                
-                // 3. Last resort fallback: try to go back in history or close
-                setTimeout(() => {
-                    log("Executing last resort fallback");
-                    if (window.history.length > 1) {
-                        log("Going back in history");
-                        window.history.back();
-                    } else {
-                        log("Attempting to close window");
-                        window.close();
-                    }
-                }, 2000);
-            } catch (err) {
-                log("Error in performRedirect: " + err.message);
-                redirected = false; // allow retry via button
-            }
-        }
-        
-        // Countdown with proper display of 0
-        const countdown = setInterval(() => {
-            try {
-                count--;
-                log("Countdown: " + count);
-                
-                if (count >= 0) {
-                    countdownEl.textContent = "Redirecting in " + count + " second" + (count !== 1 ? "s" : "") + "...";
-                }
-                
-                if (count <= 0) {
-                    clearInterval(countdown);
-                    log("Countdown complete");
-                    performRedirect();
-                }
-            } catch (err) {
-                log("Error in interval: " + err.message);
-            }
-        }, 1000);
-        
-        // Send initial status message
-        if (window.ReactNativeWebView) {
-            try {
-                log("Sending initial payment_status message");
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: "payment_status",
-                    status: "' . $transaction->status . '",
-                    tx_ref: "' . $txRef . '"
-                }));
-            } catch (err) {
-                log("Error sending initial message: " + err.message);
-            }
-        }
-        
-        // Additional fallback: Force redirect after 5 seconds no matter what
-        setTimeout(() => {
-            if (!redirected) {
-                console.log("Emergency fallback redirect triggered");
-                performRedirect();
-            }
-        }, 5000);
     </script>
 </body>
 </html>';
 
-            return response($html)->header('Content-Type', 'text/html');
-
-        } catch (\Exception $e) {
-            Log::error('PayChangu return handler error', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
+        return response($html);
+    }
     }
 
     public function checkStatus(Request $request)

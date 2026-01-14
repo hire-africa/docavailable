@@ -28,16 +28,9 @@ export default function CheckoutWebViewModal({
 }: CheckoutWebViewModalProps) {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [isFinished, setIsFinished] = useState(false);
     const webViewRef = useRef<WebView>(null);
 
-    const handleLoadStart = (syntheticEvent: any) => {
-        const { nativeEvent } = syntheticEvent;
-        if (isSuccessUrl(nativeEvent.url)) {
-            console.log('✅ Success URL detected on load start:', nativeEvent.url);
-            setIsFinished(true);
-            onPaymentDetected?.();
-        }
+    const handleLoadStart = () => {
         setIsLoading(true);
     };
 
@@ -70,7 +63,6 @@ export default function CheckoutWebViewModal({
                 data.status === 'success' ||
                 data.type === 'payment_success') {
                 console.log('✅ Success signal received from WebView message! Closing modal...');
-                setIsFinished(true);
                 onPaymentDetected?.();
             }
         } catch (e) {
@@ -84,13 +76,9 @@ export default function CheckoutWebViewModal({
         // If the error is on a success URL or local redirect, ignore it
         if (nativeEvent.url && isSuccessUrl(nativeEvent.url)) {
             console.log('✅ Success path detected, ignoring WebView error:', nativeEvent.description);
-            setIsFinished(true);
             onPaymentDetected?.(); // Treat as success if we reached the success path
             return;
         }
-
-        // Check if we already detected success
-        if (isFinished) return;
 
         console.error('❌ CheckoutWebViewModal error:', nativeEvent);
         setError(nativeEvent.description || 'Failed to load payment page');
@@ -103,7 +91,6 @@ export default function CheckoutWebViewModal({
         // Intercept navigation to any known success-related keyword
         if (navState.url && isSuccessUrl(navState.url)) {
             console.log('✅ Success navigation keyword detected, triggering closure');
-            setIsFinished(true);
             onPaymentDetected?.();
         }
     };
@@ -112,7 +99,6 @@ export default function CheckoutWebViewModal({
     React.useEffect(() => {
         if (visible) {
             setIsLoading(true);
-            setIsFinished(false);
             setError(null);
         }
     }, [visible]);
@@ -133,24 +119,15 @@ export default function CheckoutWebViewModal({
 
                     {/* Header */}
                     <View style={styles.header}>
-                        <TouchableOpacity onPress={onClose} style={styles.closeButton} disabled={isFinished}>
-                            <Text style={[styles.closeText, isFinished && { color: '#ccc' }]}>Cancel</Text>
+                        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                            <Text style={styles.closeText}>Cancel</Text>
                         </TouchableOpacity>
                         <Text style={styles.title}>Secure Payment</Text>
                         <View style={styles.placeholder} />
                     </View>
 
-                    {/* Success/Processing Overlay */}
-                    {isFinished && (
-                        <View style={styles.loadingOverlay}>
-                            <ActivityIndicator size="large" color="#4CAF50" />
-                            <Text style={styles.loadingText}>Payment Successful!</Text>
-                            <Text style={styles.subLoadingText}>Finalizing your subscription...</Text>
-                        </View>
-                    )}
-
                     {/* Loading Overlay */}
-                    {isLoading && !isFinished && (
+                    {isLoading && (
                         <View style={styles.loadingOverlay}>
                             <ActivityIndicator size="large" color="#4CAF50" />
                             <Text style={styles.loadingText}>Loading payment page...</Text>
@@ -158,7 +135,7 @@ export default function CheckoutWebViewModal({
                     )}
 
                     {/* Error State */}
-                    {error && !isFinished ? (
+                    {error ? (
                         <View style={styles.errorContainer}>
                             <Text style={styles.errorTitle}>Payment Error</Text>
                             <Text style={styles.errorText}>{error}</Text>
@@ -184,7 +161,7 @@ export default function CheckoutWebViewModal({
                         <WebView
                             ref={webViewRef}
                             source={{ uri: checkoutUrl }}
-                            style={[styles.webview, isFinished && { opacity: 0 }]}
+                            style={styles.webview}
                             onLoadStart={handleLoadStart}
                             onLoadEnd={handleLoadEnd}
                             onError={handleError}
@@ -195,7 +172,6 @@ export default function CheckoutWebViewModal({
 
                                 if (isSuccessUrl(request.url)) {
                                     console.log('🚫 Blocking success/return URL from loading in WebView');
-                                    setIsFinished(true);
                                     onPaymentDetected?.();
                                     return false; // Block the request
                                 }
@@ -291,12 +267,6 @@ const styles = StyleSheet.create({
         marginTop: 12,
         fontSize: 16,
         color: '#4CAF50',
-    },
-    subLoadingText: {
-        marginTop: 8,
-        fontSize: 14,
-        color: '#666',
-        textAlign: 'center',
     },
     errorContainer: {
         flex: 1,
