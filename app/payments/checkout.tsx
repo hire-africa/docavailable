@@ -239,12 +239,28 @@ export default function PayChanguCheckout() {
   }, [isLoading, webViewError]);
 
   // Active background polling to detect payment success even if WebView hangs
+  // CRITICAL: Start polling immediately on mount, don't wait for hasLoaded
   useEffect(() => {
-    if (!txRef || hasDetectedPayment || !hasLoaded) return;
+    if (!txRef || hasDetectedPayment) return;
 
-    console.log('🔄 Starting background status polling for tx_ref:', txRef);
+    console.log('🔄 Starting background status polling IMMEDIATELY for tx_ref:', txRef);
 
-    // Poll every 4 seconds to avoid overwhelming the server but stay responsive
+    // Start first check after 5 seconds (give time for payment to process)
+    const initialDelay = setTimeout(() => {
+      console.log('📡 Initial status check after 5s delay...');
+      checkPaymentStatus().then((statusData) => {
+        if (statusData && statusData.success) {
+          console.log('✅ Initial check confirms: Payment successful!');
+          setHasDetectedPayment(true);
+          setTimeout(() => {
+            console.log('🚀 Force reloading to dashboard');
+            router.replace('/');
+          }, 1000);
+        }
+      });
+    }, 5000);
+
+    // Then poll every 3 seconds
     const interval = setInterval(async () => {
       console.log('📡 Background status check...');
       const statusData = await checkPaymentStatus();
@@ -252,22 +268,22 @@ export default function PayChanguCheckout() {
       if (statusData && statusData.success) {
         console.log('✅ Background check confirms: Payment successful!');
         setHasDetectedPayment(true);
+        clearInterval(interval);
 
-        // Give a moment for the user to see the success state if they are on it
-        // and for the backend data refresh to complete
         setTimeout(() => {
           console.log('🚀 Force reloading to dashboard');
           router.replace('/');
-        }, 1500);
+        }, 1000);
       }
-    }, 4000);
+    }, 3000);
 
     setPaymentCheckTimer(interval);
 
     return () => {
+      clearTimeout(initialDelay);
       if (interval) clearInterval(interval);
     };
-  }, [txRef, hasDetectedPayment, hasLoaded, checkPaymentStatus]);
+  }, [txRef, hasDetectedPayment, checkPaymentStatus]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
