@@ -38,8 +38,22 @@ export default function CheckoutWebViewModal({
         setIsLoading(false);
     };
 
+    const isSuccessUrl = (url: string) => {
+        return url.includes('/api/paychangu/return') ||
+            url.includes('payments/status') ||
+            url.startsWith('com.docavailable.app://');
+    };
+
     const handleError = (syntheticEvent: any) => {
         const { nativeEvent } = syntheticEvent;
+
+        // If the error is on a success URL, ignore it
+        if (nativeEvent.url && isSuccessUrl(nativeEvent.url)) {
+            console.log('✅ Ignoring error on success/return URL');
+            onPaymentDetected?.();
+            return;
+        }
+
         console.error('❌ CheckoutWebViewModal error:', nativeEvent);
         setError(nativeEvent.description || 'Failed to load payment page');
         setIsLoading(false);
@@ -49,11 +63,7 @@ export default function CheckoutWebViewModal({
         console.log('📍 CheckoutWebViewModal navigation:', navState.url);
 
         // Intercept navigation to return URL (success/return)
-        if (navState.url && (
-            navState.url.includes('/api/paychangu/return') ||
-            navState.url.includes('payments/status') ||
-            navState.url.includes('com.docavailable.app://')
-        )) {
+        if (navState.url && isSuccessUrl(navState.url)) {
             console.log('✅ Success navigation detected, triggering payment check');
             onPaymentDetected?.();
         }
@@ -130,6 +140,16 @@ export default function CheckoutWebViewModal({
                             onLoadEnd={handleLoadEnd}
                             onError={handleError}
                             onNavigationStateChange={handleNavigationStateChange}
+                            onShouldStartLoadWithRequest={(request) => {
+                                console.log('🔄 Checking if should load:', request.url);
+
+                                if (isSuccessUrl(request.url)) {
+                                    console.log('🚫 Blocking success/return URL from loading in WebView');
+                                    onPaymentDetected?.();
+                                    return false; // Block the request
+                                }
+                                return true;
+                            }}
                             javaScriptEnabled={true}
                             domStorageEnabled={true}
                             thirdPartyCookiesEnabled={true}
