@@ -546,98 +546,130 @@ class PaymentController extends Controller
         <p>Transaction Reference: ' . htmlspecialchars($txRef) . '</p>
         <p>Status: ' . htmlspecialchars($transaction->status) . '</p>
         <div class="countdown" id="countdown">Redirecting in 3 seconds...</div>
-        <p>You can close this window and return to the app.</p>
+        
+        <button id="btn-manual" style="
+            background: #28a745; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 6px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            cursor: pointer;
+            margin-top: 10px;
+            display: none;
+        " onclick="performRedirect()">Return to App Now</button>
+        
+        <p style="font-size: 12px; color: #999; margin-top: 20px;" id="debug-info"></p>
     </div>
     <script>
-        console.log("Payment return page loaded", {
-            status: "' . $transaction->status . '",
-            tx_ref: "' . $txRef . '",
-            hasWebView: !!window.ReactNativeWebView
-        });
+        const debugInfo = document.getElementById("debug-info");
+        const btnManual = document.getElementById("btn-manual");
+        
+        function log(msg) {
+            console.log(msg);
+            const time = new Date().toLocaleTimeString();
+            debugInfo.innerHTML += "[" + time + "] " + msg + "<br>";
+        }
+
+        log("Payment return page loaded");
+        log("Status: ' . $transaction->status . '");
+        log("Has ReactNativeWebView: " + (!!window.ReactNativeWebView));
         
         // Countdown and redirect
         let count = 3;
         const countdownEl = document.getElementById("countdown");
         let redirected = false;
         
+        // Show button after 1 second as fallback
+        setTimeout(() => {
+            btnManual.style.display = "inline-block";
+        }, 1000);
+        
         // Function to handle redirect
         function performRedirect() {
-            if (redirected) {
-                console.log("Already redirected, skipping");
-                return;
-            }
-            redirected = true;
-            
-            console.log("Performing redirect...");
-            countdownEl.textContent = "Redirecting now...";
-            
-            // 1. Try Deep Link Redirect (Primary fallback)
-            // This attempts to open the app directly via custom scheme
-            const deepLink = "com.docavailable.app://payment-result?status=" + 
-                encodeURIComponent("' . $transaction->status . '") + 
-                "&tx_ref=" + encodeURIComponent("' . $txRef . '");
+            try {
+                if (redirected) {
+                    log("Already redirected, skipping");
+                    return;
+                }
                 
-            console.log("Attempting deep link redirect:", deepLink);
-            window.location.href = deepLink;
-            
-            // 2. Send close window message to WebView (Standard method)
-            if (window.ReactNativeWebView) {
-                console.log("Sending close_window message to WebView");
-                try {
+                log("Performing redirect...");
+                countdownEl.textContent = "Redirecting now...";
+                
+                // 1. Send close window message to WebView (Standard method)
+                // We do this BEFORE href change as href change might halt JS execution
+                if (window.ReactNativeWebView) {
+                    log("Sending close_window message to WebView");
                     window.ReactNativeWebView.postMessage(JSON.stringify({
                         type: "close_window",
                         status: "' . $transaction->status . '",
                         tx_ref: "' . $txRef . '"
                     }));
-                    console.log("Message sent successfully");
-                } catch (error) {
-                    console.error("Error sending message to WebView:", error);
+                    log("Message sent");
                 }
-            } else {
-                console.log("ReactNativeWebView not available");
+                
+                // 2. Try Deep Link Redirect (Primary fallback)
+                const deepLink = "com.docavailable.app://payment-result?status=" + 
+                    encodeURIComponent("' . $transaction->status . '") + 
+                    "&tx_ref=" + encodeURIComponent("' . $txRef . '");
+                    
+                log("Attempting deep link: " + deepLink);
+                
+                // Use a slight delay before href change to ensure postMessage has a chance
+                setTimeout(() => {
+                    redirected = true;
+                    window.location.href = deepLink;
+                }, 100);
+                
+                // 3. Last resort fallback: try to go back in history or close
+                setTimeout(() => {
+                    log("Executing last resort fallback");
+                    if (window.history.length > 1) {
+                        log("Going back in history");
+                        window.history.back();
+                    } else {
+                        log("Attempting to close window");
+                        window.close();
+                    }
+                }, 2000);
+            } catch (err) {
+                log("Error in performRedirect: " + err.message);
+                redirected = false; // allow retry via button
             }
-            
-            // 3. Last resort fallback: try to go back in history or close
-            setTimeout(() => {
-                console.log("Executing fallback redirect");
-                if (window.history.length > 1) {
-                    console.log("Going back in history");
-                    window.history.back();
-                } else {
-                    console.log("Attempting to close window");
-                    window.close();
-                }
-            }, 1000);
         }
         
         // Countdown with proper display of 0
         const countdown = setInterval(() => {
-            count--;
-            console.log("Countdown:", count);
-            
-            if (count >= 0) {
-                countdownEl.textContent = "Redirecting in " + count + " second" + (count !== 1 ? "s" : "") + "...";
-            }
-            
-            if (count <= 0) {
-                clearInterval(countdown);
-                console.log("Countdown complete, redirecting");
-                performRedirect();
+            try {
+                count--;
+                log("Countdown: " + count);
+                
+                if (count >= 0) {
+                    countdownEl.textContent = "Redirecting in " + count + " second" + (count !== 1 ? "s" : "") + "...";
+                }
+                
+                if (count <= 0) {
+                    clearInterval(countdown);
+                    log("Countdown complete");
+                    performRedirect();
+                }
+            } catch (err) {
+                log("Error in interval: " + err.message);
             }
         }, 1000);
         
-        // Send immediate notification that payment is complete
+        // Send initial status message
         if (window.ReactNativeWebView) {
-            console.log("Sending payment_status message");
             try {
+                log("Sending initial payment_status message");
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                     type: "payment_status",
                     status: "' . $transaction->status . '",
                     tx_ref: "' . $txRef . '"
                 }));
-                console.log("Payment status message sent");
-            } catch (error) {
-                console.error("Error sending payment_status:", error);
+            } catch (err) {
+                log("Error sending initial message: " + err.message);
             }
         }
         

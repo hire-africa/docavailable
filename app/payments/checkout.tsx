@@ -381,7 +381,11 @@ export default function PayChanguCheckout() {
           // Check for both the full URL and the deep link
           if (request.url.includes('/api/paychangu/return') ||
             request.url.startsWith('com.docavailable.app://')) {
-            console.log('✅ Payment return URL or Deep Link detected:', request.url);
+            console.log('🎯 Payment return detected!', {
+              url: request.url,
+              isDeepLink: request.url.startsWith('com.docavailable.app://'),
+              isApiReturn: request.url.includes('/api/paychangu/return')
+            });
 
             // If it's the deep link, parses parameters
             if (request.url.startsWith('com.docavailable.app://')) {
@@ -486,10 +490,11 @@ export default function PayChanguCheckout() {
           setWebViewError(`HTTP Error: ${nativeEvent.statusCode} - ${nativeEvent.description}`);
         }}
         onMessage={(event) => {
-          console.log('📨 WebView message:', event.nativeEvent.data);
+          console.log('📨 WebView message received:', event.nativeEvent.data);
 
           try {
             const message = JSON.parse(event.nativeEvent.data);
+            console.log('📦 Parsed WebView message:', message);
 
             // Handle payment status notification (sent immediately when page loads)
             if (message.type === 'payment_status') {
