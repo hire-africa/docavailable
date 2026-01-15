@@ -1226,20 +1226,46 @@ export default function PatientDashboard() {
 
     setRefreshingHome(true);
     try {
-      // console.log('🔄 Manual refresh of home tab...');
+      console.log('🔄 [PatientDashboard] Fetching dashboard summary...');
+      const response = await apiService.get('/dashboard/summary');
 
-      // Refresh appointments
-      const appointmentsData = await appointmentService.getAppointments().catch(err => {
-        console.error('Error refreshing appointments:', err);
-        return [];
-      });
-      setAppointments(appointmentsData);
+      if (response.success && response.data) {
+        const data = response.data as any;
 
-      // Refresh subscription
-      await refreshSubscription().catch(err => console.error('Error refreshing subscription:', err));
+        // 1. Update Subscription
+        if (data.patient_data?.subscription) {
+          setCurrentSubscription(data.patient_data.subscription);
+        } else {
+          setCurrentSubscription(null);
+        }
 
-      // Refresh API health
-      await checkApiHealth().catch(err => console.error('Error checking API health:', err));
+        // 2. Update Appointments
+        if (data.patient_data?.appointments) {
+          setAppointments(data.patient_data.appointments);
+        }
+
+        // 3. Update Active Sessions
+        if (data.patient_data?.active_sessions) {
+          setActiveTextSessions(data.patient_data.active_sessions);
+        }
+
+        // 4. Refresh API health
+        await checkApiHealth().catch(err => console.error('Error checking API health:', err));
+      } else {
+        console.warn('⚠️ [PatientDashboard] Summary failed, falling back to individual fetches');
+        // Refresh appointments
+        const appointmentsData = await appointmentService.getAppointments().catch(err => {
+          console.error('Error refreshing appointments:', err);
+          return [];
+        });
+        setAppointments(appointmentsData);
+
+        // Refresh subscription
+        await refreshSubscription().catch(err => console.error('Error refreshing subscription:', err));
+
+        // Refresh API health
+        await checkApiHealth().catch(err => console.error('Error checking API health:', err));
+      }
     } catch (error) {
       console.error('PatientDashboard: Home refresh - Error:', error);
     } finally {

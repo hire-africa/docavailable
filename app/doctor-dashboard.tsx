@@ -1195,19 +1195,81 @@ export default function DoctorDashboard() {
 
     setRefreshingHome(true);
     try {
-      // // console.log('🔄 Manual refresh of home tab...');
+      console.log('🔄 [DoctorDashboard] Fetching dashboard summary...');
+      const response = await apiService.get('/dashboard/summary');
 
-      // Refresh all home data with better error handling
-      const promises = [
-        fetchAppointments().catch(err => console.error('Error refreshing appointments:', err)),
-        fetchBookingRequests().catch(err => console.error('Error refreshing booking requests:', err)),
-        fetchConfirmedAppointments().catch(err => console.error('Error refreshing confirmed appointments:', err)),
-        fetchActiveTextSessions().catch(err => console.error('Error refreshing text sessions:', err)),
-        fetchRatings().catch(err => console.error('Error refreshing ratings:', err)),
-        fetchWalletInfo().catch(err => console.error('Error refreshing wallet info:', err))
-      ];
+      if (response.success && response.data) {
+        const data = response.data as any;
 
-      await Promise.allSettled(promises);
+        // 1. Update Wallet Info
+        if (data.doctor_data?.wallet) {
+          setWalletInfo(data.doctor_data.wallet);
+          setEarnings(data.doctor_data.wallet.balance || 0);
+        }
+
+        // 2. Update Appointments
+        if (data.doctor_data?.appointments) {
+          const rawAppointments = data.doctor_data.appointments;
+          setAppointments(rawAppointments);
+
+          // Transformation logic similar to fetchBookingRequests
+          const transformed = rawAppointments.map((request: any) => ({
+            id: request.id,
+            patient_name: request.patientName || (request.patient ? `${request.patient.first_name || ''} ${request.patient.last_name || ''}`.trim() : 'Patient'),
+            doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
+            patientProfilePictureUrl: request.patient?.profile_picture_url || null,
+            patientProfilePicture: request.patient?.profile_picture || null,
+            patientEmail: request.patient?.email,
+            patientGender: request.patient?.gender || request.patient?.sex,
+            patientCountry: request.patient?.country,
+            patientCity: request.patient?.city,
+            patientDateOfBirth: request.patient?.date_of_birth,
+            date: request.appointment_date || request.date,
+            time: request.appointment_time || request.time,
+            appointment_date: request.appointment_date || request.date,
+            appointment_time: request.appointment_time || request.time,
+            appointment_type: request.appointment_type || 'text',
+            reason: request.reason || null,
+            status: request.status === 0 ? 'pending' :
+              request.status === 1 ? 'confirmed' :
+                request.status === 2 ? 'cancelled' :
+                  request.status === 3 ? 'completed' :
+                    request.status === 7 ? 'in_progress' : 'pending',
+            createdAt: request.created_at || '',
+            reschedulePending: request.status === 4 // STATUS_RESCHEDULE_PROPOSED is usually 4
+          }));
+
+          // Set booking requests (pending)
+          const pending = transformed.filter((r: any) => r.status === 'pending');
+          setBookingRequests(pending);
+
+          // Set confirmed appointments
+          const confirmed = transformed.filter((r: any) =>
+            r.status === 'confirmed' || r.status === 'completed' || r.status === 'in_progress'
+          );
+          setConfirmedAppointments(confirmed);
+        }
+
+        // 3. Update Active Sessions
+        if (data.doctor_data?.active_sessions) {
+          setActiveTextSessions(data.doctor_data.active_sessions);
+        }
+
+        // 4. Update Notifications Count (if state exists)
+        // Actually notifications stats are usually handled by NotificationService
+      } else {
+        // Fallback to individual fetches if summary fails
+        console.warn('⚠️ [DoctorDashboard] Summary failed, falling back to individual fetches');
+        const promises = [
+          fetchAppointments(),
+          fetchBookingRequests(),
+          fetchConfirmedAppointments(),
+          fetchActiveTextSessions(),
+          fetchRatings(),
+          fetchWalletInfo()
+        ];
+        await Promise.allSettled(promises);
+      }
     } catch (error) {
       console.error('DoctorDashboard: Home refresh - Error:', error);
     } finally {

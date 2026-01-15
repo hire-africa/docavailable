@@ -25,6 +25,7 @@ use App\Http\Controllers\TextAppointmentController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\BlogFeedController;
 use App\Http\Controllers\AppVersionController;
+use App\Http\Controllers\DashboardController;
 use App\Models\User;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::patch('/profile', [AuthenticationController::class, 'updateProfile']);
     Route::get('/private-document-url', [AuthenticationController::class, 'getPrivateDocumentUrl']);
     Route::post('/change-password', [AuthenticationController::class, 'changePassword']);
+    Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 
     // User & Subscription routes
     Route::get('/subscription', [UserController::class, 'subscription']);

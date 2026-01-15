@@ -1,3 +1,4 @@
+import { AppState, AppStateStatus } from 'react-native';
 import { apiService } from '../app/services/apiService';
 import backgroundSessionTimer, { SessionTimerEvents } from './backgroundSessionTimer';
 
@@ -16,6 +17,7 @@ class GlobalSessionMonitor {
   private checkInterval: NodeJS.Timeout | null = null;
   private readonly CHECK_INTERVAL = 30000; // Check every 30 seconds to reduce load
   private monitoredSessions = new Set<string>();
+  private appStateSubscription: any = null;
 
   constructor() {
     this.initialize();
@@ -43,14 +45,34 @@ class GlobalSessionMonitor {
 
     backgroundSessionTimer.setEvents(timerEvents);
 
-    // Start monitoring
-    this.startMonitoring();
+    // Monitor AppState to pause/resume checks
+    this.appStateSubscription = AppState.addEventListener('change', this.handleAppStateChange);
+
+    // Start monitoring if app is active
+    if (AppState.currentState === 'active') {
+      this.startMonitoring();
+    }
+  }
+
+  private handleAppStateChange = (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'active') {
+      console.log('🌍 [GlobalSessionMonitor] App came to foreground, resuming monitoring');
+      this.startMonitoring();
+    } else {
+      console.log('🌍 [GlobalSessionMonitor] App went to background, pausing monitoring');
+      this.stopMonitoring();
+    }
+  };
+
+  private stopMonitoring() {
+    if (this.checkInterval) {
+      clearInterval(this.checkInterval);
+      this.checkInterval = null;
+    }
   }
 
   private startMonitoring() {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-    }
+    this.stopMonitoring(); // Clear any existing interval
 
     console.log('🌍 [GlobalSessionMonitor] Starting session monitoring');
 
@@ -59,7 +81,11 @@ class GlobalSessionMonitor {
     }, this.CHECK_INTERVAL);
 
     // Initial check after a short delay
-    setTimeout(() => this.checkActiveSessions(), 5000);
+    setTimeout(() => {
+      if (AppState.currentState === 'active') {
+        this.checkActiveSessions();
+      }
+    }, 5000);
   }
 
   private async checkActiveSessions() {
@@ -130,9 +156,10 @@ class GlobalSessionMonitor {
   }
 
   stop() {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
+    this.stopMonitoring();
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
     }
     this.isRunning = false;
     console.log('🌍 [GlobalSessionMonitor] Stopped monitoring');

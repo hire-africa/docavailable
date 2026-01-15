@@ -776,15 +776,58 @@ class ApiService {
     throw lastError;
   }
 
+  private pendingRequests = new Map<string, Promise<any>>();
+  private getCache = new Map<string, { data: any, timestamp: number }>();
+  private readonly CACHE_TTL = 2000; // 2 seconds cache for identical GET requests
+
   async get<T>(url: string, params?: any): Promise<ApiResponse<T>> {
-    return this.retryRequest(async () => {
+    const cacheKey = `${url}${JSON.stringify(params || {})}`;
+    const now = Date.now();
+
+    // Check memory cache first
+    const cached = this.getCache.get(cacheKey);
+    if (cached && (now - cached.timestamp < this.CACHE_TTL)) {
+      console.log(`🚀 [ApiService] Cache hit for: ${url}`);
+      return cached.data;
+    }
+
+    // Check if there's a pending request for the same resource
+    if (this.pendingRequests.has(cacheKey)) {
+      console.log(`🔄 [ApiService] Deduplicating concurrent request to: ${url}`);
+      return this.pendingRequests.get(cacheKey);
+    }
+
+    const request = this.retryRequest(async () => {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.get(url, { params });
       return response.data;
     });
+
+    this.pendingRequests.set(cacheKey, request);
+
+    try {
+      const result = await request;
+      // Store in cache for a short period
+      this.getCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    } finally {
+      // Clear pending status immediately upon completion
+      this.pendingRequests.delete(cacheKey);
+
+      // Schedule cache cleanup for this specific key
+      setTimeout(() => {
+        const current = this.getCache.get(cacheKey);
+        if (current && Date.now() - current.timestamp >= this.CACHE_TTL) {
+          this.getCache.delete(cacheKey);
+        }
+      }, this.CACHE_TTL);
+    }
   }
 
   async post<T>(url: string, data?: any): Promise<ApiResponse<T>> {
     console.log('📤 [ApiService] POST request:', { url, data });
+
+    // Invalidate GET cache on mutations to ensure data consistency
+    this.getCache.clear();
 
     return this.retryRequest(async () => {
       try {
@@ -809,6 +852,7 @@ class ApiService {
   }
 
   async put<T>(url: string, data?: any): Promise<ApiResponse<T>> {
+    this.getCache.clear();
     return this.retryRequest(async () => {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.put(url, data);
       return response.data;
@@ -816,6 +860,7 @@ class ApiService {
   }
 
   async patch<T>(url: string, data?: any): Promise<ApiResponse<T>> {
+    this.getCache.clear();
     return this.retryRequest(async () => {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.patch(url, data);
       return response.data;
@@ -823,6 +868,7 @@ class ApiService {
   }
 
   async delete<T>(url: string): Promise<ApiResponse<T>> {
+    this.getCache.clear();
     return this.retryRequest(async () => {
       const response: AxiosResponse<ApiResponse<T>> = await this.api.delete(url);
       return response.data;
@@ -831,6 +877,7 @@ class ApiService {
 
   // File upload method
   async uploadFile<T>(url: string, formData: FormData): Promise<ApiResponse<T>> {
+    this.getCache.clear();
     console.log('📤 [ApiService] UploadFile request:', { url, formDataEntries: Array.from((formData as any).entries()).map(([key, value]: [any, any]) => ({ key, type: typeof value })) });
 
     // Check and refresh token proactively before upload
