@@ -750,53 +750,10 @@ export default function PatientDashboard() {
     }
   }, [user, loading]);
 
+  // Consolidated initial data fetch
   useEffect(() => {
-    if (user) {
-      appointmentService.getAppointments()
-        .then((appointmentsData) => {
-          setAppointments(appointmentsData);
-          // Trigger conversion check after appointments are loaded
-          setTimeout(() => triggerConversionCheck(), 1000);
-        })
-        .catch(error => {
-          console.error('❌ [PatientDashboard] Error fetching appointments:', error);
-          setAppointments([]);
-        });
-    }
-  }, [user, triggerConversionCheck]);
-
-  useEffect(() => {
-    if (user && user.id) { // Add user.id check to ensure user is fully loaded
-      console.log('PatientDashboard: Loading subscription for user:', user.id);
-
-      // Load user's current subscription from Laravel API
-      apiService.get('/subscription')
-        .then((response: any) => {
-          console.log('PatientDashboard: Subscription API response:', response);
-
-          if (response.success && response.data) {
-            console.log('PatientDashboard: Setting subscription data:', response.data);
-            setCurrentSubscription(response.data as UserSubscription);
-          } else {
-            console.log('PatientDashboard: No subscription data in response, setting to null');
-            setCurrentSubscription(null);
-          }
-        })
-        .catch(error => {
-          console.error('PatientDashboard: Error loading subscription:', error);
-          console.error('PatientDashboard: Error response:', error.response?.data);
-          console.error('PatientDashboard: Error status:', error.response?.status);
-
-          // Don't show error to user for subscription, just set null
-          setCurrentSubscription(null);
-
-          // If it's an authentication error, don't retry
-          if (error.response?.status === 401) {
-            console.log('PatientDashboard: Authentication error loading subscription, not retrying');
-          }
-        });
-    } else {
-      console.log('PatientDashboard: No user or user.id, skipping subscription load');
+    if (user && user.id) {
+      refreshHomeTab();
     }
   }, [user]);
 
@@ -1249,11 +1206,17 @@ export default function PatientDashboard() {
           setActiveTextSessions(data.patient_data.active_sessions);
         }
 
-        // 4. Refresh API health
+        // 4. Update Notifications Count
+        if (data.notifications_stats?.unread_count !== undefined) {
+          setUnreadNotificationCount(data.notifications_stats.unread_count);
+        }
+
+        // 5. Refresh API health
         await checkApiHealth().catch(err => console.error('Error checking API health:', err));
       } else {
         console.warn('⚠️ [PatientDashboard] Summary failed, falling back to individual fetches');
-        // Refresh appointments
+        // Trigger conversion check after appointments might have loaded
+        setTimeout(() => triggerConversionCheck(), 1000);
         const appointmentsData = await appointmentService.getAppointments().catch(err => {
           console.error('Error refreshing appointments:', err);
           return [];

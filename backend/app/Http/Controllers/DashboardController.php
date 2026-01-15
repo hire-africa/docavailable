@@ -13,9 +13,6 @@ use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
-    /**
-     * Get a comprehensive summary of data for the dashboard
-     */
     public function summary(Request $request)
     {
         $user = Auth::user();
@@ -23,23 +20,46 @@ class DashboardController extends Controller
             return response()->json(['success' => false, 'message' => 'Unauthenticated'], 401);
         }
 
-        $summary = [
-            'user' => $user,
-            'notifications_stats' => [
-                'unread_count' => $user->unreadNotifications()->count(),
-            ],
-            'timestamp' => now()->toISOString(),
-        ];
+        // Cache the entire summary for 60 seconds for maximum performance
+        $cacheKey = "comprehensive_dashboard_summary_v2_{$user->id}";
 
-        if ($user->user_type === 'doctor') {
-            $summary['doctor_data'] = $this->getDoctorSummary($user);
-        } elseif ($user->user_type === 'patient') {
-            $summary['patient_data'] = $this->getPatientSummary($user);
-        }
+        $data = Cache::remember($cacheKey, 60, function () use ($user) {
+            // Load only necessary relationships
+            $user->load(['subscription', 'wallet']);
+
+            $summary = [
+                // Only send minimal user data to keep payload small
+                'user' => [
+                    'id' => $user->id,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'display_name' => $user->display_name,
+                    'user_type' => $user->user_type,
+                    'profile_picture_url' => $user->profile_picture_url,
+                ],
+                'notifications_stats' => [
+                    // Direct DB count is faster than Eloquent relationship count
+                    'unread_count' => \Illuminate\Support\Facades\DB::table('notifications')
+                        ->where('notifiable_id', $user->id)
+                        ->where('notifiable_type', User::class)
+                        ->whereNull('read_at')
+                        ->count(),
+                ],
+                'timestamp' => now()->toISOString(),
+            ];
+
+            if ($user->user_type === 'doctor') {
+                $summary['doctor_data'] = $this->getDoctorSummary($user);
+            } elseif ($user->user_type === 'patient') {
+                $summary['patient_data'] = $this->getPatientSummary($user);
+            }
+
+            return $summary;
+        });
 
         return response()->json([
             'success' => true,
-            'data' => $summary
+            'data' => $data
         ]);
     }
 
@@ -48,54 +68,50 @@ class DashboardController extends Controller
      */
     private function getDoctorSummary($user)
     {
-        $wallet = DoctorWallet::getOrCreate($user->id);
+        $wallet = $user->wallet ?: DoctorWallet::getOrCreate($user->id);
 
-        // Cache stats for 30 seconds to balance freshness and performance
-        $cacheKey = "doctor_summary_stats_{$user->id}";
+        // Get upcoming appointments with minimal fields
+        $appointments = Appointment::where('doctor_id', $user->id)
+            ->with(['patient:id,first_name,last_name,profile_picture,gender,country'])
+            ->whereIn('status', [
+                    Appointment::STATUS_PENDING,
+                    Appointment::STATUS_CONFIRMED,
+                    Appointment::STATUS_IN_PROGRESS,
+                    Appointment::STATUS_RESCHEDULE_PROPOSED
+                ])
+            ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')
+            ->orderBy('appointment_date', 'asc')
+            ->orderBy('appointment_time', 'asc')
+            ->limit(10)
+            ->get();
 
-        return Cache::remember($cacheKey, 30, function () use ($user, $wallet) {
-            // Get upcoming appointments (pending or confirmed)
-            $appointments = Appointment::where('doctor_id', $user->id)
-                ->with(['patient:id,first_name,last_name,profile_picture,gender,country'])
-                ->whereIn('status', [
-                        Appointment::STATUS_PENDING,
-                        Appointment::STATUS_CONFIRMED,
-                        Appointment::STATUS_IN_PROGRESS,
-                        Appointment::STATUS_RESCHEDULE_PROPOSED
-                    ])
-                ->orderBy('appointment_date', 'asc')
-                ->orderBy('appointment_time', 'asc')
-                ->limit(10)
-                ->get();
+        foreach ($appointments as $appointment) {
+            if ($appointment->patient) {
+                $appointment->patient->append('profile_picture_url');
+            }
+        }
 
-            // Ensure profile URLs are appended (using the accessor)
-            $appointments->each(function ($appointment) {
-                if ($appointment->patient) {
-                    $appointment->patient->append('profile_picture_url');
-                }
-            });
-
-            return [
-                'wallet' => [
-                    'balance' => $wallet->balance,
-                    'total_earned' => $wallet->total_earned,
-                    'total_withdrawn' => $wallet->total_withdrawn,
-                ],
-                'payment_rates' => DoctorPaymentService::getPaymentAmountsForDoctor($user),
-                'appointments' => $appointments,
-                'active_sessions' => TextSession::where('doctor_id', $user->id)
-                    ->with(['patient:id,first_name,last_name,profile_picture'])
-                    ->where('status', 'active')
-                    ->get(),
-                'stats' => [
-                    'rating' => $user->rating,
-                    'total_ratings' => $user->total_ratings,
-                    'pending_appointments_count' => Appointment::where('doctor_id', $user->id)
-                        ->where('status', Appointment::STATUS_PENDING)
-                        ->count(),
-                ]
-            ];
-        });
+        return [
+            'wallet' => [
+                'balance' => $wallet->balance,
+                'total_earned' => $wallet->total_earned,
+                'total_withdrawn' => $wallet->total_withdrawn,
+            ],
+            'payment_rates' => DoctorPaymentService::getPaymentAmountsForDoctor($user),
+            'appointments' => $appointments,
+            'active_sessions' => TextSession::where('doctor_id', $user->id)
+                ->with(['patient:id,first_name,last_name,profile_picture'])
+                ->where('status', 'active')
+                ->select('id', 'patient_id', 'doctor_id', 'status', 'started_at', 'chat_id')
+                ->get(),
+            'stats' => [
+                'rating' => $user->rating,
+                'total_ratings' => $user->total_ratings,
+                'pending_appointments_count' => Appointment::where('doctor_id', $user->id)
+                    ->where('status', Appointment::STATUS_PENDING)
+                    ->count(),
+            ]
+        ];
     }
 
     /**
@@ -103,48 +119,45 @@ class DashboardController extends Controller
      */
     private function getPatientSummary($user)
     {
-        $cacheKey = "patient_summary_stats_{$user->id}";
+        $subscription = $user->subscription;
 
-        return Cache::remember($cacheKey, 30, function () use ($user) {
-            $subscription = $user->subscription;
+        // Get upcoming appointments with minimal fields
+        $appointments = Appointment::where('patient_id', $user->id)
+            ->with(['doctor:id,first_name,last_name,profile_picture,specialization,rating'])
+            ->whereIn('status', [
+                    Appointment::STATUS_PENDING,
+                    Appointment::STATUS_CONFIRMED,
+                    Appointment::STATUS_IN_PROGRESS,
+                    Appointment::STATUS_RESCHEDULE_PROPOSED
+                ])
+            ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')
+            ->orderBy('appointment_date', 'asc')
+            ->orderBy('appointment_time', 'asc')
+            ->limit(10)
+            ->get();
 
-            // Get upcoming appointments
-            $appointments = Appointment::where('patient_id', $user->id)
-                ->with(['doctor:id,first_name,last_name,profile_picture,specialization,rating'])
-                ->whereIn('status', [
-                        Appointment::STATUS_PENDING,
-                        Appointment::STATUS_CONFIRMED,
-                        Appointment::STATUS_IN_PROGRESS,
-                        Appointment::STATUS_RESCHEDULE_PROPOSED
-                    ])
-                ->orderBy('appointment_date', 'asc')
-                ->orderBy('appointment_time', 'asc')
-                ->limit(10)
-                ->get();
+        foreach ($appointments as $appointment) {
+            if ($appointment->doctor) {
+                $appointment->doctor->append('profile_picture_url');
+            }
+        }
 
-            // Ensure profile URLs are appended
-            $appointments->each(function ($appointment) {
-                if ($appointment->doctor) {
-                    $appointment->doctor->append('profile_picture_url');
-                }
-            });
-
-            return [
-                'subscription' => $subscription ? [
-                    'id' => $subscription->id,
-                    'is_active' => $subscription->isActive,
-                    'plan_name' => $subscription->plan_name,
-                    'text_sessions_remaining' => $subscription->text_sessions_remaining,
-                    'voice_calls_remaining' => $subscription->voice_calls_remaining,
-                    'video_calls_remaining' => $subscription->video_calls_remaining,
-                    'expires_at' => $subscription->expires_at,
-                ] : null,
-                'appointments' => $appointments,
-                'active_sessions' => TextSession::where('patient_id', $user->id)
-                    ->with(['doctor:id,first_name,last_name,profile_picture,specialization'])
-                    ->where('status', 'active')
-                    ->get(),
-            ];
-        });
+        return [
+            'subscription' => $subscription ? [
+                'id' => $subscription->id,
+                'is_active' => $subscription->isActive,
+                'plan_name' => $subscription->plan_name,
+                'text_sessions_remaining' => $subscription->text_sessions_remaining,
+                'voice_calls_remaining' => $subscription->voice_calls_remaining,
+                'video_calls_remaining' => $subscription->video_calls_remaining,
+                'expires_at' => $subscription->expires_at,
+            ] : null,
+            'appointments' => $appointments,
+            'active_sessions' => TextSession::where('patient_id', $user->id)
+                ->with(['doctor:id,first_name,last_name,profile_picture,specialization'])
+                ->where('status', 'active')
+                ->select('id', 'patient_id', 'doctor_id', 'status', 'started_at', 'chat_id')
+                ->get(),
+        ];
     }
 }

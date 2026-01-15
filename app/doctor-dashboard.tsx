@@ -32,7 +32,7 @@ import OnboardingOverlay from '../components/OnboardingOverlay';
 import PermissionsWalkthrough from '../components/PermissionsWalkthrough';
 import appTourService from '../services/appTourService';
 import customAlertService from '../services/customAlertService';
-import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
+import { EndedSessionMetadata } from '../services/endedSessionStorageService';
 import { Activity, addRealtimeActivity, generateUserActivities } from '../utils/activityUtils';
 import { formatAppointmentDate, formatAppointmentDateTime, formatAppointmentTime } from '../utils/appointmentDisplayUtils';
 import { PermissionUtils } from '../utils/PermissionUtils';
@@ -322,106 +322,26 @@ export default function DoctorDashboard() {
     }
   }, [userData]);
 
+  // Consolidated initial data fetch
   useEffect(() => {
-    if (user) {
-      fetchAppointments();
+    if (user && user.id) {
+      refreshHomeTab();
+      updateEnabledDaysCount();
     }
   }, [user]);
 
-  // Fetch booking requests for this doctor immediately when user logs in
-  useEffect(() => {
-    if (user) {
-      fetchBookingRequests();
-    }
-  }, [user]);
-
-  // Additional fetch when appointments tab is active (for real-time updates)
+  // Tab-specific refreshes
   useEffect(() => {
     if (user && activeTab === 'appointments') {
-      fetchBookingRequests();
-    }
-  }, [user, activeTab]);
-
-  // Refresh appointments when appointments tab becomes active
-  useFocusEffect(
-    useCallback(() => {
-      if (user && activeTab === 'appointments') {
-        // console.log('🔄 [DoctorDashboard] Appointments tab focused, refreshing data...');
-        fetchBookingRequests();
-        fetchConfirmedAppointments();
-      }
-    }, [user, activeTab])
-  );
-
-  // Fetch confirmed appointments immediately when user logs in
-  useEffect(() => {
-    if (user && user.id) { // Add user.id check
-      fetchConfirmedAppointments();
-      fetchActiveTextSessions();
-    }
-  }, [user]);
-
-  // Additional fetch when messages tab is active (for real-time updates)
-  useEffect(() => {
-    if (user && activeTab === 'messages') {
+      refreshAppointmentsTab();
+    } else if (user && activeTab === 'messages') {
       fetchConfirmedAppointments();
       fetchActiveTextSessions();
       loadEndedSessions();
     }
   }, [user, activeTab]);
 
-  // Load ended sessions for the messages tab
-  const loadEndedSessions = async () => {
-    if (!user?.id) return;
-
-    try {
-      setLoadingEndedSessions(true);
-      const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
-      setEndedSessions(sessions || []);
-    } catch (error) {
-      console.error('Error loading ended sessions:', error);
-      setEndedSessions([]);
-    } finally {
-      setLoadingEndedSessions(false);
-    }
-  };
-
-  const handleDeleteEndedSession = async (appointmentId: number) => {
-    try {
-      await endedSessionStorageService.deleteEndedSession(appointmentId);
-      setEndedSessions(prev => prev.filter(session => session.appointmentId !== appointmentId));
-      setShowEndedSessionMenu(null);
-    } catch (error) {
-      console.error('Error deleting ended session:', error);
-    }
-  };
-
-  const handleExportEndedSession = async (appointmentId: number) => {
-    try {
-      const exportData = await endedSessionStorageService.exportEndedSession(appointmentId);
-      // Handle export (could show share dialog, etc.)
-      console.log('Exported session data:', exportData);
-      setShowEndedSessionMenu(null);
-    } catch (error) {
-      console.error('Error exporting ended session:', error);
-    }
-  };
-
-  // Fetch ratings immediately when user logs in
-  useEffect(() => {
-    if (user && user.id) { // Add user.id check
-      fetchRatings();
-    }
-  }, [user]);
-
-  // Fetch wallet info immediately when user logs in
-  useEffect(() => {
-    if (user && user.id) { // Add user.id check
-      fetchWalletInfo();
-    }
-  }, [user]);
-
-  // Refresh activities when appointments change or when user logs in
+  // Refresh activities when appointments change
   useEffect(() => {
     if (user && user.id) {
       loadActivities();
@@ -1255,8 +1175,16 @@ export default function DoctorDashboard() {
           setActiveTextSessions(data.doctor_data.active_sessions);
         }
 
-        // 4. Update Notifications Count (if state exists)
-        // Actually notifications stats are usually handled by NotificationService
+        // 4. Update Ratings
+        if (data.doctor_data?.stats?.rating !== undefined) {
+          setRating(data.doctor_data.stats.rating);
+          setTotalRatings(data.doctor_data.stats.total_ratings || 0);
+        }
+
+        // 5. Update Notifications Count
+        if (data.notifications_stats?.unread_count !== undefined) {
+          setUnreadNotificationCount(data.notifications_stats.unread_count);
+        }
       } else {
         // Fallback to individual fetches if summary fails
         console.warn('⚠️ [DoctorDashboard] Summary failed, falling back to individual fetches');
