@@ -20,10 +20,18 @@ export const useTextAppointmentConverter = ({
   const checkAndConvertTextAppointments = useCallback(async () => {
     try {
       console.log('🔄 [TextAppointmentConverter] Checking appointments for conversion...');
-      
+
+      // Optimization: Fetch active sessions once to avoid API calls inside the loop
+      const activeSessions = await textSessionService.getActiveTextSessions();
+      const activeSessionAppointmentIds = new Set(
+        activeSessions
+          .filter(s => s.appointment_id)
+          .map(s => Number(s.appointment_id))
+      );
+
       for (const appointment of appointments) {
         const appointmentId = appointment.id;
-        
+
         // Skip if already processed
         if (processedAppointments.current.has(appointmentId)) {
           continue;
@@ -32,9 +40,10 @@ export const useTextAppointmentConverter = ({
         // Check if this appointment should be converted
         if (textSessionService.shouldConvertToTextSession(appointment)) {
           console.log('⏰ [TextAppointmentConverter] Appointment ready for conversion:', appointmentId);
-          
-          // Check if text session already exists
-          const hasExistingSession = await textSessionService.hasTextSessionForAppointment(appointmentId);
+
+          // Check if text session already exists using optimized local lookup
+          const hasExistingSession = activeSessionAppointmentIds.has(Number(appointmentId));
+
           if (hasExistingSession) {
             console.log('ℹ️ [TextAppointmentConverter] Text session already exists for appointment:', appointmentId);
             processedAppointments.current.add(appointmentId);

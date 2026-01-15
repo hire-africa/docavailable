@@ -473,8 +473,12 @@ export default function ChatPage() {
   // Check if this is an instant session
   const isInstantSession = appointmentId.startsWith('text_session_');
 
-  // Extract session ID for instant sessions
+  // State to track the active Unified Session ID for scheduled appointments
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
+  // Extract session ID for instant sessions OR use the active session ID for converted appointments
   const sessionId = isInstantSession ? appointmentId.replace('text_session_', '') : '';
+  const effectiveSessionId = activeSessionId || sessionId;
 
   // Get current user ID
   const currentUserId = user?.id || 0;
@@ -487,8 +491,8 @@ export default function ChatPage() {
   const patientId = chatInfo?.patient_id || textSessionInfo?.patient_id || 0; // Use a single source of truth for patientId
 
   // Determine if the hook should be enabled.
-  // It requires the session to be an instant session, and for us to have valid IDs and an auth token.
-  const isDetectorEnabled = isInstantSession && doctorId > 0 && patientId > 0 && !!token;
+  // It requires the session to be an instant session OR a converted appointment, and for us to have valid IDs and an auth token.
+  const isDetectorEnabled = (isInstantSession || !!activeSessionId) && doctorId > 0 && patientId > 0 && !!token;
 
   // Debug logging for IDs
   // NOTE: This console.log is kept for your debugging purposes.
@@ -500,6 +504,8 @@ export default function ChatPage() {
     textSessionDoctorId: textSessionInfo?.doctor_id,
     isInstantSession,
     sessionId,
+    activeSessionId,
+    effectiveSessionId,
     appointmentId,
     chatInfoLoaded: !!chatInfo,
     textSessionInfoLoaded: !!textSessionInfo,
@@ -522,7 +528,7 @@ export default function ChatPage() {
     forceStateSync,
     updateAuthToken
   } = useInstantSessionDetector({
-    sessionId,
+    sessionId: effectiveSessionId,
     appointmentId,
     patientId: patientId,
     doctorId: doctorId,
@@ -552,42 +558,43 @@ export default function ChatPage() {
   // Debug instant session detector configuration
   useEffect(() => {
     console.log('🔍 [InstantSession] Detector Config Debug:', {
-      sessionId,
+      sessionId: effectiveSessionId,
       appointmentId,
       patientId: patientId,
       doctorId: doctorId,
       chatInfoPatientId: chatInfo?.patient_id,
       textSessionPatientId: textSessionInfo?.patient_id,
       isInstantSession,
+      activeSessionId,
       enabled: isDetectorEnabled
     });
     console.log('🔍 [InstantSession] Full chatInfo object:', chatInfo);
     console.log('🔍 [InstantSession] Full textSessionInfo object:', textSessionInfo);
-  }, [sessionId, appointmentId, patientId, doctorId, isInstantSession, isDetectorEnabled, chatInfo, textSessionInfo]);
+  }, [effectiveSessionId, appointmentId, patientId, doctorId, isInstantSession, activeSessionId, isDetectorEnabled, chatInfo, textSessionInfo]);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Show instant session UI when patient sends first message or when timer is active
   useEffect(() => {
     // Only show the timer UI when the timer is confirmed to be active by the hook
-    if (isInstantSession && isTimerActive && !hasDoctorResponded && !isSessionActivated) {
+    if ((isInstantSession || activeSessionId) && isTimerActive && !hasDoctorResponded && !isSessionActivated) {
       setShowInstantSessionUI(true);
-    } else if (isInstantSession && (hasDoctorResponded || isSessionActivated)) {
+    } else if ((isInstantSession || activeSessionId) && (hasDoctorResponded || isSessionActivated)) {
       setShowInstantSessionUI(false);
     } // When the timer is not active, the component will be hidden.
-  }, [isInstantSession, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
+  }, [isInstantSession, activeSessionId, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
 
   // Log when doctor ID becomes available
   useEffect(() => {
-    if (isInstantSession && doctorId > 0) {
+    if ((isInstantSession || activeSessionId) && doctorId > 0) {
       console.log('✅ [InstantSession] Doctor ID now available:', doctorId);
       console.log('✅ [InstantSession] Detector should now be enabled');
     }
-  }, [isInstantSession, doctorId]);
+  }, [isInstantSession, activeSessionId, doctorId]);
 
   // Log when chat info loads
   useEffect(() => {
-    if (isInstantSession) {
+    if (isInstantSession || activeSessionId) {
       console.log('📊 [InstantSession] Chat info loaded:', {
         chatInfo: chatInfo ? 'loaded' : 'not loaded',
         textSessionInfo: textSessionInfo ? 'loaded' : 'not loaded',
@@ -596,11 +603,11 @@ export default function ChatPage() {
         currentUserId
       });
     }
-  }, [isInstantSession, chatInfo, textSessionInfo, doctorId, patientId, currentUserId]);
+  }, [isInstantSession, activeSessionId, chatInfo, textSessionInfo, doctorId, patientId, currentUserId]);
 
   // Watch for new messages and trigger instant session detection
   useEffect(() => {
-    if (isInstantSession && messages.length > 0) {
+    if ((isInstantSession || activeSessionId) && messages.length > 0) {
       // Check if there are any patient messages
       const patientMessages = messages.filter(msg => msg.sender_id === currentUserId);
       const doctorMessages = messages.filter(msg => msg.sender_id === doctorId);
@@ -636,7 +643,7 @@ export default function ChatPage() {
         triggerDoctorMessageDetection(firstDoctorMessage);
       }
     }
-  }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
+  }, [isInstantSession, activeSessionId, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
 
   // Debug current user ID
   console.log('🔍 Current user ID debug:', {
@@ -925,35 +932,58 @@ export default function ChatPage() {
       setIsSessionActive(true);
       // Don't reset timer here - it will be calculated from sessionStartTime
     }
-    // For text appointments: activate when session becomes active (show for both users)
-    else if (!isInstantSession && textAppointmentSession.isActive && !isSessionActive) {
+    // For text appointments (Unified and Legacy): activate when session becomes active (show for both users)
+    else if (!isInstantSession && (textAppointmentSession.isActive || activeSessionId) && !isSessionActive) {
       console.log('🎬 [SessionHeader] Activating session header - text appointment active');
       setIsSessionActive(true);
       // Don't reset timer here - it will be calculated from textAppointmentSession.startTime
     }
     // Deactivate when session ends
-    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !textAppointmentSession.isActive))) {
+    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !textAppointmentSession.isActive && !activeSessionId))) {
       console.log('🛑 [SessionHeader] Deactivating session header');
       setIsSessionActive(false);
     }
-  }, [isInstantSession, hasDoctorResponded, textAppointmentSession.isActive, isSessionActive]);
+  }, [isInstantSession, hasDoctorResponded, textAppointmentSession.isActive, activeSessionId, isSessionActive]);
 
-  // Function to start text appointment session via API
+  // Function to start text appointment session via API (Unified Session System)
   const startTextAppointmentSession = async () => {
     try {
-      const response = await apiService.post('/text-appointments/start-session', {
+      console.log('🔄 [TextAppointment] Starting session via Unified System...');
+
+      // Use the new create-from-appointment endpoint to create a TextSession
+      const response = await apiService.post('/text-sessions/create-from-appointment', {
         appointment_id: getNumericAppointmentId(),
-        user_timezone: getUserTimezone() // Include user timezone for backend validation
+        doctor_id: chatInfo?.doctor_id,
+        patient_id: chatInfo?.patient_id,
+        appointment_type: 'text',
+        reason: 'Scheduled Appointment',
+        user_timezone: getUserTimezone() // Include user timezone to prevent 400 errors
       });
 
       if (response.success) {
-        console.log('✅ [TextAppointment] Session started successfully:', response.data);
+        console.log('✅ [TextAppointment] Session started successfully (Unified):', response.data);
+        const newSessionId = String(response.data.id);
+        setActiveSessionId(newSessionId); // Store new session ID
+
+        // Update textSessionInfo to enable instant session features
+        setTextSessionInfo({
+          id: response.data.id,
+          doctor_id: response.data.doctor_id,
+          patient_id: response.data.patient_id,
+          started_at: response.data.created_at,
+          status: response.data.status,
+          reason: response.data.reason,
+          doctor: response.data.doctor,
+          patient: response.data.patient
+        });
+
+        // Mark textAppointmentSession as active to keep UI happy/consistent
         setTextAppointmentSession(prev => ({
           ...prev,
           isActive: true,
-          startTime: new Date(response.data.start_time),
-          lastActivityTime: new Date(response.data.start_time),
-          sessionsUsed: response.data.sessions_used || 0
+          startTime: new Date(response.data.created_at),
+          lastActivityTime: new Date(response.data.updated_at),
+          sessionsUsed: 0
         }));
       } else {
         console.error('❌ [TextAppointment] Failed to start session:', response.message);
@@ -964,7 +994,11 @@ export default function ChatPage() {
   };
 
   // Function to update text appointment activity via API
+  // NOTE: For unified sessions (activeSessionId set), this is handled by backgroundSessionTimer/detector
   const updateTextAppointmentActivity = async () => {
+    // If we have an active unified session, skip the old activity update
+    if (activeSessionId) return;
+
     try {
       const response = await apiService.post('/text-appointments/update-activity', {
         appointment_id: getNumericAppointmentId(),
@@ -984,7 +1018,9 @@ export default function ChatPage() {
 
   // Monitor activity and handle session logic for text appointments
   useEffect(() => {
-    if (!isTextAppointment || !textAppointmentSession.isActive || textAppointmentSession.isEnded) {
+    // If we have a unified session ID, we don't need this legacy polling loop
+    // valid unified sessions are handled by useInstantSessionDetector
+    if (!isTextAppointment || !textAppointmentSession.isActive || textAppointmentSession.isEnded || activeSessionId) {
       return;
     }
 
@@ -1033,10 +1069,13 @@ export default function ChatPage() {
 
     const interval = setInterval(checkActivity, 60000); // Check every minute
     return () => clearInterval(interval);
-  }, [isTextAppointment, textAppointmentSession]);
+  }, [isTextAppointment, textAppointmentSession, activeSessionId]);
 
   // Function to process text appointment deduction via API
   const processTextAppointmentDeduction = async (sessionsToDeduct: number, reason: string) => {
+    // If unified session, skip legacy deduction
+    if (activeSessionId) return;
+
     try {
       const response = await apiService.post('/text-appointments/process-deduction', {
         appointment_id: getNumericAppointmentId(),
@@ -1056,6 +1095,25 @@ export default function ChatPage() {
 
   // Function to end text appointment session
   const endTextAppointmentSession = async (additionalSessions = 0) => {
+    // If unified session, use the new endpoint
+    if (activeSessionId) {
+      console.log(`🏁 [TextAppointment] Ending Unified Session: ${activeSessionId}`);
+      try {
+        const response = await apiService.post(`/text-sessions/${activeSessionId}/end`, {});
+        if (response.success) {
+          console.log('✅ [TextAppointment] Unified Session ended successfully');
+          setIsSessionActive(false);
+          setSessionEnded(true);
+        } else {
+          console.error('❌ [TextAppointment] Failed to end Unified Session:', response.message);
+        }
+      } catch (error) {
+        console.error('❌ [TextAppointment] Error ending Unified Session:', error);
+      }
+      return;
+    }
+
+    // Legacy termination flow
     const totalSessions = textAppointmentSession.sessionsUsed + additionalSessions;
     console.log(`🏁 [TextAppointment] Ending session, total sessions used: ${totalSessions}`);
 

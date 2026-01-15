@@ -14,7 +14,7 @@ export interface ActiveSession {
 class GlobalSessionMonitor {
   private isRunning = false;
   private checkInterval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL = 10000; // Check every 10 seconds for faster response
+  private readonly CHECK_INTERVAL = 30000; // Check every 30 seconds to reduce load
   private monitoredSessions = new Set<string>();
 
   constructor() {
@@ -23,17 +23,17 @@ class GlobalSessionMonitor {
 
   private async initialize() {
     if (this.isRunning) return;
-    
+
     console.log('🌍 [GlobalSessionMonitor] Initializing global session monitor');
     this.isRunning = true;
-    
+
     // Set up background timer events
     const timerEvents: SessionTimerEvents = {
       onDeductionTriggered: (sessionId, deductions) => {
         console.log('💰 [GlobalSessionMonitor] Deduction triggered for session:', sessionId, 'deductions:', deductions);
       },
       onTimerUpdate: (sessionId, elapsedMinutes, nextDeductionIn) => {
-        console.log('🕐 [GlobalSessionMonitor] Timer update for session:', sessionId, 'elapsed:', elapsedMinutes, 'next in:', nextDeductionIn);
+        // Reduced logging for timer updates to keep logs clean
       },
       onSessionEnded: (sessionId) => {
         console.log('🕐 [GlobalSessionMonitor] Session ended:', sessionId);
@@ -42,7 +42,7 @@ class GlobalSessionMonitor {
     };
 
     backgroundSessionTimer.setEvents(timerEvents);
-    
+
     // Start monitoring
     this.startMonitoring();
   }
@@ -53,46 +53,46 @@ class GlobalSessionMonitor {
     }
 
     console.log('🌍 [GlobalSessionMonitor] Starting session monitoring');
-    
+
     this.checkInterval = setInterval(async () => {
       await this.checkActiveSessions();
     }, this.CHECK_INTERVAL);
 
-    // Check immediately
-    this.checkActiveSessions();
+    // Initial check after a short delay
+    setTimeout(() => this.checkActiveSessions(), 5000);
   }
 
   private async checkActiveSessions() {
     try {
-      // Only log if debug mode is enabled or if there are monitored sessions
-      if (this.monitoredSessions.size > 0) {
-        console.log('🌍 [GlobalSessionMonitor] Checking for active sessions (monitoring:', this.monitoredSessions.size, ')');
+      // Clean up any ended sessions from the background timer first
+      if (backgroundSessionTimer.getAllActiveSessions().length > 0) {
+        await backgroundSessionTimer.cleanupEndedSessions();
       }
-      
-      // First, clean up any ended sessions from the background timer
-      await backgroundSessionTimer.cleanupEndedSessions();
-      
-      // Get all active text sessions
+
+      // Get all active text sessions - only if we have monitored sessions or every few ticks
+      const shouldCheck = this.monitoredSessions.size > 0 || Math.random() < 0.2;
+      if (!shouldCheck) return;
+
       const response = await apiService.get('/text-sessions/active');
-      
+
       if ((response.data as any)?.success && (response.data as any)?.data) {
         const activeSessions = (response.data as any).data as ActiveSession[];
-        
+
         console.log('🌍 [GlobalSessionMonitor] Found active sessions:', activeSessions.length);
-        
+
         for (const session of activeSessions) {
           // Only monitor sessions that are active and have been activated
           if (session.status === 'active' && session.activated_at) {
             const sessionId = session.id.toString();
-            
+
             // Check if we're already monitoring this session
             if (!this.monitoredSessions.has(sessionId)) {
               console.log('🌍 [GlobalSessionMonitor] Starting timer for new active session:', sessionId);
-              
+
               // Start background timer for this session
               const activatedAt = new Date(session.activated_at);
               await backgroundSessionTimer.startSessionTimer(sessionId, activatedAt);
-              
+
               this.monitoredSessions.add(sessionId);
             } else {
               // Session is already being monitored, check if timer is still active
@@ -113,7 +113,7 @@ class GlobalSessionMonitor {
             }
           }
         }
-        
+
         // Clean up any sessions we're monitoring that are no longer in the active list
         const activeSessionIds = new Set(activeSessions.map(s => s.id.toString()));
         for (const monitoredSessionId of this.monitoredSessions) {

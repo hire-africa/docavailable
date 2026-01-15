@@ -819,9 +819,9 @@ export default function PatientDashboard() {
         });
     };
 
-    // Poll every 10 seconds for the first 2 minutes after component mount
+    // Poll every 30 seconds for the first 2 minutes after component mount
     // This helps catch subscription updates if the payment redirect didn't work properly
-    const pollInterval = setInterval(pollForSubscriptionUpdates, 10000);
+    const pollInterval = setInterval(pollForSubscriptionUpdates, 30000);
 
     // Stop polling after 2 minutes
     const stopPollingTimeout = setTimeout(() => {
@@ -1466,8 +1466,8 @@ export default function PatientDashboard() {
     if (user) {
       checkApiHealth();
 
-      // Set up periodic health checks every 30 seconds
-      const healthCheckInterval = setInterval(checkApiHealth, 30000);
+      // Set up periodic health checks every 60 seconds
+      const healthCheckInterval = setInterval(checkApiHealth, 60000);
 
       return () => clearInterval(healthCheckInterval);
     }
@@ -1555,8 +1555,8 @@ export default function PatientDashboard() {
     // Initial check after 5 seconds
     const initialTimeout = setTimeout(pollPaymentStatus, 5000);
 
-    // Then poll every 3 seconds
-    paymentPollingRef.current = setInterval(pollPaymentStatus, 3000);
+    // Then poll every 5 seconds
+    paymentPollingRef.current = setInterval(pollPaymentStatus, 5000);
 
     return () => {
       clearTimeout(initialTimeout);
@@ -4324,8 +4324,17 @@ export default function PatientDashboard() {
           }
         }}
         onPaymentDetected={() => {
-          console.log('✅ Payment detected via navigation! Forcing poll...');
-          // Trigger immediate poll
+          console.log('✅ Payment success detected! Closing modal immediately.');
+          setShowCheckoutModal(false);
+          setShowSubscriptions(false);
+
+          // Stop polling interval
+          if (paymentPollingRef.current) {
+            clearInterval(paymentPollingRef.current);
+            paymentPollingRef.current = null;
+          }
+
+          // Trigger immediate poll to refresh UI status
           pollPaymentStatus();
         }}
       />

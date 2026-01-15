@@ -256,9 +256,9 @@ class AuthenticationController extends Controller
 
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_national_id.jpg';
-                        $path = 'private_documents/' . $filename;
-                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
-                        $nationalIdPath = $path; // Store the full path for private access
+                        $path = 'id_documents/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $image);
+                        $nationalIdPath = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
                     }
                 }
 
@@ -270,9 +270,9 @@ class AuthenticationController extends Controller
 
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_degree.jpg';
-                        $path = 'private_documents/' . $filename;
-                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
-                        $medicalDegreePath = $path; // Store the full path for private access
+                        $path = 'medical_degrees/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $image);
+                        $medicalDegreePath = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
                     }
                 }
 
@@ -284,9 +284,9 @@ class AuthenticationController extends Controller
 
                     if ($image && strlen($image) > 100) { // Reduced to 100 bytes for uncompressed images
                         $filename = \Illuminate\Support\Str::uuid() . '_medical_licence.jpg';
-                        $path = 'private_documents/' . $filename;
-                        \Illuminate\Support\Facades\Storage::disk('spaces_private')->put($path, $image);
-                        $medicalLicencePath = $path; // Store the full path for private access
+                        $path = 'medical_licences/' . $filename;
+                        \Illuminate\Support\Facades\Storage::disk('spaces')->put($path, $image);
+                        $medicalLicencePath = \Illuminate\Support\Facades\Storage::disk('spaces')->url($path);
                     }
                 }
             }
@@ -836,8 +836,8 @@ class AuthenticationController extends Controller
             // This validates the signature and ensures the token is authentic
             $response = \Illuminate\Support\Facades\Http::timeout(10)
                 ->get('https://oauth2.googleapis.com/tokeninfo', [
-                    'id_token' => $idToken
-                ]);
+                        'id_token' => $idToken
+                    ]);
 
             if (!$response->successful()) {
                 Log::error('Google token verification failed - API returned error', [
@@ -1434,7 +1434,17 @@ class AuthenticationController extends Controller
                 ], 404);
             }
 
-            // Generate a temporary signed URL (valid for 1 hour)
+            // If it's already a full URL (new behavior), return it directly
+            if (filter_var($documentPath, FILTER_VALIDATE_URL)) {
+                return response()->json([
+                    'success' => true,
+                    'url' => $documentPath,
+                    'is_public' => true,
+                    'expires_at' => null
+                ]);
+            }
+
+            // Generate a temporary signed URL (valid for 1 hour) for legacy private paths
             $url = \Illuminate\Support\Facades\Storage::disk('spaces_private')->temporaryUrl(
                 $documentPath,
                 now()->addHour()

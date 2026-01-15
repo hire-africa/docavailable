@@ -28,7 +28,7 @@ class BackgroundSessionTimer {
 
   private async initialize() {
     if (this.isInitialized) return;
-    
+
     try {
       // Load persisted timer states from storage
       await this.loadPersistedStates();
@@ -46,7 +46,7 @@ class BackgroundSessionTimer {
         const states = JSON.parse(storedStates);
         for (const [sessionId, state] of Object.entries(states)) {
           this.states.set(sessionId, state as SessionTimerState);
-          
+
           // Restart timer if session was active
           if (state.isActive) {
             this.startTimer(sessionId, new Date(state.startTime));
@@ -74,10 +74,10 @@ class BackgroundSessionTimer {
 
   async startSessionTimer(sessionId: string, startTime: Date = new Date()) {
     console.log('🕐 [BackgroundTimer] Starting timer for session:', sessionId, 'at:', startTime.toISOString());
-    
+
     // Stop existing timer if any
     this.stopSessionTimer(sessionId);
-    
+
     // Create timer state
     const state: SessionTimerState = {
       sessionId,
@@ -86,12 +86,12 @@ class BackgroundSessionTimer {
       sessionsDeducted: 0,
       isActive: true
     };
-    
+
     this.states.set(sessionId, state);
     await this.persistStates();
-    
+
     console.log('🕐 [BackgroundTimer] Timer state created and persisted:', state);
-    
+
     // Start the timer
     this.startTimer(sessionId, startTime);
   }
@@ -99,67 +99,54 @@ class BackgroundSessionTimer {
   private startTimer(sessionId: string, startTime: Date) {
     const timer = setInterval(async () => {
       await this.processTimerTick(sessionId);
-    }, 10000); // Check every 10 seconds for more accurate timing
-    
+    }, 30000); // Check every 30 seconds instead of 10 to reduce load
+
     this.timers.set(sessionId, timer);
     console.log('🕐 [BackgroundTimer] Timer started for session:', sessionId);
   }
 
   private async processTimerTick(sessionId: string) {
     const tickTime = new Date();
-    console.log('🕐 [BackgroundTimer] Processing timer tick for session:', sessionId, 'at:', tickTime.toISOString());
-    
+
     const state = this.states.get(sessionId);
-    if (!state || !state.isActive) {
-      console.log('🕐 [BackgroundTimer] Timer tick skipped - session not active:', sessionId, 'state:', state);
-      return;
-    }
+    if (!state || !state.isActive) return;
 
-    console.log('🕐 [BackgroundTimer] Session state:', {
-      sessionId,
-      startTime: state.startTime,
-      sessionsDeducted: state.sessionsDeducted,
-      isActive: state.isActive,
-      lastUpdateTime: state.lastUpdateTime
-    });
+    // Only verify with backend occasionally (every 2 minutes) to save bandwidth
+    const lastUpdate = new Date(state.lastUpdateTime);
+    const msSinceUpdate = tickTime.getTime() - lastUpdate.getTime();
 
-    // Verify session is still active on the backend before processing deductions
-    try {
-      const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
-      if (sessionResponse.data && (sessionResponse.data as any).success) {
-        const sessionData = (sessionResponse.data as any).data;
-        if (sessionData.status !== 'active') {
-          console.log('🕐 [BackgroundTimer] Session no longer active on backend, stopping timer:', sessionId, 'status:', sessionData.status);
-          this.endSessionTimer(sessionId);
-          return;
+    if (msSinceUpdate > 120000) {
+      try {
+        const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
+        if (sessionResponse.data && (sessionResponse.data as any).success) {
+          const sessionData = (sessionResponse.data as any).data;
+          if (sessionData.status !== 'active') {
+            console.log('🕐 [BackgroundTimer] Session no longer active on backend, stopping timer:', sessionId);
+            this.endSessionTimer(sessionId);
+            return;
+          }
         }
-      } else {
-        console.log('🕐 [BackgroundTimer] Failed to verify session status, stopping timer:', sessionId);
-        this.endSessionTimer(sessionId);
-        return;
+      } catch (error) {
+        console.error('❌ [BackgroundTimer] Failed to verify session status:', error);
       }
-    } catch (error) {
-      console.error('❌ [BackgroundTimer] Failed to verify session status:', error);
-      // Don't stop the timer on network errors, just skip this tick
-      return;
     }
 
     const currentTime = new Date();
     const startTime = new Date(state.startTime);
     const elapsedMinutes = Math.floor((currentTime.getTime() - startTime.getTime()) / (1000 * 60));
-    
+
     // Calculate deductions and next deduction time
     const deductions = Math.floor(elapsedMinutes / 10);
     const nextDeductionMinute = Math.ceil(elapsedMinutes / 10) * 10;
     const minutesUntilNextDeduction = Math.max(0, nextDeductionMinute - elapsedMinutes);
-    
+
     // Check if we've hit a 10-minute mark and need to trigger deduction
     const previousDeductions = Math.floor((elapsedMinutes - 1) / 10);
     const currentDeductions = Math.floor(elapsedMinutes / 10);
-    
+
     // More precise check: trigger deduction exactly at 10, 20, 30, etc. minutes
     const shouldTriggerDeduction = currentDeductions > previousDeductions && elapsedMinutes >= 10;
-    
+
     console.log('🕐 [BackgroundTimer] Timer tick:', {
       sessionId,
       elapsedMinutes,
@@ -169,10 +156,10 @@ class BackgroundSessionTimer {
       startTime: startTime.toISOString(),
       currentTime: currentTime.toISOString()
     });
-    
+
     if (shouldTriggerDeduction) {
       const deductionsToProcess = currentDeductions - state.sessionsDeducted;
-      
+
       console.log('💰 [BackgroundTimer] 10-minute mark reached, triggering backend deduction:', {
         sessionId,
         elapsedMinutes,
@@ -181,21 +168,21 @@ class BackgroundSessionTimer {
         deductionsToProcess,
         alreadyDeducted: state.sessionsDeducted
       });
-      
+
       if (deductionsToProcess > 0) {
         console.log('💰 [BackgroundTimer] Processing deduction - calling backend API');
-        
+
         // Trigger backend auto-deduction
         await this.triggerAutoDeduction(sessionId, deductionsToProcess);
-        
+
         // Update state
         state.sessionsDeducted = currentDeductions;
         state.lastUpdateTime = currentTime.toISOString();
         await this.persistStates();
-        
+
         // Notify listeners
         this.events?.onDeductionTriggered(sessionId, deductionsToProcess);
-        
+
         // Notify UI via event emitter
         sessionTimerNotifier.notifyDeduction({
           sessionId,
@@ -210,14 +197,14 @@ class BackgroundSessionTimer {
         });
       }
     }
-    
+
     // Update last update time
     state.lastUpdateTime = currentTime.toISOString();
     await this.persistStates();
-    
+
     // Notify listeners of timer update
     this.events?.onTimerUpdate(sessionId, elapsedMinutes, minutesUntilNextDeduction);
-    
+
     // Notify UI via event emitter
     sessionTimerNotifier.notifyTimerUpdate({
       sessionId,
@@ -231,27 +218,27 @@ class BackgroundSessionTimer {
   private async triggerAutoDeduction(sessionId: string, deductions: number) {
     try {
       console.log('💰 [BackgroundTimer] Triggering auto-deduction for session:', sessionId, 'deductions:', deductions);
-      
+
       const requestData = {
         triggered_by: 'background_timer',
         deductions_requested: deductions
       };
-      
+
       console.log('💰 [BackgroundTimer] Sending deduction request to existing endpoint /text-sessions/${sessionId}/auto-deduction:', requestData);
-      
+
       const response = await apiService.post(`/text-sessions/${sessionId}/auto-deduction`, requestData);
-      
+
       console.log('💰 [BackgroundTimer] Auto-deduction API response:', {
         status: response.status,
         statusText: response.statusText,
         data: response.data,
         headers: response.headers
       });
-      
+
       if (response.status === 200 && (response.data as any)?.success) {
         const deductionData = (response.data as any).data;
         console.log('✅ [BackgroundTimer] Auto-deduction processed successfully:', deductionData);
-        
+
         if (deductionData.deductions_processed > 0) {
           console.log(`🔔 [BackgroundTimer] ${deductionData.deductions_processed} session(s) deducted via backend`);
         } else {
@@ -276,7 +263,7 @@ class BackgroundSessionTimer {
         } : 'No response',
         stack: error.stack
       });
-      
+
       // If it's a 404 or 405, the endpoint might not exist
       if (error.response?.status === 404 || error.response?.status === 405) {
         console.error('🚨 [BackgroundTimer] Auto-deduction endpoint not found - check backend implementation');
@@ -291,7 +278,7 @@ class BackgroundSessionTimer {
       this.timers.delete(sessionId);
       console.log('🕐 [BackgroundTimer] Timer stopped for session:', sessionId);
     }
-    
+
     // Mark as inactive but keep state for reference
     const state = this.states.get(sessionId);
     if (state) {
@@ -320,7 +307,7 @@ class BackgroundSessionTimer {
   async cleanupOldSessions() {
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    
+
     for (const [sessionId, state] of this.states.entries()) {
       const lastUpdate = new Date(state.lastUpdateTime);
       if (!state.isActive && lastUpdate < oneDayAgo) {
@@ -328,17 +315,20 @@ class BackgroundSessionTimer {
         console.log('🧹 [BackgroundTimer] Cleaned up old session:', sessionId);
       }
     }
-    
+
     await this.persistStates();
   }
 
   // Clean up ended sessions by checking their status on the backend
   async cleanupEndedSessions() {
+    // Only run cleanup periodically (20% of the time it's called) to save battery/network
+    if (Math.random() > 0.2 && this.states.size > 0) return;
+
     // Only log if there are sessions to clean up
     if (this.states.size > 0) {
       console.log('🧹 [BackgroundTimer] Cleaning up ended sessions... (active:', this.states.size, ')');
     }
-    
+
     for (const [sessionId, state] of this.states.entries()) {
       try {
         const sessionResponse = await apiService.get(`/text-sessions/${sessionId}`);
@@ -350,9 +340,10 @@ class BackgroundSessionTimer {
           }
         }
       } catch (error) {
-        console.error('❌ [BackgroundTimer] Failed to check session status during cleanup:', sessionId, error);
-        // If we can't check the status, assume it's ended and clean it up
-        this.endSessionTimer(sessionId);
+        // Only cleanup if it's a 404 - meaning session is gone
+        if (error.response?.status === 404) {
+          this.endSessionTimer(sessionId);
+        }
       }
     }
   }
