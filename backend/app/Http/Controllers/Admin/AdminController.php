@@ -25,24 +25,24 @@ class AdminController extends Controller
         $perPage = $request->get('per_page', 20);
         $role = $request->get('role');
         $search = $request->get('search');
-        
+
         $query = User::with(['subscription']);
-        
+
         // Apply filters
         if ($role) {
             $query->where('user_type', $role);
         }
-        
+
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
-        
+
         $users = $query->orderBy('created_at', 'desc')->paginate($perPage);
-        
+
         return response()->json([
             'success' => true,
             'data' => $users
@@ -58,26 +58,26 @@ class AdminController extends Controller
         $status = $request->get('status');
         $date = $request->get('date');
         $doctorId = $request->get('doctor_id');
-        
+
         $query = Appointment::with(['patient', 'doctor']);
-        
+
         // Apply filters
         if ($status !== null) {
             $query->where('status', $status);
         }
-        
+
         if ($date) {
             $query->whereDate('appointment_date', $date);
         }
-        
+
         if ($doctorId) {
             $query->where('doctor_id', $doctorId);
         }
-        
+
         $appointments = $query->orderBy('appointment_date', 'desc')
-                             ->orderBy('appointment_time', 'asc')
-                             ->paginate($perPage);
-        
+            ->orderBy('appointment_time', 'asc')
+            ->paginate($perPage);
+
         return response()->json([
             'appointments' => $appointments
         ]);
@@ -140,23 +140,23 @@ class AdminController extends Controller
     {
         $perPage = $request->get('per_page', 20);
         $search = $request->get('search');
-        
+
         $query = User::where('user_type', 'doctor')
-                    ->where('status', 'pending');
-        
+            ->where('status', 'pending');
+
         // Apply search filter
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('specialization', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('specialization', 'like', "%{$search}%");
             });
         }
-        
+
         $doctors = $query->orderBy('created_at', 'desc')
-                        ->paginate($perPage);
-        
+            ->paginate($perPage);
+
         // Add profile picture URLs to each doctor
         $doctors->getCollection()->transform(function ($doctor) {
             $doctorData = $doctor->toArray();
@@ -165,7 +165,7 @@ class AdminController extends Controller
             }
             return $doctorData;
         });
-        
+
         return response()->json([
             'success' => true,
             'data' => $doctors
@@ -178,34 +178,27 @@ class AdminController extends Controller
     public function getDoctorDetails($doctorId): JsonResponse
     {
         $doctor = User::where('user_type', 'doctor')
-                     ->where('id', $doctorId)
-                     ->first();
-        
+            ->where('id', $doctorId)
+            ->first();
+
         if (!$doctor) {
             return response()->json([
                 'success' => false,
                 'message' => 'Doctor not found'
             ], 404);
         }
-        
+
         // Generate full URLs for images if they exist
         $doctorData = $this->generateImageUrls($doctor);
-        
+
         // Map backend field names to frontend expectations
         $doctorData['certificate_image'] = $doctor->medical_degree;
         $doctorData['license_image'] = $doctor->medical_licence;
-        
-        // Add additional URLs for documents (stored in private spaces)
-        if ($doctor->medical_degree) {
-            $doctorData['certificate_image_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->medical_degree);
-        }
-        if ($doctor->medical_licence) {
-            $doctorData['license_image_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->medical_licence);
-        }
-        if ($doctor->national_id) {
-            $doctorData['national_id_url'] = \Illuminate\Support\Facades\Storage::disk('spaces_private')->url($doctor->national_id);
-        }
-        
+
+        // Ensure compatibility with frontend keys (generateImageUrls already provides *_url keys)
+        $doctorData['certificate_image_url'] = $doctorData['medical_degree_url'] ?? null;
+        $doctorData['license_image_url'] = $doctorData['medical_licence_url'] ?? null;
+
         return response()->json([
             'success' => true,
             'data' => $doctorData
@@ -218,28 +211,36 @@ class AdminController extends Controller
     public function approveDoctor($doctorId): JsonResponse
     {
         $doctor = User::where('user_type', 'doctor')
-                     ->where('id', $doctorId)
-                     ->first();
-        
+            ->where('id', $doctorId)
+            ->first();
+
         if (!$doctor) {
             return response()->json([
                 'success' => false,
                 'message' => 'Doctor not found'
             ], 404);
         }
-        
+
         if ($doctor->status !== 'pending') {
             return response()->json([
                 'success' => false,
                 'message' => 'Doctor is not pending approval'
             ], 400);
         }
-        
+
         $doctor->update(['status' => 'approved']);
-        
-        // Send notification to doctor (you can implement this later)
-        // event(new DoctorApproved($doctor));
-        
+
+        // Send notification to doctor
+        try {
+            $doctor->notify(new \App\Notifications\DoctorApprovedNotification());
+            Log::info('Doctor approval notification sent', ['doctor_id' => $doctor->id]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send doctor approval notification', [
+                'doctor_id' => $doctor->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Doctor approved successfully',
@@ -253,28 +254,36 @@ class AdminController extends Controller
     public function rejectDoctor($doctorId): JsonResponse
     {
         $doctor = User::where('user_type', 'doctor')
-                     ->where('id', $doctorId)
-                     ->first();
-        
+            ->where('id', $doctorId)
+            ->first();
+
         if (!$doctor) {
             return response()->json([
                 'success' => false,
                 'message' => 'Doctor not found'
             ], 404);
         }
-        
+
         if ($doctor->status !== 'pending') {
             return response()->json([
                 'success' => false,
                 'message' => 'Doctor is not pending approval'
             ], 400);
         }
-        
+
         $doctor->update(['status' => 'rejected']);
-        
-        // Send notification to doctor (you can implement this later)
-        // event(new DoctorRejected($doctor));
-        
+
+        // Send notification to doctor
+        try {
+            $doctor->notify(new \App\Notifications\DoctorRejectedNotification());
+            Log::info('Doctor rejection notification sent', ['doctor_id' => $doctor->id]);
+        } catch (\Exception $e) {
+            Log::error('Failed to send doctor rejection notification', [
+                'doctor_id' => $doctor->id,
+                'error' => $e->getMessage()
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Doctor rejected successfully',
