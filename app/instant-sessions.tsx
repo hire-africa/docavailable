@@ -187,8 +187,8 @@ export default function InstantSessionsScreen() {
     setStartingSession(true);
     try {
       // Use the reusable session creation service
-      const { createSession } = await import('../../services/sessionCreationService');
-      
+      const { createSession } = await import('../services/sessionCreationService');
+
       const result = await createSession({
         type: sessionType === 'text' ? 'text' : 'call',
         doctorId: selectedDoctor.id,
@@ -251,8 +251,7 @@ export default function InstantSessionsScreen() {
             callType: sessionType,
             isDirectSession: 'true'
           }
-          });
-        }
+        });
       } else {
         // Handle specific error cases - preserve existing behavior
         if (result.status === 400 && result.message?.includes('already have an active session')) {
@@ -433,18 +432,18 @@ export default function InstantSessionsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.light.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.light.background,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: Colors.text,
+    color: Colors.light.text,
   },
   header: {
     padding: 20,
@@ -463,10 +462,10 @@ const styles = StyleSheet.create({
   activeSessionCard: {
     margin: 20,
     padding: 16,
-    backgroundColor: Colors.success + '10',
+    backgroundColor: Colors.light.success + '10',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
+    borderColor: Colors.light.success + '30',
   },
   activeSessionHeader: {
     flexDirection: 'row',
@@ -476,16 +475,16 @@ const styles = StyleSheet.create({
   activeSessionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.success,
+    color: Colors.light.success,
     marginLeft: 8,
   },
   activeSessionText: {
     fontSize: 14,
-    color: Colors.text,
+    color: Colors.light.text,
     marginBottom: 4,
   },
   goToChatButton: {
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.light.success,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -502,7 +501,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: Colors.light.text,
     marginBottom: 16,
   },
   emptyState: {
@@ -512,12 +511,12 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.text,
+    color: Colors.light.text,
     marginTop: 16,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: Colors.gray,
+    color: Colors.light.gray,
     marginTop: 8,
     textAlign: 'center',
   },
@@ -544,7 +543,7 @@ const styles = StyleSheet.create({
   doctorName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: Colors.light.text,
   },
   onlineIndicator: {
     flexDirection: 'row',
@@ -554,12 +553,12 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: Colors.success,
+    backgroundColor: Colors.light.success,
     marginRight: 4,
   },
   onlineText: {
     fontSize: 12,
-    color: Colors.success,
+    color: Colors.light.success,
     fontWeight: '600',
   },
   doctorSpecialization: {
@@ -570,18 +569,18 @@ const styles = StyleSheet.create({
   },
   doctorExperience: {
     fontSize: 14,
-    color: Colors.gray,
+    color: Colors.light.gray,
     marginBottom: 8,
   },
   doctorBio: {
     fontSize: 14,
-    color: Colors.text,
+    color: Colors.light.text,
     lineHeight: 20,
     marginBottom: 8,
   },
   lastSeen: {
     fontSize: 12,
-    color: Colors.gray,
+    color: Colors.light.gray,
   },
   startSessionButton: {
     backgroundColor: '#4CAF50',
@@ -602,13 +601,13 @@ const styles = StyleSheet.create({
   infoSection: {
     margin: 20,
     padding: 16,
-    backgroundColor: Colors.lightGray,
+    backgroundColor: Colors.light.lightGray,
     borderRadius: 12,
   },
   infoTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: Colors.light.text,
     marginBottom: 12,
   },
   infoItem: {
@@ -618,7 +617,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: Colors.text,
+    color: Colors.light.text,
     marginLeft: 8,
   },
 }); 
