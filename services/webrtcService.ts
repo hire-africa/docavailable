@@ -38,12 +38,33 @@ class CustomEventEmitter {
   }
 }
 
+// Global type for hot-reload persistence
+declare global {
+  var __webrtcService: WebRTCService | undefined;
+}
+
 export class WebRTCService extends CustomEventEmitter {
+  private static activeInstance: WebRTCService | null = null;
+  private instanceId: number;
+  private static instanceCounter = 0;
   private isConnected: boolean = false;
   private connectionCallbacks: ((connected: boolean) => void)[] = [];
 
   constructor() {
     super();
+    this.instanceId = ++WebRTCService.instanceCounter;
+    console.log(`🏗️ [WebRTCService] Instance ${this.instanceId} created`);
+  }
+
+  static getInstance(): WebRTCService {
+    if (global.__webrtcService) {
+      return global.__webrtcService;
+    }
+    if (!WebRTCService.activeInstance) {
+      WebRTCService.activeInstance = new WebRTCService();
+      global.__webrtcService = WebRTCService.activeInstance;
+    }
+    return WebRTCService.activeInstance;
   }
 
   /**
@@ -51,14 +72,14 @@ export class WebRTCService extends CustomEventEmitter {
    */
   async initialize(): Promise<boolean> {
     try {
-      console.log('🔌 WebRTC Service: Initializing...');
-      
+      console.log(`🔌 [WebRTCService] Initializing instance ${this.instanceId}...`);
+
       // Mark as connected since actual WebRTC signaling is handled by AudioCallService
       this.isConnected = true;
-      
+
       // Notify connection change
       this.connectionCallbacks.forEach(callback => callback(true));
-      
+
       console.log('✅ WebRTC Service: Initialized successfully');
       return true;
     } catch (error) {
@@ -101,4 +122,5 @@ export class WebRTCService extends CustomEventEmitter {
   }
 }
 
-export const webrtcService = new WebRTCService();
+export const webrtcService = WebRTCService.getInstance();
+export default webrtcService;

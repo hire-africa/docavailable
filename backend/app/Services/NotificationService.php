@@ -79,6 +79,57 @@ class NotificationService
     }
 
     /**
+     * Send appointment session started notification
+     * 
+     * Notifies both patient and doctor that an appointment session has started
+     * 
+     * @param Appointment $appointment
+     * @param mixed $session TextSession or CallSession
+     * @param string $modality 'text' | 'voice' | 'video'
+     */
+    public function sendAppointmentSessionStartedNotification(Appointment $appointment, $session, string $modality): void
+    {
+        try {
+            $patient = $appointment->patient;
+            $doctor = $appointment->doctor;
+
+            // Notify patient
+            if ($patient) {
+                $message = $modality === 'text' 
+                    ? "Your appointment session is ready. You can now start chatting with Dr. {$doctor->first_name} {$doctor->last_name}."
+                    : "Your appointment {$modality} call is starting now.";
+                
+                $this->sendAppointmentNotification($appointment, 'session_started', $message);
+            }
+
+            // Notify doctor
+            if ($doctor) {
+                $message = $modality === 'text'
+                    ? "Your appointment with {$patient->first_name} {$patient->last_name} is ready. The patient can now start chatting."
+                    : "Your appointment {$modality} call with {$patient->first_name} {$patient->last_name} is starting now.";
+                
+                // Use appointment notification for doctor as well
+                $notification = new AppointmentNotification($appointment, 'session_started', $message);
+                $doctor->notify($notification);
+            }
+
+            Log::info("Appointment session started notification sent", [
+                'appointment_id' => $appointment->id,
+                'session_id' => $session->id,
+                'modality' => $modality,
+                'patient_id' => $appointment->patient_id,
+                'doctor_id' => $appointment->doctor_id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to send appointment session started notification: " . $e->getMessage(), [
+                'appointment_id' => $appointment->id,
+                'session_id' => $session->id,
+                'modality' => $modality,
+            ]);
+        }
+    }
+
+    /**
      * Send wallet notification
      */
     public function sendWalletNotification(WalletTransaction $transaction, string $type, string $message = null): void

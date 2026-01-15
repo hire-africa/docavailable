@@ -3,6 +3,16 @@ import { ChatConfig, ChatEvents, ChatMessage } from '../types/chat';
 import { imageService } from './imageService';
 import { mediaUploadQueueService } from './mediaUploadQueueService';
 import { voiceRecordingService } from './voiceRecordingService';
+import { SessionContext, contextToString } from '../types/sessionContext';
+
+// Global type for hot-reload persistence
+declare global {
+  var __webrtcChatInstances: Map<string, WebRTCChatService> | undefined;
+}
+
+if (!global.__webrtcChatInstances) {
+  global.__webrtcChatInstances = new Map();
+}
 
 export class WebRTCChatService {
   private config: ChatConfig;
@@ -24,13 +34,7 @@ export class WebRTCChatService {
   private isSyncing = false; // Flag to prevent multiple simultaneous syncs
 
   constructor(config: ChatConfig, events: ChatEvents) {
-    console.log('🔧 [WebRTCChat] Constructor called with config:', {
-      appointmentId: config.appointmentId,
-      userId: config.userId,
-      userName: config.userName,
-      sessionType: config.sessionType,
-      webrtcConfig: config.webrtcConfig
-    });
+    console.log(`🔧 [WebRTCChat] Constructor called for appointment ${config.appointmentId}`);
 
     this.config = config;
     this.events = events;
@@ -39,7 +43,33 @@ export class WebRTCChatService {
     this.storageKey = `webrtc_messages_${sessionType}_${config.appointmentId}`;
     this.processedMessageHashes = new Set();
 
-    console.log('✅ [WebRTCChat] Constructor completed successfully');
+    // Register this instance globally
+    if (global.__webrtcChatInstances) {
+      global.__webrtcChatInstances.set(config.appointmentId, this);
+    }
+  }
+
+  /**
+   * Get an existing instance or create a new one for an appointment
+   */
+  static getInstance(config: ChatConfig, events: ChatEvents): WebRTCChatService {
+    const existing = global.__webrtcChatInstances?.get(config.appointmentId);
+    if (existing) {
+      console.log(`🔄 [WebRTCChat] Reusing global persistent instance for appointment ${config.appointmentId}`);
+      // Update events/callbacks because they might have been re-created in the component
+      existing.updateEvents(events);
+      existing.config = config; // Update config just in case
+      return existing;
+    }
+    return new WebRTCChatService(config, events);
+  }
+
+  /**
+   * Update the events/callbacks for this instance (useful for hot reloads)
+   */
+  updateEvents(events: ChatEvents): void {
+    console.log('🔄 [WebRTCChat] Updating events/callbacks');
+    this.events = events;
   }
 
   // Load messages from AsyncStorage
@@ -89,7 +119,20 @@ export class WebRTCChatService {
 
         const token = await this.getAuthToken();
         const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
-        const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
+        
+        // Architecture: Use context envelope if available, fallback to appointmentId for backward compatibility
+        let contextParam: string;
+        if (this.config.context) {
+          // Use context envelope: context_type:context_id
+          contextParam = `context=${encodeURIComponent(contextToString(this.config.context))}`;
+          console.log('🔌 [WebRTCChat] Using session context:', contextToString(this.config.context));
+        } else {
+          // Legacy: use appointmentId (read-only appointment context)
+          contextParam = `appointmentId=${encodeURIComponent(this.config.appointmentId)}`;
+          console.log('⚠️ [WebRTCChat] Using legacy appointmentId (read-only):', this.config.appointmentId);
+        }
+        
+        const wsUrl = `${base}?${contextParam}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
 
@@ -1139,8 +1182,8 @@ export class WebRTCChatService {
             this.lastPingTime = now;
           } catch (error) {
             console.error('❌ [WebRTCChat] Failed to send ping:', error);
-            // Only reconnect if the connection is actually broken
-            if (this.websocket.readyState === WebSocket.CLOSED || this.websocket.readyState === WebSocket.CLOSING) {
+            // Reconnect if the connection is no longer usable
+            if (this.websocket.readyState !== WebSocket.OPEN) {
               this.handleReconnect();
             }
           }
@@ -1205,12 +1248,22 @@ export class WebRTCChatService {
     const content = message.content || message.message || '';
     const senderId = message.senderId || message.sender_id || '';
     const timestamp = message.createdAt || message.created_at || message.timestamp || '';
+    const messageId = message.id || message.temp_id || message.tempId || '';
 
-    // Create a hash based on content, sender, and timestamp (rounded to nearest minute to handle small time differences)
-    const timeRounded = new Date(timestamp).setSeconds(0, 0).toString();
-    const hash = `${senderId}_${content}_${timeRounded}`;
+    // Create a hash based on content, sender, and timestamp
+    // We round to nearest second instead of minute to be more granular but still handle network jitter
+    const date = new Date(timestamp);
+    const timeSecs = isNaN(date.getTime()) ? 'unknown' : Math.floor(date.getTime() / 1000).toString();
 
-    console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', message.tempId || message.id);
+    // If we have a stable message ID (from server), include it to ensure uniqueness
+    // For local/websocket messages, content + sender + second is usually enough
+    const idPart = (messageId && !String(messageId).startsWith('ws_') && !String(messageId).startsWith('temp_'))
+      ? `id_${messageId}_`
+      : '';
+
+    const hash = `${idPart}${senderId}_${content.substring(0, 50)}_${timeSecs}`;
+
+    console.log('🔍 [WebRTCChat] Created message hash:', hash, 'for message:', messageId);
     return hash;
   }
 

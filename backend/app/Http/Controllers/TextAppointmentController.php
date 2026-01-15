@@ -296,6 +296,32 @@ class TextAppointmentController extends Controller
     /**
      * Process session deduction for text appointment.
      */
+    /**
+     * Process deduction for scheduled text appointment session
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING ENDPOINT ⚠️
+     * 
+     * Architecture Note: This endpoint processes billing based on appointment_id and references
+     * text_appointment_sessions table keyed by appointment_id. This is an appointment-derived billing path.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated and scheduled consults migrate to real sessions:
+     *   - Text appointments should create text_sessions (via auto-start job)
+     *   - Billing should come from text_sessions auto-deduction flows (ProcessAutoDeductions command)
+     *   - This endpoint becomes a migration hazard unless clearly scoped as legacy
+     * - This endpoint should only be used for legacy text_appointment_sessions that haven't
+     *   been migrated to the unified text_sessions table.
+     * 
+     * TODO: Add session_id check guardrail:
+     *   if ($appointment->session_id !== null) {
+     *     return response()->json([
+     *       'success' => false,
+     *       'message' => 'Billing must be processed through session auto-deduction, not appointment endpoint'
+     *     ], 400);
+     *   }
+     * 
+     * @deprecated In favor of session-based auto-deduction flows (ProcessAutoDeductions command)
+     */
     public function processDeduction(Request $request): JsonResponse
     {
         try {

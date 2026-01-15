@@ -1,13 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import DirectBookingModal from '../components/DirectBookingModal';
 import SessionTypeSelectionModal, { SessionType } from '../components/SessionTypeSelectionModal';
@@ -169,108 +170,97 @@ export default function InstantSessionsScreen() {
       Alert.alert('Error', 'Please select a doctor first');
       return;
     }
-    
+
     if (!selectedDoctor.id || selectedDoctor.id <= 0) {
       console.error('❌ [InstantSessions] Invalid doctor ID:', selectedDoctor.id);
       Alert.alert('Error', 'Invalid doctor selected. Please try again.');
       return;
     }
-    
+
     console.log('🔍 [InstantSessions] Starting session with doctor:', {
       doctorId: selectedDoctor.id,
       doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
       sessionType,
       reason
     });
-    
+
     setStartingSession(true);
     try {
-      let endpoint = '';
-      let requestBody: any = { reason };
+      // Use the reusable session creation service
+      const { createSession } = await import('../../services/sessionCreationService');
       
-      if (sessionType === 'text') {
-        endpoint = '/api/text-sessions/start';
-        requestBody.doctor_id = selectedDoctor.id;
-      } else if (sessionType === 'audio') {
-        endpoint = '/api/call-sessions/start';
-        requestBody.call_type = 'voice'; // Backend expects 'voice' not 'audio'
-        requestBody.appointment_id = `direct_session_${Date.now()}`;
-        requestBody.doctor_id = selectedDoctor.id; // Pass doctor ID for direct sessions
-      } else if (sessionType === 'video') {
-        endpoint = '/api/call-sessions/start';
-        requestBody.call_type = 'video';
-        requestBody.appointment_id = `direct_session_${Date.now()}`;
-        requestBody.doctor_id = selectedDoctor.id; // Pass doctor ID for direct sessions
-      }
-
-      const response = await fetch(`${environment.LARAVEL_API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+      const result = await createSession({
+        type: sessionType === 'text' ? 'text' : 'call',
+        doctorId: selectedDoctor.id,
+        reason: reason,
+        callType: sessionType === 'audio' ? 'voice' : sessionType === 'video' ? 'video' : undefined,
+        source: 'INSTANT',
       });
 
-      const data = await response.json();
+      if (!result.success) {
+        // Handle error - preserve existing error handling behavior
+        console.error('❌ [InstantSessions] Session creation failed:', result.message);
+        Alert.alert('Error', result.message || 'Failed to start session');
+        setStartingSession(false);
+        return;
+      }
 
-      if (response.ok) {
-        setActiveSession(data.data);
+      // Handle success based on session type
+      if (sessionType === 'text' && 'sessionId' in result) {
+        // Text session: use the chatId from result
+        setActiveSession(result.rawResponseData.data);
         setShowDirectBookingModal(false);
-        
+
         // Add real-time activity for session started
-        const activityType = sessionType === 'text' ? 'text_session_started' : 
-                           sessionType === 'audio' ? 'audio_session_started' : 
-                           'video_session_started';
-        
-        // Note: We can't directly update activities here since this component doesn't have access to the dashboard state
-        // The activity will be added when the user returns to the dashboard
+        const activityType = 'text_session_started';
         console.log(`[ActivitySystem] ${sessionType} session started with Dr. ${selectedDoctor.first_name} ${selectedDoctor.last_name}`);
-        
-        // Navigate to appropriate screen based on session type
-        if (sessionType === 'text') {
-          // Navigate directly to chat without showing alert
-          const chatId = `text_session_${data.data.session_id}`;
-          router.push(`/chat/${chatId}`);
-        } else {
-          // For audio/video calls, use the data from the call-sessions response
-          const sessionData = data.data;
-          const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
-          
-          // Double-check doctorId before navigation
-          if (!selectedDoctor.id || selectedDoctor.id <= 0) {
-            console.error('❌ [InstantSessions] Invalid doctorId during navigation:', selectedDoctor.id);
-            Alert.alert('Error', 'Invalid doctor data. Please try again.');
-            return;
-          }
-          
-          console.log('🔍 [InstantSessions] Navigating to call with params:', {
-            sessionId: appointmentId,
+
+        // Navigate directly to chat without showing alert
+        router.push(`/chat/${result.chatId}`);
+      } else if ((sessionType === 'audio' || sessionType === 'video') && 'appointmentId' in result) {
+        // Call session: use the appointmentId from result
+        setActiveSession(result.rawResponseData.data);
+        setShowDirectBookingModal(false);
+
+        // Add real-time activity for session started
+        const activityType = sessionType === 'audio' ? 'audio_session_started' : 'video_session_started';
+        console.log(`[ActivitySystem] ${sessionType} session started with Dr. ${selectedDoctor.first_name} ${selectedDoctor.last_name}`);
+
+        // Double-check doctorId before navigation
+        if (!selectedDoctor.id || selectedDoctor.id <= 0) {
+          console.error('❌ [InstantSessions] Invalid doctorId during navigation:', selectedDoctor.id);
+          Alert.alert('Error', 'Invalid doctor data. Please try again.');
+          setStartingSession(false);
+          return;
+        }
+
+        console.log('🔍 [InstantSessions] Navigating to call with params:', {
+          sessionId: result.appointmentId,
+          doctorId: selectedDoctor.id,
+          doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
+          callType: sessionType
+        });
+
+        router.push({
+          pathname: '/call',
+          params: {
+            sessionId: result.appointmentId,
             doctorId: selectedDoctor.id,
             doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
-            callType: sessionType
-          });
-          
-          router.push({
-            pathname: '/call',
-            params: {
-              sessionId: appointmentId,
-              doctorId: selectedDoctor.id,
-              doctorName: `${selectedDoctor.first_name} ${selectedDoctor.last_name}`,
-              doctorSpecialization: selectedDoctor.specialization,
-              callType: sessionType,
-              isDirectSession: 'true'
-            }
+            doctorSpecialization: selectedDoctor.specialization,
+            callType: sessionType,
+            isDirectSession: 'true'
+          }
           });
         }
       } else {
-        // Handle specific error cases - all logged to console only
-        if (response.status === 400 && data.message?.includes('already have an active session')) {
+        // Handle specific error cases - preserve existing behavior
+        if (result.status === 400 && result.message?.includes('already have an active session')) {
           console.log('Active Session Found: You already have an active session. Please check your messages or wait for the current session to end before starting a new one.');
           // Navigate to messages tab
           router.push('/patient-dashboard?tab=messages');
         } else {
-          console.error('Error:', data.message || 'Failed to start session');
+          console.error('Error:', result.message || 'Failed to start session');
         }
       }
     } catch (error) {
@@ -306,7 +296,7 @@ export default function InstantSessionsScreen() {
     );
   }
 
-    return (
+  return (
     <>
       <ScrollView
         style={styles.container}
@@ -324,19 +314,19 @@ export default function InstantSessionsScreen() {
         {activeSession && (
           <View style={styles.activeSessionCard}>
             <View style={styles.activeSessionHeader}>
-                              <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
+              <Text style={{ fontSize: 48, color: "#CCC" }}>💬</Text>
               <Text style={styles.activeSessionTitle}>Active Session</Text>
             </View>
-                         <Text style={styles.activeSessionText}>
-               You are currently in a session with Dr. {activeSession.doctor.first_name} {activeSession.doctor.last_name}
-             </Text>
-             <Text style={styles.activeSessionText}>
-               Started: {new Date(activeSession.started_at).toLocaleString()}
-             </Text>
-             <TouchableOpacity
-               style={styles.goToChatButton}
-               onPress={() => router.push(`/chat/text_session_${activeSession.id}`)}
-             >
+            <Text style={styles.activeSessionText}>
+              You are currently in a session with Dr. {activeSession.doctor.first_name} {activeSession.doctor.last_name}
+            </Text>
+            <Text style={styles.activeSessionText}>
+              Started: {new Date(activeSession.started_at).toLocaleString()}
+            </Text>
+            <TouchableOpacity
+              style={styles.goToChatButton}
+              onPress={() => router.push(`/chat/text_session_${activeSession.id}`)}
+            >
               <Text style={styles.goToChatButtonText}>Continue Chat</Text>
             </TouchableOpacity>
           </View>
@@ -346,7 +336,7 @@ export default function InstantSessionsScreen() {
           <Text style={styles.sectionTitle}>Available Doctors</Text>
           {doctors.length === 0 ? (
             <View style={styles.emptyState}>
-                              <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
+              <Text style={{ fontSize: 24, color: "#4CAF50" }}>🏥</Text>
               <Text style={styles.emptyStateText}>No doctors available right now</Text>
               <Text style={styles.emptyStateSubtext}>
                 Check back later or try again in a few minutes
@@ -404,16 +394,16 @@ export default function InstantSessionsScreen() {
 
         <View style={styles.infoSection}>
           <Text style={styles.infoTitle}>How it works:</Text>
-                   <View style={styles.infoItem}>
-                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
+          <View style={styles.infoItem}>
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>⏰</Text>
             <Text style={styles.infoText}>Each session is 10 minutes long</Text>
           </View>
           <View style={styles.infoItem}>
-                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>⚡</Text>
             <Text style={styles.infoText}>Doctors respond within 2 minutes</Text>
           </View>
           <View style={styles.infoItem}>
-                                 <Text style={{ fontSize: 20, color: "#4CAF50" }}>💳</Text>
+            <Text style={{ fontSize: 20, color: "#4CAF50" }}>💳</Text>
             <Text style={styles.infoText}>Uses your subscription text sessions</Text>
           </View>
         </View>

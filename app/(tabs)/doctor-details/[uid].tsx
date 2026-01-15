@@ -380,80 +380,59 @@ export default function DoctorProfilePage() {
     try {
       setStartingSession(true);
       setCallInitiated(true);
-      let response;
 
-      if (sessionType === 'text') {
-        console.log('📱 [DoctorProfile] Starting text session...');
-        // Start text session with reason
-        response = await apiService.post('/text-sessions/start', {
-          doctor_id: doctor.id,
-          reason: reason
-        });
-      } else if (sessionType === 'audio' || sessionType === 'video') {
-        // Generate a direct session ID so both peers can connect to the same signaling room
-        const provisionalAppointmentId = `direct_session_${Date.now()}`;
-        console.log(`📞 [DoctorProfile] Starting ${sessionType} call session...`, {
-          appointmentId: provisionalAppointmentId,
-          doctorId: doctor.id
-        });
-        
-        // Start call session on backend so it can notify the doctor via push (for background/killed delivery)
-        response = await apiService.post('/call-sessions/start', {
-          call_type: sessionType === 'audio' ? 'voice' : 'video',
-          appointment_id: provisionalAppointmentId,
-          doctor_id: doctor.id,
-          reason: reason
-        });
-        
-        console.log('📞 [DoctorProfile] Call session API response:', response);
+      // Use the reusable session creation service
+      const { createSession } = await import('../../../services/sessionCreationService');
+      
+      const result = await createSession({
+        type: sessionType === 'text' ? 'text' : 'call',
+        doctorId: doctor.id,
+        reason: reason,
+        callType: sessionType === 'audio' ? 'voice' : sessionType === 'video' ? 'video' : undefined,
+        source: 'INSTANT',
+      });
+
+      if (!result.success) {
+        console.error('❌ [DoctorProfile] Session creation failed:', result.message);
+        // Preserve existing error handling - no alert shown, just logged
+        setStartingSession(false);
+        setCallInitiated(false);
+        return;
       }
 
-      if (response && response.success) {
-        console.log('✅ [DoctorProfile] Session started successfully');
-        // Close the direct booking modal
-        setShowDirectBookingModal(false);
+      console.log('✅ [DoctorProfile] Session started successfully');
+      // Close the direct booking modal
+      setShowDirectBookingModal(false);
 
-        if (sessionType === 'text') {
-          // For text sessions, navigate to chat using the returned session id
-          const sessionData = response.data as any;
-          const chatId = `text_session_${sessionData.session_id}`;
-          console.log('📱 [DoctorProfile] Navigating to text chat:', chatId);
-          router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+      if (sessionType === 'text' && 'sessionId' in result) {
+        // For text sessions, navigate to chat using the returned chatId
+        console.log('📱 [DoctorProfile] Navigating to text chat:', result.chatId);
+        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: result.chatId } });
+      } else if ((sessionType === 'audio' || sessionType === 'video') && 'appointmentId' in result) {
+        // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
+        console.log(`📞 [DoctorProfile] Opening ${sessionType} call modal:`, {
+          appointmentId: result.appointmentId,
+        });
+
+        // Clear any lingering global call flags before starting new call
+        const g: any = global as any;
+        console.log('🧹 [DoctorProfile] Clearing global flags before new call');
+        g.activeAudioCall = false;
+        g.activeVideoCall = false;
+        g.currentCallType = null;
+
+        // Set session ID and show modal atomically to prevent race conditions
+        setDirectSessionId(result.appointmentId);
+        if (sessionType === 'audio') {
+          console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
+          setShowAudioCallModal(true);
         } else {
-          // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
-          const sessionData = response.data as any;
-          const appointmentId = sessionData?.appointment_id || `direct_session_${Date.now()}`;
-
-          console.log(`📞 [DoctorProfile] Opening ${sessionType} call modal:`, {
-            appointmentId,
-            sessionData
-          });
-
-          // Clear any lingering global call flags before starting new call
-          const g: any = global as any;
-          console.log('🧹 [DoctorProfile] Clearing global flags before new call');
-          g.activeAudioCall = false;
-          g.activeVideoCall = false;
-          g.currentCallType = null;
-
-          // Set session ID and show modal atomically to prevent race conditions
-          setDirectSessionId(appointmentId);
-          if (sessionType === 'audio') {
-            console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
-            setShowAudioCallModal(true);
-          } else {
             console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
             setShowVideoCallModal(true);
           }
 
-          console.log('✅ Call modal opened for session:', appointmentId);
+          console.log('✅ Call modal opened for session:', result.appointmentId);
         }
-      } else {
-        console.error('❌ [DoctorProfile] Session start failed:', response);
-        Alert.alert('Error', response?.message || 'Failed to start session');
-        // Reset flags on error so user can retry
-        setCallInitiated(false);
-      }
     } catch (error) {
       console.error('❌ [DoctorProfile] Error starting session:', error);
       Alert.alert('Error', 'Failed to start session. Please try again.');

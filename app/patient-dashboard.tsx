@@ -757,40 +757,8 @@ export default function PatientDashboard() {
     }
   }, [user]);
 
-  // Poll for subscription updates after payment (in case user doesn't get redirected properly)
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const pollForSubscriptionUpdates = () => {
-      console.log('PatientDashboard: Polling for subscription updates...');
-
-      apiService.get('/subscription')
-        .then((response: any) => {
-          if (response.success && response.data) {
-            console.log('PatientDashboard: Polling found subscription update:', response.data);
-            setCurrentSubscription(response.data);
-          }
-        })
-        .catch(error => {
-          console.log('PatientDashboard: Polling subscription check failed:', error.message);
-        });
-    };
-
-    // Poll every 30 seconds for the first 2 minutes after component mount
-    // This helps catch subscription updates if the payment redirect didn't work properly
-    const pollInterval = setInterval(pollForSubscriptionUpdates, 30000);
-
-    // Stop polling after 2 minutes
-    const stopPollingTimeout = setTimeout(() => {
-      clearInterval(pollInterval);
-      console.log('PatientDashboard: Stopped polling for subscription updates');
-    }, 120000); // 2 minutes
-
-    return () => {
-      clearInterval(pollInterval);
-      clearTimeout(stopPollingTimeout);
-    };
-  }, [user?.id]);
+  // Note: Subscription refresh is handled by useFocusEffect below - no duplicate polling needed
+  // The useFocusEffect triggers refreshSubscriptionData() when user returns to dashboard
 
   // Refresh subscription data when user returns to dashboard (e.g., after payment)
   useFocusEffect(
@@ -802,12 +770,14 @@ export default function PatientDashboard() {
     }, [user?.id, refreshSubscriptionData])
   );
 
-  // Refresh activities when user logs in or when data changes
+  // Refresh activities only when user first logs in (not on every data change to avoid cascading re-renders)
   useEffect(() => {
     if (user?.id) {
       loadActivities();
     }
-  }, [user, appointments, currentSubscription]);
+    // Note: Removed appointments/currentSubscription dependencies to prevent cascading re-renders
+    // Activities are updated via RealTimeEventService subscription (line 464+) and manual refreshes
+  }, [user?.id]);
 
   // Handle new appointment from navigation params
   const { newAppointment, sessionStarted } = useLocalSearchParams();
@@ -980,10 +950,15 @@ export default function PatientDashboard() {
 
   useEffect(() => {
     if (activeTab === 'discover') {
-      // Only show loading spinner if we don't have any doctors yet
-      if (doctors.length === 0) {
-        setLoadingDoctors(true);
+      // PERFORMANCE: Skip fetching if doctors are already loaded (prevents refetch on tab switch)
+      if (doctors.length > 0) {
+        console.log('📦 [PatientDashboard] Using cached doctors list:', doctors.length, 'doctors');
+        return; // Use cached data
       }
+
+      // Only show loading spinner if we don't have any doctors yet
+      setLoadingDoctors(true);
+
       // Only reset animation if this is the first load
       if (!hasAnimatedDoctors.current) {
         setVisibleDoctorCards(0);
@@ -1109,7 +1084,7 @@ export default function PatientDashboard() {
               console.error('PatientDashboard: Auto-refresh - Error fetching appointments:', error);
             });
         }
-      }, 30000); // 30 seconds
+      }, 45000); // PERFORMANCE: Changed from 30s to 45s to reduce API load
     }
 
     return () => {
@@ -1455,38 +1430,17 @@ export default function PatientDashboard() {
     if (user) {
       checkApiHealth();
 
-      // Set up periodic health checks every 60 seconds
-      const healthCheckInterval = setInterval(checkApiHealth, 60000);
+      // PERFORMANCE: Changed from 60s to 120s - connectivity rarely changes that fast
+      const healthCheckInterval = setInterval(checkApiHealth, 120000);
 
       return () => clearInterval(healthCheckInterval);
     }
   }, [user]);
 
-  // Add polling for real-time status updates
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (user && activeTab === 'appointments') {
-      // Poll for updates every 30 seconds
-      interval = setInterval(async () => {
-        try {
-          const response = await apiService.get('/appointments');
-          if (response.success && response.data) {
-            const appointmentsData = (response.data as any).data || response.data;
-            setAppointments(Array.isArray(appointmentsData) ? appointmentsData : []);
-          }
-        } catch (error) {
-          console.error('Error polling for appointment updates:', error);
-        }
-      }, 30000); // 30 seconds
-    }
-
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [user, activeTab]);
+  // Note: Appointments tab polling removed - already covered by:
+  // 1. The 60s auto-refresh timer at line 613-628
+  // 2. The messages tab 30s refresh which also fetches appointments
+  // 3. The useFocusEffect which triggers refreshHomeTab() on screen focus
 
   const handleLogout = async () => {
     setShowConfirm(true);

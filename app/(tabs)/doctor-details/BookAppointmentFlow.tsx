@@ -398,11 +398,13 @@ export default function BookAppointmentFlow() {
 
                 // Add days of the month
                 for (let day = 1; day <= daysInMonth; day++) {
-                  const currentDate = new Date();
+                  const now = new Date();
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
                   const dayDate = new Date(currentYear, currentMonth, day);
-                  const isToday = dayDate.toDateString() === currentDate.toDateString();
-                  const isPast = dayDate < currentDate;
-                  const isDisabled = isPast; // Only disable past dates, not today
+                  const isToday = dayDate.toDateString() === now.toDateString();
+                  const isPast = dayDate < today;
+                  const isDisabled = isPast; // Only disable dates before today
 
                   // Check if this day is a working day
                   const dayOfWeek = dayDate.getDay();

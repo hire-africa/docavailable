@@ -240,14 +240,31 @@ const MyAppointments = () => {
 
   const renderAppointment = (appt: any, keyPrefix: string) => {
     const statusStr = getStatusString(appt.status);
-    const statusLabel = getStatusLabel(appt.status);
+    const statusLabel = getStatusLabel(statusStr);
     const canCancel = canCancelAppointment(appt);
+
+    // Architecture: Session-gated routing
+    // If appointment has session_id, navigate to session; otherwise show details
+    const handleAppointmentPress = () => {
+      // Check if appointment has a session
+      if (appt.session_id !== null && appt.session_id !== undefined) {
+        // Determine session type from appointment type
+        const sessionType = appt.appointment_type === 'text' ? 'text_session' : 'call_session';
+        const sessionContext = `${sessionType}:${appt.session_id}`;
+        
+        console.log('✅ [MyAppointments] Navigating to session:', sessionContext);
+        router.push(`/chat/${sessionContext}`);
+      } else {
+        // No session yet, show appointment details
+        setSelectedAppointment(appt);
+      }
+    };
 
     return (
       <TouchableOpacity
         key={`${keyPrefix}${appt.id}`}
         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
-        onPress={() => setSelectedAppointment(appt)}
+        onPress={handleAppointmentPress}
         activeOpacity={0.8}
       >
         <View style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
@@ -268,6 +285,12 @@ const MyAppointments = () => {
           <View style={{ backgroundColor: getStatusColor(appt.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
             <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{statusLabel}</Text>
           </View>
+          {/* Show session indicator if appointment has a session */}
+          {appt.session_id !== null && appt.session_id !== undefined && (
+            <View style={{ marginTop: 4, backgroundColor: '#4CAF50', borderRadius: 6, paddingVertical: 2, paddingHorizontal: 6 }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '500' }}>Session Active</Text>
+            </View>
+          )}
         </View>
       </TouchableOpacity>
     );

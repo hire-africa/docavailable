@@ -110,6 +110,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::delete('/appointments/{id}', [AppointmentController::class, 'cancel_appointment']);
     Route::get('/available-doctors', [AppointmentController::class, 'available_doctors']);
     Route::get('/appointments/{id}', [AppointmentController::class, 'getAppointmentById']);
+    Route::get('/appointments/{id}/session', [AppointmentController::class, 'getAppointmentSession']); // Lightweight session status query
     Route::post('/appointments/{id}/start-session', [AppointmentController::class, 'startSession']);
     Route::post('/appointments/{id}/end-session', [AppointmentController::class, 'endSession']);
     Route::post('/appointments/{id}/process-payment', [AppointmentController::class, 'processPayment']);

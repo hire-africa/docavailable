@@ -596,13 +596,54 @@ class AppointmentController extends Controller
                     'sessions_deducted' => $appointment->sessions_deducted,
                     'no_show' => $appointment->no_show,
                     'completed_at' => $appointment->completed_at,
-                    'earnings_awarded' => $appointment->earnings_awarded
+                    'earnings_awarded' => $appointment->earnings_awarded,
+                    'session_id' => $appointment->session_id, // Include session_id in response
+                    'appointment_type' => $appointment->appointment_type // Include appointment_type
                 ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch appointment: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get appointment session status (lightweight query endpoint)
+     * 
+     * Architecture: Pure query endpoint that returns session_id and status
+     * Used by frontend to check if appointment has a session without fetching full appointment data
+     * 
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getAppointmentSession($id)
+    {
+        try {
+            $appointment = \App\Models\Appointment::select('id', 'status', 'session_id', 'appointment_type')
+                ->find($id);
+
+            if (!$appointment) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Appointment not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'appointment_id' => $appointment->id,
+                    'session_id' => $appointment->session_id,
+                    'status' => $appointment->status,
+                    'appointment_type' => $appointment->appointment_type,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch appointment session status: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -730,6 +771,31 @@ class AppointmentController extends Controller
                 'completed_at' => now()
             ]);
 
+            // ⚠️ GUARDRAIL: Check if appointment has session_id and warn/refuse legacy billing
+            $guardrail = \App\Services\SessionContextGuard::checkAppointmentBillingGuardrail(
+                $appointment,
+                'AppointmentController::endSession'
+            );
+            
+            if ($guardrail['warning']) {
+                // Warning logged, but proceed for backward compatibility (phased approach)
+            }
+            
+            // ⚠️ LEGACY APPOINTMENT-BASED BILLING ⚠️
+            // Architecture Note: This endpoint calls processAppointmentEnd() which violates
+            // the target invariant "billing triggered only by session events".
+            // 
+            // TODO: In later phase, return 400 if session_id is not null:
+            //   if ($appointment->session_id !== null) {
+            //     return response()->json([
+            //       'success' => false,
+            //       'message' => 'Session must be ended through session completion endpoint, not appointment endpoint'
+            //     ], 400);
+            //   }
+            // 
+            // Once session_id is populated, billing should come from session completion flows,
+            // not from appointment end endpoint.
+            
             // Process payment and deduction using the comprehensive service
             $paymentService = new \App\Services\DoctorPaymentService();
             $paymentResult = $paymentService->processAppointmentEnd($appointment);
@@ -768,6 +834,31 @@ class AppointmentController extends Controller
         }
     }
 
+    /**
+     * Process payment for an appointment
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING ENDPOINT ⚠️
+     * 
+     * Architecture Note: This endpoint violates the target invariant "billing triggered only by session events".
+     * It deducts from patient subscription and awards doctor earnings directly from an Appointment record.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, billing should come from:
+     *   - text_sessions (for text appointments) via session end flows
+     *   - call_sessions (for call appointments) via call session completion flows
+     * - This endpoint should only be used as a fallback for appointments without session_id
+     *   (during transition period) or for legacy appointments created before session migration.
+     * 
+     * TODO: Add session_id check guardrail:
+     *   if ($appointment->session_id !== null) {
+     *     return response()->json([
+     *       'success' => false,
+     *       'message' => 'Billing must be processed through session completion, not appointment endpoint'
+     *     ], 400);
+     *   }
+     * 
+     * @deprecated In favor of session-based billing endpoints
+     */
     public function processPayment($id)
     {
         try {

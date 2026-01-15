@@ -105,10 +105,36 @@ class DoctorPaymentService
 
     /**
      * Process payment for a completed appointment (audio/video call)
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING ⚠️
+     * 
+     * Architecture Note: This function violates the target invariant "billing triggered only by session events".
+     * It credits doctor wallet directly from an Appointment record, not from a session record.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, billing should come from:
+     *   - text_sessions (for text appointments) via processSessionEnd()
+     *   - call_sessions (for call appointments) via call session completion flows
+     * - This function should only be used as a fallback for appointments without session_id
+     *   (during transition period) or for legacy appointments created before session migration.
+     * 
+     * TODO: Add session_id check guardrail - if appointment.session_id exists, defer to session-based billing.
+     * 
+     * @deprecated In favor of session-based billing (processSessionEnd for text, call session flows for calls)
      */
     public function processAppointmentPayment(Appointment $appointment): bool
     {
         try {
+            // ⚠️ GUARDRAIL: Check if appointment has session_id and warn/refuse legacy billing
+            $guardrail = \App\Services\SessionContextGuard::checkAppointmentBillingGuardrail(
+                $appointment,
+                'DoctorPaymentService::processAppointmentPayment'
+            );
+            
+            if ($guardrail['warning']) {
+                // Warning logged, but proceed for backward compatibility (phased approach)
+            }
+            
             // IDEMPOTENCY CHECK: Prevent double payment
             if ($appointment->earnings_awarded > 0) {
                 \Log::warning('Attempted double payment for appointment', [
@@ -260,6 +286,26 @@ class DoctorPaymentService
 
     /**
      * Process complete appointment end - both doctor payment and patient deduction
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING ⚠️
+     * 
+     * Architecture Note: This function violates the target invariant "billing triggered only by session events".
+     * It processes both doctor payment and patient deduction directly from an Appointment record.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, billing should come from:
+     *   - text_sessions (for text appointments) via processSessionEnd()
+     *   - call_sessions (for call appointments) via call session completion flows
+     * - This function should only be used as a fallback for appointments without session_id
+     *   (during transition period) or for legacy appointments created before session migration.
+     * 
+     * TODO: Add session_id check guardrail:
+     *   if ($appointment->session_id !== null) {
+     *     // Defer to session-based billing instead
+     *     return $this->processBillingFromSession($appointment->session_id, $appointment->appointment_type);
+     *   }
+     * 
+     * @deprecated In favor of session-based billing (processSessionEnd for text, call session flows for calls)
      */
     public function processAppointmentEnd(Appointment $appointment): array
     {
@@ -272,6 +318,16 @@ class DoctorPaymentService
         ];
 
         try {
+            // ⚠️ GUARDRAIL: Check if appointment has session_id and warn/refuse legacy billing
+            $guardrail = \App\Services\SessionContextGuard::checkAppointmentBillingGuardrail(
+                $appointment,
+                'DoctorPaymentService::processAppointmentEnd'
+            );
+            
+            if ($guardrail['warning']) {
+                // Warning logged, but proceed for backward compatibility (phased approach)
+            }
+            
             // Process doctor payment
             $doctorPaymentSuccess = $this->processAppointmentPayment($appointment);
             $result['doctor_payment_success'] = $doctorPaymentSuccess;
@@ -364,6 +420,20 @@ class DoctorPaymentService
 
     /**
      * Deduct from patient's subscription for appointment
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING ⚠️
+     * 
+     * Architecture Note: This function violates the target invariant "billing triggered only by session events".
+     * It deducts from patient subscription directly from an Appointment record, not from a session record.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, deductions should come from:
+     *   - text_sessions (for text appointments) via deductFromPatientSubscription() or deductMultipleSessionsFromPatient()
+     *   - call_sessions (for call appointments) via call session completion flows
+     * - This function should only be used as a fallback for appointments without session_id
+     *   (during transition period) or for legacy appointments created before session migration.
+     * 
+     * @deprecated In favor of session-based billing (deductFromPatientSubscription for text sessions)
      */
     public function deductFromPatientSubscriptionForAppointment(Appointment $appointment): bool
     {

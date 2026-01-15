@@ -25,6 +25,20 @@ class ProcessAppointmentSessions extends Command
 
     /**
      * Execute the console command.
+     * 
+     * ⚠️ APPOINTMENT-TIME-BASED TRIGGER ⚠️
+     * 
+     * Architecture Note: This command checks appointment time windows for missed/cancel logic.
+     * It calls billing/payout (deductSessionFromPatient) which is part of legacy appointment billing.
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, this command should:
+     *   1. Check if appointment.session_id exists
+     *   2. If session_id exists, evaluate missed/cancel logic based on session state, not appointment time
+     *   3. Only use appointment-time-based logic for appointments without session_id (legacy)
+     * - Billing/payout should come from session completion, not appointment time triggers
+     * 
+     * TODO: Add session_id check guardrail before calling billing/payout functions
      */
     public function handle()
     {
@@ -35,6 +49,7 @@ class ProcessAppointmentSessions extends Command
 
         // Find confirmed or in-progress appointments that are at or past their scheduled time (within last 10 minutes)
         // Use appointment_date and appointment_time legacy fields
+        // TODO: Once session_id is populated, filter to only appointments without session_id (legacy appointments)
         $confirmedAppointments = Appointment::select([
             'id',
             'patient_id',

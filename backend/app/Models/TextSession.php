@@ -440,7 +440,7 @@ class TextSession extends Model
                 throw $e; // Re-throw to be caught by controller
             }
 
-            if (!$session || $session->status !== self::STATUS_ACTIVE) {
+            if (!$session || !in_array($session->status, [self::STATUS_ACTIVE, self::STATUS_WAITING_FOR_DOCTOR])) {
                 return false;
             }
 

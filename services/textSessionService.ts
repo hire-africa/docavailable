@@ -1,6 +1,7 @@
 // Text Session Service for handling appointment-to-session conversion
 import { getTimezoneInfo, isAppointmentTimeReached } from '../utils/timezoneUtils';
 import { apiService } from './apiService';
+import { StartSessionResponse, SessionContext, contextToString } from '../types/sessionContext';
 
 export interface TextSession {
   id: number;
@@ -39,14 +40,60 @@ export interface Appointment {
 }
 
 export const textSessionService = {
-  // Create a text session from a text appointment
-  createTextSessionFromAppointment: async (appointment: Appointment): Promise<TextSession | null> => {
+  /**
+   * Unified endpoint: Start session from appointment
+   * Architecture: POST /appointments/{id}/start-session
+   * Returns context_type and context_id (session identifier)
+   */
+  startSessionFromAppointment: async (appointmentId: string | number, modality?: 'text' | 'audio' | 'video'): Promise<SessionContext | null> => {
     try {
-      console.log('🔄 [TextSessionService] Creating text session from appointment:', appointment.id);
+      console.log('🔄 [TextSessionService] Starting session from appointment:', appointmentId, 'modality:', modality);
       
       // Get user's timezone for backend processing
       const timezoneInfo = getTimezoneInfo();
       
+      const response = await apiService.post(`/appointments/${appointmentId}/start-session`, {
+        modality: modality || 'text' // Default to text if not specified
+      }, {
+        headers: {
+          'X-User-Timezone': timezoneInfo.userTimezone
+        }
+      }) as StartSessionResponse;
+
+      if (response.success && response.context_type && response.context_id) {
+        const context: SessionContext = {
+          context_type: response.context_type,
+          context_id: response.context_id
+        };
+        console.log('✅ [TextSessionService] Session started successfully:', contextToString(context));
+        return context;
+      } else {
+        console.error('❌ [TextSessionService] Failed to start session:', response);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ [TextSessionService] Error starting session from appointment:', error);
+      return null;
+    }
+  },
+
+  // Create a text session from a text appointment (legacy - use startSessionFromAppointment instead)
+  createTextSessionFromAppointment: async (appointment: Appointment): Promise<TextSession | null> => {
+    try {
+      console.log('🔄 [TextSessionService] Creating text session from appointment (legacy):', appointment.id);
+      
+      // Try the new unified endpoint first
+      const context = await textSessionService.startSessionFromAppointment(appointment.id, 'text');
+      if (context && context.context_type === 'text_session') {
+        // Fetch the full session details
+        const sessionResponse = await apiService.get(`/text-sessions/${context.context_id}`);
+        if (sessionResponse.success && sessionResponse.data) {
+          return sessionResponse.data;
+        }
+      }
+      
+      // Fallback to legacy endpoint if new one fails
+      const timezoneInfo = getTimezoneInfo();
       const response = await apiService.post('/text-sessions/create-from-appointment', {
         appointment_id: appointment.id,
         doctor_id: appointment.doctor_id,
@@ -60,7 +107,7 @@ export const textSessionService = {
       });
 
       if (response.success && response.data) {
-        console.log('✅ [TextSessionService] Text session created successfully:', response.data);
+        console.log('✅ [TextSessionService] Text session created successfully (legacy):', response.data);
         return response.data;
       } else {
         console.error('❌ [TextSessionService] Failed to create text session:', response);

@@ -48,7 +48,8 @@ class Appointment extends Model
         'doctor_joined',
         'cancelled_reason',
         'actual_start_time',
-        'actual_end_time'
+        'actual_end_time',
+        'session_id',                  // Link to authoritative session record
     ];
 
     protected $casts = [

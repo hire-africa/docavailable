@@ -14,7 +14,10 @@ class CallSession extends Model
         'patient_id',
         'doctor_id',
         'call_type',
-        'appointment_id',
+        'appointment_id', // ⚠️ SEMANTIC NOTE: This is a session routing key, not necessarily a DB appointment row.
+                          // For instant calls, this is 'direct_session_{timestamp}'. For scheduled calls,
+                          // this may reference an appointments.id, but billing is still session-event-driven
+                          // (connected_at, duration, call end), not appointment-time-driven.
         'status',
         'started_at',
         'ended_at',

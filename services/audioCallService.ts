@@ -9,6 +9,12 @@ import {
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import configService from './configService';
+import { SessionContext, contextToString } from '../types/sessionContext';
+
+// Global type for hot-reload persistence
+declare global {
+  var __audioCallService: AudioCallService | undefined;
+}
 
 export interface AudioCallState {
   isConnected: boolean;
@@ -41,7 +47,8 @@ class AudioCallService {
   private callTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private reofferTimer: ReturnType<typeof setInterval> | null = null;
   private isCallAnswered: boolean = false;
-  private appointmentId: string | null = null;
+  private appointmentId: string | null = null; // Legacy: kept for backward compatibility
+  private context: SessionContext | null = null; // New: session context (preferred)
   private userId: string | null = null;
   private doctorName: string | null = null;
   private doctorProfilePicture: string | null = null;
@@ -82,14 +89,20 @@ class AudioCallService {
   }
 
   /**
-   * Get or create singleton instance
+   * Get or create singleton instance with hot-reload persistence
    */
   static getInstance(): AudioCallService {
+    if (global.__audioCallService) {
+      console.log(`🔄 [AudioCallService] Reusing global persistent instance ${global.__audioCallService.instanceId}`);
+      return global.__audioCallService;
+    }
+
     if (!AudioCallService.activeInstance) {
       AudioCallService.activeInstance = new AudioCallService();
+      global.__audioCallService = AudioCallService.activeInstance;
       console.log(`🏗️ [AudioCallService] Created new singleton instance ${AudioCallService.activeInstance.instanceId}`);
     } else {
-      console.log(`🔄 [AudioCallService] Reusing existing singleton instance ${AudioCallService.activeInstance.instanceId}`);
+      console.log(`🔄 [AudioCallService] Reusing existing static instance ${AudioCallService.activeInstance.instanceId}`);
     }
     return AudioCallService.activeInstance;
   }
@@ -98,10 +111,12 @@ class AudioCallService {
    * Clear active instance
    */
   static clearInstance(): void {
-    if (AudioCallService.activeInstance) {
-      console.log(`🧹 [AudioCallService] Clearing active instance ${AudioCallService.activeInstance.instanceId}`);
-      AudioCallService.activeInstance.endCall();
+    const instance = global.__audioCallService || AudioCallService.activeInstance;
+    if (instance) {
+      console.log(`🧹 [AudioCallService] Clearing active instance ${instance.instanceId}`);
+      instance.endCall();
       AudioCallService.activeInstance = null;
+      global.__audioCallService = undefined;
     }
   }
 
@@ -136,13 +151,15 @@ class AudioCallService {
         throw new Error('Invalid appointmentId: ' + appointmentId);
       }
 
-      // Prevent multiple initializations
-      if (this.isProcessingIncomingCall) {
-        console.log(`⚠️ [AudioCallService ${this.instanceId}] Already processing incoming call, skipping...`);
+      // Update events even if already processing (crucial for hot-reloads)
+      this.events = events;
+
+      // Prevent multiple initializations of the connection logic
+      if (this.isProcessingIncomingCall && this.state.connectionState === 'connected') {
+        console.log(`⚠️ [AudioCallService ${this.instanceId}] Already connected, updated events and skipping...`);
         return;
       }
 
-      this.events = events;
       this.appointmentId = appointmentId;
       this.userId = userId;
       this.isCallAnswered = false;
@@ -302,8 +319,9 @@ class AudioCallService {
 
   /**
    * Initialize audio call service
+   * @param appointmentIdOrContext - Either appointmentId (legacy) or SessionContext (preferred)
    */
-  async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents, doctorName?: string, doctorProfilePicture?: string): Promise<void> {
+  async initialize(appointmentIdOrContext: string | SessionContext, userId: string, doctorId: string | number | undefined, events: AudioCallEvents, doctorName?: string, doctorProfilePicture?: string): Promise<void> {
     try {
       // Prevent multiple initializations
       if (this.isInitializing) {
@@ -332,7 +350,20 @@ class AudioCallService {
 
       this.isIncoming = false;
       this.events = events;
-      this.appointmentId = appointmentId;
+      
+      // Determine if we received a context or appointmentId
+      if (typeof appointmentIdOrContext === 'string') {
+        // Legacy: appointmentId string
+        this.appointmentId = appointmentIdOrContext;
+        this.context = null;
+        console.log(`🔌 [AudioCallService] Initializing with appointmentId (legacy): ${appointmentIdOrContext}`);
+      } else {
+        // New: SessionContext
+        this.context = appointmentIdOrContext;
+        this.appointmentId = contextToString(appointmentIdOrContext); // Use context string for backward compatibility checks
+        console.log(`🔌 [AudioCallService] Initializing with session context: ${contextToString(appointmentIdOrContext)}`);
+      }
+      
       this.userId = userId;
       this.doctorName = doctorName || null;
       this.doctorProfilePicture = doctorProfilePicture || null;
@@ -480,7 +511,7 @@ class AudioCallService {
           autoGainControl: true,
           sampleRate: 44100,
           channelCount: 1,
-        },
+        } as any,
       });
 
       // Log audio stream details
@@ -620,6 +651,7 @@ class AudioCallService {
 
   /**
    * Connect to WebSocket signaling server
+   * Architecture: Uses session context if available, falls back to appointmentId for backward compatibility
    */
   private async connectSignaling(appointmentId: string, userId: string, useFallback: boolean = false): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -636,11 +668,23 @@ class AudioCallService {
         signalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL || 'ws://46.101.123.123:8081/chat-signaling';
       }
 
-      const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
+      // Architecture: Use context envelope if available, fallback to appointmentId for backward compatibility
+      let contextParam: string;
+      if (this.context) {
+        // Use context envelope: context_type:context_id
+        contextParam = `context=${encodeURIComponent(contextToString(this.context))}`;
+        console.log('🔌 [AudioCallService] Using session context:', contextToString(this.context));
+      } else {
+        // Legacy: use appointmentId (read-only appointment context)
+        contextParam = `appointmentId=${encodeURIComponent(appointmentId)}`;
+        console.log('⚠️ [AudioCallService] Using legacy appointmentId (read-only):', appointmentId);
+      }
+
+      const wsUrl = `${signalingUrl}?${contextParam}&userId=${encodeURIComponent(userId)}`;
 
       console.log(`🔧 [AudioCallService] ${useFallback ? 'Fallback ' : ''}WebSocket URL:`, wsUrl);
       console.log(`🔧 [AudioCallService] ${useFallback ? 'Fallback ' : ''}Signaling URL:`, signalingUrl);
-      console.log('🔧 [AudioCallService] Appointment ID:', appointmentId);
+      console.log('🔧 [AudioCallService] Context/Appointment ID:', this.context ? contextToString(this.context) : appointmentId);
       console.log('🔧 [AudioCallService] User ID:', userId);
 
       let connectionTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -722,7 +766,7 @@ class AudioCallService {
                           autoGainControl: true,
                           sampleRate: 44100,
                           channelCount: 1,
-                        }
+                        } as any
                       });
                       await this.configureAudioRouting();
                     }
@@ -1123,11 +1167,12 @@ class AudioCallService {
       console.log('📞 Configuring audio routing for earpiece (default)...');
 
       // Set audio mode for phone calls (earpiece by default like normal phone calls)
+      // Note: shouldDuckAndroid: false prevents Android from lowering audio volume
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
+        shouldDuckAndroid: false, // Don't duck audio - prevents volume issues
         playThroughEarpieceAndroid: true, // Start with earpiece mode
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
@@ -1214,7 +1259,7 @@ class AudioCallService {
           type: answer.type,
           sdp: this.mungeSdpForAudio(answer.sdp || '')
         } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        await this.peerConnection.setLocalDescription(mungedAnswer as any);
 
         console.log('📞 Sending answer message...');
         this.sendSignalingMessage({
@@ -1261,7 +1306,7 @@ class AudioCallService {
           type: answer.type,
           sdp: this.mungeSdpForAudio(answer.sdp || '')
         } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        await this.peerConnection.setLocalDescription(mungedAnswer as any);
 
         this.sendSignalingMessage({
           type: 'answer',
@@ -1535,7 +1580,7 @@ class AudioCallService {
               autoGainControl: true,
               sampleRate: 44100,
               channelCount: 1,
-            }
+            } as any
           });
           await this.configureAudioRouting();
         }
@@ -1563,7 +1608,7 @@ class AudioCallService {
             autoGainControl: true,
             sampleRate: 44100,
             channelCount: 1,
-          }
+          } as any
         });
         await this.configureAudioRouting();
       }
@@ -1653,7 +1698,7 @@ class AudioCallService {
         type: offer.type,
         sdp: this.mungeSdpForAudio(offer.sdp || '')
       } as RTCSessionDescriptionInit;
-      await this.peerConnection.setLocalDescription(mungedOffer);
+      await this.peerConnection.setLocalDescription(mungedOffer as any);
 
       console.log('📞 [AudioCallService] Sending offer via signaling...');
       this.sendSignalingMessage({
@@ -1931,7 +1976,7 @@ class AudioCallService {
 
       // Set audio mode to control speaker/earpiece routing
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true, // MUST be true for audio calls
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
@@ -2471,4 +2516,4 @@ class AudioCallService {
 }
 
 export { AudioCallService };
-export default new AudioCallService();
+export default AudioCallService.getInstance();

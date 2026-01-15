@@ -111,12 +111,29 @@ class ProcessMissedPayments extends Command
 
     /**
      * Process missed appointment payments
+     * 
+     * ⚠️ LEGACY APPOINTMENT-BASED BILLING COMMAND ⚠️
+     * 
+     * Architecture Note: This command processes billing directly from Appointment records,
+     * violating the target invariant "billing triggered only by session events".
+     * 
+     * Migration Path:
+     * - Once appointments.session_id is populated, this command should:
+     *   1. Check if appointment.session_id exists
+     *   2. If session_id exists, defer to session-based billing (processSessionEnd for text, call flows for calls)
+     *   3. Only process appointment-based billing if session_id is null (legacy appointments)
+     * - This ensures new appointments with sessions are billed through session completion,
+     *   while legacy appointments without sessions can still be processed.
+     * 
+     * TODO: Add session_id check guardrail before calling processAppointmentEnd()
      */
     private function processAppointments(bool $isDryRun): int
     {
         $this->info('Checking for missed appointment payments and deductions...');
 
         // Find completed appointments without payment transactions
+        // TODO: Filter to only appointments without session_id (legacy appointments)
+        // Once session_id is populated, appointments with sessions should be billed via session completion
         $appointments = Appointment::where('status', Appointment::STATUS_COMPLETED)
             ->whereDoesntHave('doctor.wallet.transactions', function($query) {
                 $query->where('session_table', 'appointments');

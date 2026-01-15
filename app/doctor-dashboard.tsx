@@ -673,6 +673,20 @@ export default function DoctorDashboard() {
     }
   };
 
+  const loadEndedSessions = async () => {
+    if (!user) return;
+
+    setLoadingEndedSessions(true);
+    try {
+      const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+      setEndedSessions(sessions);
+    } catch (error) {
+      console.error('Error loading ended sessions:', error);
+      setEndedSessions([]);
+    } finally {
+      setLoadingEndedSessions(false);
+    }
+  };
 
 
   const fetchRatings = async () => {
@@ -1042,6 +1056,33 @@ export default function DoctorDashboard() {
     // For text sessions, use the session ID with text_session_ prefix
     const chatId = `text_session_${session.id}`;
     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+  };
+
+  const handleExportEndedSession = async (appointmentId: number) => {
+    try {
+      const exportData = await endedSessionStorageService.exportEndedSession(appointmentId);
+      // For now, just log the export data
+      // In a production app, you would use Share API or save to file
+      console.log('Export data:', exportData);
+      customAlertService.success('Export Ready', 'Session data has been prepared for export.');
+      setShowEndedSessionMenu(null);
+    } catch (error) {
+      console.error('Error exporting session:', error);
+      customAlertService.error('Export Failed', 'Failed to export session data.');
+    }
+  };
+
+  const handleDeleteEndedSession = async (appointmentId: number) => {
+    try {
+      await endedSessionStorageService.deleteEndedSession(appointmentId);
+      // Refresh the ended sessions list
+      await loadEndedSessions();
+      customAlertService.success('Deleted', 'Session has been deleted successfully.');
+      setShowEndedSessionMenu(null);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      customAlertService.error('Delete Failed', 'Failed to delete session.');
+    }
   };
 
   const handleTestChat = () => {
@@ -2250,21 +2291,21 @@ export default function DoctorDashboard() {
                       marginRight: 16
                     }}>
                       <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>
-                        {String(item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient').charAt(0) || 'P'}
+                        {(item.patient_name || 'Unknown Patient').charAt(0) || 'P'}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                        {String(item.patient_name || 'Unknown Patient')}
+                        {item.patient_name || 'Unknown Patient'}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        {String(item.reason || 'Chat')}
+                        {item.reason || 'Chat'}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                          {item.consultationType === 'text' ? 'Text Chat' :
-                            item.consultationType === 'voice' ? 'Voice Call' :
-                              item.consultationType === 'video' ? 'Video Call' : 'Chat'}
+                          {item.appointment_type === 'text' ? 'Text Chat' :
+                            item.appointment_type === 'voice' ? 'Voice Call' :
+                              item.appointment_type === 'video' ? 'Video Call' : 'Chat'}
                         </Text>
                         {isAppointmentUpcoming(item) && (
                           <View style={{
@@ -2284,7 +2325,7 @@ export default function DoctorDashboard() {
                       </View>
                     </View>
                     <Text style={{ fontSize: 12, color: '#999' }}>
-                      {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                      {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
                     </Text>
                   </View>
                 </TouchableOpacity>

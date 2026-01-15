@@ -104,25 +104,22 @@ export default function DoctorProfileScreen() {
 
     setStartingSession(true);
     try {
-      const response = await fetch(`${environment.LARAVEL_API_URL}/api/text-sessions/start`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ doctor_id: doctor.id }),
+      // Use the reusable session creation service
+      const { createSession } = await import('../../services/sessionCreationService');
+      
+      const result = await createSession({
+        type: 'text',
+        doctorId: doctor.id,
+        source: 'INSTANT',
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setActiveSession(data.data);
-        console.log(`Session Started: You are now connected with Dr. ${doctor.first_name} ${doctor.last_name}. Response time: ${data.data.doctor.response_time} minutes.`);
+      if (result.success && 'sessionId' in result) {
+        setActiveSession(result.rawResponseData.data);
+        console.log(`Session Started: You are now connected with Dr. ${doctor.first_name} ${doctor.last_name}. Response time: ${result.rawResponseData.data?.doctor?.response_time || 'N/A'} minutes.`);
         // Navigate directly to chat without showing alert
-        const chatId = `text_session_${data.data.session_id}`;
-        router.push(`/chat/${chatId}`);
+        router.push(`/chat/${result.chatId}`);
       } else {
-        console.error('Error:', data.message || 'Failed to start session');
+        console.error('Error:', result.message || 'Failed to start session');
         // Session start error logged to console only - no modal shown
       }
     } catch (error) {

@@ -16,7 +16,10 @@ return new class extends Migration
             $table->foreignId('patient_id')->constrained('users')->onDelete('cascade');
             $table->foreignId('doctor_id')->constrained('users')->onDelete('cascade');
             $table->enum('call_type', ['voice', 'video']);
-            $table->string('appointment_id')->index(); // Can be appointment ID or direct session ID
+            $table->string('appointment_id')->index(); // ⚠️ SEMANTIC NOTE: This is a session routing key, not necessarily a DB appointment row.
+                                                       // For instant calls, this is 'direct_session_{timestamp}'. For scheduled calls,
+                                                       // this may reference an appointments.id, but billing is still session-event-driven
+                                                       // (connected_at, duration, call end), not appointment-time-driven.
             $table->enum('status', ['active', 'ended', 'expired', 'waiting_for_doctor', 'connecting'])->default('connecting');
             $table->timestamp('started_at');
             $table->timestamp('ended_at')->nullable();

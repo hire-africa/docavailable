@@ -67,3 +67,10 @@ Schedule::command('sessions:activate-scheduled')
 // NEW: Activate booked appointments when their scheduled time arrives
 Schedule::command('appointments:activate-booked')
     ->everyMinute();
+
+// NEW: Auto-start appointment sessions (idempotent, no instant interference)
+// Runs every 60 seconds to meet the 30-60s cadence requirement
+Schedule::command('appointments:auto-start-sessions')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

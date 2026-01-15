@@ -307,6 +307,29 @@ class ChatController extends Controller
                 ], 404);
             }
         } else {
+            // ⚠️ GUARDRAIL: Chat/WebSocket must require session context
+            // Appointments may only receive read-only notifications (schedule changes), not "live chat"
+            // If appointment has session_id, redirect to session context
+            if ($appointment->session_id !== null) {
+                \Log::warning('SessionContextGuard: Chat message attempted on appointment with session_id', [
+                    'appointment_id' => $appointment->id,
+                    'session_id' => $appointment->session_id,
+                    'user_id' => $user->id,
+                    'warning' => 'Chat should use session context, not appointment ID',
+                ]);
+                
+                // For now, allow but log warning (phased compatibility)
+                // TODO: In later phase, return 400 and require client to use session context
+            } else {
+                // Appointment without session_id - this is a legacy path
+                // Log warning but allow for backward compatibility during transition
+                \Log::warning('SessionContextGuard: Chat message on appointment without session_id', [
+                    'appointment_id' => $appointment->id,
+                    'user_id' => $user->id,
+                    'warning' => 'Appointment should have session_id for live chat',
+                ]);
+            }
+            
             // Check if user is part of this appointment
             if ($appointment->patient_id !== $user->id && $appointment->doctor_id !== $user->id) {
                 return response()->json([
@@ -673,6 +696,7 @@ class ChatController extends Controller
                 'status' => $appointment->status,
                 'doctor_id' => $appointment->doctor_id,
                 'patient_id' => $appointment->patient_id,
+                'session_id' => $appointment->session_id ?? null, // Include session_id for session-gated routing
                 'other_participant_profile_picture' => $otherParticipantProfilePath,
                 'other_participant_profile_picture_url' => $otherParticipantProfileUrl
             ]

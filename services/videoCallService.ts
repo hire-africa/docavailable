@@ -10,6 +10,11 @@ import {
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
 
+// Global type for hot-reload persistence
+declare global {
+  var __videoCallService: VideoCallService | undefined;
+}
+
 export interface VideoCallState {
   isConnected: boolean;
   isAudioEnabled: boolean;
@@ -79,13 +84,35 @@ class VideoCallService {
   }
 
   /**
-   * Get or create singleton instance
+   * Get or create singleton instance with hot-reload persistence
    */
   static getInstance(): VideoCallService {
+    if (global.__videoCallService) {
+      console.log(`🔄 [VideoCallService] Reusing global persistent instance ${global.__videoCallService.instanceId}`);
+      return global.__videoCallService;
+    }
+
     if (!VideoCallService.activeInstance) {
       VideoCallService.activeInstance = new VideoCallService();
+      global.__videoCallService = VideoCallService.activeInstance;
+      console.log(`🏗️ [VideoCallService] Created new singleton instance ${VideoCallService.activeInstance.instanceId}`);
+    } else {
+      console.log(`🔄 [VideoCallService] Reusing existing static instance ${VideoCallService.activeInstance.instanceId}`);
     }
     return VideoCallService.activeInstance;
+  }
+
+  /**
+   * Clear active instance
+   */
+  static clearInstance(): void {
+    const instance = global.__videoCallService || VideoCallService.activeInstance;
+    if (instance) {
+      console.log(`🧹 [VideoCallService] Clearing active instance ${instance.instanceId}`);
+      instance.endCall();
+      VideoCallService.activeInstance = null;
+      global.__videoCallService = undefined;
+    }
   }
 
   /**
@@ -93,8 +120,15 @@ class VideoCallService {
    */
   async initializeForIncomingCall(appointmentId: string, userId: string, events: VideoCallEvents): Promise<void> {
     try {
-      console.log('📞 [VideoCallService] Initializing for incoming call...');
+      console.log(`📞 [VideoCallService ${this.instanceId}] Initializing for incoming call...`);
       this.events = events;
+
+      // Prevent multiple initializations (crucial for hot-reloads)
+      if (this.isProcessingIncomingCall && (this.state.connectionState === 'connected' || this.state.isConnected)) {
+        console.log(`⚠️ [VideoCallService ${this.instanceId}] Already connected, updated events and skipping...`);
+        return;
+      }
+
       this.appointmentId = appointmentId;
       this.userId = userId;
       this.isProcessingIncomingCall = true;
@@ -1607,4 +1641,5 @@ class VideoCallService {
 }
 
 export { VideoCallService };
+export default VideoCallService.getInstance();
 

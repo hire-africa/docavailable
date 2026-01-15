@@ -46,8 +46,11 @@ import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
+import { textSessionService } from '../../services/textSessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
+import { SessionContext } from '../../types/sessionContext';
+import { resolveAppointmentSession, getSessionContextFromAppointment } from '../../services/appointmentSessionService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
@@ -55,6 +58,7 @@ import {
   getUserTimezone,
   isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
+import { formatAppointmentDateTime } from '../../utils/appointmentDisplayUtils';
 import { Alert } from '../../utils/customAlert';
 import { withDoctorPrefix } from '../../utils/name';
 import { apiService } from '../services/apiService';
@@ -82,6 +86,7 @@ interface ChatInfo {
   other_participant_profile_picture?: string;
   other_participant_profile_picture_url?: string;
   appointment_type?: string;
+  session_id?: number | null; // Session ID for session-gated routing
 }
 
 interface TextSessionInfo {
@@ -807,8 +812,9 @@ export default function ChatPage() {
 
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
-    // For appointments, also check if it's appointment time
-    const appointmentTimeCheck = isTextSession || isAppointmentTime;
+    // Architecture: For appointments, check session_id (not time)
+    // If appointment has session_id, allow interaction; otherwise waiting state handles it
+    const appointmentTimeCheck = isTextSession || isAppointmentTime || (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined);
 
     // Check subscription availability
     const hasAvailableSessions = subscriptionData ? (
@@ -847,81 +853,167 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user?.user_type]);
 
-  // Helper function to check if current time is within appointment time
-  // IMPORTANT: This only affects scheduled appointments, NOT instant sessions
+  // Architecture: Countdown display is cosmetic only (no behavior gating)
+  // Time-based availability decisions come from backend (session_id presence), not device clock
   const checkAppointmentTime = useCallback(() => {
-    // Skip time checking for instant sessions or if appointment is already in progress/active
-    // This ensures that if the status is active (7), we allow access regardless of time
-    const status = chatInfo?.status;
-    const isActiveStatus = status === 'in_progress' || status === 'active' || status === '7' || status === 7;
-
-    if (isInstantSession || isActiveStatus) {
-      if (isActiveStatus) {
-        console.log('✅ [AppointmentTime] Appointment is explicitly active/in_progress, bypassing time check');
-      }
+    // Skip for instant sessions
+    if (isInstantSession || isTextSession) {
       setIsAppointmentTime(true);
       setTimeUntilAppointment('');
       return;
     }
 
+    // Cosmetic countdown only - does not gate behavior
     if (!chatInfo?.appointment_date || !chatInfo?.appointment_time) {
-      setIsAppointmentTime(true); // If no appointment info, allow interaction
+      setIsAppointmentTime(true);
       return;
     }
 
     try {
-      // Use the unified appointment time utility
+      // Use the unified appointment time utility for display purposes only
       const userTimezone = getUserTimezone();
       const timeValidation = isAppointmentTimeReached(
         chatInfo.appointment_date,
         chatInfo.appointment_time,
         userTimezone,
-        5 // 5-minute buffer to match backend
+        5 // 5-minute buffer
       );
 
       if (timeValidation.error) {
         console.error('Error checking appointment time:', timeValidation.error);
-        // For scheduled appointments, be more conservative on errors
-        setIsAppointmentTime(false);
-        setTimeUntilAppointment(`Error: ${timeValidation.error}`);
+        setIsAppointmentTime(true); // Always allow (backend decides via session_id)
+        setTimeUntilAppointment('');
         return;
       }
 
       setAppointmentDateTime(timeValidation.appointmentDateTime);
-      setIsAppointmentTime(timeValidation.isTimeReached);
-      setTimeUntilAppointment(timeValidation.timeUntilAppointment);
+      setIsAppointmentTime(true); // Always true - backend session_id is the gate
+      setTimeUntilAppointment(timeValidation.timeUntilAppointment); // Display only
 
-      // Debug logging for appointment time validation
-      console.log('🕐 [AppointmentTime] Time validation result:', {
-        appointment_date: chatInfo.appointment_date,
-        appointment_time: chatInfo.appointment_time,
-        user_timezone: userTimezone,
-        is_time_reached: timeValidation.isTimeReached,
+      console.log('🕐 [AppointmentTime] Countdown display (cosmetic):', {
         time_until_appointment: timeValidation.timeUntilAppointment,
-        time_difference_ms: timeValidation.timeDifference
       });
 
     } catch (error) {
       console.error('Error checking appointment time:', error);
-      // For scheduled appointments, be conservative on errors
-      setIsAppointmentTime(false);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      setTimeUntilAppointment(`Error: ${errorMessage}`);
+      setIsAppointmentTime(true); // Always allow
+      setTimeUntilAppointment('');
     }
-  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession]);
+  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession, isTextSession]);
 
-  // Check appointment time when chat info changes
+  // Check appointment time when chat info changes (for countdown display only)
   useEffect(() => {
     checkAppointmentTime();
   }, [checkAppointmentTime]);
 
-  // Start text appointment session when appointment time is reached
+  // Architecture: Session-gated routing - check if appointment has session_id
+  // If session_id exists, navigate to session; if null, show waiting state
+  const [isWaitingForSession, setIsWaitingForSession] = useState(false);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Check appointment session status and route accordingly
   useEffect(() => {
-    if (isTextAppointment && isAppointmentTime && !textAppointmentSession.isActive && !textAppointmentSession.isEnded) {
-      console.log('🕐 [TextAppointment] Starting text appointment session');
-      startTextAppointmentSession();
+    // Skip for instant sessions (they already have session context)
+    if (isInstantSession || isTextSession) {
+      return;
     }
-  }, [isTextAppointment, isAppointmentTime, textAppointmentSession.isActive, textAppointmentSession.isEnded]);
+
+    // Skip if we already have a session context
+    if (activeSessionId) {
+      return;
+    }
+
+    // Only check for numeric appointment IDs (not text_session_*)
+    const numericAppointmentId = parseInt(appointmentId, 10);
+    if (isNaN(numericAppointmentId)) {
+      return;
+    }
+
+    const checkAndRoute = async () => {
+      try {
+        // First check chatInfo.session_id if available
+        if (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined) {
+          console.log('✅ [AppointmentSession] Appointment has session from chatInfo, navigating:', chatInfo.session_id);
+          const sessionType = chatInfo.appointment_type === 'text' ? 'text_session' : 'call_session';
+          const sessionContext = `${sessionType}:${chatInfo.session_id}`;
+          router.replace(`/chat/${sessionContext}`);
+          return;
+        }
+
+        // Otherwise, query backend for session status
+        const sessionStatus = await resolveAppointmentSession(numericAppointmentId);
+        
+        if (!sessionStatus) {
+          console.log('⚠️ [AppointmentSession] Appointment not found');
+          return;
+        }
+
+        // If appointment has session_id, navigate to session
+        if (sessionStatus.session_id !== null) {
+          console.log('✅ [AppointmentSession] Appointment has session, navigating to session:', sessionStatus.session_id);
+          
+          // Determine session type and construct session context
+          const sessionType = sessionStatus.appointment_type === 'text' ? 'text_session' : 'call_session';
+          const sessionContext = `${sessionType}:${sessionStatus.session_id}`;
+          
+          // Navigate to session (replace current route)
+          router.replace(`/chat/${sessionContext}`);
+          return;
+        }
+
+        // If session_id is null, show waiting state
+        console.log('⏳ [AppointmentSession] Appointment has no session yet, showing waiting state');
+        setIsWaitingForSession(true);
+
+        // Start polling for session_id (every 8 seconds, within 5-10s range)
+        if (!pollingIntervalRef.current) {
+          const interval = setInterval(async () => {
+            const updatedStatus = await resolveAppointmentSession(numericAppointmentId);
+            
+            if (updatedStatus && updatedStatus.session_id !== null) {
+              // Session created, navigate to it
+              console.log('✅ [AppointmentSession] Session created, navigating:', updatedStatus.session_id);
+              clearInterval(interval);
+              pollingIntervalRef.current = null;
+              setIsWaitingForSession(false);
+              
+              const sessionType = updatedStatus.appointment_type === 'text' ? 'text_session' : 'call_session';
+              const sessionContext = `${sessionType}:${updatedStatus.session_id}`;
+              router.replace(`/chat/${sessionContext}`);
+            } else if (updatedStatus && (
+              updatedStatus.status === 'cancelled' || 
+              updatedStatus.status === 'completed' ||
+              String(updatedStatus.status) === '2' || // STATUS_CANCELLED
+              String(updatedStatus.status) === '3'    // STATUS_COMPLETED
+            )) {
+              // Appointment is terminal, stop polling
+              console.log('🛑 [AppointmentSession] Appointment is terminal, stopping polling');
+              clearInterval(interval);
+              pollingIntervalRef.current = null;
+              setIsWaitingForSession(false);
+            }
+          }, 8000); // Poll every 8 seconds (within 5-10s range)
+          
+          pollingIntervalRef.current = interval;
+        }
+      } catch (error) {
+        console.error('❌ [AppointmentSession] Error checking session status:', error);
+      }
+    };
+
+    // Only check if chatInfo is loaded (to avoid race conditions)
+    if (chatInfo) {
+      checkAndRoute();
+    }
+
+    // Cleanup polling on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [appointmentId, chatInfo, isInstantSession, isTextSession, activeSessionId]);
 
   // Activate session header when doctor responds (for instant sessions) or when text appointment session becomes active
   // Show for both patient and doctor
@@ -945,53 +1037,10 @@ export default function ChatPage() {
     }
   }, [isInstantSession, hasDoctorResponded, textAppointmentSession.isActive, activeSessionId, isSessionActive]);
 
-  // Function to start text appointment session via API (Unified Session System)
-  const startTextAppointmentSession = async () => {
-    try {
-      console.log('🔄 [TextAppointment] Starting session via Unified System...');
-
-      // Use the new create-from-appointment endpoint to create a TextSession
-      const response = await apiService.post('/text-sessions/create-from-appointment', {
-        appointment_id: getNumericAppointmentId(),
-        doctor_id: chatInfo?.doctor_id,
-        patient_id: chatInfo?.patient_id,
-        appointment_type: 'text',
-        reason: 'Scheduled Appointment',
-        user_timezone: getUserTimezone() // Include user timezone to prevent 400 errors
-      });
-
-      if (response.success) {
-        console.log('✅ [TextAppointment] Session started successfully (Unified):', response.data);
-        const newSessionId = String(response.data.id);
-        setActiveSessionId(newSessionId); // Store new session ID
-
-        // Update textSessionInfo to enable instant session features
-        setTextSessionInfo({
-          id: response.data.id,
-          doctor_id: response.data.doctor_id,
-          patient_id: response.data.patient_id,
-          started_at: response.data.created_at,
-          status: response.data.status,
-          reason: response.data.reason,
-          doctor: response.data.doctor,
-          patient: response.data.patient
-        });
-
-        // Mark textAppointmentSession as active to keep UI happy/consistent
-        setTextAppointmentSession(prev => ({
-          ...prev,
-          isActive: true,
-          startTime: new Date(response.data.created_at),
-          lastActivityTime: new Date(response.data.updated_at),
-          sessionsUsed: 0
-        }));
-      } else {
-        console.error('❌ [TextAppointment] Failed to start session:', response.message);
-      }
-    } catch (error) {
-      console.error('❌ [TextAppointment] Error starting session:', error);
-    }
-  };
+  // Architecture: Frontend no longer starts appointment sessions
+  // Sessions are created by backend auto-start job or manual start-session endpoint
+  // This function is kept for reference but should not be called
+  // REMOVED: startTextAppointmentSession() - frontend does not activate appointments
 
   // Function to update text appointment activity via API
   // NOTE: For unified sessions (activeSessionId set), this is handled by backgroundSessionTimer/detector
@@ -1302,10 +1351,43 @@ export default function ChatPage() {
 
         // Determine session type from appointmentId
         const sessionType = appointmentId.startsWith('text_session_') ? 'text_session' : 'appointment';
+        
+        // Architecture: For appointments, start session first to get context
+        let sessionContext: SessionContext | null = null;
+        if (sessionType === 'appointment' && !appointmentId.startsWith('text_session_')) {
+          try {
+            console.log('🔄 [ChatComponent] Starting session from appointment:', appointmentId);
+            // Determine modality from appointment type (if available in chatInfo)
+            const modality = chatInfo?.appointment_type === 'text' ? 'text' : 
+                           chatInfo?.appointment_type === 'voice' ? 'audio' :
+                           chatInfo?.appointment_type === 'video' ? 'video' : 'text';
+            
+            sessionContext = await textSessionService.startSessionFromAppointment(appointmentId, modality);
+            if (sessionContext) {
+              console.log('✅ [ChatComponent] Session started, context:', sessionContext);
+            } else {
+              console.warn('⚠️ [ChatComponent] Failed to start session, using appointmentId (read-only)');
+            }
+          } catch (error) {
+            console.error('❌ [ChatComponent] Error starting session from appointment:', error);
+            // Continue with appointmentId (read-only mode) if session start fails
+          }
+        } else if (sessionType === 'text_session') {
+          // For instant text sessions, parse the session ID from the appointmentId format
+          const sessionId = appointmentId.replace('text_session_', '');
+          if (sessionId && !isNaN(Number(sessionId))) {
+            sessionContext = {
+              context_type: 'text_session',
+              context_id: Number(sessionId)
+            };
+            console.log('✅ [ChatComponent] Using text session context:', sessionContext);
+          }
+        }
 
         console.log('🔍 [ChatComponent] Initializing WebRTC chat service with config:', {
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
+          context: sessionContext,
           userId: currentUserId,
           sessionType: sessionType,
           webrtcConfig: config.webrtc
@@ -1315,15 +1397,17 @@ export default function ChatPage() {
         console.log('🔍 [WebRTC Chat] Service config:', {
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
+          context: sessionContext,
           userId: currentUserId,
           userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
           sessionType: sessionType,
           webrtcConfig: config.webrtc
         });
 
-        const chatService = new WebRTCChatService({
+        const chatService = WebRTCChatService.getInstance({
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
+          context: sessionContext || undefined, // Pass context if available
           userId: currentUserId,
           userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
           apiKey: (user as any)?.api_key || '',
@@ -4034,6 +4118,37 @@ export default function ChatPage() {
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#4CAF50" />
           <Text style={{ marginTop: 10, color: '#666' }}>Loading chat...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Architecture: Show waiting state if appointment has no session yet
+  if (isWaitingForSession && !isInstantSession && !isTextSession) {
+    const appointmentDateTime = chatInfo?.appointment_date && chatInfo?.appointment_time
+      ? new Date(`${chatInfo.appointment_date} ${chatInfo.appointment_time}`)
+      : null;
+    
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+        <StatusBar barStyle="dark-content" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Ionicons name="time-outline" size={64} color="#4CAF50" style={{ marginBottom: 20 }} />
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 10, textAlign: 'center' }}>
+            Waiting for Session
+          </Text>
+          <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 20 }}>
+            Your appointment session will start automatically when the scheduled time arrives.
+          </Text>
+          {appointmentDateTime && (
+            <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
+              {formatAppointmentDateTime(chatInfo!)}
+            </Text>
+          )}
+          <ActivityIndicator size="small" color="#4CAF50" style={{ marginTop: 20 }} />
+          <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 }}>
+            Checking for session...
+          </Text>
         </View>
       </SafeAreaView>
     );

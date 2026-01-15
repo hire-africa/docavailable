@@ -13,11 +13,11 @@ interface DoctorProfilePictureProps {
   style?: any;
 }
 
-const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({ 
+const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
   imageUrl,
   profilePictureUrl,
   profilePicture,
-  size = 60, 
+  size = 60,
   name,
   style
 }) => {
@@ -28,11 +28,11 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
     if (!uri || typeof uri !== 'string') {
       return null;
     }
-    
+
     if (uri.startsWith('http')) {
       return uri;
     }
-    
+
     // Clean the URI to remove any leading slashes or storage prefixes
     let cleanUri = uri.trim();
     if (cleanUri.startsWith('/storage/')) {
@@ -42,9 +42,9 @@ const DoctorProfilePicture: React.FC<DoctorProfilePictureProps> = ({
       cleanUri = cleanUri.substring('storage/'.length);
     }
     cleanUri = cleanUri.replace(/^\/+/, ''); // Remove leading slashes
-    
-      // Use the image serving route - will show placeholder if not accessible
-      return `https://docavailable-5.onrender.com/api/images/${cleanUri}`;
+
+    // Use the image serving route - will show placeholder if not accessible
+    return `https://docavailable-5.onrender.com/api/images/${cleanUri}`;
   };
 
   // Determine which image to use (priority: profilePictureUrl > profilePicture > imageUrl)
