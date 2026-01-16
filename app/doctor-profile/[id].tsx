@@ -306,7 +306,7 @@ export default function DoctorProfileScreen() {
             </Text>
             <TouchableOpacity
               style={styles.goToChatButton}
-              onPress={() => router.push(`/chat/${activeSession.session_id}`)}
+              onPress={() => router.push(`/sessions/${activeSession.session_id}/chat`)}
             >
               <Text style={styles.goToChatButtonText}>Continue Chat</Text>
             </TouchableOpacity>

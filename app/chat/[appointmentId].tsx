@@ -5,18 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Animated,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../components/AppTour';
@@ -38,6 +38,7 @@ import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
+import { resolveAppointmentSession } from '../../services/appointmentSessionService';
 import appTourService, { CHAT_TOUR_STEPS } from '../../services/appTourService';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
@@ -49,16 +50,15 @@ import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import { textSessionService } from '../../services/textSessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
-import { SessionContext } from '../../types/sessionContext';
-import { resolveAppointmentSession, getSessionContextFromAppointment } from '../../services/appointmentSessionService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
-import {
-  getUserTimezone,
-  isAppointmentTimeReached
-} from '../../utils/appointmentTimeUtils';
+import { SessionContext } from '../../types/sessionContext';
 import { formatAppointmentDateTime } from '../../utils/appointmentDisplayUtils';
+import {
+    getUserTimezone,
+    isAppointmentTimeReached
+} from '../../utils/appointmentTimeUtils';
 import { Alert } from '../../utils/customAlert';
 import { withDoctorPrefix } from '../../utils/name';
 import { apiService } from '../services/apiService';
@@ -934,9 +934,7 @@ export default function ChatPage() {
         // First check chatInfo.session_id if available
         if (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined) {
           console.log('✅ [AppointmentSession] Appointment has session from chatInfo, navigating:', chatInfo.session_id);
-          const sessionType = chatInfo.appointment_type === 'text' ? 'text_session' : 'call_session';
-          const sessionContext = `${sessionType}:${chatInfo.session_id}`;
-          router.replace(`/chat/${sessionContext}`);
+          router.replace(`/sessions/${chatInfo.session_id}/chat`);
           return;
         }
 
@@ -951,13 +949,9 @@ export default function ChatPage() {
         // If appointment has session_id, navigate to session
         if (sessionStatus.session_id !== null) {
           console.log('✅ [AppointmentSession] Appointment has session, navigating to session:', sessionStatus.session_id);
-          
-          // Determine session type and construct session context
-          const sessionType = sessionStatus.appointment_type === 'text' ? 'text_session' : 'call_session';
-          const sessionContext = `${sessionType}:${sessionStatus.session_id}`;
-          
+
           // Navigate to session (replace current route)
-          router.replace(`/chat/${sessionContext}`);
+          router.replace(`/sessions/${sessionStatus.session_id}/chat`);
           return;
         }
 
@@ -976,10 +970,8 @@ export default function ChatPage() {
               clearInterval(interval);
               pollingIntervalRef.current = null;
               setIsWaitingForSession(false);
-              
-              const sessionType = updatedStatus.appointment_type === 'text' ? 'text_session' : 'call_session';
-              const sessionContext = `${sessionType}:${updatedStatus.session_id}`;
-              router.replace(`/chat/${sessionContext}`);
+
+              router.replace(`/sessions/${updatedStatus.session_id}/chat`);
             } else if (updatedStatus && (
               updatedStatus.status === 'cancelled' || 
               updatedStatus.status === 'completed' ||

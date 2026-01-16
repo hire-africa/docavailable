@@ -6,24 +6,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  AppState,
-  BackHandler,
-  Dimensions,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    AppState,
+    BackHandler,
+    Dimensions,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -1402,8 +1402,7 @@ export default function PatientDashboard() {
 
     // If sessionId is provided, navigate to the chat after a short delay
     if (params.sessionId) {
-      // Navigate to chat using appointment ID
-      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: params.sessionId } });
+      router.push(`/sessions/${params.sessionId}/chat`);
     }
   }, [params]);
 
@@ -1802,8 +1801,7 @@ export default function PatientDashboard() {
               activeOpacity={0.9}
               onPress={() => {
                 const session = activeTextSessions[0];
-                const appointmentId = session.appointment_id || `text_session_${session.id}`;
-                router.push(`/chat/${appointmentId}`);
+                router.push(`/sessions/${session.id}/chat`);
               }}
               style={{
                 backgroundColor: '#4CAF50',

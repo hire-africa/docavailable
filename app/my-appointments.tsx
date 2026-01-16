@@ -42,14 +42,14 @@ const MyAppointments = () => {
   const fetchAppointments = async () => {
     try {
       setLoading(true);
-      const response = await apiService.get('/appointments');
+      const response: any = await apiService.get('/appointments');
       if (response.success) {
         // Handle different response structures
         let appointmentsData = response.data;
 
         // Check if data is nested (Laravel pagination structure)
-        if (response.data && response.data.data) {
-          appointmentsData = response.data.data;
+        if (response.data && (response.data as any).data) {
+          appointmentsData = (response.data as any).data;
         }
 
         // Ensure we have an array
@@ -248,12 +248,8 @@ const MyAppointments = () => {
     const handleAppointmentPress = () => {
       // Check if appointment has a session
       if (appt.session_id !== null && appt.session_id !== undefined) {
-        // Determine session type from appointment type
-        const sessionType = appt.appointment_type === 'text' ? 'text_session' : 'call_session';
-        const sessionContext = `${sessionType}:${appt.session_id}`;
-        
-        console.log('✅ [MyAppointments] Navigating to session:', sessionContext);
-        router.push(`/chat/${sessionContext}`);
+        console.log('✅ [MyAppointments] Navigating to session:', appt.session_id);
+        router.push(`/sessions/${appt.session_id}/chat`);
       } else {
         // No session yet, show appointment details
         setSelectedAppointment(appt);
