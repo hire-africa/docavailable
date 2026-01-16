@@ -200,14 +200,86 @@ class TextSession extends Model
     }
 
     /**
-     * Expire the session.
+     * Check if session should be expired based on lazy expiration rules.
+     * A session is expired if: status = waiting_for_doctor AND doctor_response_deadline < now()
+     * 
+     * @return bool True if session should be expired
+     */
+    public function shouldBeExpired(): bool
+    {
+        return $this->status === self::STATUS_WAITING_FOR_DOCTOR
+            && $this->doctor_response_deadline !== null
+            && $this->doctor_response_deadline < now(); // Use < not <= to match requirement
+    }
+
+    /**
+     * Apply lazy expiration: compute expiry at read-time and persist if detected.
+     * Only persists expiry if session should be expired and is still in waiting_for_doctor status.
+     * 
+     * @return bool True if session was expired, false otherwise
+     */
+    public function applyLazyExpiration(): bool
+    {
+        // Check if session should be expired
+        if (!$this->shouldBeExpired()) {
+            return false;
+        }
+
+        // Persist expiry via atomic conditional update
+        $now = now();
+        $expiredCount = self::where('id', $this->id)
+            ->where('status', self::STATUS_WAITING_FOR_DOCTOR)
+            ->whereNotNull('doctor_response_deadline')
+            ->where('doctor_response_deadline', '<', $now)
+            ->update([
+                'status' => self::STATUS_EXPIRED,
+                'ended_at' => $now,
+                'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window') / 60) . ' minutes',
+            ]);
+
+        if ($expiredCount > 0) {
+            // Refresh to get updated values
+            $this->refresh();
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Atomically expire the session only if conditions are met.
+     * Only expires sessions with status = waiting_for_doctor AND doctor_response_deadline <= now()
+     * Never overwrites active, ended, or cancelled statuses.
+     * 
+     * @param int $sessionId The session ID to expire
+     * @return int Number of rows updated (0 if no update, 1 if expired)
+     */
+    public static function expireIfWaitingAndDeadlinePassed(int $sessionId): int
+    {
+        $now = now();
+        
+        // Only expire if: status = waiting_for_doctor AND doctor_response_deadline <= now()
+        // The WHERE clause already ensures status = waiting_for_doctor, so we don't need whereNotIn
+        return self::where('id', $sessionId)
+            ->where('status', self::STATUS_WAITING_FOR_DOCTOR)
+            ->whereNotNull('doctor_response_deadline')
+            ->where('doctor_response_deadline', '<=', $now)
+            ->update([
+                'status' => self::STATUS_EXPIRED,
+                'ended_at' => $now,
+                'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window') / 60) . ' minutes',
+            ]);
+    }
+
+    /**
+     * Expire the session (deprecated - use expireIfWaitingAndDeadlinePassed for atomic updates).
+     * @deprecated Use expireIfWaitingAndDeadlinePassed() for race-condition-safe expiry
      */
     public function expireSession(): void
     {
-        $this->update([
-            'status' => self::STATUS_EXPIRED,
-            'ended_at' => now(),
-        ]);
+        // Use atomic conditional update instead
+        self::expireIfWaitingAndDeadlinePassed($this->id);
+        $this->refresh();
     }
 
     /**

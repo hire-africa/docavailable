@@ -193,7 +193,11 @@ export default function InstantSessionTimer({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const progress = isActive ? (timeRemaining / 90) * 100 : 0;
+  // Calculate progress based on time remaining
+  // Use a reasonable maximum (10 minutes = 600 seconds) for progress calculation
+  // The actual countdown is derived from server deadline, this is just for UI progress bar
+  const maxDuration = 600; // 10 minutes max for progress calculation
+  const progress = isActive && timeRemaining > 0 ? Math.min(100, (timeRemaining / maxDuration) * 100) : 0;
 
   // Debug logging
   console.log('🔍 [InstantSessionTimer] Props:', {
@@ -213,7 +217,7 @@ export default function InstantSessionTimer({
           <View style={styles.infoOnlyContainer}>
             <Text style={styles.title}>Instant Session</Text>
             <Text style={styles.infoText}>
-              Send a message to start the 90-second timer
+              Send a message to start the response timer
             </Text>
           </View>
         </View>

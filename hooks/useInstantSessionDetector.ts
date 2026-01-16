@@ -44,8 +44,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
   const [timerState, setTimerState] = useState<TimerState>({
     isActive: false,
     timeRemaining: 0,
-    startTime: 0,
-    endTime: 0
+    doctor_response_deadline: null
   });
   const [hasPatientSentMessage, setHasPatientSentMessage] = useState(false);
   const [hasDoctorResponded, setHasDoctorResponded] = useState(false);
@@ -88,14 +87,13 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
         console.log('👨‍⚕️ [Hook] Setting hasDoctorResponded to true');
         setHasDoctorResponded(true);
       },
-      onTimerStarted: (timeRemaining) => {
-        console.log('⏰ [Hook] Timer started, remaining:', timeRemaining);
+      onTimerStarted: (timeRemaining, doctor_response_deadline) => {
+        console.log('⏰ [Hook] Timer started, remaining:', timeRemaining, 'deadline:', doctor_response_deadline);
         setTimerState(prev => ({
           ...prev,
           isActive: true,
           timeRemaining,
-          startTime: Date.now(),
-          endTime: Date.now() + (timeRemaining * 1000)
+          doctor_response_deadline
         }));
       },
       onTimerExpired: () => {
@@ -190,13 +188,13 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
 
       // Immediately rehydrate timer from backend after successful connect to avoid race conditions
       try {
-        const { default: sessionService } = await import('../services/sessionService');
-        const result = await sessionService.checkDoctorResponse(sessionId);
-        if ((result as any)?.status === 'waiting' && typeof (result as any)?.timeRemaining === 'number') {
-          const remaining = Math.max(0, Math.floor((result as any).timeRemaining));
+        const { default: apiService } = await import('../services/apiService');
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+        if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
+          const remaining = Math.max(0, Math.floor(result.timeRemaining));
           if (remaining > 0) {
-            console.log('⏰ [Hook] Post-connect rehydrate with remaining:', remaining);
-            detectorRef.current.resumeTimerWithRemaining(remaining);
+            console.log('⏰ [Hook] Post-connect rehydrate with deadline:', result.doctor_response_deadline, 'remaining:', remaining);
+            detectorRef.current.resumeTimerWithDeadline(result.doctor_response_deadline, remaining);
             setTimerState(detectorRef.current.getTimerState());
             setHasPatientSentMessage(true);
           }
@@ -220,16 +218,16 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
         if (!detectorRef.current) return;
 
         // Import lazily to avoid cycles
-        const { default: sessionService } = await import('../services/sessionService');
-        const result = await sessionService.checkDoctorResponse(sessionId);
+        const { default: apiService } = await import('../services/apiService');
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
         if (cancelled) return;
 
-        if ((result as any)?.status === 'waiting' && typeof (result as any)?.timeRemaining === 'number') {
-          const remaining = Math.max(0, Math.floor((result as any).timeRemaining));
+        if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
+          const remaining = Math.max(0, Math.floor(result.timeRemaining));
           if (remaining > 0) {
-            console.log('⏰ [Hook] Rehydrating timer from backend with remaining:', remaining);
-            // Ask detector to resume timer in-place
-            detectorRef.current.resumeTimerWithRemaining(remaining);
+            console.log('⏰ [Hook] Rehydrating timer from backend with deadline:', result.doctor_response_deadline, 'remaining:', remaining);
+            // Ask detector to resume timer in-place with deadline
+            detectorRef.current.resumeTimerWithDeadline(result.doctor_response_deadline, remaining);
             // Reflect immediately in hook state
             setTimerState(detectorRef.current.getTimerState());
             setHasPatientSentMessage(true);
@@ -259,9 +257,8 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setIsSessionActivated(false);
       setTimerState({
         isActive: false,
-        timeRemaining: 90,
-        startTime: 0,
-        endTime: 0
+        timeRemaining: 0, // Will be set from server deadline
+        doctor_response_deadline: null
       });
     }
   };

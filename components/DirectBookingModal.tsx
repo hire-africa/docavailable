@@ -107,7 +107,7 @@ export default function DirectBookingModal({
           title: 'Text Session',
           items: [
             { icon: 'comment', text: 'You\'ll be directed to the chat immediately', color: '#4CAF50' },
-            { icon: 'clock-o', text: 'Doctor has 90 seconds to respond', color: '#FF9500' },
+            { icon: 'clock-o', text: 'Doctor has a response window to respond', color: '#FF9500' },
             { icon: 'shield', text: 'You won\'t be charged if doctor doesn\'t respond in time', color: '#4CAF50' },
             { icon: 'credit-card', text: 'Uses 1 text session per 10 minutes', color: '#4CAF50' }
           ]

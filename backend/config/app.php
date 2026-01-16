@@ -29,6 +29,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Text Session Response Window
+    |--------------------------------------------------------------------------
+    |
+    | The duration in seconds that a doctor has to respond to a patient's
+    | first message before the session expires. Default is 5 minutes (300 seconds).
+    | Can be configured via TEXT_SESSION_RESPONSE_WINDOW environment variable.
+    |
+    */
+
+    'text_session_response_window' => env('TEXT_SESSION_RESPONSE_WINDOW', 300), // 5 minutes default
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

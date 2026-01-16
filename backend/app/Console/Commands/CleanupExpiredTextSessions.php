@@ -29,31 +29,31 @@ class CleanupExpiredTextSessions extends Command
     {
         $this->info('Starting cleanup of expired text sessions...');
 
-        // Find active sessions that have expired
-        $expiredSessions = TextSession::where('status', 'active')
-            ->get()
-            ->filter(function ($session) {
-                return $session->hasExpired();
-            });
+        // NOTE: Active sessions should NOT be expired - they should be ended when they run out of time
+        // This cleanup command should only handle waiting_for_doctor sessions with expired deadlines
+        // Atomic conditional update: Only expire if status = waiting_for_doctor AND deadline passed
+        $now = now();
+        $expiredCount = TextSession::where('status', TextSession::STATUS_WAITING_FOR_DOCTOR)
+            ->whereNotNull('doctor_response_deadline')
+            ->where('doctor_response_deadline', '<=', $now)
+            ->update([
+                'status' => TextSession::STATUS_EXPIRED,
+                'ended_at' => $now,
+                'reason' => 'Doctor did not respond within 90 seconds',
+            ]);
 
-        $count = 0;
-        foreach ($expiredSessions as $session) {
-            $session->markAsExpired();
-            $count++;
-        }
+        $this->info("Atomically expired {$expiredCount} waiting sessions with expired deadline.");
 
-        $this->info("Cleaned up {$count} expired text sessions.");
-
-        // Clean up stale waiting sessions (older than 24 hours)
-        $staleWaitingSessions = TextSession::where('status', 'waiting_for_doctor')
+        // Clean up stale waiting sessions (older than 24 hours) - only if no deadline set
+        // Use atomic conditional update
+        $staleCount = TextSession::where('status', TextSession::STATUS_WAITING_FOR_DOCTOR)
             ->where('created_at', '<', Carbon::now()->subHours(24))
-            ->get();
-            
-        $waitingCount = 0;
-        foreach ($staleWaitingSessions as $session) {
-            $session->update(['status' => 'expired']);
-            $waitingCount++;
-        }
+            ->whereNull('doctor_response_deadline')
+            ->update([
+                'status' => TextSession::STATUS_EXPIRED,
+                'ended_at' => $now,
+                'reason' => 'Stale waiting session (older than 24 hours)',
+            ]);
         
         $this->info("Cleaned up {$waitingCount} stale waiting sessions.");
 

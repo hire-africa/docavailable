@@ -623,9 +623,9 @@ async function checkSessionActivation(appointmentId, message, messageData, sende
           await activateTextSession(sessionId, appointmentId);
         }
         
-        // If session is waiting and patient sent message, start 90-second timer
+        // If session is waiting and patient sent message, start response window timer
         if (sessionData.status === 'waiting_for_doctor' && messageData.sender_id === sessionData.patient.id) {
-          console.log(`👤 [SessionActivation] Patient message detected, starting 90-second timer for session ${sessionId}`);
+          console.log(`👤 [SessionActivation] Patient message detected, starting response window timer for session ${sessionId}`);
           await startDoctorResponseTimer(sessionId, appointmentId);
         }
       }
@@ -650,7 +650,7 @@ async function activateTextSession(sessionId, appointmentId) {
     if (response.data.success) {
       console.log(`✅ [SessionActivation] Text session ${sessionId} activated successfully`);
       
-      // Stop the 90-second timer since doctor responded
+      // Stop the response window timer since doctor responded
       stopDoctorResponseTimer(sessionId, appointmentId);
       
       // Start auto-deduction timer (every 10 minutes)
@@ -674,7 +674,9 @@ async function activateTextSession(sessionId, appointmentId) {
   }
 }
 
-// Start 90-second doctor response timer for text sessions
+// Start doctor response timer for text sessions (configurable duration)
+const TEXT_SESSION_RESPONSE_WINDOW = parseInt(process.env.TEXT_SESSION_RESPONSE_WINDOW || '300', 10); // Default 5 minutes (300 seconds)
+
 async function startDoctorResponseTimer(sessionId, appointmentId) {
   // Clear existing timer if any
   if (sessionTimers.has(`response_${sessionId}`)) {
@@ -682,20 +684,20 @@ async function startDoctorResponseTimer(sessionId, appointmentId) {
     console.log(`⏰ [Timer] Cleared existing timer for session ${sessionId}`);
   }
 
-  console.log(`⏰ [Timer] Starting 90-second timer for session ${sessionId}`);
+  console.log(`⏰ [Timer] Starting ${TEXT_SESSION_RESPONSE_WINDOW}-second timer for session ${sessionId}`);
   
   // Set new timer
   const timer = setTimeout(async () => {
-    console.log(`⏰ [Timer] 90-second timer expired for session ${sessionId}`);
+    console.log(`⏰ [Timer] ${TEXT_SESSION_RESPONSE_WINDOW}-second timer expired for session ${sessionId}`);
     await checkDoctorResponse(sessionId, appointmentId);
-  }, 90000); // 90 seconds
+  }, TEXT_SESSION_RESPONSE_WINDOW * 1000); // Configurable duration in milliseconds
 
   sessionTimers.set(`response_${sessionId}`, timer);
   
   // Store timer start time for tracking
   sessionStates.set(`response_${sessionId}`, {
     startTime: Date.now(),
-    endTime: Date.now() + 90000,
+    endTime: Date.now() + (TEXT_SESSION_RESPONSE_WINDOW * 1000),
     isActive: true
   });
   
@@ -704,15 +706,15 @@ async function startDoctorResponseTimer(sessionId, appointmentId) {
     type: 'doctor-response-timer-started',
     sessionId: sessionId,
     sessionType: 'instant',
-    timeRemaining: 90,
+    timeRemaining: TEXT_SESSION_RESPONSE_WINDOW,
     startTime: Date.now(),
-    endTime: Date.now() + 90000
+    endTime: Date.now() + (TEXT_SESSION_RESPONSE_WINDOW * 1000)
   });
   
   console.log(`✅ [Timer] Timer started and participants notified for session ${sessionId}`);
 }
 
-// Check if doctor responded within 90 seconds
+// Check if doctor responded within response window
 async function checkDoctorResponse(sessionId, appointmentId) {
   try {
     console.log(`🔍 [Timer] Checking doctor response for session ${sessionId}`);
@@ -731,7 +733,7 @@ async function checkDoctorResponse(sessionId, appointmentId) {
           type: 'session-expired',
           sessionId: sessionId,
           sessionType: 'instant',
-          reason: 'Doctor did not respond within 90 seconds',
+          reason: `Doctor did not respond within ${TEXT_SESSION_RESPONSE_WINDOW / 60} minutes`,
           expiredAt: new Date().toISOString()
         });
         

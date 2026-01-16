@@ -104,7 +104,13 @@ class TextSessionController extends Controller
                     ->first();
 
                 if ($existingSession) {
-                    throw new \Exception('You already have an active session with this doctor');
+                    // Apply lazy expiration at read-time
+                    $existingSession->applyLazyExpiration();
+                    
+                    // Re-check status after lazy expiration
+                    if (in_array($existingSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
+                        throw new \Exception('You already have an active session with this doctor');
+                    }
                 }
 
                 // Create text session
@@ -117,7 +123,7 @@ class TextSessionController extends Controller
                     'sessions_used' => 0,
                     'sessions_remaining_before_start' => $sessionsRemaining,
                     'reason' => $reason,
-                    'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
+                    'doctor_response_deadline' => now()->addSeconds(config('app.text_session_response_window')), // Configurable response window
                 ]);
 
                 // Create chat room
@@ -174,6 +180,11 @@ class TextSessionController extends Controller
 
             // Get the created session to calculate remaining time
             $session = TextSession::find($textSessionId);
+            
+            // Apply lazy expiration at read-time (unlikely to be expired immediately after creation, but safe)
+            if ($session) {
+                $session->applyLazyExpiration();
+            }
 
             // Send notifications to both patient and doctor
             $this->notificationService->sendTextSessionNotification($session, 'started', 'Your text session has started');
@@ -232,6 +243,9 @@ class TextSessionController extends Controller
                 ], 404);
             }
 
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
+
             // Check if session has expired waiting for doctor
             if ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
                 Log::info("Session is waiting for doctor", [
@@ -251,6 +265,7 @@ class TextSessionController extends Controller
                         'success' => true,
                         'status' => 'waiting',
                         'timeRemaining' => null, // No timer started yet
+                        'doctor_response_deadline' => null, // No deadline set yet
                         'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
                         'remainingSessions' => $session->getRemainingSessions(),
                         'message' => 'Waiting for patient to send first message'
@@ -277,7 +292,7 @@ class TextSessionController extends Controller
                 ]);
 
                 if ($timeRemaining <= 0) {
-                    Log::info("Session expired - auto-expiring", [
+                    Log::info("Session expired - lazy expiration detected", [
                         'session_id' => $sessionId,
                         'time_remaining' => $timeRemaining,
                         'deadline' => $deadline,
@@ -285,31 +300,15 @@ class TextSessionController extends Controller
                         'current_status' => $session->status
                     ]);
 
-                    // Auto-expire the session
-                    try {
-                        $updateResult = $session->update([
-                            'status' => TextSession::STATUS_EXPIRED,
-                            'ended_at' => now()
-                        ]);
+                    // Lazy expiration already applied above via applyLazyExpiration()
+                    // Just refresh to ensure we have the latest status
+                    $session->refresh();
 
-                        // Refresh to verify update
-                        $session->refresh();
-
-                        Log::info("Session update result", [
-                            'session_id' => $sessionId,
-                            'update_successful' => $updateResult,
-                            'new_status' => $session->status,
-                            'ended_at' => $session->ended_at,
-                            'is_expired' => $session->status === TextSession::STATUS_EXPIRED
-                        ]);
-                    } catch (\Exception $updateError) {
-                        Log::error("CRITICAL: Failed to update session to expired", [
-                            'session_id' => $sessionId,
-                            'error' => $updateError->getMessage(),
-                            'trace' => $updateError->getTraceAsString()
-                        ]);
-                        // Still try to return expired status even if DB update fails
-                    }
+                    Log::info("Session expiry check complete", [
+                        'session_id' => $sessionId,
+                        'new_status' => $session->status,
+                        'ended_at' => $session->ended_at,
+                    ]);
 
                     // Broadcast session-expired event via WebSocket
                     try {
@@ -350,6 +349,7 @@ class TextSessionController extends Controller
                         'success' => true,
                         'status' => 'expired',
                         'timeRemaining' => 0,
+                        'doctor_response_deadline' => null, // Expired - no deadline
                         'message' => 'Session expired - no session will be deducted'
                     ]);
                 }
@@ -364,6 +364,7 @@ class TextSessionController extends Controller
                     'success' => true,
                     'status' => 'waiting',
                     'timeRemaining' => $timeRemaining,
+                    'doctor_response_deadline' => $deadline->toIso8601String(), // Return deadline for frontend countdown
                     'remainingTimeMinutes' => $session->getRemainingTimeMinutes(),
                     'remainingSessions' => $session->getRemainingSessions(),
                     'message' => 'Waiting for doctor response'
@@ -509,6 +510,11 @@ class TextSessionController extends Controller
                 ->orderBy('activated_at', 'desc')
                 ->get();
 
+            // Apply lazy expiration to all sessions at read-time
+            foreach ($sessions as $session) {
+                $session->applyLazyExpiration();
+            }
+
             $sessionsData = $sessions->map(function ($session) {
                 return [
                     'id' => $session->id,
@@ -553,6 +559,11 @@ class TextSessionController extends Controller
             }
 
             $sessions = $query->orderBy('started_at', 'desc')->get();
+            
+            // Apply lazy expiration to all sessions at read-time
+            foreach ($sessions as $session) {
+                $session->applyLazyExpiration();
+            }
 
             return response()->json([
                 'success' => true,
@@ -590,6 +601,11 @@ class TextSessionController extends Controller
             }
 
             $sessions = $query->orderBy('last_activity_at', 'desc')->get();
+            
+            // Apply lazy expiration to all sessions at read-time
+            foreach ($sessions as $session) {
+                $session->applyLazyExpiration();
+            }
 
             // Add remaining time information to each session
             $sessionsWithTime = $sessions->map(function ($session) use ($userType) {
@@ -663,6 +679,9 @@ class TextSessionController extends Controller
                     'message' => 'Text session not found. It may have already been ended or deleted.'
                 ], 404);
             }
+
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
 
             // Check if session is already ended
             if ($session->status === TextSession::STATUS_ENDED) {
@@ -803,6 +822,9 @@ class TextSessionController extends Controller
                     'message' => 'Text session not found'
                 ], 404);
             }
+
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
 
             // Check if user is part of this session
             if ($session->patient_id !== $user->id && $session->doctor_id !== $user->id) {
@@ -963,6 +985,9 @@ class TextSessionController extends Controller
                 ], 404);
             }
 
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
+
             $status = $request->input('status');
             $oldStatus = $session->status;
 
@@ -1055,6 +1080,9 @@ class TextSessionController extends Controller
                     'message' => 'Session not found'
                 ], 404);
             }
+
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
 
             if ($session->status !== TextSession::STATUS_ACTIVE) {
                 return response()->json([
@@ -1282,6 +1310,8 @@ class TextSessionController extends Controller
             // Check if text session already exists for this appointment
             $existingSession = TextSession::where('appointment_id', $appointmentId)->first();
             if ($existingSession) {
+                // Apply lazy expiration at read-time
+                $existingSession->applyLazyExpiration();
                 if ($appointment->session_id === null) {
                     $appointment->update([
                         'session_id' => $existingSession->id,
@@ -1368,7 +1398,7 @@ class TextSessionController extends Controller
                 'status' => TextSession::STATUS_WAITING_FOR_DOCTOR, // Use waiting_for_doctor (matches DB enum)
                 'reason' => $reason ?: $appointment->reason,
                 'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
-                'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
+                'doctor_response_deadline' => now()->addSeconds(config('app.text_session_response_window')), // Configurable response window
                 'started_at' => now(),
                 'last_activity_at' => now(),
                 'created_at' => now(),

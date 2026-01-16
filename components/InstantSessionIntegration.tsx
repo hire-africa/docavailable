@@ -88,7 +88,7 @@ export default function InstantSessionIntegration({
   const handleTimerExpired = () => {
     Alert.alert(
       'Session Expired',
-      'The doctor did not respond within 90 seconds. The session has expired.',
+      'The doctor did not respond within the response window. The session has expired.',
       [
         {
           text: 'OK',
@@ -147,7 +147,7 @@ export default function InstantSessionIntegration({
     } else if (isSessionActivated) {
       return 'Type your message...';
     } else {
-      return 'Type your message to start the 90-second timer...';
+      return 'Type your message to start the response timer...';
     }
   };
 
@@ -180,7 +180,7 @@ export default function InstantSessionIntegration({
       {!showTimer && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && (
         <View style={styles.expiredContainer}>
           <Text style={styles.expiredText}>
-            Session expired - Doctor did not respond within 90 seconds
+            Session expired - Doctor did not respond within the response window
           </Text>
           <TouchableOpacity style={styles.clearButton} onPress={handleClearState}>
             <Text style={styles.clearButtonText}>Clear Session</Text>

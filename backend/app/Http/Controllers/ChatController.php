@@ -111,6 +111,8 @@ class ChatController extends Controller
         // Try text session first (more common for chat)
         $textSession = \App\Models\TextSession::find($sessionId);
         if ($textSession) {
+            // Apply lazy expiration at read-time
+            $textSession->applyLazyExpiration();
             return 'text_session:' . $sessionId;
         }
         
@@ -160,11 +162,12 @@ class ChatController extends Controller
 
         // If not found as appointment, try as text session
         if (!$appointment) {
-            $textSession = DB::table('text_sessions')
-                ->where('id', $actualId)
-                ->first();
+            $textSession = \App\Models\TextSession::find($actualId);
 
             if ($textSession) {
+                // Apply lazy expiration at read-time
+                $textSession->applyLazyExpiration();
+                
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return [
@@ -253,11 +256,12 @@ class ChatController extends Controller
 
         // If not found as appointment, try as text session
         if (!$appointment) {
-            $textSession = DB::table('text_sessions')
-                ->where('id', $actualId)
-                ->first();
+            $textSession = \App\Models\TextSession::find($actualId);
 
             if ($textSession) {
+                // Apply lazy expiration at read-time
+                $textSession->applyLazyExpiration();
+                
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return response()->json([
@@ -472,6 +476,9 @@ class ChatController extends Controller
                     abort(404, 'Session not found');
                 }
 
+                // Apply lazy expiration at read-time
+                $session->applyLazyExpiration();
+
                 Log::info("Text session message received", [
                     'appointment_id' => $appointmentId,
                     'session_id' => $sessionId,
@@ -492,39 +499,61 @@ class ChatController extends Controller
                     abort(403, 'Session is not active');
                 }
 
-                // FINAL BACKEND RULES: Handle waiting_for_doctor status (or pending)
-                // Only check deadline if this is the doctor's message
-                if (in_array($session->status, ['waiting_for_doctor', 'pending']) && $user->id === $session->doctor_id) {
-                    if (now()->gt($session->doctor_response_deadline)) {
-                        $session->update([
-                            'status' => 'expired',
-                            'ended_at' => now(),
-                            'reason' => 'Doctor did not respond within 90 seconds',
+                // FINAL BACKEND RULES: Handle waiting_for_doctor status (or pending) with atomic conditional update
+                // Only process if this is the doctor's message
+                if ($user->id === $session->doctor_id) {
+                    $now = now();
+                    
+                    // Atomic update 1: Expire session if deadline passed
+                    // Only expire if: status = waiting_for_doctor AND doctor_response_deadline <= now()
+                    // Never overwrite: active, ended, cancelled
+                    $expiredCount = \App\Models\TextSession::where('id', $sessionId)
+                        ->where('status', \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR)
+                        ->where('doctor_id', $user->id)
+                        ->whereNotNull('doctor_response_deadline')
+                        ->where('doctor_response_deadline', '<=', $now)
+                        ->update([
+                            'status' => \App\Models\TextSession::STATUS_EXPIRED,
+                            'ended_at' => $now,
+                            'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window') / 60) . ' minutes',
                         ]);
 
-                        Log::info("Session expired - doctor response deadline passed", [
+                    if ($expiredCount > 0) {
+                        Log::info("Session expired - doctor response deadline passed (atomic update)", [
                             'session_id' => $sessionId,
                             'deadline' => $session->doctor_response_deadline,
-                            'current_time' => now(),
-                            'seconds_past_deadline' => now()->diffInSeconds($session->doctor_response_deadline)
+                            'current_time' => $now,
+                            'seconds_past_deadline' => $session->doctor_response_deadline ? $now->diffInSeconds($session->doctor_response_deadline) : 0
                         ]);
 
                         abort(403, 'Session expired');
                     }
 
-                    // Deadline not passed - activate the session
-                    $session->update([
-                        'status' => 'active',
-                        'activated_at' => now(),
-                        'started_at' => now(),
-                    ]);
+                    // Atomic update 2: Activate session if deadline not passed
+                    $activatedCount = \App\Models\TextSession::where('id', $sessionId)
+                        ->whereIn('status', ['waiting_for_doctor', 'pending'])
+                        ->where('doctor_id', $user->id)
+                        ->where(function ($query) use ($now) {
+                            $query->whereNull('doctor_response_deadline')
+                                  ->orWhere('doctor_response_deadline', '>', $now);
+                        })
+                        ->update([
+                            'status' => 'active',
+                            'activated_at' => $now,
+                            'started_at' => $now,
+                        ]);
 
-                    Log::info("Session activated by doctor's first message", [
-                        'session_id' => $sessionId,
-                        'activated_at' => now(),
-                        'deadline' => $session->doctor_response_deadline,
-                        'seconds_remaining' => $session->doctor_response_deadline->diffInSeconds(now())
-                    ]);
+                    if ($activatedCount > 0) {
+                        // Refresh session to get updated values
+                        $session->refresh();
+                        
+                        Log::info("Session activated by doctor's first message (atomic update)", [
+                            'session_id' => $sessionId,
+                            'activated_at' => $now,
+                            'deadline' => $session->doctor_response_deadline,
+                            'seconds_remaining' => $session->doctor_response_deadline ? $session->doctor_response_deadline->diffInSeconds($now) : null
+                        ]);
+                    }
                 }
 
                 // Update last_activity_at on every message (for active sessions)
@@ -654,20 +683,14 @@ class ChatController extends Controller
 
         // If not found as appointment, try as text session
         if (!$appointment) {
-            $textSession = DB::table('text_sessions')
-                ->join('users as doctor', 'text_sessions.doctor_id', '=', 'doctor.id')
-                ->join('users as patient', 'text_sessions.patient_id', '=', 'patient.id')
-                ->where('text_sessions.id', $actualId)
-                ->select(
-                    'text_sessions.*',
-                    'doctor.first_name as doctor_first_name',
-                    'doctor.last_name as doctor_last_name',
-                    'patient.first_name as patient_first_name',
-                    'patient.last_name as patient_last_name'
-                )
+            $textSession = \App\Models\TextSession::with(['patient', 'doctor'])
+                ->where('id', $actualId)
                 ->first();
 
             if ($textSession) {
+                // Apply lazy expiration at read-time
+                $textSession->applyLazyExpiration();
+                
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return response()->json([
@@ -680,7 +703,7 @@ class ChatController extends Controller
                 $otherParticipantName = '';
                 $otherParticipantId = null;
                 if ($user->id === $textSession->doctor_id) {
-                    $otherParticipantName = $textSession->patient_first_name . ' ' . $textSession->patient_last_name;
+                    $otherParticipantName = $textSession->patient->first_name . ' ' . $textSession->patient->last_name;
                     $otherParticipantId = $textSession->patient_id;
                     \Log::info('🔍 [ChatController] Doctor viewing patient', [
                         'doctor_id' => $user->id,
@@ -688,7 +711,7 @@ class ChatController extends Controller
                         'original_patient_name' => $otherParticipantName
                     ]);
                 } else {
-                    $otherParticipantName = 'Dr. ' . $textSession->doctor_first_name . ' ' . $textSession->doctor_last_name;
+                    $otherParticipantName = 'Dr. ' . $textSession->doctor->first_name . ' ' . $textSession->doctor->last_name;
                     $otherParticipantId = $textSession->doctor_id;
                     \Log::info('🔍 [ChatController] Patient viewing doctor', [
                         'patient_id' => $user->id,

@@ -21,63 +21,68 @@ class ProcessExpiredTextSessions extends Command
      *
      * @var string
      */
-    protected $description = 'Process expired text sessions that haven\'t received doctor replies within 90 seconds or have run out of time';
+    protected $description = 'Process expired text sessions (backup/cleanup only - lazy expiration at read-time is primary mechanism)';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        $this->info('Processing expired text sessions...');
+        $this->info('Processing expired text sessions (backup cleanup - lazy expiration is primary)...');
 
-        // Find sessions that have been waiting for doctor for more than 90 seconds
-        // FIXED: Only expire sessions where patient has sent a message (doctor_response_deadline is set)
-        $waitingExpiredSessions = TextSession::where('status', TextSession::STATUS_WAITING_FOR_DOCTOR)
-            ->whereNotNull('doctor_response_deadline')
-            ->where('doctor_response_deadline', '<=', now())
-            ->get();
-            
-        $this->info("Found {$waitingExpiredSessions->count()} sessions waiting for doctor with expired deadline");
+        // NOTE: Lazy expiration at read-time is the primary mechanism for correctness.
+        // This command is for backup/cleanup only and should not be relied upon for correctness.
+        // Sessions are expired lazily when read via applyLazyExpiration().
         
-        // Log details for debugging
-        foreach ($waitingExpiredSessions as $session) {
-            $this->info("  Session {$session->id}: Started at {$session->started_at}, Deadline: {$session->doctor_response_deadline}");
-        }
+        // Atomic conditional update: Only expire sessions with status = waiting_for_doctor AND deadline passed
+        // Never overwrite active, ended, or cancelled statuses
+        $now = now();
+        $expiredCount = TextSession::where('status', TextSession::STATUS_WAITING_FOR_DOCTOR)
+            ->whereNotNull('doctor_response_deadline')
+            ->where('doctor_response_deadline', '<', $now)
+            ->update([
+                'status' => TextSession::STATUS_EXPIRED,
+                'ended_at' => $now,
+                'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window') / 60) . ' minutes',
+            ]);
 
-        // Find active sessions that have run out of time - FIXED: Use proper logic instead of SQL
+        $this->info("Atomically expired {$expiredCount} sessions waiting for doctor with expired deadline (backup cleanup)");
+
+        // Find active sessions that have run out of time - these should be ENDED, not expired
+        // Active sessions that run out of time are handled separately (they get ended, not expired)
         $timeExpiredSessions = TextSession::where('status', TextSession::STATUS_ACTIVE)
             ->get()
             ->filter(function($session) {
                 return $session->hasRunOutOfTime();
             });
 
-        $allExpiredSessions = $waitingExpiredSessions->merge($timeExpiredSessions);
-
-        if ($allExpiredSessions->isEmpty()) {
+        if ($expiredCount === 0 && $timeExpiredSessions->isEmpty()) {
             $this->info('No expired text sessions found.');
             return;
         }
 
-        $this->info("Found {$allExpiredSessions->count()} expired text sessions.");
-
-        $processedCount = 0;
+        $processedCount = $expiredCount;
         $paymentService = new DoctorPaymentService();
 
-        foreach ($allExpiredSessions as $session) {
+        // Process active sessions that have run out of time (these get ENDED, not expired)
+        foreach ($timeExpiredSessions as $session) {
             try {
                 $this->info("Processing session {$session->id} (Patient: {$session->patient->first_name}, Doctor: {$session->doctor->first_name})");
                 
-                if ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR) {
-                    // Session expired waiting for doctor - no deduction
-                    $session->update([
-                        'status' => TextSession::STATUS_EXPIRED,
-                        'ended_at' => now()
-                    ]);
-                    
-                    $this->info("Session {$session->id} expired waiting for doctor - no session deducted from patient");
-                } else {
-                    // Session ran out of time - process auto-deductions first, then end
-                    DB::transaction(function () use ($session, $paymentService) {
+                // Active sessions that run out of time should be ENDED, not expired
+                // Use atomic conditional update to ensure we don't overwrite if status changed
+                // First, lock and check the session
+                $session = TextSession::where('id', $session->id)
+                    ->lockForUpdate()
+                    ->first();
+                
+                if (!$session || $session->status !== TextSession::STATUS_ACTIVE) {
+                    $this->info("Session {$session->id} is no longer active, skipping");
+                    continue;
+                }
+                
+                // Process auto-deductions first, then end
+                DB::transaction(function () use ($session, $paymentService) {
                         // Process any pending auto-deductions before ending
                         $elapsedMinutes = now()->diffInMinutes($session->activated_at);
                         $expectedDeductions = max(0, floor($elapsedMinutes / 10)); // Ensure non-negative
@@ -110,15 +115,20 @@ class ProcessExpiredTextSessions extends Command
                             $this->info("Session {$session->id}: No new auto-deductions needed (already processed: {$alreadyProcessed})");
                         }
                         
-                        // Now end the session
-                        $session->update([
-                            'status' => TextSession::STATUS_ENDED,
-                            'ended_at' => now()
-                        ]);
+                        // Now end the session with atomic conditional update
+                        $endedCount = TextSession::where('id', $session->id)
+                            ->where('status', TextSession::STATUS_ACTIVE)
+                            ->update([
+                                'status' => TextSession::STATUS_ENDED,
+                                'ended_at' => now()
+                            ]);
                         
-                        $this->info("Session {$session->id} ended successfully");
+                        if ($endedCount > 0) {
+                            $this->info("Session {$session->id} ended successfully");
+                        } else {
+                            $this->info("Session {$session->id} status changed during processing, skipping end");
+                        }
                     });
-                }
                 
                 $processedCount++;
                 

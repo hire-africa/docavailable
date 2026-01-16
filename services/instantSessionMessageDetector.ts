@@ -34,7 +34,7 @@ export async function destroyAllInstantSessionDetectors(): Promise<void> {
 export interface MessageDetectionEvents {
   onPatientMessageDetected: (message: any) => void;
   onDoctorMessageDetected: (message: any) => void;
-  onTimerStarted: (timeRemaining: number) => void;
+  onTimerStarted: (timeRemaining: number, doctor_response_deadline: string | null) => void;
   onTimerExpired: () => void;
   onTimerStopped: () => void;
   onSessionActivated: () => void;
@@ -44,8 +44,7 @@ export interface MessageDetectionEvents {
 export interface TimerState {
   isActive: boolean;
   timeRemaining: number;
-  startTime: number;
-  endTime: number;
+  doctor_response_deadline: string | null; // Server-provided deadline for countdown calculation
 }
 
 export class InstantSessionMessageDetector {
@@ -57,9 +56,8 @@ export class InstantSessionMessageDetector {
   private countdownInterval: NodeJS.Timeout | null = null;
   private timerState: TimerState = {
     isActive: false,
-    timeRemaining: 90,
-    startTime: 0,
-    endTime: 0
+    timeRemaining: 0, // Will be set from server deadline
+    doctor_response_deadline: null
   };
   private hasPatientMessageSent: boolean = false;
   private hasDoctorResponded: boolean = false;
@@ -289,7 +287,7 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Handle patient message - start 90-second timer if not already started
+   * Handle patient message - start response window timer if not already started
    */
   private handlePatientMessage(message: any): void {
     // Validate message object
@@ -440,16 +438,9 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Start the 90-second timer
+   * Start timer with server-provided deadline (UI-only, never enforces expiry)
    */
-  private start90SecondTimer(): void {
-    this.startTimer(90);
-  }
-
-  /**
-   * Start timer with specified remaining time (for resuming)
-   */
-  private startTimer(timeRemaining: number): void {
+  private startTimerWithDeadline(doctor_response_deadline: string, timeRemaining: number): void {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -459,29 +450,28 @@ export class InstantSessionMessageDetector {
       this.countdownInterval = null;
     }
 
-    console.log('⏰ [InstantSessionDetector] Starting timer with remaining time:', timeRemaining);
+    console.log('⏰ [InstantSessionDetector] Starting UI-only timer with deadline:', doctor_response_deadline, 'remaining:', timeRemaining);
     
     this.timerState = {
       isActive: true,
       timeRemaining: timeRemaining,
-      startTime: Date.now() - ((90 - timeRemaining) * 1000), // Calculate original start time
-      endTime: Date.now() + (timeRemaining * 1000)
+      doctor_response_deadline: doctor_response_deadline
     };
 
-    // Start countdown updates every second
+    // Start countdown updates every second (UI-only)
     this.startCountdown();
     
-    // Set timeout for remaining time
+    // Set timeout to check backend when deadline would be reached (UI-only, doesn't enforce expiry)
     this.timer = setTimeout(() => {
       this.handleTimerExpired();
     }, timeRemaining * 1000) as any;
 
     this.saveSessionState();
-    this.events.onTimerStarted(timeRemaining);
+    this.events.onTimerStarted(timeRemaining, doctor_response_deadline);
   }
 
   /**
-   * Start countdown updates
+   * Start countdown updates (UI-only, derived from server deadline)
    */
   private startCountdown(): void {
     if (this.countdownInterval) {
@@ -489,7 +479,7 @@ export class InstantSessionMessageDetector {
       this.countdownInterval = null;
     }
     this.countdownInterval = setInterval(() => {
-      if (!this.timerState.isActive) {
+      if (!this.timerState.isActive || !this.timerState.doctor_response_deadline) {
         if (this.countdownInterval) {
           clearInterval(this.countdownInterval);
           this.countdownInterval = null;
@@ -497,14 +487,16 @@ export class InstantSessionMessageDetector {
         return;
       }
 
+      // Calculate remaining time from server-provided deadline (not local endTime)
+      const deadlineTimestamp = new Date(this.timerState.doctor_response_deadline).getTime();
       const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((this.timerState.endTime - now) / 1000));
+      const remaining = Math.max(0, Math.ceil((deadlineTimestamp - now) / 1000));
       
       this.timerState.timeRemaining = remaining;
       
       // Update every 5 seconds to avoid too many updates
       if (remaining % 5 === 0 || remaining <= 10) {
-        console.log('⏰ [InstantSessionDetector] Timer remaining:', remaining, 'seconds');
+        console.log('⏰ [InstantSessionDetector] Timer remaining (UI-only):', remaining, 'seconds');
       }
       
       if (remaining <= 0) {
@@ -512,6 +504,7 @@ export class InstantSessionMessageDetector {
           clearInterval(this.countdownInterval);
           this.countdownInterval = null;
         }
+        // Don't enforce expiry here - let handleTimerExpired() call backend
       }
     }, 1000) as any;
   }
@@ -536,49 +529,67 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Handle timer expiration
+   * Handle timer expiration (UI-only - always calls backend, never enforces expiry locally)
    */
   private async handleTimerExpired(): Promise<void> {
     try {
-      console.log('⏰ [InstantSessionDetector] Local 90-second timer reached zero - verifying with server');
-      // Verify with backend to avoid premature expiry due to drift or hydration delays
+      console.log('⏰ [InstantSessionDetector] UI timer reached zero - checking backend for authoritative status');
       const url = `${this.getApiBaseUrl()}/api/text-sessions/${this.config.sessionId}/check-response`;
       console.log('🔍 [InstantSessionDetector] Calling check-response URL:', url);
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${this.config.authToken}` }
       });
       console.log('🔍 [InstantSessionDetector] Response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
         console.log('🔍 [InstantSessionDetector] Response data:', JSON.stringify(data, null, 2));
+        
+        // Render based on server response only - never enforce expiry locally
         if (data && data.status === 'expired') {
           console.log('❌ [InstantSessionDetector] Server confirms session expired');
           this.timerState.isActive = false;
           this.timerState.timeRemaining = 0;
+          this.timerState.doctor_response_deadline = null;
           await this.saveSessionState();
           this.events.onTimerExpired();
           return;
         }
-        if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
-          console.log('⏰ [InstantSessionDetector] Server indicates time remaining, resuming with:', data.timeRemaining);
-          this.startTimer(Math.floor(data.timeRemaining));
+        
+        if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0 && data.doctor_response_deadline) {
+          console.log('⏰ [InstantSessionDetector] Server indicates time remaining, resuming with deadline:', data.doctor_response_deadline);
+          this.startTimerWithDeadline(data.doctor_response_deadline, Math.floor(data.timeRemaining));
           return;
         }
-        console.warn('⚠️ [InstantSessionDetector] Unexpected server response, treating as expired');
+        
+        if (data && data.status === 'active') {
+          console.log('✅ [InstantSessionDetector] Server indicates session is active - stopping timer');
+          this.stopTimer();
+          this.activateSession();
+          return;
+        }
+        
+        console.warn('⚠️ [InstantSessionDetector] Unexpected server response:', data);
+        // Don't enforce expiry - keep timer inactive until server provides clear status
+        this.timerState.isActive = false;
+        this.timerState.timeRemaining = 0;
+        await this.saveSessionState();
       } else {
         console.warn('⚠️ [InstantSessionDetector] check-response returned non-OK status:', response.status);
         const errorText = await response.text();
         console.warn('⚠️ [InstantSessionDetector] Error response:', errorText);
+        // Don't enforce expiry on error - keep timer inactive
+        this.timerState.isActive = false;
+        this.timerState.timeRemaining = 0;
+        await this.saveSessionState();
       }
     } catch (error) {
-      console.error('❌ [InstantSessionDetector] Error verifying expiry with server:', error);
+      console.error('❌ [InstantSessionDetector] Error checking backend for expiry:', error);
+      // Don't enforce expiry on error - keep timer inactive
+      this.timerState.isActive = false;
+      this.timerState.timeRemaining = 0;
+      await this.saveSessionState();
     }
-    // Fallback: if no server info, do not hard-expire; keep inactive with 0 remaining until status arrives
-    console.log('⏰ [InstantSessionDetector] Falling back to local expiry');
-    this.timerState.isActive = false;
-    this.timerState.timeRemaining = 0;
-    await this.saveSessionState();
-    this.events.onTimerExpired();
   }
 
   /**
@@ -587,20 +598,22 @@ export class InstantSessionMessageDetector {
   private handleTimerStarted(data: any): void {
     console.log('⏰ [InstantSessionDetector] Server timer started event received');
     this.serverTimerActive = true;
-    // Use server-provided endTime/timeRemaining if available to avoid restarting a fresh 90s
-    if (typeof data?.endTime === 'number') {
-      const remaining = Math.max(0, Math.ceil((data.endTime - Date.now()) / 1000));
-      if (remaining > 0) {
-        this.startTimer(remaining);
-        return;
-      }
-    }
-    if (typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
-      this.startTimer(data.timeRemaining);
+    
+    // Use server-provided doctor_response_deadline and timeRemaining
+    if (data?.doctor_response_deadline && typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
+      this.startTimerWithDeadline(data.doctor_response_deadline, data.timeRemaining);
       return;
     }
+    
+    // Fallback: if deadline not provided but timeRemaining is, fetch from backend
+    if (typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
+      this.fetchAndResumeRemainingFromBackend();
+      return;
+    }
+    
+    // If no timer info provided, fetch from backend
     if (!this.timerState.isActive) {
-      this.start90SecondTimer();
+      this.fetchAndResumeRemainingFromBackend();
     }
   }
 
@@ -704,11 +717,11 @@ export class InstantSessionMessageDetector {
       sessionActivated: this.sessionActivated
     });
     
-    // If the server reports an active timer, resume with remaining time
-    if (data.timerActive && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
-      console.log('⏰ [InstantSessionDetector] Resuming server timer with remaining:', data.timeRemaining);
+    // If the server reports an active timer, resume with remaining time and deadline
+    if (data.timerActive && typeof data.timeRemaining === 'number' && data.timeRemaining > 0 && data.doctor_response_deadline) {
+      console.log('⏰ [InstantSessionDetector] Resuming server timer with remaining:', data.timeRemaining, 'deadline:', data.doctor_response_deadline);
       this.serverTimerActive = true;
-      this.startTimer(data.timeRemaining);
+      this.startTimerWithDeadline(data.doctor_response_deadline, data.timeRemaining);
       this.hasPatientMessageSent = true;
       return;
     }
@@ -758,7 +771,7 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Fetch authoritative remaining time from backend and resume timer
+   * Fetch authoritative remaining time and deadline from backend and resume timer
    */
   private async fetchAndResumeRemainingFromBackend(): Promise<void> {
     try {
@@ -777,10 +790,10 @@ export class InstantSessionMessageDetector {
         return;
       }
       const data = await response.json();
-      if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0) {
-        console.log('⏰ [InstantSessionDetector] Backend remaining time:', data.timeRemaining);
+      if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0 && data.doctor_response_deadline) {
+        console.log('⏰ [InstantSessionDetector] Backend remaining time:', data.timeRemaining, 'deadline:', data.doctor_response_deadline);
         this.serverTimerActive = true;
-        this.startTimer(Math.floor(data.timeRemaining));
+        this.startTimerWithDeadline(data.doctor_response_deadline, Math.floor(data.timeRemaining));
         this.hasPatientMessageSent = true;
       } else {
         console.log('ℹ️ [InstantSessionDetector] No remaining time from backend or not waiting');
@@ -813,21 +826,21 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Resume timer with a specific remaining duration (public API for hooks)
+   * Resume timer with server-provided deadline and remaining duration (public API for hooks)
    */
-  public resumeTimerWithRemaining(remainingSeconds: number): void {
+  public resumeTimerWithDeadline(doctor_response_deadline: string, remainingSeconds: number): void {
     try {
       const safeRemaining = Math.max(0, Math.floor(remainingSeconds));
-      if (safeRemaining > 0) {
-        console.log('⏰ [InstantSessionDetector] Resuming timer via public API with remaining:', safeRemaining);
+      if (safeRemaining > 0 && doctor_response_deadline) {
+        console.log('⏰ [InstantSessionDetector] Resuming timer via public API with deadline:', doctor_response_deadline, 'remaining:', safeRemaining);
         this.serverTimerActive = true;
-        this.startTimer(safeRemaining);
+        this.startTimerWithDeadline(doctor_response_deadline, safeRemaining);
         this.hasPatientMessageSent = true;
       } else {
-        console.log('⏰ [InstantSessionDetector] Resume requested with non-positive remaining; ignoring');
+        console.log('⏰ [InstantSessionDetector] Resume requested with invalid deadline or non-positive remaining; ignoring');
       }
     } catch (error) {
-      console.error('❌ [InstantSessionDetector] Failed to resume timer with remaining:', error);
+      console.error('❌ [InstantSessionDetector] Failed to resume timer with deadline:', error);
     }
   }
 
@@ -970,10 +983,14 @@ export class InstantSessionMessageDetector {
             timerActive: this.timerState.isActive
           });
           
-          // If timer was active, restart it with remaining time
-          if (this.timerState.isActive && this.timerState.timeRemaining > 0) {
-            console.log('⏰ [InstantSessionDetector] Resuming timer with remaining time:', this.timerState.timeRemaining);
-            this.startTimer(this.timerState.timeRemaining);
+          // If timer was active, restart it with deadline and remaining time
+          if (this.timerState.isActive && this.timerState.timeRemaining > 0 && this.timerState.doctor_response_deadline) {
+            console.log('⏰ [InstantSessionDetector] Resuming timer with deadline:', this.timerState.doctor_response_deadline, 'remaining:', this.timerState.timeRemaining);
+            this.startTimerWithDeadline(this.timerState.doctor_response_deadline, this.timerState.timeRemaining);
+          } else if (this.timerState.isActive && this.timerState.timeRemaining > 0) {
+            // If deadline missing, fetch from backend
+            console.log('⏰ [InstantSessionDetector] Timer state missing deadline, fetching from backend');
+            this.fetchAndResumeRemainingFromBackend();
           }
         } else {
           console.log('📱 [InstantSessionDetector] Not restoring state - different session or too old:', {
@@ -1002,9 +1019,8 @@ export class InstantSessionMessageDetector {
       this.sessionActivated = false;
       this.timerState = {
         isActive: false,
-        timeRemaining: 90,
-        startTime: 0,
-        endTime: 0
+        timeRemaining: 0, // Will be set from server deadline
+        doctor_response_deadline: null
       };
       console.log('🗑️ [InstantSessionDetector] Session state cleared for session:', this.config.sessionId);
     } catch (error) {
