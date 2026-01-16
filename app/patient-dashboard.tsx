@@ -337,6 +337,34 @@ export default function PatientDashboard() {
   const [favoriteDoctors, setFavoriteDoctors] = useState<any[]>([]);
   const [favoritesRefreshTrigger, setFavoritesRefreshTrigger] = useState(0);
 
+  // Helper function to transform subscription data from snake_case to camelCase
+  const transformSubscriptionData = useCallback((subscription: any): UserSubscription | null => {
+    if (!subscription) return null;
+
+    // If already in camelCase format (from /subscription endpoint), return as-is
+    if (subscription.textSessionsRemaining !== undefined) {
+      return subscription as UserSubscription;
+    }
+
+    // Transform from snake_case (from /dashboard/summary endpoint) to camelCase
+    return {
+      id: subscription.id?.toString() || '',
+      plan_id: subscription.plan_id?.toString() || '',
+      planName: subscription.plan_name || subscription.planName || '',
+      plan_price: subscription.plan_price || 0,
+      plan_currency: subscription.plan_currency || '',
+      textSessionsRemaining: subscription.text_sessions_remaining ?? subscription.textSessionsRemaining ?? 0,
+      voiceCallsRemaining: subscription.voice_calls_remaining ?? subscription.voiceCallsRemaining ?? 0,
+      videoCallsRemaining: subscription.video_calls_remaining ?? subscription.videoCallsRemaining ?? 0,
+      totalTextSessions: subscription.total_text_sessions ?? subscription.totalTextSessions ?? 0,
+      totalVoiceCalls: subscription.total_voice_calls ?? subscription.totalVoiceCalls ?? 0,
+      totalVideoCalls: subscription.total_video_calls ?? subscription.totalVideoCalls ?? 0,
+      activatedAt: subscription.activated_at || subscription.activatedAt || '',
+      expiresAt: subscription.expires_at || subscription.expiresAt,
+      isActive: subscription.is_active ?? subscription.isActive ?? false,
+    };
+  }, []);
+
   // Function to refresh subscription data
   const refreshSubscriptionData = useCallback(async () => {
     if (!user?.id) return;
@@ -347,7 +375,8 @@ export default function PatientDashboard() {
 
       if (response.success && response.data) {
         console.log('PatientDashboard: Subscription data refreshed:', response.data);
-        setCurrentSubscription(response.data);
+        const transformedSubscription = transformSubscriptionData(response.data);
+        setCurrentSubscription(transformedSubscription);
       } else {
         console.log('PatientDashboard: No subscription data found');
         setCurrentSubscription(null);
@@ -1164,9 +1193,10 @@ export default function PatientDashboard() {
       if (response.success && response.data) {
         const data = response.data as any;
 
-        // 1. Update Subscription
+        // 1. Update Subscription (transform from snake_case to camelCase)
         if (data.patient_data?.subscription) {
-          setCurrentSubscription(data.patient_data.subscription);
+          const transformedSubscription = transformSubscriptionData(data.patient_data.subscription);
+          setCurrentSubscription(transformedSubscription);
         } else {
           setCurrentSubscription(null);
         }
@@ -1688,7 +1718,7 @@ export default function PatientDashboard() {
       const response = await apiService.get('/subscription');
       console.log('PatientDashboard: Refresh subscription response:', response);
 
-      const subscription = response.success ? response.data as UserSubscription : null;
+      const subscription = response.success ? transformSubscriptionData(response.data) : null;
       console.log('PatientDashboard: Setting refreshed subscription:', subscription);
       setCurrentSubscription(subscription);
       console.log('PatientDashboard: Subscription refreshed successfully');

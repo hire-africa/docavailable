@@ -97,15 +97,91 @@ export class WebRTCChatService {
 
   // Add message and save to storage
   private async addMessage(message: ChatMessage): Promise<void> {
-    // Check if message already exists to prevent duplicates
-    const existingMessage = this.messages.find(msg => msg.id === message.id);
+    // Check if message already exists by id or temp_id to prevent duplicates
+    const existingMessage = this.messages.find(msg => 
+      (msg.id && message.id && String(msg.id) === String(message.id)) ||
+      (msg.temp_id && message.temp_id && msg.temp_id === message.temp_id) ||
+      (msg.id && message.temp_id && String(msg.id) === String(message.temp_id)) ||
+      (msg.temp_id && message.id && String(msg.temp_id) === String(message.id))
+    );
+    
     if (existingMessage) {
-      console.log('⚠️ [WebRTCChat] Message already exists, skipping duplicate:', message.id);
+      // Update existing message if we have new data (like server ID for temp messages)
+      if (message.id && !existingMessage.id) {
+        console.log('🔄 [WebRTCChat] Updating temp message with server ID:', message.id);
+        existingMessage.id = message.id;
+        existingMessage.temp_id = undefined;
+        existingMessage.delivery_status = message.delivery_status || existingMessage.delivery_status;
+        await this.saveMessages();
+      } else {
+        console.log('⚠️ [WebRTCChat] Message already exists, skipping duplicate:', message.id || message.temp_id);
+      }
       return;
     }
 
     this.messages.push(message);
     await this.saveMessages();
+  }
+
+  // Merge server messages with local messages, preserving local messages that aren't on server yet
+  private mergeMessages(localMessages: ChatMessage[], serverMessages: ChatMessage[]): ChatMessage[] {
+    const merged = new Map<string, ChatMessage>();
+    
+    // First, add all local messages (including temp messages that might not be on server yet)
+    for (const msg of localMessages) {
+      const key = msg.temp_id || String(msg.id || `temp_${msg.created_at}`);
+      merged.set(key, msg);
+    }
+    
+    // Then, update/add server messages
+    for (const serverMsg of serverMessages) {
+      const serverKey = String(serverMsg.id);
+      
+      // Check if we have a temp message that matches this server message
+      let foundMatch = false;
+      for (const [key, localMsg] of merged.entries()) {
+        // Match by content, sender, and time (within 5 seconds)
+        if (localMsg.temp_id && localMsg.message === serverMsg.message) {
+          const timeDiff = Math.abs(
+            new Date(localMsg.created_at).getTime() - 
+            new Date(serverMsg.created_at).getTime()
+          );
+          const sameSender = String(localMsg.sender_id) === String(serverMsg.sender_id);
+          
+          if (sameSender && timeDiff < 5000) {
+            // Update temp message with server data
+            merged.set(key, {
+              ...localMsg,
+              id: serverMsg.id,
+              temp_id: undefined,
+              delivery_status: serverMsg.delivery_status || 'sent',
+              created_at: serverMsg.created_at || localMsg.created_at
+            });
+            foundMatch = true;
+            break;
+          }
+        }
+      }
+      
+      // If no match found, add server message (but don't overwrite if we have a temp version)
+      if (!foundMatch) {
+        // Check if we already have this message by ID
+        const hasById = Array.from(merged.values()).some(m => 
+          m.id && String(m.id) === serverKey
+        );
+        
+        if (!hasById) {
+          merged.set(serverKey, serverMsg);
+        }
+      }
+    }
+    
+    // Sort by created_at
+    return Array.from(merged.values()).sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      return ta - tb;
+    });
   }
 
   async connect(): Promise<void> {
@@ -1027,10 +1103,14 @@ export class WebRTCChatService {
 
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages');
+      console.log('📨 [WebRTCChat] Local messages before merge:', this.messages.length);
 
-      // Replace local messages with server messages to ensure consistency
-      // This prevents duplicates when navigating back to chat
-      this.messages = serverMessages;
+      // Merge server messages with local messages instead of replacing
+      // This preserves temp messages that haven't been persisted to server yet
+      const mergedMessages = this.mergeMessages(this.messages, serverMessages);
+      console.log('📨 [WebRTCChat] Merged messages count:', mergedMessages.length);
+      
+      this.messages = mergedMessages;
       await this.saveMessages();
 
       console.log('✅ [WebRTCChat] Messages synced and saved to storage:', this.messages.length);
@@ -1092,9 +1172,13 @@ export class WebRTCChatService {
 
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages on refresh');
+      console.log('📨 [WebRTCChat] Local messages before merge:', this.messages.length);
 
-      // Replace local messages with server messages
-      this.messages = serverMessages;
+      // Merge server messages with local messages instead of replacing
+      const mergedMessages = this.mergeMessages(this.messages, serverMessages);
+      console.log('📨 [WebRTCChat] Merged messages count:', mergedMessages.length);
+      
+      this.messages = mergedMessages;
       await this.saveMessages();
 
       console.log('✅ [WebRTCChat] Messages refreshed from server');

@@ -665,7 +665,7 @@ class AudioCallService {
       // Handle explicit fallback request (e.g. after SSL failure)
       if (useFallback) {
         console.warn('🔄 [AudioCallService] Using fallback signaling URL due to previous error');
-        signalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL || 'ws://46.101.123.123:8081/chat-signaling';
+        signalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL || 'ws://46.101.123.123:8081/call-signaling';
       }
 
       // Architecture: Use context envelope if available, fallback to appointmentId for backward compatibility

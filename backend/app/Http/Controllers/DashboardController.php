@@ -145,11 +145,18 @@ class DashboardController extends Controller
         return [
             'subscription' => $subscription ? [
                 'id' => $subscription->id,
+                'plan_id' => $subscription->plan_id,
                 'is_active' => $subscription->isActive,
                 'plan_name' => $subscription->plan_name,
+                'plan_price' => $subscription->plan_price,
+                'plan_currency' => $subscription->plan_currency,
                 'text_sessions_remaining' => $subscription->text_sessions_remaining,
                 'voice_calls_remaining' => $subscription->voice_calls_remaining,
                 'video_calls_remaining' => $subscription->video_calls_remaining,
+                'total_text_sessions' => $subscription->total_text_sessions,
+                'total_voice_calls' => $subscription->total_voice_calls,
+                'total_video_calls' => $subscription->total_video_calls,
+                'activated_at' => $subscription->activated_at,
                 'expires_at' => $subscription->expires_at,
             ] : null,
             'appointments' => $appointments,

@@ -7,6 +7,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
+    AppState,
+    DeviceEventEmitter,
     Image,
     Keyboard,
     KeyboardAvoidingView,
@@ -1283,6 +1285,79 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, authLoading]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const subscription = DeviceEventEmitter.addListener('chat:refresh', async (payload: any) => {
+      try {
+        const incomingAppointmentId = payload?.appointmentId;
+
+        if (incomingAppointmentId) {
+          const currentIdStr = String(appointmentId);
+          const incomingIdStr = String(incomingAppointmentId);
+
+          const currentNumericId = currentIdStr.startsWith('text_session_')
+            ? currentIdStr.replace('text_session_', '')
+            : currentIdStr;
+
+          const matches = incomingIdStr === currentIdStr || incomingIdStr === currentNumericId;
+          if (!matches) return;
+        }
+
+        if (sessionEnded) return;
+        if (isLoadingChat) return;
+
+        if (webrtcChatService) {
+          const synced = await webrtcChatService.syncWithServer();
+          // Merge with existing messages to preserve any that were just added
+          setMessages(prev => safeMergeMessages(prev, synced));
+        } else {
+          const response = await apiService.get(`/chat/${appointmentId}/messages`);
+          if (response.success && response.data) {
+            // Merge with existing messages instead of replacing
+            setMessages(prev => safeMergeMessages(prev, response.data));
+          }
+        }
+      } catch (error) {
+        console.error('❌ [ChatComponent] Failed to refresh messages from push event:', error);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated, appointmentId, isLoadingChat, sessionEnded, webrtcChatService]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const subscription = AppState.addEventListener('change', async (nextState) => {
+      if (nextState !== 'active') return;
+      if (sessionEnded) return;
+      if (isLoadingChat) return;
+
+      try {
+        if (webrtcChatService) {
+          const synced = await webrtcChatService.syncWithServer();
+          // Merge with existing messages to preserve any that were just added
+          setMessages(prev => safeMergeMessages(prev, synced));
+        } else {
+          const response = await apiService.get(`/chat/${appointmentId}/messages`);
+          if (response.success && response.data) {
+            // Merge with existing messages instead of replacing
+            setMessages(prev => safeMergeMessages(prev, response.data));
+          }
+        }
+      } catch (error) {
+        console.error('❌ [ChatComponent] Failed to refresh messages on app active:', error);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated, appointmentId, isLoadingChat, sessionEnded, webrtcChatService]);
+
   // Debug chatInfo changes
   useEffect(() => {
     if (chatInfo) {
@@ -1520,9 +1595,16 @@ export default function ChatPage() {
           webrtcSessionService.setOnTypingIndicator(handleTypingIndicator);
         }
 
-        // Load existing messages from storage
+        // Load existing messages from storage and merge with any existing state
         const existingMessages = await chatService.getMessages();
-        setMessages(existingMessages);
+        setMessages(prev => {
+          if (prev.length === 0) {
+            // If no existing messages in state, just set them
+            return existingMessages;
+          }
+          // Otherwise merge to preserve any messages that were just added
+          return safeMergeMessages(prev, existingMessages);
+        });
         console.log('✅ [WebRTCChat] Service initialized successfully with', existingMessages.length, 'messages');
 
         // Add debug method to window for testing (only in development)
@@ -2508,12 +2590,18 @@ export default function ChatPage() {
           console.log('🔄 [ChatComponent] Syncing with server to get latest messages...');
           const syncedMessages = await webrtcChatService.syncWithServer();
           console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
-          setMessages(syncedMessages);
+          // Merge with existing messages to preserve any that were just added
+          setMessages(prev => {
+            const merged = safeMergeMessages(prev, syncedMessages);
+            console.log('🔄 [ChatComponent] Merged messages: prev=', prev.length, 'synced=', syncedMessages.length, 'final=', merged.length);
+            return merged;
+          });
         } catch (error) {
           console.error('❌ [ChatComponent] Failed to sync with server, using local messages only:', error);
           // Fallback to local messages if sync fails
           const loadedMessages = await webrtcChatService.getMessages();
-          setMessages(loadedMessages);
+          // Merge with existing messages
+          setMessages(prev => safeMergeMessages(prev, loadedMessages));
         }
       } else {
         // Fallback to backend API for loading messages
@@ -2521,7 +2609,8 @@ export default function ChatPage() {
         try {
           const response = await apiService.get(`/chat/${appointmentId}/messages`);
           if (response.success && response.data) {
-            setMessages(response.data);
+            // Merge with existing messages instead of replacing
+            setMessages(prev => safeMergeMessages(prev, response.data));
             console.log('✅ [ChatComponent] Messages loaded via backend API:', response.data.length);
           }
         } catch (error) {

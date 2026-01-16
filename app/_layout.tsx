@@ -3,7 +3,7 @@ import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, NativeEventEmitter, NativeModules, PermissionsAndroid, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, DeviceEventEmitter, NativeEventEmitter, NativeModules, PermissionsAndroid, Platform, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CustomAlertProvider from '../components/CustomAlertProvider';
@@ -445,6 +445,15 @@ export default function RootLayout() {
         }
 
         // For other notifications, determine channel and display
+        if (type.includes('message')) {
+          const appointmentId = (data.appointment_id || data.appointmentId || data.session_id || data.sessionId) as any;
+          DeviceEventEmitter.emit('chat:refresh', {
+            appointmentId: appointmentId ? String(appointmentId) : undefined,
+            source: 'push_foreground',
+            data,
+          });
+        }
+
         const channelId = type.includes('message') ? 'messages' :
           type.includes('appointment') ? 'appointments' :
             type.includes('session') ? 'sessions' : 'default';
