@@ -11,46 +11,39 @@ Artisan::command('inspire', function () {
 // Schedule text session message cleanup to run every hour
 Schedule::command('text-sessions:cleanup-messages')
     ->hourly()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // Schedule appointment session processing to run every 5 minutes
 Schedule::command('sessions:process-appointment-sessions')
     ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // NEW: Schedule auto-deductions for text sessions every 10 minutes
 Schedule::command('sessions:process-auto-deductions')
     ->everyTenMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // NEW: Cleanup stale call connections every minute
 Schedule::command('calls:cleanup-stale-connections')
     ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // PRODUCTION-SAFE: Promote missed call connections (fallback for queue reliability)
 // Catches calls that missed the queue job due to queue being down
 Schedule::command('calls:promote-missed-connections')
     ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // Enhanced: Expire appointments every 30 minutes
 Schedule::command('appointments:expire')
     ->everyThirtyMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // Process subscription expirations and apply 30-day plan roll-over rules
 // Runs daily to check and update subscription statuses
 Schedule::command('subscriptions:process-expirations')
     ->daily()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
 // Note: Auto-ending for text sessions is handled by the existing ProcessExpiredTextSessions command
 // This provides reliable session ending without queue complexity
@@ -62,15 +55,16 @@ Artisan::command('sessions:clear-active {--force : Force clear without confirmat
 
 // NEW: Activate scheduled sessions every minute
 Schedule::command('sessions:activate-scheduled')
-    ->everyMinute();
+    ->everyMinute()
+    ->withoutOverlapping();
 
 // NEW: Activate booked appointments when their scheduled time arrives
 Schedule::command('appointments:activate-booked')
-    ->everyMinute();
+    ->everyMinute()
+    ->withoutOverlapping();
 
 // NEW: Auto-start appointment sessions (idempotent, no instant interference)
 // Runs every 60 seconds to meet the 30-60s cadence requirement
 Schedule::command('appointments:auto-start-sessions')
     ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
