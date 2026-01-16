@@ -11,12 +11,31 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->json('notification_preferences')->nullable()->after('push_token');
-            $table->boolean('email_notifications_enabled')->default(true)->after('notification_preferences');
-            $table->boolean('push_notifications_enabled')->default(true)->after('email_notifications_enabled');
-            $table->boolean('sms_notifications_enabled')->default(false)->after('push_notifications_enabled');
-        });
+        // Check if columns already exist before adding them (skip if duplicates)
+        // Note: Schema::hasColumn() must be called outside the Blueprint closure
+        if (!Schema::hasColumn('users', 'notification_preferences')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->json('notification_preferences')->nullable()->after('push_token');
+            });
+        }
+        
+        if (!Schema::hasColumn('users', 'email_notifications_enabled')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->boolean('email_notifications_enabled')->default(true)->after('notification_preferences');
+            });
+        }
+        
+        if (!Schema::hasColumn('users', 'push_notifications_enabled')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->boolean('push_notifications_enabled')->default(true)->after('email_notifications_enabled');
+            });
+        }
+        
+        if (!Schema::hasColumn('users', 'sms_notifications_enabled')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->boolean('sms_notifications_enabled')->default(false)->after('push_notifications_enabled');
+            });
+        }
     }
 
     /**
@@ -24,13 +43,26 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn([
-                'notification_preferences',
-                'email_notifications_enabled',
-                'push_notifications_enabled',
-                'sms_notifications_enabled'
-            ]);
-        });
+        // Only drop columns if they exist (safe rollback)
+        $columnsToDrop = [];
+        
+        if (Schema::hasColumn('users', 'notification_preferences')) {
+            $columnsToDrop[] = 'notification_preferences';
+        }
+        if (Schema::hasColumn('users', 'email_notifications_enabled')) {
+            $columnsToDrop[] = 'email_notifications_enabled';
+        }
+        if (Schema::hasColumn('users', 'push_notifications_enabled')) {
+            $columnsToDrop[] = 'push_notifications_enabled';
+        }
+        if (Schema::hasColumn('users', 'sms_notifications_enabled')) {
+            $columnsToDrop[] = 'sms_notifications_enabled';
+        }
+        
+        if (!empty($columnsToDrop)) {
+            Schema::table('users', function (Blueprint $table) use ($columnsToDrop) {
+                $table->dropColumn($columnsToDrop);
+            });
+        }
     }
 };

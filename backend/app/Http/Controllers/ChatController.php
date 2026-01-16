@@ -11,6 +11,8 @@ use App\Models\User;
 use App\Models\Appointment;
 use App\Services\MessageStorageService;
 use App\Services\AnonymizationService;
+use App\Services\FeatureFlags;
+use App\Services\SessionContextGuard;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\Log;
 use App\Events\ChatMessageSent;
@@ -29,16 +31,120 @@ class ChatController extends Controller
     }
 
     /**
+     * Enforce session context guardrail for appointment-based chat operations
+     * 
+     * Returns null if allowed, or JsonResponse if blocked
+     */
+    private function enforceAppointmentSessionContext($appointment, $appointmentId, $operation = 'chat_operation'): ?JsonResponse
+    {
+        if (!$appointment) {
+            return null; // Not an appointment, let other logic handle it
+        }
+
+        // If appointment has session_id, block appointment-based chat (when flag enabled)
+        if ($appointment->session_id !== null) {
+            $enforce = FeatureFlags::enforceSessionGatedChat();
+            
+            if ($enforce) {
+                // Determine session type (text or call) to provide correct context format
+                $sessionContext = $this->determineSessionContextFormat($appointment->session_id);
+                
+                Log::warning('SessionContextGuard: Chat operation blocked - appointment has session_id', [
+                    'appointment_id' => $appointment->id,
+                    'session_id' => $appointment->session_id,
+                    'operation' => $operation,
+                    'session_context' => $sessionContext,
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat must be accessed through session context. Please use the session endpoint.',
+                    'session_id' => $appointment->session_id,
+                    'error_code' => 'SESSION_CONTEXT_REQUIRED',
+                    'session_context' => $sessionContext, // Canonical format: text_session:{id} or call_session:{id}
+                ], 400);
+            } else {
+                // Flag disabled: log warning but allow (backward compatibility for Phase 1)
+                Log::warning('SessionContextGuard: Chat operation on appointment with session_id (flag disabled - Phase 1 monitoring)', [
+                    'appointment_id' => $appointment->id,
+                    'session_id' => $appointment->session_id,
+                    'operation' => $operation,
+                ]);
+            }
+        } else {
+            // Appointment without session_id
+            $allowLegacy = FeatureFlags::allowLegacyAppointmentChat();
+            
+            if (!$allowLegacy) {
+                // Block appointment-based chat when session_id is null (waiting state)
+                Log::warning('SessionContextGuard: Chat operation blocked - appointment waiting for session', [
+                    'appointment_id' => $appointment->id,
+                    'operation' => $operation,
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Session is not ready yet. Please wait for the session to start.',
+                    'error_code' => 'SESSION_NOT_READY',
+                    'appointment_id' => $appointment->id,
+                ], 403);
+            } else {
+                // Legacy flag enabled: allow but log warning
+                Log::warning('SessionContextGuard: Chat operation on appointment without session_id (legacy allowed)', [
+                    'appointment_id' => $appointment->id,
+                    'operation' => $operation,
+                ]);
+            }
+        }
+
+        return null; // Allowed
+    }
+
+    /**
+     * Determine the canonical session context format for a session_id
+     * 
+     * Checks if session_id refers to a text session or call session
+     * Returns: text_session:{id} or call_session:{id}
+     */
+    private function determineSessionContextFormat($sessionId): string
+    {
+        // Try text session first (more common for chat)
+        $textSession = \App\Models\TextSession::find($sessionId);
+        if ($textSession) {
+            return 'text_session:' . $sessionId;
+        }
+        
+        // Try call session
+        $callSession = \App\Models\CallSession::find($sessionId);
+        if ($callSession) {
+            return 'call_session:' . $sessionId;
+        }
+        
+        // Fallback: assume text session (most chat operations are text)
+        // This should rarely happen if session_id is properly linked
+        Log::warning('SessionContextGuard: Could not determine session type, defaulting to text_session', [
+            'session_id' => $sessionId,
+        ]);
+        
+        return 'text_session:' . $sessionId;
+    }
+
+    /**
      * Helper method to handle text session ID format and verify access
      */
     private function handleAppointmentIdAndVerifyAccess($appointmentId, $user)
     {
-        // Handle text session ID format (text_session_123)
+        // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -121,12 +227,17 @@ class ChatController extends Controller
     {
         $user = Auth::user();
 
-        // Handle text session ID format (text_session_123)
+        // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -179,6 +290,12 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => 'Unauthorized access to chat'
             ], 403);
+        }
+
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'getMessages');
+        if ($guardrailResponse !== null) {
+            return $guardrailResponse;
         }
 
         // Get messages from cache storage
@@ -252,12 +369,17 @@ class ChatController extends Controller
 
         // Rate limiting disabled
 
-        // Handle text session ID format (text_session_123)
+        // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -307,35 +429,19 @@ class ChatController extends Controller
                 ], 404);
             }
         } else {
-            // ⚠️ GUARDRAIL: Chat/WebSocket must require session context
-            // Appointments may only receive read-only notifications (schedule changes), not "live chat"
-            // If appointment has session_id, redirect to session context
-            if ($appointment->session_id !== null) {
-                \Log::warning('SessionContextGuard: Chat message attempted on appointment with session_id', [
-                    'appointment_id' => $appointment->id,
-                    'session_id' => $appointment->session_id,
-                    'user_id' => $user->id,
-                    'warning' => 'Chat should use session context, not appointment ID',
-                ]);
-                
-                // For now, allow but log warning (phased compatibility)
-                // TODO: In later phase, return 400 and require client to use session context
-            } else {
-                // Appointment without session_id - this is a legacy path
-                // Log warning but allow for backward compatibility during transition
-                \Log::warning('SessionContextGuard: Chat message on appointment without session_id', [
-                    'appointment_id' => $appointment->id,
-                    'user_id' => $user->id,
-                    'warning' => 'Appointment should have session_id for live chat',
-                ]);
-            }
-            
-            // Check if user is part of this appointment
+            // Check if user is part of this appointment (authorization first)
             if ($appointment->patient_id !== $user->id && $appointment->doctor_id !== $user->id) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to chat'
                 ], 403);
+            }
+
+            // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+            // This respects feature flags - Phase 1 will warn only, Phase 2+ will block
+            $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'sendMessage');
+            if ($guardrailResponse !== null) {
+                return $guardrailResponse;
             }
 
             $otherParticipantId = $appointment->patient_id === $user->id ? $appointment->doctor_id : $appointment->patient_id;
@@ -347,8 +453,8 @@ class ChatController extends Controller
         // Handle text session logic with atomic expiry enforcement BEFORE storing message
         // This ensures expired/ended sessions reject messages before they're stored
         $session = null;
-        if (!$appointment && strpos($appointmentId, 'text_session_') === 0) {
-            $sessionId = str_replace('text_session_', '', $appointmentId);
+        if (!$appointment && (strpos($appointmentId, 'text_session_') === 0 || strpos($appointmentId, 'text_session:') === 0)) {
+            $sessionId = str_replace(['text_session_', 'text_session:'], '', $appointmentId);
 
             // Use transaction with lockForUpdate() for atomic operations
             $session = DB::transaction(function () use ($sessionId, $user, $request, $appointmentId) {
@@ -443,7 +549,7 @@ class ChatController extends Controller
 
         // Store message in cache (only if session validation passed)
         // Use numeric ID for MessageStorageService methods
-        $sessionType = (!$appointment && strpos($appointmentId, 'text_session_') === 0) ? 'text_session' : 'appointment';
+        $sessionType = (!$appointment && (strpos($appointmentId, 'text_session_') === 0 || strpos($appointmentId, 'text_session:') === 0)) ? 'text_session' : 'appointment';
         $message = $this->messageStorageService->storeMessage($actualId, $messageData, $sessionType);
 
         // Update chat room keys for tracking
@@ -513,12 +619,17 @@ class ChatController extends Controller
     {
         $user = Auth::user();
 
-        // Handle text session ID format (text_session_123)
+        // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -710,12 +821,17 @@ class ChatController extends Controller
     {
         $user = Auth::user();
 
-        // Handle text session ID format (text_session_123)
+        // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -793,6 +909,11 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -870,6 +991,11 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -921,6 +1047,12 @@ class ChatController extends Controller
             ], 403);
         }
 
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'addReaction');
+        if ($guardrailResponse !== null) {
+            return $guardrailResponse;
+        }
+
         // Add reaction to message
         $result = $this->messageStorageService->addReaction($actualId, $messageId, $user->id, $request->reaction);
 
@@ -956,6 +1088,11 @@ class ChatController extends Controller
         if (strpos($appointmentId, 'text_session_') === 0) {
             $actualId = str_replace('text_session_', '', $appointmentId);
             $isTextSession = true;
+        } elseif (strpos($appointmentId, 'text_session:') === 0) {
+            $actualId = str_replace('text_session:', '', $appointmentId);
+            $isTextSession = true;
+        } elseif (strpos($appointmentId, 'call_session:') === 0) {
+            $actualId = str_replace('call_session:', '', $appointmentId);
         }
 
         // Convert to integer for database queries
@@ -1017,6 +1154,12 @@ class ChatController extends Controller
             ], 403);
         }
 
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'removeReaction');
+        if ($guardrailResponse !== null) {
+            return $guardrailResponse;
+        }
+
         // Get reaction from query string for DELETE requests
         $reaction = $request->query('reaction') ?? $request->input('reaction');
 
@@ -1056,6 +1199,14 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => $accessResult['message']
             ], $accessResult['status']);
+        }
+
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        if ($accessResult['type'] === 'appointment' && isset($accessResult['data'])) {
+            $guardrailResponse = $this->enforceAppointmentSessionContext($accessResult['data'], $appointmentId, 'markAsRead');
+            if ($guardrailResponse !== null) {
+                return $guardrailResponse;
+            }
         }
 
         // Mark messages as read
@@ -1110,6 +1261,14 @@ class ChatController extends Controller
             ], $accessResult['status']);
         }
 
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        if ($accessResult['type'] === 'appointment' && isset($accessResult['data'])) {
+            $guardrailResponse = $this->enforceAppointmentSessionContext($accessResult['data'], $appointmentId, 'startTyping');
+            if ($guardrailResponse !== null) {
+                return $guardrailResponse;
+            }
+        }
+
         // Start typing indicator
         $result = $this->messageStorageService->startTyping($accessResult['actualId'], $user->id, $this->getUserName($user->id));
 
@@ -1143,6 +1302,14 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => $accessResult['message']
             ], $accessResult['status']);
+        }
+
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        if ($accessResult['type'] === 'appointment' && isset($accessResult['data'])) {
+            $guardrailResponse = $this->enforceAppointmentSessionContext($accessResult['data'], $appointmentId, 'stopTyping');
+            if ($guardrailResponse !== null) {
+                return $guardrailResponse;
+            }
         }
 
         // Stop typing indicator
@@ -1210,6 +1377,14 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => $accessResult['message']
             ], $accessResult['status']);
+        }
+
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        if ($accessResult['type'] === 'appointment' && isset($accessResult['data'])) {
+            $guardrailResponse = $this->enforceAppointmentSessionContext($accessResult['data'], $appointmentId, 'replyToMessage');
+            if ($guardrailResponse !== null) {
+                return $guardrailResponse;
+            }
         }
 
         // Get the original message to reply to

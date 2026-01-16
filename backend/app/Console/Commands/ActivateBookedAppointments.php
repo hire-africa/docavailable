@@ -29,6 +29,12 @@ class ActivateBookedAppointments extends Command
      */
     public function handle(): int
     {
+        // ⚠️ GUARDRAIL: Check feature flag to disable legacy triggers
+        if (\App\Services\FeatureFlags::disableLegacyAppointmentTriggers()) {
+            $this->info('Legacy appointment triggers disabled via feature flag. Skipping...');
+            return Command::SUCCESS;
+        }
+
         $this->info('Checking for appointments to activate...');
 
         // Find all confirmed appointments where scheduled time has arrived
@@ -38,7 +44,10 @@ class ActivateBookedAppointments extends Command
         Log::info('🕐 [ActivateBookedAppointments] Checking at ' . $now->toDateTimeString());
 
         // Fetch all confirmed appointments and filter using TimezoneService for maximum resilience
-        $allConfirmed = Appointment::where('status', Appointment::STATUS_CONFIRMED)->get();
+        // ⚠️ GUARDRAIL: Skip appointments that already have session_id (handled by auto-start job)
+        $allConfirmed = Appointment::where('status', Appointment::STATUS_CONFIRMED)
+            ->whereNull('session_id') // Only process appointments without session_id
+            ->get();
 
         $appointmentsToActivate = $allConfirmed->filter(function ($appointment) {
             $reached = \App\Services\TimezoneService::isAppointmentTimeReached(
@@ -154,6 +163,13 @@ class ActivateBookedAppointments extends Command
                             'sessions_used' => 0 // Reverted to 0: billing is deferred
                         ]);
                     }
+                    
+                    // ⚠️ CRITICAL: Populate appointments.session_id to link appointment to session
+                    // This ensures frontend can resolve session context and prevents duplicate session creation
+                    if (!$appointment->session_id) {
+                        $appointment->update(['session_id' => $session->id]);
+                        $this->info("      Linked appointment {$appointment->id} to existing session {$session->id}");
+                    }
                 } else {
                     // Create new TextSession
                     // NO UPFRONT DEDUCTION: sessions_used starts at 0
@@ -173,6 +189,11 @@ class ActivateBookedAppointments extends Command
                     ]);
 
                     $this->info("   Created text session {$session->id}");
+                    
+                    // ⚠️ CRITICAL: Populate appointments.session_id to link appointment to session
+                    // This ensures frontend can resolve session context and prevents duplicate session creation
+                    $appointment->update(['session_id' => $session->id]);
+                    $this->info("      Linked appointment {$appointment->id} to session {$session->id}");
                 }
 
                 // Create Chat Room if needed

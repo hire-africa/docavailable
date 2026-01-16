@@ -764,13 +764,41 @@ class AppointmentController extends Controller
                 ], 403);
             }
 
+            // ⚠️ GUARDRAIL: Block billing if appointment has session_id
+            // Billing must come from session completion flows, not appointment endpoints
+            $enforce = \App\Services\FeatureFlags::enforceSessionGatedBilling();
+            
+            if ($appointment->session_id !== null) {
+                if ($enforce) {
+                    \Log::warning('SessionContextGuard: Billing blocked - appointment has session_id', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'AppointmentController::endSession',
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Session must be ended through session completion endpoint, not appointment endpoint',
+                        'session_id' => $appointment->session_id,
+                        'error_code' => 'SESSION_BILLING_REQUIRED'
+                    ], 400);
+                } else {
+                    // Flag disabled: log warning but allow (backward compatibility)
+                    \Log::warning('SessionContextGuard: Billing on appointment with session_id (flag disabled)', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'AppointmentController::endSession',
+                    ]);
+                }
+            }
+
             // Update appointment status first
             $appointment->update([
                 'actual_end_time' => now(),
                 'status' => \App\Models\Appointment::STATUS_COMPLETED,
                 'completed_at' => now()
             ]);
-
+            
             // ⚠️ GUARDRAIL: Check if appointment has session_id and warn/refuse legacy billing
             $guardrail = \App\Services\SessionContextGuard::checkAppointmentBillingGuardrail(
                 $appointment,
@@ -784,17 +812,7 @@ class AppointmentController extends Controller
             // ⚠️ LEGACY APPOINTMENT-BASED BILLING ⚠️
             // Architecture Note: This endpoint calls processAppointmentEnd() which violates
             // the target invariant "billing triggered only by session events".
-            // 
-            // TODO: In later phase, return 400 if session_id is not null:
-            //   if ($appointment->session_id !== null) {
-            //     return response()->json([
-            //       'success' => false,
-            //       'message' => 'Session must be ended through session completion endpoint, not appointment endpoint'
-            //     ], 400);
-            //   }
-            // 
-            // Once session_id is populated, billing should come from session completion flows,
-            // not from appointment end endpoint.
+            // This path is only allowed for appointments without session_id (legacy appointments).
             
             // Process payment and deduction using the comprehensive service
             $paymentService = new \App\Services\DoctorPaymentService();
@@ -869,6 +887,34 @@ class AppointmentController extends Controller
                     'success' => false,
                     'message' => 'Appointment not found'
                 ], 404);
+            }
+
+            // ⚠️ GUARDRAIL: Block billing if appointment has session_id
+            // Billing must come from session completion flows, not appointment endpoints
+            $enforce = \App\Services\FeatureFlags::enforceSessionGatedBilling();
+            
+            if ($appointment->session_id !== null) {
+                if ($enforce) {
+                    \Log::warning('SessionContextGuard: Billing blocked - appointment has session_id', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'AppointmentController::processPayment',
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Billing must be processed through session completion, not appointment endpoint',
+                        'session_id' => $appointment->session_id,
+                        'error_code' => 'SESSION_BILLING_REQUIRED'
+                    ], 400);
+                } else {
+                    // Flag disabled: log warning but allow (backward compatibility)
+                    \Log::warning('SessionContextGuard: Billing on appointment with session_id (flag disabled)', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'AppointmentController::processPayment',
+                    ]);
+                }
             }
 
             // Deduct session from patient's subscription

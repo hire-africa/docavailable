@@ -1282,6 +1282,53 @@ class TextSessionController extends Controller
             // Check if text session already exists for this appointment
             $existingSession = TextSession::where('appointment_id', $appointmentId)->first();
             if ($existingSession) {
+                if ($appointment->session_id === null) {
+                    $appointment->update([
+                        'session_id' => $existingSession->id,
+                        'status' => \App\Models\Appointment::STATUS_IN_PROGRESS,
+                        'actual_start_time' => now(),
+                    ]);
+                }
+
+                if (!$existingSession->chat_id) {
+                    $chatRoomName = "text_session_{$existingSession->id}";
+
+                    $existingRoom = DB::table('chat_rooms')
+                        ->where('name', $chatRoomName)
+                        ->where('type', 'text_session')
+                        ->first();
+
+                    if ($existingRoom) {
+                        $roomId = $existingRoom->id;
+                    } else {
+                        $roomId = DB::table('chat_rooms')->insertGetId([
+                            'name' => $chatRoomName,
+                            'type' => 'text_session',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    }
+
+                    $existingSession->update(['chat_id' => $roomId]);
+
+                    DB::table('chat_room_participants')->insertOrIgnore([
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $patientId,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ],
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $doctorId,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ],
+                    ]);
+                }
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Text session already exists for this appointment',
@@ -1322,17 +1369,48 @@ class TextSessionController extends Controller
                 'reason' => $reason ?: $appointment->reason,
                 'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
                 'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
+                'started_at' => now(),
+                'last_activity_at' => now(),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
+            $chatRoomName = "text_session_{$textSession->id}";
+            $chatRoomId = DB::table('chat_rooms')->insertGetId([
+                'name' => $chatRoomName,
+                'type' => 'text_session',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $textSession->update(['chat_id' => $chatRoomId]);
+
+            DB::table('chat_room_participants')->insert([
+                [
+                    'chat_room_id' => $chatRoomId,
+                    'user_id' => $patientId,
+                    'role' => 'member',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                [
+                    'chat_room_id' => $chatRoomId,
+                    'user_id' => $doctorId,
+                    'role' => 'member',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+            ]);
+
+            $appointment->update([
+                'session_id' => $textSession->id,
+                'status' => \App\Models\Appointment::STATUS_IN_PROGRESS,
+                'actual_start_time' => now(),
+            ]);
+
             // Deduct one text session from subscription
-            $subscription->decrement('text_sessions_remaining');
 
             // Update text session with new remaining count
-            $textSession->update([
-                'sessions_remaining_before_start' => $subscription->fresh()->text_sessions_remaining
-            ]);
 
             // Get doctor information
             $doctor = User::find($doctorId);

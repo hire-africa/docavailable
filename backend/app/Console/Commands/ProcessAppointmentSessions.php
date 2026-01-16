@@ -42,6 +42,12 @@ class ProcessAppointmentSessions extends Command
      */
     public function handle()
     {
+        // ⚠️ GUARDRAIL: Check feature flag to disable legacy triggers
+        if (\App\Services\FeatureFlags::disableLegacyAppointmentTriggers()) {
+            $this->info('Legacy appointment triggers disabled via feature flag. Skipping...');
+            return 0;
+        }
+
         $this->info('Processing appointment sessions...');
 
         $now = now();
@@ -49,7 +55,8 @@ class ProcessAppointmentSessions extends Command
 
         // Find confirmed or in-progress appointments that are at or past their scheduled time (within last 10 minutes)
         // Use appointment_date and appointment_time legacy fields
-        // TODO: Once session_id is populated, filter to only appointments without session_id (legacy appointments)
+        // ⚠️ GUARDRAIL: Only process appointments WITHOUT session_id (legacy appointments)
+        // Appointments with session_id should be handled by session-based flows, not appointment-time triggers
         $confirmedAppointments = Appointment::select([
             'id',
             'patient_id',
@@ -58,9 +65,11 @@ class ProcessAppointmentSessions extends Command
             'appointment_time',
             'status',
             'appointment_type',
-            'actual_start_time'
+            'actual_start_time',
+            'session_id'
         ])
             ->whereIn('status', [Appointment::STATUS_CONFIRMED, Appointment::STATUS_IN_PROGRESS])
+            ->whereNull('session_id') // ⚠️ Only process legacy appointments without session_id
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) >= ?", [$tenMinutesAgo->toDateTimeString()])
             ->get();

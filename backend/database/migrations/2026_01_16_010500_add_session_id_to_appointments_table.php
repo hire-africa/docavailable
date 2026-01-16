@@ -22,15 +22,25 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            // Add nullable session_id column
-            // Type: unsignedBigInteger to match future canonical session identifier
-            // Assumes unified numeric ID space (or best-effort pointer until unified table exists)
-            $table->unsignedBigInteger('session_id')->nullable()->after('id');
-            
-            // Add non-unique index for efficient lookups
-            // Non-unique allows for potential future cases (follow-ups, reschedules, merged sessions)
-            $table->index('session_id');
+            // Add nullable session_id column only if it doesn't exist
+            if (!Schema::hasColumn('appointments', 'session_id')) {
+                // Add nullable session_id column
+                // Type: unsignedBigInteger to match future canonical session identifier
+                // Assumes unified numeric ID space (or best-effort pointer until unified table exists)
+                $table->unsignedBigInteger('session_id')->nullable()->after('id');
+            }
         });
+        
+        // Add index separately (check if it exists first)
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                // Add non-unique index for efficient lookups
+                // Non-unique allows for potential future cases (follow-ups, reschedules, merged sessions)
+                $table->index('session_id', 'appointments_session_id_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
     }
 
     /**
@@ -43,10 +53,17 @@ return new class extends Migration
     {
         Schema::table('appointments', function (Blueprint $table) {
             // Drop index first (required before dropping column in some databases)
-            $table->dropIndex(['session_id']);
+            // Only drop if it exists
+            try {
+                $table->dropIndex(['session_id']);
+            } catch (\Throwable $e) {
+                // Index may not exist; safely ignore
+            }
             
-            // Drop column
-            $table->dropColumn('session_id');
+            // Drop column only if it exists
+            if (Schema::hasColumn('appointments', 'session_id')) {
+                $table->dropColumn('session_id');
+            }
         });
     }
 };

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\TextSession;
 use App\Models\CallSession;
+use App\Models\Appointment;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -37,8 +38,8 @@ class SessionContextGuard
         $identifierStr = (string) $identifier;
         
         // Check if it's a text session identifier
-        if (strpos($identifierStr, 'text_session_') === 0) {
-            $sessionId = (int) str_replace('text_session_', '', $identifierStr);
+        if (strpos($identifierStr, 'text_session_') === 0 || strpos($identifierStr, 'text_session:') === 0) {
+            $sessionId = (int) str_replace(['text_session_', 'text_session:'], '', $identifierStr);
             
             // Verify session exists and is active
             $session = TextSession::find($sessionId);
@@ -64,6 +65,42 @@ class SessionContextGuard
             return [
                 'is_valid' => true,
                 'session_type' => 'text_session',
+                'session_id' => $sessionId,
+                'reason' => null,
+            ];
+        }
+
+        if (strpos($identifierStr, 'call_session_') === 0 || strpos($identifierStr, 'call_session:') === 0) {
+            $sessionId = (int) str_replace(['call_session_', 'call_session:'], '', $identifierStr);
+
+            $callSession = CallSession::find($sessionId);
+            if (!$callSession) {
+                return [
+                    'is_valid' => false,
+                    'session_type' => null,
+                    'session_id' => null,
+                    'reason' => 'call_session_not_found',
+                ];
+            }
+
+            if (!in_array($callSession->status, [
+                CallSession::STATUS_ACTIVE,
+                CallSession::STATUS_CONNECTING,
+                CallSession::STATUS_WAITING_FOR_DOCTOR,
+                CallSession::STATUS_ANSWERED,
+            ])) {
+                return [
+                    'is_valid' => false,
+                    'session_type' => null,
+                    'session_id' => null,
+                    'reason' => 'call_session_not_active',
+                    'current_status' => $callSession->status,
+                ];
+            }
+
+            return [
+                'is_valid' => true,
+                'session_type' => 'call_session',
                 'session_id' => $sessionId,
                 'reason' => null,
             ];

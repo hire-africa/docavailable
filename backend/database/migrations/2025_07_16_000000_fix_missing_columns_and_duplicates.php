@@ -52,20 +52,74 @@ return new class extends Migration {
             }
         });
 
-        // Add indexes for better performance
-        Schema::table('appointments', function (Blueprint $table) {
-            $table->index(['patient_id', 'status']);
-            $table->index(['doctor_id', 'status']);
-            $table->index(['appointment_date', 'status']);
-            $table->index('actual_start_time');
-            $table->index('actual_end_time');
-        });
+        // Add indexes for better performance (skip if already exist)
+        // Note: Use try-catch for indexes since Laravel's hasIndex() may not work reliably for composite indexes
+        
+        // Appointments indexes
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->index(['patient_id', 'status'], 'appointments_patient_id_status_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->index(['doctor_id', 'status'], 'appointments_doctor_id_status_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->index(['appointment_date', 'status'], 'appointments_appointment_date_status_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->index('actual_start_time', 'appointments_actual_start_time_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('appointments', function (Blueprint $table) {
+                $table->index('actual_end_time', 'appointments_actual_end_time_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
 
-        Schema::table('text_sessions', function (Blueprint $table) {
-            $table->index(['patient_id', 'status']);
-            $table->index(['doctor_id', 'status']);
-            $table->index('last_activity_at');
-        });
+        // Text sessions indexes
+        try {
+            Schema::table('text_sessions', function (Blueprint $table) {
+                $table->index(['patient_id', 'status'], 'text_sessions_patient_id_status_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('text_sessions', function (Blueprint $table) {
+                $table->index(['doctor_id', 'status'], 'text_sessions_doctor_id_status_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
+        
+        try {
+            Schema::table('text_sessions', function (Blueprint $table) {
+                $table->index('last_activity_at', 'text_sessions_last_activity_at_index');
+            });
+        } catch (\Throwable $e) {
+            // Index likely already exists; safely ignore
+        }
     }
 
     /**

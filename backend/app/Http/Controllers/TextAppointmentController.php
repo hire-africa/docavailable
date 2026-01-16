@@ -353,6 +353,34 @@ class TextAppointmentController extends Controller
                 ], 404);
             }
 
+            // ⚠️ GUARDRAIL: Block billing if appointment has session_id
+            // Billing must come from session auto-deduction flows, not appointment endpoints
+            $enforce = \App\Services\FeatureFlags::enforceSessionGatedBilling();
+            
+            if ($appointment->session_id !== null) {
+                if ($enforce) {
+                    \Log::warning('SessionContextGuard: Billing blocked - appointment has session_id', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'TextAppointmentController::processDeduction',
+                    ]);
+                    
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Billing must be processed through session auto-deduction, not appointment endpoint',
+                        'session_id' => $appointment->session_id,
+                        'error_code' => 'SESSION_BILLING_REQUIRED'
+                    ], 400);
+                } else {
+                    // Flag disabled: log warning but allow (backward compatibility)
+                    \Log::warning('SessionContextGuard: Billing on appointment with session_id (flag disabled)', [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => $appointment->session_id,
+                        'endpoint' => 'TextAppointmentController::processDeduction',
+                    ]);
+                }
+            }
+
             // Get patient's subscription
             $subscription = Subscription::where('user_id', $appointment->patient_id)
                 ->where('is_active', true)
