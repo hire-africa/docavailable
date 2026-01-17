@@ -29,7 +29,11 @@ echo "🔗 Ensuring storage symlink..."
 php artisan storage:link || true
 
 echo "🗄️ Running migrations..."
-php artisan migrate --force || true
+if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+  echo "⏭️  Skipping migrations (SKIP_MIGRATIONS=1)"
+else
+  php artisan migrate --force || true
+fi
 
 echo "⚡ Caching configuration and routes..."
 php artisan config:cache || true
@@ -64,7 +68,11 @@ php artisan tinker --execute='echo config("database.default")."\n";' 2>/dev/null
 php artisan tinker --execute='$c=config("database.default"); echo (config("database.connections.$c.host")??"(no host)")."\n";' 2>/dev/null || true
 
 echo "🗄️ Running migrations (if any)..."
-php artisan migrate --force || true
+if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+  echo "⏭️  Skipping migrations (SKIP_MIGRATIONS=1)"
+else
+  php artisan migrate --force || true
+fi
 
 echo "⚡ Caching config..."
 php artisan config:cache || true

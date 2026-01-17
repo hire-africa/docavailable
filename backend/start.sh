@@ -5,7 +5,11 @@ echo "🔗 Creating storage symlink..."
 php artisan storage:link
 
 echo "🗄️ Running migrations..."
-php artisan migrate --force
+if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+  echo "⏭️  Skipping migrations (SKIP_MIGRATIONS=1)"
+else
+  php artisan migrate --force
+fi
 
 echo "⚡ Optimizing..."
 php artisan config:cache
