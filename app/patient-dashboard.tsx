@@ -2183,7 +2183,12 @@ export default function PatientDashboard() {
                 status === 'confirmed' || status === 1 ||
                 status === 'in_progress' || status === 7; // Include in_progress appointments
 
+              const appointmentType = (appt.appointment_type ?? appt.consultationType ?? appt.type ?? null);
+              const linkedSessionId = (appt.session_id ?? appt.sessionId ?? null);
+              const isTextWithLinkedSession = appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+
               return isConfirmedOrInProgress && (
+                !isTextWithLinkedSession &&
                 !messageSearchQuery ||
                 (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
                 (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())
@@ -2334,6 +2339,13 @@ export default function PatientDashboard() {
                     elevation: 3
                   }}
                   onPress={() => {
+                    const appointmentType = (item.appointment_type ?? item.consultationType ?? item.type ?? null);
+                    const linkedSessionId = (item.session_id ?? item.sessionId ?? null);
+                    if (appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '') {
+                      const chatId = `text_session_${linkedSessionId}`;
+                      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+                      return;
+                    }
                     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
                   }}
                 >

@@ -7,22 +7,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  AppState,
-  BackHandler,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Animated,
+    AppState,
+    BackHandler,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppTour from '../components/AppTour';
@@ -1029,7 +1029,13 @@ export default function DoctorDashboard() {
   };
 
   const handleSelectPatient = (patient: BookingRequest) => {
-    // Navigate to chat using appointment ID
+    const appointmentType = (patient as any)?.appointment_type ?? (patient as any)?.consultationType ?? (patient as any)?.type ?? null;
+    const linkedSessionId = (patient as any)?.session_id ?? (patient as any)?.sessionId ?? null;
+    if (appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '') {
+      const chatId = `text_session_${linkedSessionId}`;
+      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+      return;
+    }
     router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
   };
 
@@ -2029,6 +2035,13 @@ export default function DoctorDashboard() {
             isActive: false
           }));
 
+          const filteredConfirmedAppointmentItems = confirmedAppointmentItems.filter(appt => {
+            const appointmentType = (appt as any)?.appointment_type ?? (appt as any)?.consultationType ?? (appt as any)?.type ?? null;
+            const linkedSessionId = (appt as any)?.session_id ?? (appt as any)?.sessionId ?? null;
+            const isTextWithLinkedSession = appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+            return !isTextWithLinkedSession;
+          });
+
           // Get ended sessions
           const filteredEndedSessions = endedSessions
             .filter(session => session && session.patient_id)
@@ -2040,7 +2053,7 @@ export default function DoctorDashboard() {
             }));
 
           // Combine all items and sort by date (most recent first)
-          const allItems = [...activeTextSessionItems, ...confirmedAppointmentItems, ...filteredEndedSessions]
+          const allItems = [...activeTextSessionItems, ...filteredConfirmedAppointmentItems, ...filteredEndedSessions]
             .sort((a, b) => b.sortDate - a.sortDate);
 
           if (loadingConfirmed || loadingTextSessions) {
