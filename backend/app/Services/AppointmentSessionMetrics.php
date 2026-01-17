@@ -18,19 +18,21 @@ use Carbon\Carbon;
 class AppointmentSessionMetrics
 {
     /**
-     * Get count of confirmed appointments due for session creation
+     * Get count of confirmed call appointments due for call unlock
      * 
-     * Definition: status=CONFIRMED, session_id IS NULL, appointment_datetime_utc <= now_utc()
+     * Definition: status=CONFIRMED, call_unlocked_at IS NULL, appointment_datetime_utc <= (now_utc() + 15min)
      * 
      * @return int
      */
     public static function getDueAppointmentsCount(): int
     {
         $now = Carbon::now('UTC');
+        $unlockCutoff = $now->copy()->addMinutes(15);
         
         return Appointment::where('status', Appointment::STATUS_CONFIRMED)
-            ->whereNull('session_id')
-            ->where('appointment_datetime_utc', '<=', $now)
+            ->whereNull('call_unlocked_at')
+            ->whereIn('appointment_type', [Appointment::TYPE_AUDIO, Appointment::TYPE_VIDEO, 'voice'])
+            ->where('appointment_datetime_utc', '<=', $unlockCutoff)
             ->count();
     }
 

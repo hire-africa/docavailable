@@ -41,63 +41,43 @@ class ChatController extends Controller
             return null; // Not an appointment, let other logic handle it
         }
 
-        // If appointment has session_id, block appointment-based chat (when flag enabled)
-        if ($appointment->session_id !== null) {
-            $enforce = FeatureFlags::enforceSessionGatedChat();
-            
-            if ($enforce) {
-                // Determine session type (text or call) to provide correct context format
-                $sessionContext = $this->determineSessionContextFormat($appointment->session_id);
-                
-                Log::warning('SessionContextGuard: Chat operation blocked - appointment has session_id', [
-                    'appointment_id' => $appointment->id,
-                    'session_id' => $appointment->session_id,
-                    'operation' => $operation,
-                    'session_context' => $sessionContext,
-                ]);
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Chat must be accessed through session context. Please use the session endpoint.',
-                    'session_id' => $appointment->session_id,
-                    'error_code' => 'SESSION_CONTEXT_REQUIRED',
-                    'session_context' => $sessionContext, // Canonical format: text_session:{id} or call_session:{id}
-                ], 400);
-            } else {
-                // Flag disabled: log warning but allow (backward compatibility for Phase 1)
-                Log::warning('SessionContextGuard: Chat operation on appointment with session_id (flag disabled - Phase 1 monitoring)', [
-                    'appointment_id' => $appointment->id,
-                    'session_id' => $appointment->session_id,
-                    'operation' => $operation,
-                ]);
-            }
-        } else {
-            // Appointment without session_id
-            $allowLegacy = FeatureFlags::allowLegacyAppointmentChat();
-            
-            if (!$allowLegacy) {
-                // Block appointment-based chat when session_id is null (waiting state)
-                Log::warning('SessionContextGuard: Chat operation blocked - appointment waiting for session', [
-                    'appointment_id' => $appointment->id,
-                    'operation' => $operation,
-                ]);
-                
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Session is not ready yet. Please wait for the session to start.',
-                    'error_code' => 'SESSION_NOT_READY',
-                    'appointment_id' => $appointment->id,
-                ], 403);
-            } else {
-                // Legacy flag enabled: allow but log warning
-                Log::warning('SessionContextGuard: Chat operation on appointment without session_id (legacy allowed)', [
-                    'appointment_id' => $appointment->id,
-                    'operation' => $operation,
-                ]);
-            }
+        // ENFORCEMENT: Appointments are schedulers/eligibility only. Live chat must be session-based.
+        // Always block appointment-scoped chat operations and return canonical session context when available.
+        $textSession = \App\Models\TextSession::where('appointment_id', (int) $appointment->id)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($textSession) {
+            $textSession->applyLazyExpiration();
+            $sessionContext = 'text_session:' . $textSession->id;
+
+            Log::warning('SessionContextGuard: Chat operation blocked - appointment identifier used for chat', [
+                'appointment_id' => $appointment->id,
+                'session_id' => $textSession->id,
+                'operation' => $operation,
+                'session_context' => $sessionContext,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Chat must be accessed through session context. Please use the session endpoint.',
+                'session_id' => $textSession->id,
+                'error_code' => 'SESSION_CONTEXT_REQUIRED',
+                'session_context' => $sessionContext,
+            ], 400);
         }
 
-        return null; // Allowed
+        Log::warning('SessionContextGuard: Chat operation blocked - appointment has no session yet', [
+            'appointment_id' => $appointment->id,
+            'operation' => $operation,
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Session is not ready yet. Please wait for the session to start.',
+            'error_code' => 'SESSION_NOT_READY',
+            'appointment_id' => $appointment->id,
+        ], 403);
     }
 
     /**
@@ -302,16 +282,11 @@ class ChatController extends Controller
             return $guardrailResponse;
         }
 
-        // Get messages from cache storage
-        $messages = $this->messageStorageService->getMessages($actualId, 'appointment');
-
-        // Apply anonymization if needed
-        $messages = $this->applyAnonymizationToMessages($messages, $user, $appointment);
-
         return response()->json([
-            'success' => true,
-            'data' => $messages
-        ]);
+            'success' => false,
+            'message' => 'Chat must be accessed through session context.',
+            'error_code' => 'SESSION_CONTEXT_REQUIRED'
+        ], 400);
     }
 
 
@@ -442,16 +417,10 @@ class ChatController extends Controller
             }
 
             // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
-            // This respects feature flags - Phase 1 will warn only, Phase 2+ will block
             $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'sendMessage');
             if ($guardrailResponse !== null) {
                 return $guardrailResponse;
             }
-
-            $otherParticipantId = $appointment->patient_id === $user->id ? $appointment->doctor_id : $appointment->patient_id;
-            $otherParticipantName = $appointment->patient_id === $user->id
-                ? 'Dr. ' . $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name
-                : $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
         }
 
         // Handle text session logic with atomic expiry enforcement BEFORE storing message
@@ -577,59 +546,41 @@ class ChatController extends Controller
 
         // Store message in cache (only if session validation passed)
         // Use numeric ID for MessageStorageService methods
-        $sessionType = (!$appointment && (strpos($appointmentId, 'text_session_') === 0 || strpos($appointmentId, 'text_session:') === 0)) ? 'text_session' : 'appointment';
+        // Determine session type: use 'text_session' for text sessions, 'appointment' for appointments
+        $sessionType = ($isTextSession || isset($textSession)) ? 'text_session' : 'appointment';
         $message = $this->messageStorageService->storeMessage($actualId, $messageData, $sessionType);
 
         // Update chat room keys for tracking
         // Use numeric ID for MessageStorageService methods
         $this->messageStorageService->updateChatRoomKeys($actualId, $sessionType);
 
-        // Handle appointment join tracking (patient/doctor joins by sending message)
-        if ($appointment) {
-            // Check if this is the first message from patient
-            if ($user->id === $appointment->patient_id && !$appointment->patient_joined) {
-                \App\Models\Appointment::where('id', $appointment->id)->update([
-                    'patient_joined' => now()
-                ]);
-            }
-
-            // Check if this is the first message from doctor
-            if ($user->id === $appointment->doctor_id && !$appointment->doctor_joined) {
-                \App\Models\Appointment::where('id', $appointment->id)->update([
-                    'doctor_joined' => now()
-                ]);
-            }
-
-            $this->sendChatNotification($user, $appointment, $request->message, $message['id']);
-        } else {
-            // Text session message notification
-            if (isset($session) && $session) {
-                try {
-                    $recipient = ($user->id === $session->patient_id) ? \App\Models\User::find($session->doctor_id) : \App\Models\User::find($session->patient_id);
-                    if ($recipient && $recipient->push_notifications_enabled && $recipient->push_token) {
-                        $notificationData = [
-                            'session_id' => $session->id,
-                            'sender_id' => $user->id,
-                            'sender_name' => $this->getUserName($user->id),
-                            'message_preview' => substr($request->message ?? '', 0, 50),
-                            'message_id' => $message['id']
-                        ];
-                        $recipient->notify(new \App\Notifications\TextSessionMessageNotification($notificationData));
-                        Log::info('📤 Text session push sent', [
-                            'session_id' => $session->id,
-                            'recipient_id' => $recipient->id
-                        ]);
-                    } else {
-                        Log::info('⚠️ Text session push skipped (no token or disabled)', [
-                            'session_id' => $session->id,
-                            'recipient_id' => $recipient->id ?? 'unknown'
-                        ]);
-                    }
-                } catch (\Exception $e) {
-                    Log::error('❌ Failed to send text session message notification: ' . $e->getMessage(), [
-                        'session_id' => $session->id
+        // Text session message notification
+        if (isset($session) && $session) {
+            try {
+                $recipient = ($user->id === $session->patient_id) ? \App\Models\User::find($session->doctor_id) : \App\Models\User::find($session->patient_id);
+                if ($recipient && $recipient->push_notifications_enabled && $recipient->push_token) {
+                    $notificationData = [
+                        'session_id' => $session->id,
+                        'sender_id' => $user->id,
+                        'sender_name' => $this->getUserName($user->id),
+                        'message_preview' => substr($request->message ?? '', 0, 50),
+                        'message_id' => $message['id']
+                    ];
+                    $recipient->notify(new \App\Notifications\TextSessionMessageNotification($notificationData));
+                    Log::info('📤 Text session push sent', [
+                        'session_id' => $session->id,
+                        'recipient_id' => $recipient->id
+                    ]);
+                } else {
+                    Log::info('⚠️ Text session push skipped (no token or disabled)', [
+                        'session_id' => $session->id,
+                        'recipient_id' => $recipient->id ?? 'unknown'
                     ]);
                 }
+            } catch (\Exception $e) {
+                Log::error('❌ Failed to send text session message notification: ' . $e->getMessage(), [
+                    'session_id' => $session->id
+                ]);
             }
         }
 
@@ -819,10 +770,14 @@ class ChatController extends Controller
         }
 
         $sessionStatus = null;
-        if (($appointment->appointment_type ?? 'text') === 'text' && !empty($appointment->session_id)) {
-            $textSession = \App\Models\TextSession::find($appointment->session_id);
+        $resolvedSessionId = null;
+        if (($appointment->appointment_type ?? 'text') === 'text') {
+            $textSession = \App\Models\TextSession::where('appointment_id', (int) $appointment->id)
+                ->orderBy('created_at', 'desc')
+                ->first();
             if ($textSession) {
                 $textSession->applyLazyExpiration();
+                $resolvedSessionId = $textSession->id;
                 $sessionStatus = $textSession->status;
             }
         }
@@ -838,7 +793,8 @@ class ChatController extends Controller
                 'status' => $appointment->status,
                 'doctor_id' => $appointment->doctor_id,
                 'patient_id' => $appointment->patient_id,
-                'session_id' => $appointment->session_id ?? null, // Include session_id for session-gated routing
+                'session_id' => $resolvedSessionId,
+                'session_context' => $resolvedSessionId ? ('text_session:' . $resolvedSessionId) : null,
                 'session_status' => $sessionStatus,
                 'other_participant_profile_picture' => $otherParticipantProfilePath,
                 'other_participant_profile_picture_url' => $otherParticipantProfileUrl
@@ -915,13 +871,17 @@ class ChatController extends Controller
             ], 403);
         }
 
-        // Get messages for local storage
-        $data = $this->messageStorageService->getMessagesForLocalStorage($actualId, 'appointment');
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'getMessagesForLocalStorage');
+        if ($guardrailResponse !== null) {
+            return $guardrailResponse;
+        }
 
         return response()->json([
-            'success' => true,
-            'data' => $data
-        ]);
+            'success' => false,
+            'message' => 'Chat must be accessed through session context.',
+            'error_code' => 'SESSION_CONTEXT_REQUIRED'
+        ], 400);
     }
 
     /**
@@ -997,13 +957,17 @@ class ChatController extends Controller
             ], 403);
         }
 
-        // Sync messages from local storage
-        $result = $this->messageStorageService->syncFromLocalStorage($actualId, $request->messages, 'appointment');
+        // ⚠️ GUARDRAIL: Enforce session context for appointment-based chat
+        $guardrailResponse = $this->enforceAppointmentSessionContext($appointment, $appointmentId, 'syncFromLocalStorage');
+        if ($guardrailResponse !== null) {
+            return $guardrailResponse;
+        }
 
         return response()->json([
-            'success' => true,
-            'data' => $result
-        ]);
+            'success' => false,
+            'message' => 'Chat must be accessed through session context.',
+            'error_code' => 'SESSION_CONTEXT_REQUIRED'
+        ], 400);
     }
 
     /**

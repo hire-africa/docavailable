@@ -241,7 +241,12 @@ class SessionCreationService
             // Check if there's already an active call session
             $existingSession = CallSession::where('patient_id', $patientId)
                 ->where('doctor_id', $doctorId)
-                ->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_CONNECTING, CallSession::STATUS_WAITING_FOR_DOCTOR])
+                ->whereIn('status', [
+                    CallSession::STATUS_ACTIVE,
+                    CallSession::STATUS_CONNECTING,
+                    CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    CallSession::STATUS_ANSWERED,
+                ])
                 ->first();
 
             if ($existingSession) {

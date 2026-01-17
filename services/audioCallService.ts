@@ -330,9 +330,54 @@ class AudioCallService {
       }
 
       if (this.connectionState === 'connecting' || this.connectionState === 'connected') {
-        console.warn('⚠️ [AudioCallService] Call already active - preventing duplicate initialization');
-        return;
+        console.warn('⚠️ [AudioCallService] Call already active - cleaning up previous call first');
+        // Clean up any existing call state before initializing new one
+        await this.reset();
       }
+
+      // CRITICAL: Clean up any existing connections/resources before starting new call
+      if (this.signalingChannel && this.signalingChannel.readyState !== WebSocket.CLOSED) {
+        console.log('🧹 [AudioCallService] Closing existing signaling channel before new call');
+        try {
+          this.signalingChannel.close();
+        } catch (e) {
+          console.warn('⚠️ Error closing existing signaling channel:', e);
+        }
+        this.signalingChannel = null;
+      }
+
+      if (this.peerConnection) {
+        console.log('🧹 [AudioCallService] Closing existing peer connection before new call');
+        try {
+          this.peerConnection.close();
+        } catch (e) {
+          console.warn('⚠️ Error closing existing peer connection:', e);
+        }
+        this.peerConnection = null;
+      }
+
+      if (this.localStream) {
+        console.log('🧹 [AudioCallService] Stopping existing local stream before new call');
+        try {
+          this.localStream.getTracks().forEach(track => track.stop());
+        } catch (e) {
+          console.warn('⚠️ Error stopping existing local stream:', e);
+        }
+        this.localStream = null;
+      }
+
+      // Reset state flags
+      this.hasEnded = false;
+      this.isCallAnswered = false;
+      this.didConnect = false;
+      this.didEmitAnswered = false;
+      this.isReconnecting = false;
+      this.reconnectionAttempts = 0;
+      this.offerCreated = false;
+      this.creatingOffer = false;
+      this.callStartAttempted = false;
+      this.reNotifyAttempted = false;
+      this.processedMessages.clear();
 
       this.isInitializing = true;
 
@@ -545,6 +590,15 @@ class AudioCallService {
           audioTrackSettings: event.streams[0].getAudioTracks()[0]?.getSettings()
         });
         this.remoteStream = event.streams[0];
+        
+        // CRITICAL: Ensure all audio tracks are enabled for sound to work
+        event.streams[0].getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            console.log('🔊 [AudioCallService] Enabling remote audio track:', track.id);
+            track.enabled = true;
+          }
+        });
+        
         this.events?.onRemoteStream(event.streams[0]);
       });
 

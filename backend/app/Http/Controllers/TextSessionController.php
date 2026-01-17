@@ -36,6 +36,118 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Start a call from inside an existing text session.
+     * This creates a NEW call_session and leaves the text_session untouched.
+     */
+    public function startCall(Request $request, int $textSessionId): JsonResponse
+    {
+        try {
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'call_type' => 'required|string|in:voice,video',
+                'reason' => 'nullable|string|max:1000',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $session = TextSession::find($textSessionId);
+            if (!$session) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Text session not found'
+                ], 404);
+            }
+
+            // Apply lazy expiration at read-time
+            $session->applyLazyExpiration();
+
+            // Authorization: must be a participant
+            if ((int) $session->patient_id !== (int) $user->id && (int) $session->doctor_id !== (int) $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to session'
+                ], 403);
+            }
+
+            // Session must still be live to initiate parallel call
+            if (!in_array($session->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR], true)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Text session is not active'
+                ], 400);
+            }
+
+            if (!$session->isCallEnabled()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Call is not enabled for this text session'
+                ], 403);
+            }
+
+            $callType = $request->input('call_type');
+            $reason = $request->input('reason');
+
+            // Determine the doctor for the call. CallSessionController requires doctor_id for instant calls.
+            $doctorId = (int) $session->doctor_id;
+
+            // Pass appointment_id only if it exists AND is a call appointment type.
+            $appointmentIdToUse = null;
+            if (!empty($session->appointment_id) && is_numeric((string) $session->appointment_id)) {
+                $appt = \App\Models\Appointment::find((int) $session->appointment_id);
+                if ($appt && in_array((string) $appt->appointment_type, ['audio', 'video', 'voice'], true)) {
+                    $appointmentIdToUse = (string) $appt->id;
+                }
+            }
+
+            $payload = [
+                'call_type' => (string) $callType,
+                'doctor_id' => $doctorId,
+                'reason' => $reason,
+            ];
+            if ($appointmentIdToUse !== null) {
+                $payload['appointment_id'] = $appointmentIdToUse;
+            }
+
+            $internalRequest = Request::create('/api/call-sessions/start', 'POST', $payload);
+            $internalRequest->setUserResolver(function () use ($user) {
+                return $user;
+            });
+
+            $response = app(\App\Http\Controllers\CallSessionController::class)->start($internalRequest);
+            $data = $response->getData(true);
+
+            if (!is_array($data) || empty($data['success'])) {
+                return $response;
+            }
+
+            // Ensure response communicates sibling relationship
+            $data['data']['text_session_id'] = $session->id;
+            $data['data']['text_session_status'] = $session->status;
+
+            return response()->json($data, $response->getStatusCode());
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to start call: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Start a new text session.
      */
     public function start(Request $request): JsonResponse

@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Dimensions,
     Image,
+    Linking,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -528,7 +529,12 @@ const Step1: React.FC<Step1Props> = ({
                             I accept the{' '}
                             <Text style={styles.policyLink}>Platform Terms of Service</Text>
                             {' '}and{' '}
-                            <Text style={styles.policyLink}>Privacy Policy</Text>
+                            <Text
+                                style={styles.policyLink}
+                                onPress={() => Linking.openURL('https://docavailable.com/privacy.html')}
+                            >
+                                Privacy Policy
+                            </Text>
                         </Text>
                     </TouchableOpacity>
                     {errors.acceptPolicies && <Text style={styles.errorText}>{errors.acceptPolicies}</Text>}

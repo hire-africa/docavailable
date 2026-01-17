@@ -121,9 +121,9 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
 
     // Add all existing messages to map using unique key
     for (const msg of prev) {
-      // For images, always use temp_id if available to keep them separate
+      // For images and voice messages, always use temp_id if available to keep them separate
       // For text, use temp_id or id
-      const key = msg.message_type === 'image' && msg.temp_id
+      const key = (msg.message_type === 'image' || msg.message_type === 'voice') && msg.temp_id
         ? msg.temp_id
         : (msg.temp_id || String(msg.id));
       map.set(key, msg);
@@ -132,21 +132,21 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
 
     // Add incoming messages, avoiding duplicates and handling immediate messages
     for (const msg of incoming) {
-      // For images, always use temp_id if available to keep them separate
-      const key = msg.message_type === 'image' && msg.temp_id
+      // For images and voice messages, always use temp_id if available to keep them separate
+      const key = (msg.message_type === 'image' || msg.message_type === 'voice') && msg.temp_id
         ? msg.temp_id
         : (msg.temp_id || String(msg.id));
 
       console.log(`📨 [safeMerge] Processing incoming: ${key} (type: ${msg.message_type}, id: ${msg.id}, has temp_id: ${!!msg.temp_id})`);
 
       // Check if this is a server response for a temp TEXT message
-      // Only apply this check to text messages, not images
-      const isTempMessageUpdate = msg.message_type !== 'image' && prev.some(existingMsg => {
+      // Only apply this check to text messages, not images or voice
+      const isTempMessageUpdate = msg.message_type === 'text' && prev.some(existingMsg => {
         // Skip if existing message doesn't have temp_id
         if (!existingMsg.temp_id) return false;
 
-        // Skip if it's an image message (images have their own dedup logic below)
-        if (existingMsg.message_type === 'image') return false;
+        // Skip if it's an image or voice message (they have their own dedup logic below)
+        if (existingMsg.message_type === 'image' || existingMsg.message_type === 'voice') return false;
 
         // Check if this is the same TEXT message by comparing:
         // 1. Message content (for text)
@@ -165,15 +165,17 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
         continue;
       }
 
-      // Check if this is a duplicate/update of an existing image message
-      if (msg.message_type === 'image' && msg.media_url) {
+      // Check if this is a duplicate/update of an existing media message (image or voice)
+      // Both image and voice messages have the same issue: same message text but different media_url
+      if ((msg.message_type === 'image' || msg.message_type === 'voice') && msg.media_url) {
         // Look for existing message to update instead of blocking
         let shouldSkip = false;
         let shouldUpdate = false;
 
         for (let i = 0; i < prev.length; i++) {
           const existingMsg = prev[i];
-          if (existingMsg.message_type !== 'image') continue;
+          // Check both image and voice messages
+          if (existingMsg.message_type !== msg.message_type) continue;
 
           // CRITICAL: Check if message IDs match (WebRTC echo has same server ID)
           if (existingMsg.id && msg.id && String(existingMsg.id) === String(msg.id)) {
@@ -974,17 +976,6 @@ export default function ChatPage() {
               setIsWaitingForSession(false);
 
               router.replace(`/sessions/${updatedStatus.session_id}/chat`);
-            } else if (updatedStatus && (
-              updatedStatus.status === 'cancelled' || 
-              updatedStatus.status === 'completed' ||
-              String(updatedStatus.status) === '2' || // STATUS_CANCELLED
-              String(updatedStatus.status) === '3'    // STATUS_COMPLETED
-            )) {
-              // Appointment is terminal, stop polling
-              console.log('🛑 [AppointmentSession] Appointment is terminal, stopping polling');
-              clearInterval(interval);
-              pollingIntervalRef.current = null;
-              setIsWaitingForSession(false);
             }
           }, 8000); // Poll every 8 seconds (within 5-10s range)
           
@@ -3003,12 +2994,8 @@ export default function ChatPage() {
   // Handle back button press
   const handleBackPress = () => {
     if (isPatient) {
-      // Check if this is a scheduled appointment that hasn't started yet
-      const appointmentStatus = String(chatInfo?.status || '');
-      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
-
-      // FIX: Only show "cannot end" message if it's a confirmed appointment AND it's not appointment time AND it's not a text appointment
-      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
+      // Scheduled appointment that hasn't started yet: no session_id and appointment time not reached
+      if (!isTextSession && !isTextAppointment && !isAppointmentTime && !(chatInfo?.session_id)) {
         // For confirmed appointments that haven't started, show a different message
         Alert.info(
           'Scheduled Appointment',
@@ -3041,11 +3028,8 @@ export default function ChatPage() {
       }
 
       // Check if this is a scheduled appointment that hasn't started
-      const appointmentStatus = String(chatInfo?.status || '');
-      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
-
-      // FIX: Only prevent ending if it's a confirmed appointment AND it's not a text appointment AND it's not appointment time
-      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
+      // Only prevent ending if it's a scheduled appointment with no session_id and it's not appointment time
+      if (!isTextSession && !isTextAppointment && !isAppointmentTime && !(chatInfo?.session_id)) {
         Alert.warning(
           'Cannot End Session',
           'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.'
@@ -4322,8 +4306,7 @@ export default function ChatPage() {
                   {sessionStatus.sessionType === 'instant' ? 'Instant Session' : 'Appointment'} •
                   {sessionStatus.status === 'active' ? ' Active' :
                     sessionStatus.status === 'waiting_for_doctor' ? ' Waiting for Doctor' :
-                      sessionStatus.status === 'in_progress' ? ' In Progress' :
-                        sessionStatus.status}
+                      sessionStatus.status}
                 </Text>
 
                 {sessionStatus.remainingTimeMinutes && (

@@ -34,6 +34,7 @@ class Appointment extends Model
         'appointment_date',
         'appointment_time',
         'appointment_datetime_utc',    // Add new UTC datetime field
+        'call_unlocked_at',
         'user_timezone',               // Add user timezone field
         'appointment_type',
         'duration_minutes',
@@ -54,6 +55,7 @@ class Appointment extends Model
 
     protected $casts = [
         'appointment_datetime_utc' => 'datetime',
+        'call_unlocked_at' => 'datetime',
         'actual_start_time' => 'datetime',
         'actual_end_time' => 'datetime',
     ];
@@ -144,7 +146,7 @@ class Appointment extends Model
             'reschedule_proposed' => self::STATUS_RESCHEDULE_PROPOSED,
             'reschedule_accepted' => self::STATUS_RESCHEDULE_ACCEPTED,
             'reschedule_rejected' => self::STATUS_RESCHEDULE_REJECTED,
-            'in_progress' => self::STATUS_IN_PROGRESS,
+            'in_progress' => self::STATUS_CONFIRMED,
             default => self::STATUS_PENDING
         };
     }

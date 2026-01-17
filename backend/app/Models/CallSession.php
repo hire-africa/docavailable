@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Log;
 
 class CallSession extends Model
 {
@@ -59,6 +60,7 @@ class CallSession extends Model
     const STATUS_ANSWERED = 'answered';
     const STATUS_DECLINED = 'declined';
     const STATUS_FAILED = 'failed';
+    const STATUS_MISSED = 'missed';
 
     // Call type constants
     const CALL_TYPE_VOICE = 'voice';
@@ -154,5 +156,20 @@ class CallSession extends Model
             'is_connected' => true,
             'connected_at' => $connectedAt,
         ]);
+
+        // Best-effort reporting mirror: do not block or make authoritative.
+        try {
+            if (is_numeric((string) $this->appointment_id)) {
+                Appointment::where('id', (int) $this->appointment_id)
+                    ->whereNotIn('status', [Appointment::STATUS_CANCELLED, Appointment::STATUS_COMPLETED])
+                    ->update(['status' => Appointment::STATUS_IN_PROGRESS]);
+            }
+        } catch (\Throwable $e) {
+            Log::debug('Non-blocking appointment IN_PROGRESS mirror update failed', [
+                'call_session_id' => $this->id,
+                'appointment_id' => $this->appointment_id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }

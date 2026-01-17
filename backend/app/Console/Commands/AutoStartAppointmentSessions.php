@@ -4,8 +4,6 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Models\Appointment;
-use App\Services\SessionCreationService;
-use App\Services\NotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -39,18 +37,11 @@ class AutoStartAppointmentSessions extends Command
      *
      * @var string
      */
-    protected $description = 'Automatically start sessions for appointments that are due (idempotent, no instant interference)';
+    protected $description = 'Unlock scheduled call appointments when within the start window (no session creation)';
 
-    protected $sessionCreationService;
-    protected $notificationService;
-
-    public function __construct(
-        SessionCreationService $sessionCreationService,
-        NotificationService $notificationService
-    ) {
+    public function __construct()
+    {
         parent::__construct();
-        $this->sessionCreationService = $sessionCreationService;
-        $this->notificationService = $notificationService;
     }
 
     /**
@@ -75,14 +66,16 @@ class AutoStartAppointmentSessions extends Command
             $startTime = microtime(true);
             $runId = (string) Str::uuid();
             
-            $this->info('🔄 Starting appointment auto-start scan...');
+            $this->info('🔄 Starting appointment call unlock scan...');
 
             $now = Carbon::now('UTC');
+            $unlockCutoff = $now->copy()->addMinutes(15);
             
-            // Selection criteria: status=CONFIRMED, session_id IS NULL, appointment_datetime_utc <= now_utc()
+            // Selection criteria (CALLS ONLY): status=CONFIRMED, call_unlocked_at IS NULL, appointment_datetime_utc <= (now + 15min)
             $candidateAppointments = Appointment::where('status', Appointment::STATUS_CONFIRMED)
-                ->whereNull('session_id')
-                ->where('appointment_datetime_utc', '<=', $now)
+                ->whereNull('call_unlocked_at')
+                ->whereIn('appointment_type', [Appointment::TYPE_AUDIO, Appointment::TYPE_VIDEO, 'voice'])
+                ->where('appointment_datetime_utc', '<=', $unlockCutoff)
                 ->orderBy('appointment_datetime_utc', 'asc')
                 ->limit($limit)
                 ->get();
@@ -92,7 +85,7 @@ class AutoStartAppointmentSessions extends Command
 
             if ($candidateAppointments->isEmpty()) {
                 if ($debug) {
-                    $this->info('✅ No appointments due for auto-start');
+                    $this->info('✅ No appointments due for call unlock');
                 }
                 
                 // Per-run summary log (even when no appointments)
@@ -123,18 +116,18 @@ class AutoStartAppointmentSessions extends Command
                 
                 try {
                     // Critical: Use row-level lock + transaction for idempotency
-                    $result = DB::transaction(function () use ($appointment, $now, $debug, $runId) {
+                    $result = DB::transaction(function () use ($appointment, $now, $unlockCutoff, $debug, $runId) {
                         // Re-read appointment under lock to check if session_id was set by another process
                         $lockedAppointment = Appointment::where('id', $appointment->id)
                             ->lockForUpdate()
                             ->first();
 
-                        // Idempotency check: if session_id is already set or status changed, skip
-                        if ($lockedAppointment->session_id !== null) {
+                        // Idempotency check: if already unlocked or status changed, skip
+                        if ($lockedAppointment->call_unlocked_at !== null) {
                             if ($debug) {
-                                $this->line("⏭️  Appointment {$appointment->id}: session_id already set, skipping");
+                                $this->line("⏭️  Appointment {$appointment->id}: already unlocked, skipping");
                             }
-                            return ['action' => 'skipped', 'reason' => 'session_id_already_set'];
+                            return ['action' => 'skipped', 'reason' => 'already_unlocked'];
                         }
 
                         if ($lockedAppointment->status !== Appointment::STATUS_CONFIRMED) {
@@ -144,14 +137,13 @@ class AutoStartAppointmentSessions extends Command
                             return ['action' => 'skipped', 'reason' => 'status_changed'];
                         }
 
-                        // Determine session modality from appointment data
-                        $modality = $this->determineModality($lockedAppointment);
-                        
-                        if (!$modality) {
+                        // Only unlock audio/video appointments (calls)
+                        $type = strtolower((string) ($lockedAppointment->appointment_type ?? ''));
+                        if (!in_array($type, [Appointment::TYPE_AUDIO, Appointment::TYPE_VIDEO, 'voice'], true)) {
                             if ($debug) {
-                                $this->line("⏭️  Appointment {$appointment->id}: unable to determine modality, skipping");
+                                $this->line("⏭️  Appointment {$appointment->id}: not a call appointment ({$type}), skipping");
                             }
-                            return ['action' => 'skipped', 'reason' => 'unknown_modality'];
+                            return ['action' => 'skipped', 'reason' => 'not_a_call'];
                         }
                         
                         // Validate appointment has required data
@@ -159,63 +151,36 @@ class AutoStartAppointmentSessions extends Command
                             throw new \Exception('Missing doctor or patient');
                         }
 
-                        // Create session using the shared service
-                        $sessionResult = $this->createSessionForAppointment(
-                            $lockedAppointment,
-                            $modality
-                        );
-
-                        if (!$sessionResult['success']) {
-                            // Classify failure reason and throw exception
-                            $failureReason = self::classifyFailureReason($sessionResult['message']);
-                            $exception = new \Exception($sessionResult['message']);
-                            $exception->failureReason = $failureReason; // Store as dynamic property
-                            throw $exception;
+                        // Eligibility check: appointment time reached or within unlock window
+                        if (!$lockedAppointment->appointment_datetime_utc || $lockedAppointment->appointment_datetime_utc->gt($unlockCutoff)) {
+                            if ($debug) {
+                                $this->line("⏭️  Appointment {$appointment->id}: not yet within unlock window, skipping");
+                            }
+                            return ['action' => 'skipped', 'reason' => 'not_within_unlock_window'];
                         }
 
-                        $session = $sessionResult['session'];
-                        $sessionId = $session->id;
-
-                        $appointmentUpdate = [
-                            'session_id' => $sessionId,
-                        ];
-
-                        if ($modality !== 'text') {
-                            $appointmentUpdate['status'] = Appointment::STATUS_IN_PROGRESS;
-                        }
-
-                        $lockedAppointment->update($appointmentUpdate);
+                        $lockedAppointment->update([
+                            'call_unlocked_at' => $now,
+                        ]);
 
                         if ($debug) {
-                            $this->line("✅ Appointment {$appointment->id}: Created {$modality} session {$sessionId}");
+                            $this->line("✅ Appointment {$appointment->id}: Call unlocked");
                         }
 
                         return [
                             'action' => 'created',
-                            'session_id' => $sessionId,
-                            'modality' => $modality,
-                            'session' => $session,
+                            'modality' => 'call_unlock',
                         ];
                     });
 
                     if ($result['action'] === 'created') {
                         $processedCount++;
 
-                        // Metric: appointment_sessions_created_total (counter)
-                        AppointmentSessionMetrics::recordSessionCreated(
-                            $appointment->id,
-                            $result['session_id'],
-                            $result['modality']
-                        );
-
-                        // Send notifications AFTER transaction commits (idempotent)
-                        $this->sendNotifications($appointment, $result['session'], $result['modality']);
-
                         // Per-appointment event log: created
                         Log::info('appointment_session_conversion', [
                             'appointment_id' => $appointment->id,
                             'result' => 'created',
-                            'session_id' => $result['session_id'],
+                            'session_id' => null,
                             'modality' => $result['modality'],
                             'source' => 'APPOINTMENT',
                             'job_run_id' => $runId,
@@ -263,7 +228,7 @@ class AutoStartAppointmentSessions extends Command
                 }
             }
 
-            $this->info("📊 Summary: {$processedCount} started, {$skippedCount} skipped, {$errorCount} errors");
+            $this->info("📊 Summary: {$processedCount} unlocked, {$skippedCount} skipped, {$errorCount} errors");
 
             // Per-run summary log
             $runtimeMs = (microtime(true) - $startTime) * 1000;
@@ -282,125 +247,6 @@ class AutoStartAppointmentSessions extends Command
 
         } finally {
             $lock->release();
-        }
-    }
-
-    /**
-     * Determine session modality from appointment data
-     * 
-     * @param Appointment $appointment
-     * @return string|null 'text' | 'voice' | 'video' | null
-     */
-    protected function determineModality(Appointment $appointment): ?string
-    {
-        // Use appointment_type field if available
-        if ($appointment->appointment_type) {
-            $type = strtolower($appointment->appointment_type);
-            
-            // Map appointment types to session modalities
-            if ($type === Appointment::TYPE_TEXT || $type === 'text') {
-                return 'text';
-            }
-            if ($type === Appointment::TYPE_AUDIO || $type === 'audio' || $type === 'voice') {
-                return 'voice';
-            }
-            if ($type === Appointment::TYPE_VIDEO || $type === 'video') {
-                return 'video';
-            }
-        }
-
-        // Default to text if modality cannot be determined
-        // This is a safe default that ensures the job can still process appointments
-        return 'text';
-    }
-
-    /**
-     * Create session for appointment using the shared service
-     * 
-     * @param Appointment $appointment
-     * @param string $modality 'text' | 'voice' | 'video'
-     * @return array
-     */
-    protected function createSessionForAppointment(Appointment $appointment, string $modality): array
-    {
-        $patientId = $appointment->patient_id;
-        $doctorId = $appointment->doctor_id;
-        $reason = $appointment->reason;
-        $appointmentId = $appointment->id;
-
-        if ($modality === 'text') {
-            return $this->sessionCreationService->createTextSession(
-                $patientId,
-                $doctorId,
-                $reason,
-                'APPOINTMENT',
-                $appointmentId
-            );
-        } else {
-            // For call sessions, use appointment ID as the appointment_id parameter
-            // This links the call session to the appointment
-            $appointmentIdString = (string) $appointmentId;
-            
-            return $this->sessionCreationService->createCallSession(
-                $patientId,
-                $doctorId,
-                $modality, // 'voice' or 'video'
-                $appointmentIdString,
-                $reason,
-                'APPOINTMENT'
-            );
-        }
-    }
-
-    /**
-     * Send notifications to both parties (idempotent)
-     * 
-     * @param Appointment $appointment
-     * @param mixed $session TextSession or CallSession
-     * @param string $modality
-     */
-    protected function sendNotifications(Appointment $appointment, $session, string $modality): void
-    {
-        try {
-            // Idempotency: Use dedup key to prevent duplicate notifications
-            $dedupKey = "appointment:{$appointment->id}:session_started:{$session->id}";
-            
-            // Check if notification was already sent (using cache with TTL)
-            // TTL of 24 hours is acceptable for appointment notifications
-            if (Cache::has($dedupKey)) {
-                Log::info("Notification already sent, skipping", [
-                    'appointment_id' => $appointment->id,
-                    'session_id' => $session->id,
-                    'dedup_key' => $dedupKey,
-                ]);
-                return;
-            }
-
-            // Send appointment-specific notifications
-            // Note: SessionCreationService already sends session notifications,
-            // but we add appointment-specific context here
-            $this->notificationService->sendAppointmentSessionStartedNotification(
-                $appointment,
-                $session,
-                $modality
-            );
-
-            // Mark notification as sent (24 hour TTL)
-            Cache::put($dedupKey, true, now()->addHours(24));
-
-            Log::info("Notifications sent for appointment session start", [
-                'appointment_id' => $appointment->id,
-                'session_id' => $session->id,
-                'modality' => $modality,
-            ]);
-
-        } catch (\Exception $e) {
-            // Don't fail the job if notifications fail
-            Log::warning("Failed to send appointment session notifications", [
-                'appointment_id' => $appointment->id,
-                'session_id' => $session->id,
-                'error' => $e->getMessage()
-            ]);
         }
     }
 

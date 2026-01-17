@@ -69,17 +69,12 @@ export function generateUserActivities(
           const isConfirmed = s === 'confirmed' || s === 1;
           const isPending = s === 'pending' || s === 0;
           const isCancelled = s === 'cancelled' || s === 2;
-          const isInProgress = s === 'in_progress' || s === 7;
 
           let statusLabel = 'Scheduled';
           let icon = 'calendar';
           let color = '#2196F3';
 
-          if (isInProgress) {
-            statusLabel = 'In Progress';
-            icon = 'calendarCheck';
-            color = '#4CAF50';
-          } else if (isConfirmed) {
+          if (isConfirmed) {
             statusLabel = 'Confirmed';
             icon = 'calendarCheck';
             color = '#4CAF50';

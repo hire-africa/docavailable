@@ -621,7 +621,7 @@ class AppointmentController extends Controller
     public function getAppointmentSession($id)
     {
         try {
-            $appointment = \App\Models\Appointment::select('id', 'status', 'session_id', 'appointment_type')
+            $appointment = \App\Models\Appointment::select('id', 'status', 'appointment_type')
                 ->find($id);
 
             if (!$appointment) {
@@ -633,12 +633,39 @@ class AppointmentController extends Controller
 
             $sessionStatus = null;
             $doctorResponseDeadline = null;
-            if (($appointment->appointment_type ?? 'text') === 'text' && $appointment->session_id !== null) {
-                $textSession = \App\Models\TextSession::find($appointment->session_id);
+            $sessionContext = null;
+
+            // Architecture: Resolve live session context from session tables ONLY.
+            // Do NOT rely on appointments.session_id for live communication.
+            $resolvedSessionId = null;
+
+            if (($appointment->appointment_type ?? 'text') === 'text') {
+                $textSession = \App\Models\TextSession::where('appointment_id', $appointment->id)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
                 if ($textSession) {
                     $textSession->applyLazyExpiration();
+                    $resolvedSessionId = $textSession->id;
                     $sessionStatus = $textSession->status;
                     $doctorResponseDeadline = $textSession->doctor_response_deadline;
+                    $sessionContext = 'text_session:' . $textSession->id;
+                }
+            } elseif (in_array(($appointment->appointment_type ?? ''), ['audio', 'video'], true)) {
+                $callSession = \App\Models\CallSession::where('appointment_id', (string) $appointment->id)
+                    ->whereIn('status', [
+                        \App\Models\CallSession::STATUS_ACTIVE,
+                        \App\Models\CallSession::STATUS_CONNECTING,
+                        \App\Models\CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        \App\Models\CallSession::STATUS_ANSWERED,
+                    ])
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                if ($callSession) {
+                    $resolvedSessionId = $callSession->id;
+                    $sessionStatus = $callSession->status;
+                    $sessionContext = 'call_session:' . $callSession->id;
                 }
             }
 
@@ -646,7 +673,8 @@ class AppointmentController extends Controller
                 'success' => true,
                 'data' => [
                     'appointment_id' => $appointment->id,
-                    'session_id' => $appointment->session_id,
+                    'session_id' => $resolvedSessionId,
+                    'session_context' => $sessionContext,
                     'status' => $appointment->status,
                     'appointment_type' => $appointment->appointment_type,
                     'session_status' => $sessionStatus,
@@ -719,13 +747,9 @@ class AppointmentController extends Controller
                 $existingSession = \App\Models\TextSession::where('appointment_id', $appointment->id)->first();
                 if ($existingSession) {
                     $existingSession->applyLazyExpiration();
-                    if ($appointment->session_id === null) {
-                        $appointment->update([
-                            'session_id' => $existingSession->id,
-                        ]);
-                    }
+                    // Do not rely on appointments.session_id for live routing.
                 } else {
-                    $sessionCreationService = app(\App\Services\SessionCreationService::class);
+                    $sessionCreationService = app(SessionCreationService::class);
                     $sessionResult = $sessionCreationService->createTextSession(
                         $appointment->patient_id,
                         $appointment->doctor_id,
@@ -742,18 +766,57 @@ class AppointmentController extends Controller
                     }
 
                     $session = $sessionResult['session'];
-                    $appointment->update([
-                        'session_id' => $session->id,
-                    ]);
+                    // Do not rely on appointments.session_id for live routing.
+                    // If legacy clients still expect it, it can be backfilled by a migration command.
                 }
 
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Session started successfully',
+                    'data' => [
+                        'appointment_id' => $appointment->id,
+                        'session_id' => ($existingSession ? $existingSession->id : ($sessionResult['session']->id ?? null)),
+                        'session_context' => ($existingSession ? ('text_session:' . $existingSession->id) : (!empty($sessionResult['session']) ? ('text_session:' . $sessionResult['session']->id) : null)),
+                        'appointment_type' => $appointment->appointment_type,
+                    ]
+                ]);
             } else {
-                $activeAppointmentsCount = \App\Models\Appointment::where('patient_id', $patient->id)
-                    ->where('status', \App\Models\Appointment::STATUS_IN_PROGRESS)
-                    ->where('id', '!=', $id) // Exclude current one if somehow already marked
+                // Calls must not be auto-started. They require eligibility + unlock.
+                // Allow lazy unlock when within the start window to avoid hard dependency on cron.
+                $nowUtc = \Carbon\Carbon::now('UTC');
+                $appointmentUtc = $appointment->appointment_datetime_utc
+                    ? \Carbon\Carbon::parse($appointment->appointment_datetime_utc)
+                    : \Carbon\Carbon::parse($appointment->appointment_date . ' ' . $appointment->appointment_time)->setTimezone('UTC');
+
+                $unlockCutoff = $appointmentUtc->copy()->subMinutes(15);
+                $isWithinUnlockWindow = $nowUtc->greaterThanOrEqualTo($unlockCutoff);
+
+                if (empty($appointment->call_unlocked_at)) {
+                    if ($isWithinUnlockWindow) {
+                        $appointment->update(['call_unlocked_at' => $nowUtc]);
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Call is not unlocked yet. Please wait until the scheduled time window.',
+                            'error_code' => 'SESSION_NOT_UNLOCKED',
+                            'appointment_id' => $appointment->id,
+                            'call_unlocked_at' => $appointment->call_unlocked_at,
+                            'server_time_utc' => $nowUtc->toISOString(),
+                        ], 403);
+                    }
+                }
+
+                // Live calls are session-based; validate balance against other active call sessions, not appointments.
+                $activeCallSessionsCount = \App\Models\CallSession::where('patient_id', $patient->id)
+                    ->whereIn('status', [
+                        \App\Models\CallSession::STATUS_ACTIVE,
+                        \App\Models\CallSession::STATUS_CONNECTING,
+                        \App\Models\CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        \App\Models\CallSession::STATUS_ANSWERED,
+                    ])
                     ->count();
 
-                $requiredSessions = 1 + $activeAppointmentsCount;
+                $requiredSessions = 1 + $activeCallSessionsCount;
                 $hasBalance = false;
 
                 switch ($appointment->appointment_type ?? 'text') {
@@ -768,21 +831,25 @@ class AppointmentController extends Controller
                 if (!$hasBalance) {
                     return response()->json([
                         'success' => false,
-                        'message' => 'Insufficient session balance. You have ' . $activeAppointmentsCount . ' other session(s) in progress.'
+                        'message' => 'Insufficient session balance. You have ' . $activeCallSessionsCount . ' other session(s) in progress.'
                     ], 403);
                 }
 
-                $appointment->update([
-                    'actual_start_time' => now(),
-                    'status' => \App\Models\Appointment::STATUS_IN_PROGRESS
-                ]);
-            }
+                $callType = ($appointment->appointment_type === 'video') ? 'video' : 'voice';
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Session started successfully',
-                'data' => $appointment
-            ]);
+                // SINGLE authoritative call creation path: delegate to CallSessionController::start
+                $internalRequest = Request::create('/api/call-sessions/start', 'POST', [
+                    'call_type' => $callType,
+                    'appointment_id' => (string) $appointment->id,
+                    'reason' => $appointment->reason,
+                ]);
+
+                $internalRequest->setUserResolver(function () use ($user) {
+                    return $user;
+                });
+
+                return app(\App\Http\Controllers\CallSessionController::class)->start($internalRequest);
+            }
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

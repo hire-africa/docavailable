@@ -53,7 +53,7 @@ class ProcessAppointmentSessions extends Command
         $now = now();
         $tenMinutesAgo = $now->copy()->subMinutes(10);
 
-        // Find confirmed or in-progress appointments that are at or past their scheduled time (within last 10 minutes)
+        // Find confirmed appointments that are at or past their scheduled time (within last 10 minutes)
         // Use appointment_date and appointment_time legacy fields
         // ⚠️ GUARDRAIL: Only process appointments WITHOUT session_id (legacy appointments)
         // Appointments with session_id should be handled by session-based flows, not appointment-time triggers
@@ -68,7 +68,7 @@ class ProcessAppointmentSessions extends Command
             'actual_start_time',
             'session_id'
         ])
-            ->whereIn('status', [Appointment::STATUS_CONFIRMED, Appointment::STATUS_IN_PROGRESS])
+            ->where('status', Appointment::STATUS_CONFIRMED)
             ->whereNull('session_id') // ⚠️ Only process legacy appointments without session_id
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) <= ?", [$now->toDateTimeString()])
             ->whereRaw("CONCAT(appointment_date, ' ', appointment_time) >= ?", [$tenMinutesAgo->toDateTimeString()])

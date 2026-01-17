@@ -697,9 +697,6 @@ export default function PatientDashboard() {
 
   // Check if appointment is ready for session
   const isAppointmentReadyForSession = (appointment: any) => {
-    // If appointment is already in progress, it's definitely ready
-    if (appointment.status === 'in_progress' || appointment.status === 7) return true;
-
     if (!appointment.date || !appointment.time) return false;
 
     const now = new Date();
@@ -715,11 +712,15 @@ export default function PatientDashboard() {
 
   // Get appointment session status
   const getAppointmentSessionStatus = (appointment: any) => {
-    // Handle in_progress status explicitly
-    if (appointment.status === 'in_progress' || appointment.status === 7) return 'active';
-
     // Handle both string 'confirmed' and numeric 1
     const isConfirmed = appointment.status === 'confirmed' || appointment.status === 1;
+
+    // If a session is linked, treat it as active for routing purposes.
+    // Live state should be derived from session status when available.
+    const linkedSessionId = (appointment.session_id ?? appointment.sessionId ?? null);
+    if (linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '') {
+      return 'active';
+    }
 
     if (!isConfirmed) return 'pending';
     if (isAppointmentReadyForSession(appointment)) return 'ready';
@@ -2180,19 +2181,20 @@ export default function PatientDashboard() {
               // Only show confirmed appointments in messages
               const status = appt.status;
               const isConfirmedOrInProgress =
-                status === 'confirmed' || status === 1 ||
-                status === 'in_progress' || status === 7; // Include in_progress appointments
+                status === 'confirmed' || status === 1;
 
-              const appointmentType = (appt.appointment_type ?? appt.consultationType ?? appt.type ?? null);
+              const appointmentTypeRaw = (appt.appointment_type ?? appt.consultationType ?? appt.type ?? null);
+              const appointmentType = appointmentTypeRaw ? String(appointmentTypeRaw).toLowerCase() : '';
               const linkedSessionId = (appt.session_id ?? appt.sessionId ?? null);
-              const isTextWithLinkedSession = appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+              const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+              const isTextWithLinkedSession = hasLinkedSession && (appointmentType === 'text' || appointmentType === '');
 
-              return isConfirmedOrInProgress && (
-                !isTextWithLinkedSession &&
-                !messageSearchQuery ||
-                (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase()) ||
-                (appt.reason || '')?.toLowerCase().includes(messageSearchQuery.toLowerCase())
-              );
+              const q = (messageSearchQuery || '').trim().toLowerCase();
+              const matchesSearch = q.length === 0 ||
+                (appt.doctorName || appt.doctor_name || '')?.toLowerCase().includes(q) ||
+                (appt.reason || '')?.toLowerCase().includes(q);
+
+              return isConfirmedOrInProgress && !isTextWithLinkedSession && matchesSearch;
             })
             .map(appt => ({
               ...appt,

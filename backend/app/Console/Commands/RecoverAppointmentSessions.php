@@ -309,7 +309,23 @@ class RecoverAppointmentSessions extends Command
                 ];
             }
 
-            // Create session using the shared service
+            // Single authoritative call creation path is /call-sessions/start.
+            // Recovery should not create call_sessions.
+            if ($modality === 'call') {
+                if (empty($lockedAppointment->call_unlocked_at)) {
+                    $lockedAppointment->update([
+                        'call_unlocked_at' => now('UTC'),
+                    ]);
+                }
+
+                return [
+                    'action' => 'created',
+                    'session_id' => null,
+                    'modality' => 'call_unlock',
+                ];
+            }
+
+            // Text session recovery can still backfill the authoritative text session linkage
             $sessionResult = $this->createSessionForAppointment(
                 $lockedAppointment,
                 $modality
@@ -322,15 +338,9 @@ class RecoverAppointmentSessions extends Command
             $session = $sessionResult['session'];
             $sessionId = $session->id;
 
-            $appointmentUpdate = [
+            $lockedAppointment->update([
                 'session_id' => $sessionId,
-            ];
-
-            if ($modality !== 'text') {
-                $appointmentUpdate['status'] = Appointment::STATUS_IN_PROGRESS;
-            }
-
-            $lockedAppointment->update($appointmentUpdate);
+            ]);
 
             return [
                 'action' => 'created',
@@ -356,36 +366,6 @@ class RecoverAppointmentSessions extends Command
                 $reason,
                 'APPOINTMENT', // source parameter
                 $appointment->id // appointmentId parameter
-            );
-            
-            // Return in format expected by processAppointment
-            if ($result['success']) {
-                return [
-                    'success' => true,
-                    'session' => $result['session'],
-                    'message' => $result['message'],
-                ];
-            } else {
-                return [
-                    'success' => false,
-                    'session' => null,
-                    'message' => $result['message'],
-                ];
-            }
-        } else {
-            // For call sessions, we need to determine call_type
-            $callType = $appointment->appointment_type === 'video' ? 'video' : 'voice';
-            
-            // Use appointment ID as appointment_id for call session (matches auto-start job pattern)
-            $appointmentIdForCall = (string) $appointment->id;
-            
-            $result = $this->sessionCreationService->createCallSession(
-                $patientId,
-                $doctorId,
-                $callType,
-                $appointmentIdForCall,
-                $reason,
-                'APPOINTMENT' // source parameter
             );
             
             // Return in format expected by processAppointment

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Models\Appointment;
+use App\Services\SessionContextGuard;
 
 class FileUploadController extends Controller
 {
@@ -404,15 +406,80 @@ class FileUploadController extends Controller
         try {
             $request->validate([
                 'file' => 'required|file|mimes:jpg,jpeg,png,gif,webp|max:4096', // max 4MB
-                'appointment_id' => 'required|integer',
+                'appointment_id' => 'required',
             ]);
 
             $user = $request->user();
-            $appointmentId = $request->input('appointment_id');
+            $identifier = (string) $request->input('appointment_id');
             $file = $request->file('file');
             $originalName = $file->getClientOriginalName();
             $extension = $file->getClientOriginalExtension();
             $fileSize = $file->getSize();
+
+            // Enforce session context for chat uploads
+            $sessionType = null;
+            $sessionId = null;
+            $sessionContext = null;
+
+            $guard = SessionContextGuard::validateSessionContext($identifier);
+            if ($guard['is_valid']) {
+                $sessionType = $guard['session_type'];
+                $sessionId = (int) $guard['session_id'];
+                $sessionContext = $sessionType . ':' . $sessionId;
+            } else {
+                // Backward compatibility: if numeric, treat as appointment id and resolve to linked session
+                if (is_numeric($identifier)) {
+                    $appointment = Appointment::find((int) $identifier);
+                    if (!$appointment) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Appointment not found'
+                        ], 404);
+                    }
+
+                    if ((int) $appointment->patient_id !== (int) $user->id && (int) $appointment->doctor_id !== (int) $user->id) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Unauthorized'
+                        ], 403);
+                    }
+
+                    // Scheduled text appointments upload to text_session; call appointments have no text chat upload
+                    if (($appointment->appointment_type ?? 'text') !== 'text') {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Chat uploads must be associated with a text session.',
+                            'error_code' => 'SESSION_CONTEXT_REQUIRED',
+                        ], 400);
+                    }
+
+                    $textSession = \App\Models\TextSession::where('appointment_id', (int) $appointment->id)
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+
+                    if (!$textSession) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Session is not ready yet. Please wait for the session to start.',
+                            'error_code' => 'SESSION_NOT_READY',
+                            'appointment_id' => $appointment->id,
+                        ], 403);
+                    }
+
+                    $textSession->applyLazyExpiration();
+                    $sessionType = 'text_session';
+                    $sessionId = (int) $textSession->id;
+                    $sessionContext = 'text_session:' . $sessionId;
+                }
+            }
+
+            if (!$sessionId || $sessionType !== 'text_session') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Chat uploads must be accessed through session context.',
+                    'error_code' => 'SESSION_CONTEXT_REQUIRED',
+                ], 400);
+            }
 
             // Debug: Log file details
             \Log::info('Chat image file details:', [
@@ -420,11 +487,13 @@ class FileUploadController extends Controller
                 'extension' => $extension,
                 'size' => $fileSize,
                 'mime_type' => $file->getMimeType(),
-                'appointment_id' => $appointmentId,
+                'appointment_id' => $identifier,
+                'session_type' => $sessionType,
+                'session_id' => $sessionId,
             ]);
 
-            // Create folder structure: chat_images/appointment_{id}/
-            $folder = 'chat_images/appointment_' . $appointmentId;
+            // Create folder structure: chat_images/text_session_{id}/
+            $folder = 'chat_images/text_session_' . $sessionId;
             $filename = time() . '_' . Str::random(10) . '.' . $extension;
 
             // Store in DigitalOcean Spaces (persistent storage)
@@ -434,13 +503,14 @@ class FileUploadController extends Controller
             $url = Storage::disk('spaces')->url($path);
 
             // Dispatch job to process image asynchronously
-            \App\Jobs\ProcessFileUpload::dispatch($path, 'chat_image', $user->id, ['appointment_id' => $appointmentId]);
+            \App\Jobs\ProcessFileUpload::dispatch($path, 'chat_image', $user->id, ['session_id' => $sessionId, 'session_type' => $sessionType]);
 
             \Log::info('Chat image uploaded successfully:', [
                 'path' => $path,
                 'url' => $url,
                 'folder' => $folder,
-                'appointment_id' => $appointmentId,
+                'appointment_id' => $identifier,
+                'session_context' => $sessionContext,
             ]);
 
             return response()->json([
@@ -450,7 +520,8 @@ class FileUploadController extends Controller
                     'name' => $originalName,
                     'size' => $fileSize,
                     'type' => 'image',
-                    'extension' => $extension
+                    'extension' => $extension,
+                    'session_context' => $sessionContext,
                 ],
                 'message' => 'Chat image uploaded successfully.'
             ]);
@@ -547,7 +618,7 @@ class FileUploadController extends Controller
         try {
             $request->validate([
                 'file' => 'required|file|mimes:m4a,mp3,wav,aac,mp4|max:10240', // max 10MB for audio files, added mp4
-                'appointment_id' => 'required|integer'
+                'appointment_id' => 'required'
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             \Log::error('Voice message validation failed:', [
@@ -566,7 +637,70 @@ class FileUploadController extends Controller
         $originalName = $file->getClientOriginalName();
         $extension = $file->getClientOriginalExtension();
         $fileSize = $file->getSize();
-        $appointmentId = $request->input('appointment_id');
+        $identifier = (string) $request->input('appointment_id');
+
+        // Enforce session context for chat uploads
+        $sessionType = null;
+        $sessionId = null;
+        $sessionContext = null;
+
+        $guard = SessionContextGuard::validateSessionContext($identifier);
+        if ($guard['is_valid']) {
+            $sessionType = $guard['session_type'];
+            $sessionId = (int) $guard['session_id'];
+            $sessionContext = $sessionType . ':' . $sessionId;
+        } else {
+            if (is_numeric($identifier)) {
+                $appointment = Appointment::find((int) $identifier);
+                if (!$appointment) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Appointment not found'
+                    ], 404);
+                }
+
+                if ((int) $appointment->patient_id !== (int) $user->id && (int) $appointment->doctor_id !== (int) $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized'
+                    ], 403);
+                }
+
+                if (($appointment->appointment_type ?? 'text') !== 'text') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Chat uploads must be associated with a text session.',
+                        'error_code' => 'SESSION_CONTEXT_REQUIRED',
+                    ], 400);
+                }
+
+                $textSession = \App\Models\TextSession::where('appointment_id', (int) $appointment->id)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                if (!$textSession) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Session is not ready yet. Please wait for the session to start.',
+                        'error_code' => 'SESSION_NOT_READY',
+                        'appointment_id' => $appointment->id,
+                    ], 403);
+                }
+
+                $textSession->applyLazyExpiration();
+                $sessionType = 'text_session';
+                $sessionId = (int) $textSession->id;
+                $sessionContext = 'text_session:' . $sessionId;
+            }
+        }
+
+        if (!$sessionId || $sessionType !== 'text_session') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Chat uploads must be accessed through session context.',
+                'error_code' => 'SESSION_CONTEXT_REQUIRED',
+            ], 400);
+        }
 
         // Debug: Log file details
         \Log::info('Voice file details:', [
@@ -574,7 +708,9 @@ class FileUploadController extends Controller
             'extension' => $extension,
             'size' => $fileSize,
             'mime_type' => $file->getMimeType(),
-            'appointment_id' => $appointmentId
+            'appointment_id' => $identifier,
+            'session_type' => $sessionType,
+            'session_id' => $sessionId,
         ]);
 
         try {
@@ -583,7 +719,7 @@ class FileUploadController extends Controller
 
             // Store in regular folder structure for now
             // TODO: Add timestamped folders when deployment is ready
-            $folder = 'chat_voice_messages/' . $appointmentId;
+            $folder = 'chat_voice_messages/text_session_' . $sessionId;
             $path = $file->storeAs($folder, $filename, 'public');
 
             // Get the public URL - use a custom route for better audio streaming
@@ -597,7 +733,8 @@ class FileUploadController extends Controller
                 'base_url' => $baseUrl,
                 'is_full_url' => str_starts_with($url, 'http'),
                 'folder' => $folder,
-                'appointment_id' => $appointmentId
+                'appointment_id' => $identifier,
+                'session_context' => $sessionContext,
             ]);
 
             return response()->json([
@@ -608,7 +745,8 @@ class FileUploadController extends Controller
                     'size' => $fileSize,
                     'type' => 'voice',
                     'extension' => $extension,
-                    'appointment_id' => $appointmentId
+                    'appointment_id' => $identifier,
+                    'session_context' => $sessionContext,
                 ],
                 'message' => 'Voice message uploaded successfully.'
             ]);
@@ -616,7 +754,7 @@ class FileUploadController extends Controller
             \Log::error('Voice message upload failed:', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-                'appointment_id' => $appointmentId
+                'appointment_id' => $identifier
             ]);
 
             return response()->json([

@@ -93,7 +93,6 @@ const MyAppointments = () => {
       case 4: return 'reschedule_proposed';
       case 5: return 'reschedule_accepted';
       case 6: return 'reschedule_rejected';
-      case 7: return 'in_progress';
       default: return 'unknown';
     }
   };
@@ -171,13 +170,12 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return '#FF9500';
       case 'confirmed': return '#4CAF50';
-      case 'in_progress': return '#4CAF50';
       case 'cancelled': return '#FF3B30';
       case 'completed': return '#007AFF';
       case 'reschedule_proposed': return '#FF9500';
       case 'reschedule_accepted': return '#4CAF50';
       case 'reschedule_rejected': return '#FF3B30';
-      default: return '#666';
+      default: return '#999';
     }
   };
 
@@ -186,7 +184,6 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'clock-o';
       case 'confirmed': return 'check-circle';
-      case 'in_progress': return 'play-circle';
       case 'cancelled': return 'times-circle';
       case 'completed': return 'check-square';
       case 'reschedule_proposed': return 'clock-o';
@@ -201,7 +198,6 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
-      case 'in_progress': return 'In Progress';
       case 'cancelled': return 'Cancelled';
       case 'completed': return 'Completed';
       case 'reschedule_proposed': return 'Reschedule Proposed';

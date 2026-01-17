@@ -611,9 +611,11 @@ export default function DoctorDashboard() {
         })));
 
         const confirmed = rawConfirmed
-          .filter((request: any) => request.status === 1 || request.status === 3 || request.status === 7) // Confirmed (1), Completed (3), In Progress (7)
+          .filter((request: any) => request.status === 1 || request.status === 3) // Confirmed (1), Completed (3)
           .map((request: any) => ({
             id: request.id,
+            session_id: (request as any).session_id ?? (request as any).sessionId,
+            sessionId: (request as any).session_id ?? (request as any).sessionId,
             patient_name: request.patientName || 'Patient',
             doctor_name: userData?.display_name || `${userData?.first_name || ''} ${userData?.last_name || ''}`.trim(),
             patientProfilePictureUrl: request.patient?.profile_picture_url,
@@ -631,7 +633,7 @@ export default function DoctorDashboard() {
               request.status === 1 ? 'confirmed' :
                 request.status === 2 ? 'cancelled' :
                   request.status === 3 ? 'completed' :
-                    request.status === 7 ? 'in_progress' : 'pending',
+                    'pending',
             createdAt: request.created_at || '',
             reschedulePending: false
           }));
@@ -1201,7 +1203,7 @@ export default function DoctorDashboard() {
               request.status === 1 ? 'confirmed' :
                 request.status === 2 ? 'cancelled' :
                   request.status === 3 ? 'completed' :
-                    request.status === 7 ? 'in_progress' : 'pending',
+                    'pending',
             createdAt: request.created_at || '',
             reschedulePending: request.status === 4 // STATUS_RESCHEDULE_PROPOSED is usually 4
           }));
@@ -1212,7 +1214,7 @@ export default function DoctorDashboard() {
 
           // Set confirmed appointments
           const confirmed = transformed.filter((r: any) =>
-            r.status === 'confirmed' || r.status === 'completed' || r.status === 'in_progress'
+            r.status === 'confirmed' || r.status === 'completed'
           );
           setConfirmedAppointments(confirmed);
         }
@@ -2036,9 +2038,11 @@ export default function DoctorDashboard() {
           }));
 
           const filteredConfirmedAppointmentItems = confirmedAppointmentItems.filter(appt => {
-            const appointmentType = (appt as any)?.appointment_type ?? (appt as any)?.consultationType ?? (appt as any)?.type ?? null;
+            const appointmentTypeRaw = (appt as any)?.appointment_type ?? (appt as any)?.consultationType ?? (appt as any)?.type ?? null;
+            const appointmentType = appointmentTypeRaw ? String(appointmentTypeRaw).toLowerCase() : '';
             const linkedSessionId = (appt as any)?.session_id ?? (appt as any)?.sessionId ?? null;
-            const isTextWithLinkedSession = appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+            const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+            const isTextWithLinkedSession = hasLinkedSession && (appointmentType === 'text' || appointmentType === '');
             return !isTextWithLinkedSession;
           });
 
@@ -2470,19 +2474,16 @@ export default function DoctorDashboard() {
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <View style={{
-                  backgroundColor: appointment.status === 'in_progress' ? '#E3F2FD' : // Light Blue for In Progress
-                    appointment.status === 'completed' ? '#F5F5F5' : // Gray for Completed
-                      '#E8F5E8', // Green for Accepted/Confirmed
+                  backgroundColor: appointment.status === 'completed' ? '#F5F5F5' : // Gray for Completed
+                    '#E8F5E8', // Green for Accepted/Confirmed
                   borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8
                 }}>
                   <Text style={{
-                    color: appointment.status === 'in_progress' ? '#1565C0' : // Blue for In Progress
-                      appointment.status === 'completed' ? '#616161' : // Gray for Completed
-                        '#2E7D32', // Green for Active
+                    color: appointment.status === 'completed' ? '#616161' : // Gray for Completed
+                      '#2E7D32', // Green for Active
                     fontSize: 12, fontWeight: 'bold'
                   }}>
-                    {appointment.status === 'in_progress' ? 'In Progress' :
-                      appointment.status === 'completed' ? 'Completed' : 'Accepted'}
+                    {appointment.status === 'completed' ? 'Completed' : 'Accepted'}
                   </Text>
                 </View>
               </View>

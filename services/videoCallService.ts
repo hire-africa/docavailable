@@ -2,11 +2,11 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import { Alert } from 'react-native';
 import {
-    mediaDevices,
-    MediaStream,
-    RTCIceCandidate,
-    RTCPeerConnection,
-    RTCSessionDescription,
+  mediaDevices,
+  MediaStream,
+  RTCIceCandidate,
+  RTCPeerConnection,
+  RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -192,6 +192,47 @@ class VideoCallService {
         events?.onCallRejected?.();
         return;
       }
+
+      // CRITICAL: Clean up any existing connections/resources before starting new call
+      if (this.signalingChannel) {
+        console.log('🧹 [VideoCallService] Closing existing signaling channel before new call');
+        try {
+          this.signalingChannel.close();
+        } catch (e) {
+          console.warn('⚠️ Error closing existing signaling channel:', e);
+        }
+        this.signalingChannel = null;
+      }
+
+      if (this.peerConnection) {
+        console.log('🧹 [VideoCallService] Closing existing peer connection before new call');
+        try {
+          this.peerConnection.close();
+        } catch (e) {
+          console.warn('⚠️ Error closing existing peer connection:', e);
+        }
+        this.peerConnection = null;
+      }
+
+      if (this.localStream) {
+        console.log('🧹 [VideoCallService] Stopping existing local stream before new call');
+        try {
+          this.localStream.getTracks().forEach(track => track.stop());
+        } catch (e) {
+          console.warn('⚠️ Error stopping existing local stream:', e);
+        }
+        this.localStream = null;
+      }
+
+      // Reset state flags
+      this.hasEnded = false;
+      this.isCallAnswered = false;
+      this.isIncomingMode = false;
+      this.hasAccepted = false;
+      this.pendingCandidates = [];
+      this.pendingOffer = null;
+      this.processedMessages.clear();
+
       g.activeVideoCall = true;
       g.currentCallType = 'video';
       this.events = events;
@@ -340,6 +381,15 @@ class VideoCallService {
       this.peerConnection.addEventListener('track', (event) => {
         console.log('📹 Remote video stream received');
         this.remoteStream = event.streams[0];
+        
+        // CRITICAL: Ensure all audio tracks are enabled for sound to work
+        event.streams[0].getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            console.log('🔊 [VideoCallService] Enabling remote audio track:', track.id);
+            track.enabled = true;
+          }
+        });
+        
         this.events?.onRemoteStream(event.streams[0]);
       });
 
@@ -576,6 +626,15 @@ class VideoCallService {
       this.peerConnection.addEventListener('track', (event) => {
         console.log('📹 Remote video stream received');
         this.remoteStream = event.streams[0];
+        
+        // CRITICAL: Ensure all audio tracks are enabled for sound to work
+        event.streams[0].getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            console.log('🔊 [VideoCallService] Enabling remote audio track:', track.id);
+            track.enabled = true;
+          }
+        });
+        
         this.events?.onRemoteStream(event.streams[0]);
       });
 

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Subscription;
 use App\Models\CallSession;
 use App\Jobs\PromoteCallToConnected;
+use App\Services\SessionCreationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -134,11 +135,86 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
+            // Instant calls may omit appointment_id; generate a direct session routing key.
+            // Scheduled calls provide a numeric appointment_id.
             if (!$appointmentId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Appointment ID is required'
-                ], 400);
+                $appointmentId = 'direct_session_' . time() . '_' . substr(md5((string) microtime(true)), 0, 8);
+            }
+
+            $isDirectSession = str_starts_with((string) $appointmentId, 'direct_session_');
+
+            // Scheduled call: appointment_id is a real appointments.id
+            $appointment = null;
+            if (!$isDirectSession && is_numeric((string) $appointmentId)) {
+                $appointment = \App\Models\Appointment::find((int) $appointmentId);
+                if (!$appointment) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Appointment not found'
+                    ], 404);
+                }
+
+                // Scheduled calls must be unlocked before they can be started
+                if (empty($appointment->call_unlocked_at)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Call is not unlocked yet. Please wait until the scheduled time window.',
+                        'error_code' => 'SESSION_NOT_UNLOCKED',
+                        'appointment_id' => (int) $appointment->id,
+                        'call_unlocked_at' => $appointment->call_unlocked_at,
+                    ], 403);
+                }
+
+                if ((int) $appointment->patient_id !== (int) $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized to start this call session'
+                    ], 403);
+                }
+
+                // Scheduled calls must map appointment_type -> call_type
+                $expectedCallType = ($appointment->appointment_type === 'video') ? 'video' : (($appointment->appointment_type === 'audio') ? 'voice' : null);
+                if (!$expectedCallType) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Only audio/video appointments can start call sessions'
+                    ], 400);
+                }
+
+                if ($expectedCallType !== $callType) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Call type does not match appointment type'
+                    ], 400);
+                }
+
+                // Reuse an existing LIVE call_session for this appointment (if any).
+                // Retries must create a NEW call_session once the previous session is terminal.
+                // IMPORTANT: Do not rely on appointments.session_id for call routing/state.
+                $existing = CallSession::where('appointment_id', (string) $appointmentId)
+                    ->whereIn('status', [
+                        CallSession::STATUS_ACTIVE,
+                        CallSession::STATUS_CONNECTING,
+                        CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        CallSession::STATUS_ANSWERED,
+                    ])
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
+                if ($existing) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Call session already exists for this appointment',
+                        'data' => [
+                            'session_id' => $existing->id,
+                            'session_context' => 'call_session:' . $existing->id,
+                            'appointment_id' => (string) $appointmentId,
+                            'call_type' => $existing->call_type,
+                            'status' => $existing->status,
+                            'started_at' => $existing->started_at ? $existing->started_at->toISOString() : null,
+                        ],
+                    ]);
+                }
             }
 
             // Check availability first
@@ -156,7 +232,7 @@ class CallSessionController extends Controller
 
             // For direct sessions, we need to find a doctor
             $doctorId = null;
-            if (str_starts_with($appointmentId, 'direct_session_')) {
+            if ($isDirectSession) {
                 // For direct sessions, we need to find an available doctor
                 // For now, we'll use a placeholder - in a real implementation,
                 // you'd want to find an available doctor based on the user's selection
@@ -168,46 +244,43 @@ class CallSessionController extends Controller
                     ], 400);
                 }
             } else {
-                // For regular appointments, get doctor from appointment
-                // This would require querying the appointments table
-                // For now, we'll assume the appointment ID contains the doctor info
-                $doctorId = $request->input('doctor_id');
-                if (!$doctorId) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Doctor ID is required'
-                    ], 400);
+                // For scheduled calls, derive doctor from appointment
+                if ($appointment) {
+                    $doctorId = (int) $appointment->doctor_id;
+                } else {
+                    // Backward compatibility: non-direct calls that are not numeric appointments
+                    $doctorId = $request->input('doctor_id');
+                    if (!$doctorId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Doctor ID is required'
+                        ], 400);
+                    }
                 }
             }
 
-            // Check if there's already an active call session
-            $existingSession = CallSession::where('patient_id', $user->id)
-                ->where('doctor_id', $doctorId)
-                ->whereIn('status', [CallSession::STATUS_ACTIVE, CallSession::STATUS_CONNECTING, CallSession::STATUS_WAITING_FOR_DOCTOR])
-                ->first();
+            $sessionCreationService = app(SessionCreationService::class);
+            $sessionResult = $sessionCreationService->createCallSession(
+                (int) $user->id,
+                (int) $doctorId,
+                (string) $callType,
+                (string) $appointmentId,
+                $reason,
+                $appointment ? 'APPOINTMENT' : 'INSTANT'
+            );
 
-            if ($existingSession) {
+            if (!$sessionResult['success'] || empty($sessionResult['session'])) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'You already have an active call session with this doctor'
+                    'message' => $sessionResult['message'] ?? 'Failed to start call session'
                 ], 400);
             }
 
-            // Create call session record
-            $callSession = CallSession::create([
-                'patient_id' => $user->id,
-                'doctor_id' => $doctorId,
-                'call_type' => $callType,
-                'appointment_id' => $appointmentId,
-                'status' => CallSession::STATUS_CONNECTING,
-                'started_at' => now(),
-                'last_activity_at' => now(),
-                'reason' => $reason,
-                'sessions_used' => 0, // FIX: Start with 0, will be deducted after 10 minutes and on hangup
-                'sessions_remaining_before_start' => $sessionsRemainingBeforeStart,
-                'is_connected' => false,
-                'call_duration' => 0,
-            ]);
+            /** @var CallSession $callSession */
+            $callSession = $sessionResult['session'];
+
+            // IMPORTANT: Do not link call sessions onto appointments for live state/routing.
+            // Appointments are scheduling artifacts only; call history/retries live in call_sessions.
 
             // FIX: Do NOT deduct immediately - only deduct after 10 minutes and on hangup
             // This prevents deduction for calls that don't connect
@@ -309,6 +382,8 @@ class CallSessionController extends Controller
                 'message' => 'Call session started successfully',
                 'data' => [
                     'session_id' => $callSession->id,
+                    'call_session_id' => $callSession->id,
+                    'session_context' => 'call_session:' . $callSession->id,
                     'appointment_id' => $appointmentId,
                     'call_type' => $callType,
                     'status' => $callSession->status,
@@ -410,7 +485,7 @@ class CallSessionController extends Controller
                         ]);
 
                         $callSession->update([
-                            'status' => CallSession::STATUS_ENDED,
+                            'status' => CallSession::STATUS_MISSED,
                             'ended_at' => now(),
                             'last_activity_at' => now(),
                             'is_connected' => false,
@@ -419,7 +494,7 @@ class CallSessionController extends Controller
 
                         return response()->json([
                             'success' => true,
-                            'message' => 'Call session ended (never connected - no billing)',
+                            'message' => 'Call missed (provider did not join) - no billing',
                             'session_duration' => 0,
                             'was_connected' => false,
                             'sessions_deducted' => 0,

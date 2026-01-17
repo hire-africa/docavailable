@@ -53,21 +53,21 @@ class CleanupStaleCallSessions extends Command
                     $this->line("Session {$session->id}: connecting for {$elapsedSeconds} seconds");
                 }
                 
-                // Update session status to failed
+                // No provider joined within timeout window: treat as MISSED (retry should create a new call_session)
                 $session->update([
-                    'status' => CallSession::STATUS_FAILED,
+                    'status' => CallSession::STATUS_MISSED,
                     'ended_at' => now(),
-                    'failure_reason' => 'Connection timeout after 90 seconds',
+                    'failure_reason' => 'No provider joined within 90 seconds',
                     'is_connected' => false,
                     'call_duration' => 0,
                     'sessions_used' => 0, // No deduction for failed connections
                 ]);
                 
-                // Notify patient that call failed to connect
+                // Notify patient that call was missed
                 $patient = User::find($session->patient_id);
                 if ($patient) {
                     try {
-                        $patient->notify(new \App\Notifications\CallFailedNotification($session, 'Connection timeout'));
+                        $patient->notify(new \App\Notifications\CallFailedNotification($session, 'No provider joined'));
                     } catch (\Exception $e) {
                         Log::warning('Failed to send call failed notification', [
                             'session_id' => $session->id,

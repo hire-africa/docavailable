@@ -113,11 +113,12 @@ class ActivateBookedAppointments extends Command
         if ($appointment->appointment_type === 'text') {
             $this->activateTextSession($appointment);
         } else {
-            // Standard activation for other types (audio/video)
-            $appointment->update([
-                'status' => Appointment::STATUS_IN_PROGRESS, // 7
-                'actual_start_time' => now(),
-            ]);
+            // Calls must not be auto-started. Only unlock them when eligible.
+            if (!$appointment->call_unlocked_at) {
+                $appointment->update([
+                    'call_unlocked_at' => now(),
+                ]);
+            }
         }
 
         Log::info("Activated booked appointment", [

@@ -63,26 +63,22 @@ class TextAppointmentController extends Controller
                 ], 403);
             }
 
-            if ($appointment->session_id !== null) {
-                $session = TextSession::find($appointment->session_id);
-                if (!$session) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Session not found'
-                    ], 404);
-                }
+            $existingSession = TextSession::where('appointment_id', (int) $appointmentId)
+                ->orderBy('created_at', 'desc')
+                ->first();
 
-                $session->applyLazyExpiration();
+            if ($existingSession) {
+                $existingSession->applyLazyExpiration();
 
                 return response()->json([
                     'success' => true,
                     'data' => [
-                        'session_id' => $session->id,
-                        'status' => $session->status,
-                        'started_at' => $session->started_at,
-                        'activated_at' => $session->activated_at,
-                        'ended_at' => $session->ended_at,
-                        'doctor_response_deadline' => $session->doctor_response_deadline,
+                        'session_id' => $existingSession->id,
+                        'status' => $existingSession->status,
+                        'started_at' => $existingSession->started_at,
+                        'activated_at' => $existingSession->activated_at,
+                        'ended_at' => $existingSession->ended_at,
+                        'doctor_response_deadline' => $existingSession->doctor_response_deadline,
                     ]
                 ]);
             }
@@ -138,12 +134,6 @@ class TextAppointmentController extends Controller
             $textSession = TextSession::where('appointment_id', $appointmentId)->first();
             if ($textSession) {
                 $textSession->applyLazyExpiration();
-
-                if ($appointment->session_id === null) {
-                    $appointment->update([
-                        'session_id' => $textSession->id,
-                    ]);
-                }
 
                 return response()->json([
                     'success' => true,
@@ -238,8 +228,11 @@ class TextAppointmentController extends Controller
             $userId = auth()->id();
 
             $appointment = Appointment::find($appointmentId);
-            if ($appointment && $appointment->session_id !== null) {
-                $session = TextSession::find($appointment->session_id);
+            if ($appointment) {
+                $session = TextSession::where('appointment_id', (int) $appointmentId)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+
                 if (!$session) {
                     return response()->json([
                         'success' => false,

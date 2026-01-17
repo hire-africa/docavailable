@@ -140,8 +140,35 @@ export class WebRTCChatService {
       // Check if we have a temp message that matches this server message
       let foundMatch = false;
       for (const [key, localMsg] of merged.entries()) {
-        // Match by content, sender, and time (within 5 seconds)
-        if (localMsg.temp_id && localMsg.message === serverMsg.message) {
+        // For media messages (voice/image), match by media_url instead of message content
+        // since all voice messages have the same text "🎤 Voice message" and all images have "🖼️ Image"
+        const isMediaMessage = (localMsg.message_type === 'voice' || localMsg.message_type === 'image') &&
+                               (serverMsg.message_type === 'voice' || serverMsg.message_type === 'image');
+        
+        if (isMediaMessage && localMsg.temp_id && localMsg.media_url && serverMsg.media_url) {
+          // Match media messages by media_url, sender, and time
+          const sameMediaUrl = localMsg.media_url === serverMsg.media_url;
+          const timeDiff = Math.abs(
+            new Date(localMsg.created_at).getTime() - 
+            new Date(serverMsg.created_at).getTime()
+          );
+          const sameSender = String(localMsg.sender_id) === String(serverMsg.sender_id);
+          
+          if (sameMediaUrl && sameSender && timeDiff < 10000) {
+            // Update temp message with server data
+            merged.set(key, {
+              ...localMsg,
+              id: serverMsg.id,
+              temp_id: undefined,
+              delivery_status: serverMsg.delivery_status || 'sent',
+              created_at: serverMsg.created_at || localMsg.created_at,
+              media_url: serverMsg.media_url // Use server's media_url (might be full URL)
+            });
+            foundMatch = true;
+            break;
+          }
+        } else if (localMsg.temp_id && localMsg.message === serverMsg.message) {
+          // For text messages, match by content, sender, and time (within 5 seconds)
           const timeDiff = Math.abs(
             new Date(localMsg.created_at).getTime() - 
             new Date(serverMsg.created_at).getTime()

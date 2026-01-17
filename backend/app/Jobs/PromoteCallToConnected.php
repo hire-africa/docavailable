@@ -93,11 +93,9 @@ class PromoteCallToConnected implements ShouldQueue
                 return;
             }
 
-            // Set connected_at and is_connected
-            $callSession->update([
-                'connected_at' => now(),
-                'is_connected' => true,
-            ]);
+            // Promote to connected (authoritative lifecycle transition)
+            // Uses model method for idempotency and consistent status handling
+            $callSession->markAsConnected();
 
             $callSession->refresh();
 
@@ -106,7 +104,8 @@ class PromoteCallToConnected implements ShouldQueue
                 'appointment_id' => $this->appointmentId,
                 'connected_at' => $callSession->connected_at->toISOString(),
                 'answered_at' => $callSession->answered_at ? $callSession->answered_at->toISOString() : null,
-                'is_connected' => $callSession->is_connected
+                'is_connected' => $callSession->is_connected,
+                'status' => $callSession->status,
             ]);
 
             // Send session started notifications to both patient and doctor

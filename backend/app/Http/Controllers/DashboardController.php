@@ -76,7 +76,6 @@ class DashboardController extends Controller
             ->whereIn('status', [
                     Appointment::STATUS_PENDING,
                     Appointment::STATUS_CONFIRMED,
-                    Appointment::STATUS_IN_PROGRESS,
                     Appointment::STATUS_RESCHEDULE_PROPOSED
                 ])
             ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')
@@ -127,7 +126,6 @@ class DashboardController extends Controller
             ->whereIn('status', [
                     Appointment::STATUS_PENDING,
                     Appointment::STATUS_CONFIRMED,
-                    Appointment::STATUS_IN_PROGRESS,
                     Appointment::STATUS_RESCHEDULE_PROPOSED
                 ])
             ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')

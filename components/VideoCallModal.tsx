@@ -132,6 +132,7 @@ export default function VideoCallModal({
 
   const videoCallService = useRef<VideoCallService | null>(null);
   const initOnceRef = useRef<string | null>(null);
+  const isInitializingRef = useRef<boolean>(false);
 
   // For incoming calls, show incoming UI until accepted, then show connected UI
   const shouldShowIncomingUI = isIncomingCall && isRinging && !callAccepted;
@@ -157,6 +158,7 @@ export default function VideoCallModal({
         return;
       }
       initOnceRef.current = appointmentId;
+      isInitializingRef.current = true;
 
       // Reset sound flags for new session
       hasPlayedConnectRef.current = false;
@@ -164,12 +166,16 @@ export default function VideoCallModal({
       soundsLoadedRef.current = false;
       pendingConnectSoundRef.current = false;
 
-      if (!isIncomingCall) {
-        console.log('🚀 VideoCallModal: Initializing call (outgoing)');
-        await initializeVideoCall();
-      } else {
-        console.log('📞 VideoCallModal: Initializing for incoming call');
-        await initializeIncomingCall();
+      try {
+        if (!isIncomingCall) {
+          console.log('🚀 VideoCallModal: Initializing call (outgoing)');
+          await initializeVideoCall();
+        } else {
+          console.log('📞 VideoCallModal: Initializing for incoming call');
+          await initializeIncomingCall();
+        }
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
@@ -219,6 +225,14 @@ export default function VideoCallModal({
     setupCall();
     return () => {
       console.log('🧹 VideoCallModal cleanup - ending call');
+      
+      // CRITICAL: Don't reset service if initialization is still in progress
+      // This prevents the call from disappearing during initialization
+      if (isInitializingRef.current) {
+        console.log('⚠️ [VideoCallModal] Cleanup skipped - initialization in progress');
+        return;
+      }
+      
       backgroundBillingManager.stopBilling(appointmentId);
       initOnceRef.current = null;
       if (heroTimerRef.current) {
