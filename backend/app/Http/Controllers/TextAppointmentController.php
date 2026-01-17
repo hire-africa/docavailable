@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\TextSession;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Services\SessionCreationService;
 use App\Services\TimezoneService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -61,6 +63,30 @@ class TextAppointmentController extends Controller
                 ], 403);
             }
 
+            if ($appointment->session_id !== null) {
+                $session = TextSession::find($appointment->session_id);
+                if (!$session) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Session not found'
+                    ], 404);
+                }
+
+                $session->applyLazyExpiration();
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'session_id' => $session->id,
+                        'status' => $session->status,
+                        'started_at' => $session->started_at,
+                        'activated_at' => $session->activated_at,
+                        'ended_at' => $session->ended_at,
+                        'doctor_response_deadline' => $session->doctor_response_deadline,
+                    ]
+                ]);
+            }
+
             // Check if this is a text appointment
             if ($appointment->appointment_type !== 'text') {
                 return response()->json([
@@ -109,56 +135,53 @@ class TextAppointmentController extends Controller
                 ], 400);
             }
 
-            // Check if session already exists
-            $existingSession = DB::table('text_appointment_sessions')
-                ->where('appointment_id', $appointmentId)
-                ->where('is_active', true)
-                ->first();
+            $textSession = TextSession::where('appointment_id', $appointmentId)->first();
+            if ($textSession) {
+                $textSession->applyLazyExpiration();
 
-            if ($existingSession) {
+                if ($appointment->session_id === null) {
+                    $appointment->update([
+                        'session_id' => $textSession->id,
+                    ]);
+                }
+
                 return response()->json([
                     'success' => true,
-                    'message' => 'Text appointment session already active',
+                    'message' => 'Text appointment session already exists',
                     'data' => [
-                        'session_id' => $existingSession->id,
-                        'appointment_id' => $existingSession->appointment_id,
-                        'is_active' => $existingSession->is_active,
-                        'start_time' => $existingSession->start_time,
-                        'sessions_used' => $existingSession->sessions_used,
+                        'session_id' => $textSession->id,
+                        'appointment_id' => $appointmentId,
+                        'status' => $textSession->status,
+                        'started_at' => $textSession->started_at,
+                        'activated_at' => $textSession->activated_at,
+                        'ended_at' => $textSession->ended_at,
                     ]
                 ]);
             }
 
-            // Get patient's subscription
-            $subscription = Subscription::where('user_id', $appointment->patient_id)
-                ->where('is_active', true)
-                ->first();
+            $sessionCreationService = app(SessionCreationService::class);
+            $sessionResult = $sessionCreationService->createTextSession(
+                $appointment->patient_id,
+                $appointment->doctor_id,
+                $appointment->reason,
+                'APPOINTMENT',
+                $appointment->id
+            );
 
-            if (!$subscription) {
+            if (!$sessionResult['success']) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'No active subscription found for patient'
+                    'message' => $sessionResult['message'] ?? 'Failed to start text session'
                 ], 400);
             }
 
-            // Create text appointment session
-            $sessionId = DB::table('text_appointment_sessions')->insertGetId([
-                'appointment_id' => $appointmentId,
-                'patient_id' => $appointment->patient_id,
-                'doctor_id' => $appointment->doctor_id,
-                'is_active' => true,
-                'start_time' => now(),
-                'last_activity_time' => now(),
-                'has_patient_activity' => false,
-                'has_doctor_activity' => false,
-                'sessions_used' => 0,
-                'is_ended' => false,
-                'created_at' => now(),
-                'updated_at' => now(),
+            $textSession = $sessionResult['session'];
+            $appointment->update([
+                'session_id' => $textSession->id,
             ]);
 
-            Log::info("Text appointment session started", [
-                'session_id' => $sessionId,
+            Log::info("Text session created from text appointment", [
+                'session_id' => $textSession->id,
                 'appointment_id' => $appointmentId,
                 'patient_id' => $appointment->patient_id,
                 'doctor_id' => $appointment->doctor_id,
@@ -166,13 +189,13 @@ class TextAppointmentController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Text appointment session started successfully',
+                'message' => 'Text session started successfully',
                 'data' => [
-                    'session_id' => $sessionId,
+                    'session_id' => $textSession->id,
                     'appointment_id' => $appointmentId,
-                    'is_active' => true,
-                    'start_time' => now(),
-                    'sessions_used' => 0,
+                    'status' => $textSession->status,
+                    'started_at' => $textSession->started_at,
+                    'activated_at' => $textSession->activated_at,
                 ]
             ]);
 
@@ -213,6 +236,39 @@ class TextAppointmentController extends Controller
             $appointmentId = $request->input('appointment_id');
             $userType = $request->input('user_type');
             $userId = auth()->id();
+
+            $appointment = Appointment::find($appointmentId);
+            if ($appointment && $appointment->session_id !== null) {
+                $session = TextSession::find($appointment->session_id);
+                if (!$session) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Session not found'
+                    ], 404);
+                }
+
+                if ($session->patient_id !== $userId && $session->doctor_id !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to session'
+                    ], 403);
+                }
+
+                $session->update([
+                    'last_activity_at' => now(),
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Activity updated successfully',
+                    'data' => [
+                        'session_id' => $session->id,
+                        'status' => $session->status,
+                        'last_activity_at' => $session->last_activity_at,
+                        'user_type' => $userType,
+                    ]
+                ]);
+            }
 
             // FIX: Use atomic update to prevent race conditions
             $updated = DB::transaction(function () use ($appointmentId, $userType, $userId) {

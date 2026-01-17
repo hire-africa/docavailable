@@ -1018,170 +1018,22 @@ export default function ChatPage() {
       setIsSessionActive(true);
       // Don't reset timer here - it will be calculated from sessionStartTime
     }
-    // For text appointments (Unified and Legacy): activate when session becomes active (show for both users)
-    else if (!isInstantSession && (textAppointmentSession.isActive || activeSessionId) && !isSessionActive) {
-      console.log('🎬 [SessionHeader] Activating session header - text appointment active');
+    // For non-instant sessions: activate when unified session context exists
+    else if (!isInstantSession && activeSessionId && !isSessionActive) {
+      console.log('🎬 [SessionHeader] Activating session header - unified session active');
       setIsSessionActive(true);
-      // Don't reset timer here - it will be calculated from textAppointmentSession.startTime
     }
-    // Deactivate when session ends
-    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !textAppointmentSession.isActive && !activeSessionId))) {
+    // Deactivate when session ends (unified session removed)
+    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !activeSessionId))) {
       console.log('🛑 [SessionHeader] Deactivating session header');
       setIsSessionActive(false);
     }
-  }, [isInstantSession, hasDoctorResponded, textAppointmentSession.isActive, activeSessionId, isSessionActive]);
+  }, [isInstantSession, hasDoctorResponded, activeSessionId, isSessionActive]);
 
   // Architecture: Frontend no longer starts appointment sessions
   // Sessions are created by backend auto-start job or manual start-session endpoint
   // This function is kept for reference but should not be called
   // REMOVED: startTextAppointmentSession() - frontend does not activate appointments
-
-  // Function to update text appointment activity via API
-  // NOTE: For unified sessions (activeSessionId set), this is handled by backgroundSessionTimer/detector
-  const updateTextAppointmentActivity = async () => {
-    // If we have an active unified session, skip the old activity update
-    if (activeSessionId) return;
-
-    try {
-      const response = await apiService.post('/text-appointments/update-activity', {
-        appointment_id: getNumericAppointmentId(),
-        user_timezone: getUserTimezone(), // Include user timezone for backend validation
-        user_type: user?.user_type
-      });
-
-      if (response.success) {
-        console.log('✅ [TextAppointment] Activity updated successfully');
-      } else {
-        console.error('❌ [TextAppointment] Failed to update activity:', response.message);
-      }
-    } catch (error) {
-      console.error('❌ [TextAppointment] Error updating activity:', error);
-    }
-  };
-
-  // Monitor activity and handle session logic for text appointments
-  useEffect(() => {
-    // If we have a unified session ID, we don't need this legacy polling loop
-    // valid unified sessions are handled by useInstantSessionDetector
-    if (!isTextAppointment || !textAppointmentSession.isActive || textAppointmentSession.isEnded || activeSessionId) {
-      return;
-    }
-
-    const checkActivity = () => {
-      const now = new Date();
-      const timeSinceLastActivity = textAppointmentSession.lastActivityTime
-        ? (now.getTime() - textAppointmentSession.lastActivityTime.getTime()) / (1000 * 60) // minutes
-        : 0;
-
-      const timeSinceStart = textAppointmentSession.startTime
-        ? (now.getTime() - textAppointmentSession.startTime.getTime()) / (1000 * 60) // minutes
-        : 0;
-
-      // If no activity in first 10 minutes, end session and deduct 1
-      if (timeSinceLastActivity >= 10 && !textAppointmentSession.hasPatientActivity && !textAppointmentSession.hasDoctorActivity) {
-        console.log('⏰ [TextAppointment] No activity in first 10 minutes, ending session');
-        processTextAppointmentDeduction(1, 'no_activity');
-        endTextAppointmentSession(1); // Deduct 1 session
-        return;
-      }
-
-      // If there was activity, check for 10-minute intervals for additional deductions
-      if (textAppointmentSession.hasPatientActivity || textAppointmentSession.hasDoctorActivity) {
-        // Deduct 1 session every 10 minutes after the first 10 minutes
-        const expectedSessionsUsed = Math.floor(timeSinceStart / 10);
-        if (expectedSessionsUsed > textAppointmentSession.sessionsUsed) {
-          console.log(`⏰ [TextAppointment] 10-minute interval reached, deducting session. Total: ${expectedSessionsUsed}`);
-          const sessionsToDeduct = expectedSessionsUsed - textAppointmentSession.sessionsUsed;
-          processTextAppointmentDeduction(sessionsToDeduct, 'interval');
-          setTextAppointmentSession(prev => ({
-            ...prev,
-            sessionsUsed: expectedSessionsUsed
-          }));
-        }
-      }
-
-      // FIX: Auto-end session if no activity for 20+ minutes (regardless of previous activity)
-      if (timeSinceLastActivity >= 20) {
-        console.log('⏰ [TextAppointment] No activity for 20+ minutes, auto-ending session');
-        const sessionsToDeduct = Math.max(1, Math.floor(timeSinceStart / 10));
-        processTextAppointmentDeduction(sessionsToDeduct, 'timeout');
-        endTextAppointmentSession(sessionsToDeduct);
-        return;
-      }
-    };
-
-    const interval = setInterval(checkActivity, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [isTextAppointment, textAppointmentSession, activeSessionId]);
-
-  // Function to process text appointment deduction via API
-  const processTextAppointmentDeduction = async (sessionsToDeduct: number, reason: string) => {
-    // If unified session, skip legacy deduction
-    if (activeSessionId) return;
-
-    try {
-      const response = await apiService.post('/text-appointments/process-deduction', {
-        appointment_id: getNumericAppointmentId(),
-        sessions_to_deduct: sessionsToDeduct,
-        reason: reason
-      });
-
-      if (response.success) {
-        console.log(`✅ [TextAppointment] Deduction processed successfully: ${sessionsToDeduct} sessions, reason: ${reason}`);
-      } else {
-        console.error('❌ [TextAppointment] Failed to process deduction:', response.message);
-      }
-    } catch (error) {
-      console.error('❌ [TextAppointment] Error processing deduction:', error);
-    }
-  };
-
-  // Function to end text appointment session
-  const endTextAppointmentSession = async (additionalSessions = 0) => {
-    // If unified session, use the new endpoint
-    if (activeSessionId) {
-      console.log(`🏁 [TextAppointment] Ending Unified Session: ${activeSessionId}`);
-      try {
-        const response = await apiService.post(`/text-sessions/${activeSessionId}/end`, {});
-        if (response.success) {
-          console.log('✅ [TextAppointment] Unified Session ended successfully');
-          setIsSessionActive(false);
-          setSessionEnded(true);
-        } else {
-          console.error('❌ [TextAppointment] Failed to end Unified Session:', response.message);
-        }
-      } catch (error) {
-        console.error('❌ [TextAppointment] Error ending Unified Session:', error);
-      }
-      return;
-    }
-
-    // Legacy termination flow
-    const totalSessions = textAppointmentSession.sessionsUsed + additionalSessions;
-    console.log(`🏁 [TextAppointment] Ending session, total sessions used: ${totalSessions}`);
-
-    try {
-      const response = await apiService.post('/text-appointments/end-session', {
-        appointment_id: getNumericAppointmentId(),
-        sessions_to_deduct: additionalSessions,
-        user_timezone: getUserTimezone() // Include user timezone for backend validation
-      });
-
-      if (response.success) {
-        console.log('✅ [TextAppointment] Session ended successfully via API');
-      } else {
-        console.error('❌ [TextAppointment] Failed to end session via API:', response.message);
-      }
-    } catch (error) {
-      console.error('❌ [TextAppointment] Error ending session via API:', error);
-    }
-
-    setTextAppointmentSession(prev => ({
-      ...prev,
-      isActive: false,
-      isEnded: true
-    }));
-  };
 
   // Update appointment time check every minute
   useEffect(() => {
@@ -1492,18 +1344,6 @@ export default function ChatPage() {
                 timestamp: message.created_at,
                 isOwnMessage: String(message.sender_id) === String(currentUserId)
               });
-            }
-
-            // Track activity for text appointments when receiving messages
-            if (isTextAppointment && textAppointmentSession.isActive && String(message.sender_id) !== String(currentUserId)) {
-              console.log('📝 [TextAppointment] Message received - tracking activity');
-              updateTextAppointmentActivity();
-              setTextAppointmentSession(prev => ({
-                ...prev,
-                lastActivityTime: new Date(),
-                hasPatientActivity: String(message.sender_id) === String(chatInfo?.patient_id) ? true : prev.hasPatientActivity,
-                hasDoctorActivity: String(message.sender_id) === String(chatInfo?.doctor_id) ? true : prev.hasDoctorActivity
-              }));
             }
 
             setMessages(prev => {
@@ -2642,7 +2482,7 @@ export default function ChatPage() {
       isPatient,
       isTextSession,
       isAppointmentTime,
-      textAppointmentSessionActive: textAppointmentSession.isActive
+      textAppointmentSessionActive: false
     });
 
     if (!newMessage.trim()) {
@@ -2654,18 +2494,6 @@ export default function ChatPage() {
     if (!sessionValid) {
       console.error('❌ [ChatComponent] Cannot send message - session is invalid');
       return;
-    }
-
-    // Track activity for text appointments
-    if (isTextAppointment && textAppointmentSession.isActive) {
-      console.log('📝 [TextAppointment] Message sent - tracking activity');
-      updateTextAppointmentActivity();
-      setTextAppointmentSession(prev => ({
-        ...prev,
-        lastActivityTime: new Date(),
-        hasPatientActivity: user?.user_type === 'patient' ? true : prev.hasPatientActivity,
-        hasDoctorActivity: user?.user_type === 'doctor' ? true : prev.hasDoctorActivity
-      }));
     }
 
     // Check if session has expired (for instant sessions)
@@ -3175,13 +3003,6 @@ export default function ChatPage() {
   // Handle back button press
   const handleBackPress = () => {
     if (isPatient) {
-      // Check if this is a text appointment with active session
-      if (isTextAppointment && textAppointmentSession.isActive) {
-        // Show end session modal for text appointment sessions
-        setShowEndSessionModal(true);
-        return;
-      }
-
       // Check if this is a scheduled appointment that hasn't started yet
       const appointmentStatus = String(chatInfo?.status || '');
       const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
@@ -3217,38 +3038,6 @@ export default function ChatPage() {
         sessionId = appointmentId.replace('text_session_', '');
       } else {
         sessionId = appointmentId;
-      }
-
-      // Handle text appointment session ending
-      if (isTextAppointment && textAppointmentSession.isActive) {
-        console.log('🏁 [TextAppointment] Ending text appointment session manually');
-        processTextAppointmentDeduction(1, 'manual_end');
-        endTextAppointmentSession(1); // Deduct 1 session for manual end
-
-        // IMMEDIATELY show rating modal
-        setShowEndSessionModal(false);
-        setSessionEnded(true);
-        setShowRatingModal(true);
-        setEndingSession(false);
-
-        // FIX: Trigger refresh for both participants (non-blocking)
-        console.log('🔄 [TextAppointment] Triggering chat refresh for both participants...');
-        if (webrtcChatService) {
-          webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
-            console.error('❌ [TextAppointment] Failed to send session end notification:', error);
-          });
-        }
-
-        // Force refresh chat data (non-blocking)
-        setTimeout(() => {
-          console.log('🔄 [TextAppointment] Forcing chat data refresh...');
-          if (webrtcChatService) {
-            webrtcChatService.requestSessionStatus();
-          }
-          loadChat();
-        }, 1000);
-
-        return;
       }
 
       // Check if this is a scheduled appointment that hasn't started
@@ -3287,7 +3076,12 @@ export default function ChatPage() {
               await sessionService.endTextSession(sessionId);
               console.log('✅ [End Session] Backend call successful');
             } else {
-              await sessionService.endTextAppointmentSession(sessionId);
+              const linkedSessionId = (chatInfo?.session_id ?? null);
+              if (linkedSessionId !== null && linkedSessionId !== undefined) {
+                await sessionService.endTextSession(String(linkedSessionId));
+              } else {
+                await sessionService.endTextSession(sessionId);
+              }
               console.log('✅ [End Session] Backend call successful');
             }
           } catch (backendError: any) {
@@ -5076,9 +4870,10 @@ export default function ChatPage() {
                 sessionEnded ||
                 !sessionValid ||
                 selectedImage !== null ||
+                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                (!isTextSession && isWaitingForSession)
               }
               style={{
                 padding: 8,
@@ -5088,9 +4883,10 @@ export default function ChatPage() {
                   sessionEnded ||
                   !sessionValid ||
                   selectedImage !== null ||
+                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
               }}
             >
               <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#4CAF50"} />
@@ -5104,9 +4900,10 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
+                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                (!isTextSession && isWaitingForSession)
               }
               style={{
                 padding: 8,
@@ -5115,9 +4912,10 @@ export default function ChatPage() {
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
               }}
             >
               <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#4CAF50"} />
@@ -5130,9 +4928,10 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
+                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                (!isTextSession && isWaitingForSession)
               }
               style={{
                 padding: 8,
@@ -5140,9 +4939,10 @@ export default function ChatPage() {
                 opacity: (sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
               }}
             >
               <Ionicons
@@ -5151,9 +4951,10 @@ export default function ChatPage() {
                 color={(sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
+                  (!isTextSession && isWaitingForSession)) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
               />
             </TouchableOpacity>
           </Animated.View>
@@ -5171,7 +4972,7 @@ export default function ChatPage() {
                 }
               }
             }}
-            editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
+            editable={sessionValid && !sessionEnded && !isWaitingForSession && isTextInputEnabled() && (isTextSession || isAppointmentTime)}
             placeholder="Message..."
             placeholderTextColor="#999"
             style={{
@@ -5183,7 +4984,7 @@ export default function ChatPage() {
               paddingVertical: 14,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
+              opacity: (sessionValid && !sessionEnded && !isWaitingForSession && isTextInputEnabled() && (isTextSession || isAppointmentTime)) ? 1 : 0.5,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
               maxHeight: 100,
               minHeight: 48,
@@ -5266,9 +5067,9 @@ export default function ChatPage() {
               (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
               sessionEnded ||
               !sessionValid ||
+              isWaitingForSession ||
               (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
             }
             style={{
               backgroundColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : '#E5E5E5',

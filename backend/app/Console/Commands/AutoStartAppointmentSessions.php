@@ -176,11 +176,15 @@ class AutoStartAppointmentSessions extends Command
                         $session = $sessionResult['session'];
                         $sessionId = $session->id;
 
-                        // Update appointment: set session_id and status=IN_PROGRESS
-                        $lockedAppointment->update([
+                        $appointmentUpdate = [
                             'session_id' => $sessionId,
-                            'status' => Appointment::STATUS_IN_PROGRESS,
-                        ]);
+                        ];
+
+                        if ($modality !== 'text') {
+                            $appointmentUpdate['status'] = Appointment::STATUS_IN_PROGRESS;
+                        }
+
+                        $lockedAppointment->update($appointmentUpdate);
 
                         if ($debug) {
                             $this->line("✅ Appointment {$appointment->id}: Created {$modality} session {$sessionId}");

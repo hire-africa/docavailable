@@ -1315,8 +1315,6 @@ class TextSessionController extends Controller
                 if ($appointment->session_id === null) {
                     $appointment->update([
                         'session_id' => $existingSession->id,
-                        'status' => \App\Models\Appointment::STATUS_IN_PROGRESS,
-                        'actual_start_time' => now(),
                     ]);
                 }
 
@@ -1434,8 +1432,6 @@ class TextSessionController extends Controller
 
             $appointment->update([
                 'session_id' => $textSession->id,
-                'status' => \App\Models\Appointment::STATUS_IN_PROGRESS,
-                'actual_start_time' => now(),
             ]);
 
             // Deduct one text session from subscription

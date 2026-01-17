@@ -158,7 +158,6 @@ class ActivateBookedAppointments extends Command
                         $session->update([
                             'status' => 'waiting_for_doctor',
                             'started_at' => now(),
-                            'activated_at' => now(),
                             'doctor_response_deadline' => now()->addSeconds(90),
                             'sessions_used' => 0 // Reverted to 0: billing is deferred
                         ]);
@@ -181,7 +180,6 @@ class ActivateBookedAppointments extends Command
                         'sessions_remaining_before_start' => $subscription ? $subscription->text_sessions_remaining : 0,
                         'doctor_response_deadline' => now()->addSeconds(90),
                         'started_at' => now(),
-                        'activated_at' => now(), // Important for auto-deduction timer
                         'last_activity_at' => now(),
                         'created_at' => now(),
                         'updated_at' => now(),
@@ -240,12 +238,6 @@ class ActivateBookedAppointments extends Command
 
                     $this->info("   Created/Linked chat room {$roomId}");
                 }
-
-                // Finally update appointment status
-                $appointment->update([
-                    'status' => Appointment::STATUS_IN_PROGRESS, // 7
-                    'actual_start_time' => now(),
-                ]);
             });
 
         } catch (\Exception $e) {

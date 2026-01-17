@@ -540,7 +540,6 @@ class ChatController extends Controller
                         ->update([
                             'status' => 'active',
                             'activated_at' => $now,
-                            'started_at' => $now,
                         ]);
 
                     if ($activatedCount > 0) {
@@ -819,6 +818,15 @@ class ChatController extends Controller
             }
         }
 
+        $sessionStatus = null;
+        if (($appointment->appointment_type ?? 'text') === 'text' && !empty($appointment->session_id)) {
+            $textSession = \App\Models\TextSession::find($appointment->session_id);
+            if ($textSession) {
+                $textSession->applyLazyExpiration();
+                $sessionStatus = $textSession->status;
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -831,6 +839,7 @@ class ChatController extends Controller
                 'doctor_id' => $appointment->doctor_id,
                 'patient_id' => $appointment->patient_id,
                 'session_id' => $appointment->session_id ?? null, // Include session_id for session-gated routing
+                'session_status' => $sessionStatus,
                 'other_participant_profile_picture' => $otherParticipantProfilePath,
                 'other_participant_profile_picture_url' => $otherParticipantProfileUrl
             ]

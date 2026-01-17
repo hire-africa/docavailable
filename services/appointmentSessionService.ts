@@ -13,6 +13,8 @@ export interface AppointmentSessionStatus {
   appointment_id: number;
   session_id: number | null;
   status: string;
+  session_status?: string | null;
+  doctor_response_deadline?: string | null;
   appointment_type?: string;
 }
 
@@ -32,6 +34,8 @@ export async function resolveAppointmentSession(appointmentId: string | number):
         appointment_id: Number(appointmentId),
         session_id: response.data.session_id || null,
         status: response.data.status || 'unknown',
+        session_status: response.data.session_status ?? null,
+        doctor_response_deadline: response.data.doctor_response_deadline ?? null,
         appointment_type: response.data.appointment_type,
       };
     }

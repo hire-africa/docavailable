@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Appointment;
+use App\Models\TextSession;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -58,10 +59,14 @@ try {
     $appointment->refresh();
     echo "Final Status: {$appointment->status}\n";
 
-    if ($appointment->status == Appointment::STATUS_IN_PROGRESS) {
-        echo "✅ SUCCESS: Appointment activated correctly using UTC time!\n";
+    $sessionId = $appointment->session_id;
+    $hasSession = $sessionId !== null && TextSession::where('id', $sessionId)->exists();
+
+    if ($appointment->status == Appointment::STATUS_CONFIRMED && $hasSession) {
+        echo "✅ SUCCESS: Text appointment linked to TextSession without changing appointment status!\n";
+        echo "Session ID: {$sessionId}\n";
     } else {
-        echo "❌ FAILURE: Appointment status is still {$appointment->status}.\n";
+        echo "❌ FAILURE: Expected status CONFIRMED and valid session_id. Got status={$appointment->status}, session_id=" . ($sessionId ?? 'null') . "\n";
     }
 
     // Clean up

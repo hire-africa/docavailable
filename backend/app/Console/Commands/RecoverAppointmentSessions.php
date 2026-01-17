@@ -322,11 +322,15 @@ class RecoverAppointmentSessions extends Command
             $session = $sessionResult['session'];
             $sessionId = $session->id;
 
-            // Update appointment: set session_id and status=IN_PROGRESS
-            $lockedAppointment->update([
+            $appointmentUpdate = [
                 'session_id' => $sessionId,
-                'status' => Appointment::STATUS_IN_PROGRESS,
-            ]);
+            ];
+
+            if ($modality !== 'text') {
+                $appointmentUpdate['status'] = Appointment::STATUS_IN_PROGRESS;
+            }
+
+            $lockedAppointment->update($appointmentUpdate);
 
             return [
                 'action' => 'created',

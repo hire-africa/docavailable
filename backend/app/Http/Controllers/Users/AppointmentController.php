@@ -631,6 +631,17 @@ class AppointmentController extends Controller
                 ], 404);
             }
 
+            $sessionStatus = null;
+            $doctorResponseDeadline = null;
+            if (($appointment->appointment_type ?? 'text') === 'text' && $appointment->session_id !== null) {
+                $textSession = \App\Models\TextSession::find($appointment->session_id);
+                if ($textSession) {
+                    $textSession->applyLazyExpiration();
+                    $sessionStatus = $textSession->status;
+                    $doctorResponseDeadline = $textSession->doctor_response_deadline;
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -638,6 +649,8 @@ class AppointmentController extends Controller
                     'session_id' => $appointment->session_id,
                     'status' => $appointment->status,
                     'appointment_type' => $appointment->appointment_type,
+                    'session_status' => $sessionStatus,
+                    'doctor_response_deadline' => $doctorResponseDeadline,
                 ]
             ]);
         } catch (\Exception $e) {
@@ -686,40 +699,84 @@ class AppointmentController extends Controller
             // the user has enough credits covering this AND any other active sessions.
 
             $subscription = $patient->subscription;
-            $activeAppointmentsCount = \App\Models\Appointment::where('patient_id', $patient->id)
-                ->where('status', \App\Models\Appointment::STATUS_IN_PROGRESS)
-                ->where('id', '!=', $id) // Exclude current one if somehow already marked
-                ->count();
+            if (($appointment->appointment_type ?? 'text') === 'text') {
+                $activeTextSessionsCount = \App\Models\TextSession::where('patient_id', $patient->id)
+                    ->whereIn('status', [
+                        \App\Models\TextSession::STATUS_ACTIVE,
+                        \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR,
+                    ])
+                    ->count();
 
-            // Note: Text sessions are pay-as-you-go, so we don't strictly reserve for them here,
-            // but we could check for active text sessions if we wanted to be very strict.
+                $requiredSessions = 1 + $activeTextSessionsCount;
 
-            $requiredSessions = 1 + $activeAppointmentsCount;
+                if ($subscription->text_sessions_remaining < $requiredSessions) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient session balance. You have ' . $activeTextSessionsCount . ' other session(s) in progress.'
+                    ], 403);
+                }
 
-            $hasBalance = false;
-            switch ($appointment->appointment_type ?? 'text') {
-                case 'text':
-                    $hasBalance = $subscription->text_sessions_remaining >= $requiredSessions;
-                    break;
-                case 'audio':
-                    $hasBalance = $subscription->voice_calls_remaining >= $requiredSessions;
-                    break;
-                case 'video':
-                    $hasBalance = $subscription->video_calls_remaining >= $requiredSessions;
-                    break;
+                $existingSession = \App\Models\TextSession::where('appointment_id', $appointment->id)->first();
+                if ($existingSession) {
+                    $existingSession->applyLazyExpiration();
+                    if ($appointment->session_id === null) {
+                        $appointment->update([
+                            'session_id' => $existingSession->id,
+                        ]);
+                    }
+                } else {
+                    $sessionCreationService = app(\App\Services\SessionCreationService::class);
+                    $sessionResult = $sessionCreationService->createTextSession(
+                        $appointment->patient_id,
+                        $appointment->doctor_id,
+                        $appointment->reason,
+                        'APPOINTMENT',
+                        $appointment->id
+                    );
+
+                    if (!$sessionResult['success']) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => $sessionResult['message'] ?? 'Failed to start session'
+                        ], 400);
+                    }
+
+                    $session = $sessionResult['session'];
+                    $appointment->update([
+                        'session_id' => $session->id,
+                    ]);
+                }
+
+            } else {
+                $activeAppointmentsCount = \App\Models\Appointment::where('patient_id', $patient->id)
+                    ->where('status', \App\Models\Appointment::STATUS_IN_PROGRESS)
+                    ->where('id', '!=', $id) // Exclude current one if somehow already marked
+                    ->count();
+
+                $requiredSessions = 1 + $activeAppointmentsCount;
+                $hasBalance = false;
+
+                switch ($appointment->appointment_type ?? 'text') {
+                    case 'audio':
+                        $hasBalance = $subscription->voice_calls_remaining >= $requiredSessions;
+                        break;
+                    case 'video':
+                        $hasBalance = $subscription->video_calls_remaining >= $requiredSessions;
+                        break;
+                }
+
+                if (!$hasBalance) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Insufficient session balance. You have ' . $activeAppointmentsCount . ' other session(s) in progress.'
+                    ], 403);
+                }
+
+                $appointment->update([
+                    'actual_start_time' => now(),
+                    'status' => \App\Models\Appointment::STATUS_IN_PROGRESS
+                ]);
             }
-
-            if (!$hasBalance) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Insufficient session balance. You have ' . $activeAppointmentsCount . ' other session(s) in progress.'
-                ], 403);
-            }
-
-            $appointment->update([
-                'actual_start_time' => now(),
-                'status' => \App\Models\Appointment::STATUS_IN_PROGRESS
-            ]);
 
             return response()->json([
                 'success' => true,
