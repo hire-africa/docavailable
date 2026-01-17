@@ -2,14 +2,14 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -401,10 +401,13 @@ export default function BookAppointmentFlow() {
                   const now = new Date();
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
+                  const minSelectableDate = new Date(today);
+                  minSelectableDate.setDate(minSelectableDate.getDate() + 1);
                   const dayDate = new Date(currentYear, currentMonth, day);
                   const isToday = dayDate.toDateString() === now.toDateString();
                   const isPast = dayDate < today;
-                  const isDisabled = isPast; // Only disable dates before today
+                  const isBeforeMin = dayDate < minSelectableDate;
+                  const isDisabled = isPast || isBeforeMin; // Disable today and any date before tomorrow
 
                   // Check if this day is a working day
                   const dayOfWeek = dayDate.getDay();
@@ -831,6 +834,17 @@ export default function BookAppointmentFlow() {
       //   selectedDate, customTime, consultationType, reason 
       // });
       Alert.alert('Error', 'Please select a date, time, consultation type, and reason');
+      return;
+    }
+
+    // Enforce: booking date must be from tomorrow onwards (no same-day bookings)
+    const minBookingDate = new Date();
+    minBookingDate.setHours(0, 0, 0, 0);
+    minBookingDate.setDate(minBookingDate.getDate() + 1);
+    const selectedDateOnly = new Date(selectedDate);
+    selectedDateOnly.setHours(0, 0, 0, 0);
+    if (selectedDateOnly.getTime() < minBookingDate.getTime()) {
+      Alert.alert('Error', 'Please select a date from tomorrow onwards');
       return;
     }
 

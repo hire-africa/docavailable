@@ -147,11 +147,13 @@ class TextSession extends Model
             return;
         }
 
+        $windowSeconds = (int) config('app.text_session_response_window', 300);
+
         $this->update([
             'status' => self::STATUS_WAITING_FOR_DOCTOR,
             'started_at' => now(),
             'last_activity_at' => now(),
-            'doctor_response_deadline' => now()->addSeconds(90),
+            'doctor_response_deadline' => now()->addSeconds($windowSeconds),
         ]);
 
         \Illuminate\Support\Facades\Log::info("Scheduled session activated", [

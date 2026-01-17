@@ -39,7 +39,7 @@ class CleanupExpiredTextSessions extends Command
             ->update([
                 'status' => TextSession::STATUS_EXPIRED,
                 'ended_at' => $now,
-                'reason' => 'Doctor did not respond within 90 seconds',
+                'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window', 300) / 60) . ' minutes',
             ]);
 
         $this->info("Atomically expired {$expiredCount} waiting sessions with expired deadline.");
@@ -55,7 +55,7 @@ class CleanupExpiredTextSessions extends Command
                 'reason' => 'Stale waiting session (older than 24 hours)',
             ]);
         
-        $this->info("Cleaned up {$waitingCount} stale waiting sessions.");
+        $this->info("Cleaned up {$staleCount} stale waiting sessions.");
 
         // Also clean up old ended/expired sessions (older than 30 days)
         $oldSessions = TextSession::whereIn('status', ['ended', 'expired'])

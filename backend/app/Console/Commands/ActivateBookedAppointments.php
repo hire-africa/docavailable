@@ -145,7 +145,9 @@ class ActivateBookedAppointments extends Command
                 ->where('is_active', true)
                 ->first();
 
-            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $subscription) {
+            $windowSeconds = (int) config('app.text_session_response_window', 300);
+
+            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment, $subscription, $windowSeconds) {
                 // Check if session already exists
                 $existingSession = \App\Models\TextSession::where('appointment_id', $appointment->id)->first();
 
@@ -158,7 +160,7 @@ class ActivateBookedAppointments extends Command
                         $session->update([
                             'status' => 'waiting_for_doctor',
                             'started_at' => now(),
-                            'doctor_response_deadline' => now()->addSeconds(90),
+                            'doctor_response_deadline' => now()->addSeconds($windowSeconds),
                             'sessions_used' => 0 // Reverted to 0: billing is deferred
                         ]);
                     }
@@ -178,7 +180,7 @@ class ActivateBookedAppointments extends Command
                         'doctor_id' => $appointment->doctor_id,
                         'status' => 'waiting_for_doctor', // Initial status
                         'sessions_remaining_before_start' => $subscription ? $subscription->text_sessions_remaining : 0,
-                        'doctor_response_deadline' => now()->addSeconds(90),
+                        'doctor_response_deadline' => now()->addSeconds($windowSeconds),
                         'started_at' => now(),
                         'last_activity_at' => now(),
                         'created_at' => now(),

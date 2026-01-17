@@ -79,7 +79,9 @@ class SessionCreationService
             }
 
             // Use transaction to ensure atomicity and prevent race conditions
-            $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining, $appointmentId) {
+            $windowSeconds = (int) config('app.text_session_response_window', 300);
+
+            $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining, $appointmentId, $windowSeconds) {
                 // Lock and check for existing session again within transaction
                 $existingSession = TextSession::where('patient_id', $patientId)
                     ->where('doctor_id', $doctorId)
@@ -101,7 +103,7 @@ class SessionCreationService
                     'sessions_used' => 0,
                     'sessions_remaining_before_start' => $sessionsRemaining,
                     'reason' => $reason,
-                    'doctor_response_deadline' => now()->addSeconds(90), // 90 seconds from creation
+                    'doctor_response_deadline' => now()->addSeconds($windowSeconds),
                 ];
 
                 // Add appointment_id if provided (for appointment-based sessions)

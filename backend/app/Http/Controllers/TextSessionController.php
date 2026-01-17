@@ -321,7 +321,7 @@ class TextSessionController extends Controller
                             'sessionId' => $sessionId,
                             'patientId' => $session->patient_id,
                             'doctorId' => $session->doctor_id,
-                            'reason' => 'Doctor did not respond within 90 seconds'
+                            'reason' => 'Doctor did not respond within ' . (config('app.text_session_response_window', 300) / 60) . ' minutes'
                         ]));
                         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
                         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
