@@ -174,9 +174,12 @@ export async function createSession(params: CreateSessionParams): Promise<Create
       };
     } else {
       // Call session: POST /api/call-sessions/start
+      // IMPORTANT: For direct sessions (Talk Now), there is NO appointment record.
+      // The "appointment_id" field is just a routing identifier for the CallSession.
       // Request shape: { call_type: 'voice'|'video', appointment_id: direct_session_${Date.now()}, doctor_id, reason? }
       
-      // Generate appointment_id exactly as current implementations do
+      // Generate routing identifier for direct session (NOT an appointment ID)
+      // This is used as a routing key for WebSocket signaling, NOT to look up an appointment
       const appointmentId = `direct_session_${Date.now()}`;
 
       const requestBody: any = {
@@ -210,21 +213,41 @@ export async function createSession(params: CreateSessionParams): Promise<Create
       const data = await response.json();
 
       if (!response.ok) {
+        const errorMsg = data.message || 'Failed to start call session';
         console.error('❌ [SessionCreationService] Call session creation failed:', {
           status: response.status,
-          message: data.message || 'Failed to start call session',
+          message: errorMsg,
+          data: data,
+          body: JSON.stringify(data, null, 2)
         });
 
         return {
           success: false,
           status: response.status,
-          message: data.message || 'Failed to start call session',
+          message: errorMsg,
           body: data,
         };
       }
 
       // Use API-returned appointment_id if available, otherwise use the generated one
-      const finalAppointmentId = data.data?.appointment_id || appointmentId;
+      // Check multiple possible response structures
+      const finalAppointmentId = data.data?.appointment_id || 
+                                 data.appointment_id || 
+                                 data.data?.appointmentId ||
+                                 data.appointmentId ||
+                                 appointmentId;
+      
+      const isDirectSession = finalAppointmentId.startsWith('direct_session_');
+      console.log('🔍 [SessionCreationService] Extracted appointmentId:', {
+        finalAppointmentId,
+        isDirectSession,
+        note: isDirectSession 
+          ? '⚠️ This is a CallSession routing ID, NOT an appointment ID. No appointment record exists for direct sessions.'
+          : 'This is a scheduled appointment ID - appointment record exists.',
+        dataKeys: Object.keys(data),
+        dataDataKeys: data.data ? Object.keys(data.data) : [],
+        generatedAppointmentId: appointmentId
+      });
 
       console.log('✅ [SessionCreationService] Call session created:', {
         appointmentId: finalAppointmentId,

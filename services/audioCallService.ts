@@ -478,57 +478,75 @@ class AudioCallService {
       }
 
       // Start call session on backend to trigger push notification to the doctor
-      // Always attempt start; if already active, continue without error so both flows work
+      // For direct sessions, the session is already created by sessionCreationService
+      // Only call start if it hasn't been attempted yet
       try {
-        if (!this.callStartAttempted) {
-          this.callStartAttempted = true;
-        } else {
+        if (this.callStartAttempted) {
           console.log('ℹ️ [AudioCallService] Call session start already attempted; skipping duplicate');
-          // still proceed with signaling/media even if backend start was attempted
-        }
-        const startResp = !this.callStartAttempted ? null : await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await this.getAuthToken()}`
-          },
-          body: JSON.stringify({
-            call_type: 'voice',
-            appointment_id: appointmentId,
-            doctor_id: finalDoctorId
-          })
-        });
-        if (startResp && !startResp.ok) {
-          const body = await startResp.text().catch(() => '');
-          // Treat "already active" as benign (e.g., another flow already started the session)
-          if (startResp.status === 400 && body.includes('already have an active call session')) {
-            console.log('ℹ️ [AudioCallService] Backend reports existing active call session; continuing');
-            // Proactively request a re-notify to ensure the callee gets the push (only once per instance)
-            if (!this.reNotifyAttempted) {
-              this.reNotifyAttempted = true;
-              try {
-                const rn = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/re-notify`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${await this.getAuthToken()}`
-                  },
-                  body: JSON.stringify({ appointment_id: appointmentId, doctor_id: finalDoctorId })
-                });
-                const rnText = await rn.text().catch(() => '');
-                console.log('ℹ️ [AudioCallService] Re-notify response:', rn.status, rnText);
-              } catch (e) {
-                console.warn('⚠️ [AudioCallService] Re-notify failed:', e);
+          // Session already created, proceed with signaling/media
+        } else {
+          this.callStartAttempted = true;
+          // Only call start API if this is NOT a direct session (direct sessions are already created)
+          // For direct sessions, the sessionCreationService already created the CallSession
+          const isDirectSession = appointmentId.startsWith('direct_session_');
+          
+          if (!isDirectSession) {
+            // For scheduled appointments, ensure the session is started
+            const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await this.getAuthToken()}`
+              },
+              body: JSON.stringify({
+                call_type: 'voice',
+                appointment_id: appointmentId,
+                doctor_id: finalDoctorId
+              })
+            });
+            
+            if (startResp && !startResp.ok) {
+              const body = await startResp.text().catch(() => '');
+              // Treat "already active" as benign (e.g., another flow already started the session)
+              if (startResp.status === 400 && body.includes('already have an active call session')) {
+                console.log('ℹ️ [AudioCallService] Backend reports existing active call session; continuing');
+                // Proactively request a re-notify to ensure the callee gets the push (only once per instance)
+                // Only re-notify for non-direct sessions (direct sessions already sent notification)
+                const isDirectSession = appointmentId.startsWith('direct_session_');
+                if (!isDirectSession && !this.reNotifyAttempted) {
+                  this.reNotifyAttempted = true;
+                  try {
+                    const rn = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/re-notify`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${await this.getAuthToken()}`
+                      },
+                      body: JSON.stringify({ appointment_id: appointmentId, doctor_id: finalDoctorId })
+                    });
+                    const rnText = await rn.text().catch(() => '');
+                    console.log('ℹ️ [AudioCallService] Re-notify response:', rn.status, rnText);
+                  } catch (e) {
+                    console.warn('⚠️ [AudioCallService] Re-notify failed:', e);
+                  }
+                } else if (isDirectSession) {
+                  console.log('ℹ️ [AudioCallService] Direct session - skipping re-notify (notification already sent)');
+                } else {
+                  console.log('ℹ️ [AudioCallService] Re-notify already attempted; skipping');
+                }
+              } else {
+                const errorMsg = `Failed to start call session: ${body}`;
+                console.error('❌ [AudioCallService]', errorMsg);
+                this.events?.onError?.(errorMsg);
               }
-            } else {
-              console.log('ℹ️ [AudioCallService] Re-notify already attempted; skipping');
+            } else if (startResp) {
+              const startData = await startResp.json().catch(() => ({} as any));
+              console.log('✅ [AudioCallService] Call session started on backend:', startData?.data?.session_id ?? startData);
             }
           } else {
-            console.error('❌ Failed to start call session on backend:', startResp.status, body);
+            // For direct sessions, session is already created by sessionCreationService
+            console.log('ℹ️ [AudioCallService] Direct session - skipping duplicate start call (already created)');
           }
-        } else if (startResp) {
-          const startData = await startResp.json().catch(() => ({} as any));
-          console.log('✅ Call session started on backend:', startData?.data?.session_id ?? startData);
         }
       } catch (e) {
         console.error('❌ Error starting call session on backend:', e);

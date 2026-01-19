@@ -212,15 +212,14 @@ export default function AudioCall({
           onEndCall();
         },
         onError: (error) => {
-          console.error('❌ Call error:', error);
-          // Only show alert for critical errors, not during normal transitions
-          if (!error.includes('connection') &&
-            !error.includes('transition') &&
-            !error.includes('WebRTC') &&
-            !error.includes('signaling') &&
-            !error.includes('Failed to initialize call')) {
-            Alert.error('Call Error', error);
-          }
+          console.error('❌ [AudioCall] Call error:', error);
+          // Show all errors in production - user needs to know what went wrong
+          const errorMessage = typeof error === 'string' ? error : error?.message || 'Unknown error occurred';
+          Alert.alert(
+            'Call Error',
+            `${errorMessage}\n\nPlease try again or contact support if the issue persists.`,
+            [{ text: 'Close', onPress: onEndCall, style: 'cancel' }]
+          );
         },
         onCallAnswered: () => {
           console.log('✅ Call answered');
@@ -254,10 +253,20 @@ export default function AudioCall({
       await AudioCallService.getInstance().initializeForIncomingCall(appointmentId, userId, events);
       console.log('✅ AudioCall: Incoming call initialized successfully');
 
-    } catch (error) {
-      console.error('❌ AudioCall: Failed to initialize incoming call:', error);
-      // Call initialization error logged to console only - no modal shown
-      onEndCall();
+    } catch (error: any) {
+      const errorMsg = error?.message || 'Unknown error occurred';
+      const errorDetails = error?.response?.data || error?.body || error;
+      console.error('❌ [AudioCall] Failed to initialize incoming call:', {
+        message: errorMsg,
+        error: error,
+        details: errorDetails,
+        stack: error?.stack
+      });
+      Alert.alert(
+        'Call Initialization Failed',
+        `Unable to initialize incoming call.\n\nError: ${errorMsg}\n\nPlease try again.`,
+        [{ text: 'Close', onPress: onEndCall, style: 'cancel' }]
+      );
     }
   };
 
@@ -277,15 +286,22 @@ export default function AudioCall({
           onEndCall();
         },
         onError: (error) => {
-          console.error('❌ Call error:', error);
-          // Only show alert for critical errors, not during normal transitions
-          if (!error.includes('connection') &&
-            !error.includes('transition') &&
-            !error.includes('WebRTC') &&
-            !error.includes('signaling') &&
-            !error.includes('Failed to initialize call')) {
-            Alert.error('Call Error', error, onEndCall);
-          }
+          console.error('❌ [AudioCall] Call error:', error);
+          // Show all errors in production - user needs to know what went wrong
+          const errorMessage = typeof error === 'string' ? error : error?.message || 'Unknown error occurred';
+          Alert.alert(
+            'Call Error',
+            `${errorMessage}\n\nPlease try again or contact support if the issue persists.`,
+            [
+              { text: 'Close', onPress: onEndCall, style: 'cancel' },
+              { text: 'Retry', onPress: () => {
+                // Reset and retry initialization
+                hasInitializedRef.current = false;
+                initOnceRef.current = null;
+                initializeCall();
+              }}
+            ]
+          );
         },
         onCallAnswered: () => {
           console.log('✅ Call answered - session will be activated');
@@ -313,9 +329,31 @@ export default function AudioCall({
       // Audio calls start with earpiece mode by default (like normal phone calls)
       console.log('📞 Call initialization completed - audio starts with earpiece mode');
 
-    } catch (error) {
-      console.error('Failed to initialize audio call:', error);
-      Alert.error('Call Failed', 'Unable to start audio call. Please try again.', onEndCall);
+    } catch (error: any) {
+      const errorMsg = error?.message || 'Unknown error occurred';
+      const errorDetails = error?.response?.data || error?.body || error;
+      console.error('❌ [AudioCall] Failed to initialize audio call:', {
+        message: errorMsg,
+        error: error,
+        details: errorDetails,
+        stack: error?.stack,
+        appointmentId,
+        userId,
+        doctorId
+      });
+      
+      Alert.alert(
+        'Call Initialization Failed',
+        `Unable to start audio call.\n\nError: ${errorMsg}\n\nDetails: ${JSON.stringify(errorDetails, null, 2)}\n\nPlease check your connection and try again.`,
+        [
+          { text: 'Close', onPress: onEndCall, style: 'cancel' },
+          { text: 'Retry', onPress: () => {
+            hasInitializedRef.current = false;
+            initOnceRef.current = null;
+            initializeCall();
+          }}
+        ]
+      );
     }
   };
 

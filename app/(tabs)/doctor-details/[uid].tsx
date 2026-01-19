@@ -166,14 +166,55 @@ export default function DoctorProfilePage() {
     const loadSubscription = async () => {
       try {
         const response = await apiService.get('/subscription');
+        console.log('📊 [DoctorProfile] Subscription API response:', {
+          success: response.success,
+          hasData: !!response.data,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          data: response.data
+        });
+        
         if (response.success && response.data) {
-          setCurrentSubscription(response.data);
+          // Backend already returns camelCase, but handle both formats for safety
+          const sub = response.data;
+          const transformed = {
+            ...sub,
+            // Ensure camelCase fields exist (backend should already provide these)
+            voiceCallsRemaining: sub.voiceCallsRemaining ?? sub.voice_calls_remaining ?? 0,
+            videoCallsRemaining: sub.videoCallsRemaining ?? sub.video_calls_remaining ?? 0,
+            textSessionsRemaining: sub.textSessionsRemaining ?? sub.text_sessions_remaining ?? 0,
+            isActive: sub.isActive ?? sub.is_active ?? false,
+          };
+          
+          console.log('✅ [DoctorProfile] Subscription loaded:', {
+            isActive: transformed.isActive,
+            voiceCallsRemaining: transformed.voiceCallsRemaining,
+            videoCallsRemaining: transformed.videoCallsRemaining,
+            textSessionsRemaining: transformed.textSessionsRemaining
+          });
+          
+          setCurrentSubscription(transformed);
         } else {
+          const errorMsg = response.message || 'No subscription data received';
+          console.warn(`⚠️ [DoctorProfile] Subscription load failed: ${errorMsg}`);
           setCurrentSubscription(null);
+          // Don't show alert for missing subscription - user might not have one yet
         }
-      } catch (error) {
-        console.error('Error loading subscription:', error);
+      } catch (error: any) {
+        const errorMsg = error?.message || 'Unknown error';
+        const errorDetails = error?.response?.data || error;
+        console.error('❌ [DoctorProfile] Error loading subscription:', {
+          message: errorMsg,
+          error: error,
+          details: errorDetails,
+          status: error?.response?.status
+        });
         setCurrentSubscription(null);
+        // Show error alert in production
+        Alert.alert(
+          'Subscription Error',
+          `Failed to load subscription data.\n\nError: ${errorMsg}\n\nThis may affect call availability. Please refresh the page.`,
+          [{ text: 'OK' }]
+        );
       }
     };
 
@@ -364,16 +405,20 @@ export default function DoctorProfilePage() {
   };
 
   const handleDirectBookingConfirm = async (reason: string, sessionType: SessionType) => {
+    const errorPrefix = '[DoctorProfile]';
     console.log('🎯 [DoctorProfile] handleDirectBookingConfirm called:', { sessionType, doctor: !!doctor, userData: !!userData });
     
     if (!doctor || !userData) {
-      console.log('❌ [DoctorProfile] Missing doctor or userData');
+      const errorMsg = !doctor ? 'Doctor information is missing' : 'User information is missing';
+      console.error(`❌ ${errorPrefix} ${errorMsg}`);
+      Alert.alert('Error', `${errorMsg}. Please try again.`);
       return;
     }
 
     // CRITICAL: Prevent duplicate call initiations
     if (startingSession || callInitiated) {
       console.log('⚠️ Call already in progress, ignoring duplicate request');
+      Alert.alert('Please Wait', 'A call is already being initiated. Please wait...');
       return;
     }
 
@@ -393,8 +438,13 @@ export default function DoctorProfilePage() {
       });
 
       if (!result.success) {
-        console.error('❌ [DoctorProfile] Session creation failed:', result.message);
-        // Preserve existing error handling - no alert shown, just logged
+        const errorMsg = result.message || 'Failed to create session';
+        console.error(`❌ ${errorPrefix} Session creation failed:`, errorMsg);
+        Alert.alert(
+          'Session Creation Failed',
+          `${errorMsg}\n\nStatus: ${result.status || 'Unknown'}\n\nPlease check your subscription and try again.`,
+          [{ text: 'OK' }]
+        );
         setStartingSession(false);
         setCallInitiated(false);
         return;
@@ -408,10 +458,32 @@ export default function DoctorProfilePage() {
         // For text sessions, navigate to chat using the returned chatId
         console.log('📱 [DoctorProfile] Navigating to text chat:', result.chatId);
         router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: result.chatId } });
-      } else if ((sessionType === 'audio' || sessionType === 'video') && 'appointmentId' in result) {
+      } else if ((sessionType === 'audio' || sessionType === 'video')) {
+        // Validate that appointmentId exists in result
+        if (!('appointmentId' in result) || !result.appointmentId) {
+          const errorMsg = 'Session created but appointment ID is missing from response';
+          console.error(`❌ ${errorPrefix} ${errorMsg}:`, result);
+          Alert.alert(
+            'Call Setup Failed',
+            `${errorMsg}.\n\nResponse: ${JSON.stringify(result, null, 2)}\n\nPlease try again.`,
+            [{ text: 'OK' }]
+          );
+          setStartingSession(false);
+          setCallInitiated(false);
+          return;
+        }
+        
         // For audio/video, reuse the same call flow used in Chat by opening the call modals directly
+        const appointmentId = result.appointmentId;
+        const isDirectSession = appointmentId.startsWith('direct_session_');
         console.log(`📞 [DoctorProfile] Opening ${sessionType} call modal:`, {
-          appointmentId: result.appointmentId,
+          appointmentId,
+          isDirectSession,
+          note: isDirectSession 
+            ? '⚠️ Direct session - this is a CallSession routing ID, NOT an appointment ID. No appointment record exists.'
+            : 'Scheduled appointment - appointment record exists.',
+          resultKeys: Object.keys(result),
+          fullResult: result
         });
 
         // Clear any lingering global call flags before starting new call
@@ -422,20 +494,80 @@ export default function DoctorProfilePage() {
         g.currentCallType = null;
 
         // Set session ID and show modal atomically to prevent race conditions
-        setDirectSessionId(result.appointmentId);
+        // IMPORTANT: For direct sessions, appointmentId is a CallSession routing ID (e.g., "direct_session_1234567890")
+        // It is NOT an appointment ID - there is NO appointment record for direct sessions
+        // This ID is used for WebSocket signaling routing only
+        console.log('📞 [DoctorProfile] Setting up call modal with routing ID:', {
+          routingId: appointmentId,
+          isDirectSession: appointmentId.startsWith('direct_session_'),
+          note: appointmentId.startsWith('direct_session_') 
+            ? '⚠️ This is a CallSession routing ID, NOT an appointment ID. No appointment record exists.'
+            : 'This is a scheduled appointment ID - appointment record exists.'
+        });
+        
+        // Ensure appointmentId (routing ID) and doctorId are valid before proceeding
+        if (!appointmentId) {
+          const errorMsg = 'Invalid appointment ID received from server';
+          console.error(`❌ ${errorPrefix} ${errorMsg}`);
+          Alert.alert(
+            'Call Setup Failed',
+            `${errorMsg}.\n\nSession result: ${JSON.stringify(result, null, 2)}\n\nPlease try again.`,
+            [{ text: 'OK' }]
+          );
+          setStartingSession(false);
+          setCallInitiated(false);
+          return;
+        }
+        
+        if (!doctor?.id) {
+          const errorMsg = 'Doctor ID is missing';
+          console.error(`❌ ${errorPrefix} ${errorMsg}`);
+          Alert.alert(
+            'Call Setup Failed',
+            `${errorMsg}.\n\nDoctor data: ${JSON.stringify(doctor, null, 2)}\n\nPlease try again.`,
+            [{ text: 'OK' }]
+          );
+          setStartingSession(false);
+          setCallInitiated(false);
+          return;
+        }
+        
+        console.log('✅ [DoctorProfile] All validations passed, opening call modal:', {
+          appointmentId,
+          doctorId: doctor.id,
+          sessionType
+        });
+        
+        setDirectSessionId(appointmentId);
         if (sessionType === 'audio') {
           console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
           setShowAudioCallModal(true);
         } else {
-            console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
-            setShowVideoCallModal(true);
-          }
-
-          console.log('✅ Call modal opened for session:', result.appointmentId);
+          console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
+          setShowVideoCallModal(true);
         }
-    } catch (error) {
-      console.error('❌ [DoctorProfile] Error starting session:', error);
-      Alert.alert('Error', 'Failed to start session. Please try again.');
+        
+        console.log('✅ Call modal opened for session:', appointmentId);
+      }
+    } catch (error: any) {
+      const errorMsg = error?.message || 'Unknown error occurred';
+      const errorDetails = error?.response?.data || error?.body || error;
+      console.error(`❌ ${errorPrefix} Error starting session:`, {
+        message: errorMsg,
+        error: error,
+        details: errorDetails,
+        stack: error?.stack
+      });
+      
+      // Show detailed error to user
+      const userMessage = error?.response?.data?.message || errorMsg;
+      const statusCode = error?.response?.status || error?.status || 'Unknown';
+      Alert.alert(
+        'Call Failed',
+        `Failed to start ${sessionType} session.\n\nError: ${userMessage}\nStatus: ${statusCode}\n\nPlease check your connection and try again.`,
+        [{ text: 'OK' }]
+      );
+      
       // Reset flags on error so user can retry
       setCallInitiated(false);
     } finally {
@@ -950,7 +1082,7 @@ export default function DoctorProfilePage() {
             appointmentId={directSessionId}
             userId={(user?.id ?? userData?.id ?? 0).toString()}
             isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
-            doctorId={doctor?.id}
+            doctorId={doctor?.id ? Number(doctor.id) : undefined}
             doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
             patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
             otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}
@@ -976,7 +1108,7 @@ export default function DoctorProfilePage() {
             appointmentId={directSessionId}
             userId={(user?.id ?? userData?.id ?? 0).toString()}
             isDoctor={(user?.user_type || userData?.user_type) === 'doctor'}
-            doctorId={doctor?.id}
+            doctorId={doctor?.id ? Number(doctor.id) : undefined}
             doctorName={`${doctor?.first_name} ${doctor?.last_name}`}
             patientName={user?.display_name || `${user?.first_name || ''} ${user?.last_name || ''}`.trim()}
             otherParticipantProfilePictureUrl={doctor?.profile_picture_url || doctor?.profile_picture}

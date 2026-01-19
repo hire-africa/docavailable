@@ -414,6 +414,76 @@ class CallSessionController extends Controller
     }
 
     /**
+     * Get call session status
+     */
+    public function getStatus($appointmentId): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            // Architecture: Resolve live session context from call_sessions table.
+            // This handles both direct_session_... keys and numeric appointment IDs.
+            $callSession = CallSession::where('appointment_id', (string) $appointmentId)
+                ->whereIn('status', [
+                    CallSession::STATUS_ACTIVE,
+                    CallSession::STATUS_CONNECTING,
+                    CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    CallSession::STATUS_ANSWERED,
+                ])
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => true,
+                    'data' => null,
+                    'message' => 'No active call session found'
+                ]);
+            }
+
+            // Authorization: must be a participant
+            if ((int) $callSession->patient_id !== (int) $user->id && (int) $callSession->doctor_id !== (int) $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to session'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $callSession->id,
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $callSession->appointment_id,
+                    'patient_id' => $callSession->patient_id,
+                    'doctor_id' => $callSession->doctor_id,
+                    'status' => $callSession->status,
+                    'call_type' => $callSession->call_type,
+                    'is_connected' => (bool) $callSession->connected_at,
+                    'started_at' => $callSession->created_at->toISOString(),
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error fetching call session status", [
+                'appointment_id' => $appointmentId,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch call session status'
+            ], 500);
+        }
+    }
+
+    /**
      * End a call session
      */
     public function end(Request $request): JsonResponse
@@ -437,12 +507,18 @@ class CallSessionController extends Controller
                 // Find the call session to end with lock
                 $query = CallSession::query();
                 if ($sessionId) {
-                    $query->where('id', $sessionId)->where('patient_id', $user->id);
+                    $query->where('id', $sessionId);
                 } elseif ($appointmentId) {
-                    $query->where('appointment_id', $appointmentId)->where('patient_id', $user->id);
+                    $query->where('appointment_id', (string) $appointmentId);
                 } else {
                     return response()->json(['success' => false, 'message' => 'Session ID or Appointment ID required'], 400);
                 }
+
+                // Authorization: must be a participant (patient or doctor)
+                $query->where(function ($q) use ($user) {
+                    $q->where('patient_id', $user->id)
+                        ->orWhere('doctor_id', $user->id);
+                });
 
                 $callSession = $query->lockForUpdate()->first();
 

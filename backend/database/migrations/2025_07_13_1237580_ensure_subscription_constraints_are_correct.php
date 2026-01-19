@@ -28,10 +28,9 @@ return new class extends Migration {
             // Ensure user_id is not unique (users can have multiple subscriptions)
             // This is already handled by the foreign key constraint
 
-        } else {
-            // For other databases, use Schema builder
+        } elseif ($driver !== 'sqlite') {
+            // For other databases except SQLite (which doesn't support dropping indices this way)
             Schema::table('subscriptions', function (Blueprint $table) {
-                // Drop any unique constraints on user_id if they exist
                 try {
                     $table->dropUnique(['user_id']);
                 } catch (\Throwable $e) {

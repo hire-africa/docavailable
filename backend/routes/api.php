@@ -255,6 +255,7 @@ Route::middleware(['auth:api'])->group(function () {
     // Call session routes
     Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);
     Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
+    Route::get('/call-sessions/{appointmentId}/status', [App\Http\Controllers\CallSessionController::class, 'getStatus']);
     Route::post('/call-sessions/mark-connected', [App\Http\Controllers\CallSessionController::class, 'markConnected']);
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
     Route::post('/call-sessions/deduction', [App\Http\Controllers\CallSessionController::class, 'deduction']);
