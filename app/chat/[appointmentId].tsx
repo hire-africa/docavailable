@@ -816,27 +816,33 @@ export default function ChatPage() {
 
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
-    // Architecture: For appointments, check session_id (not time)
-    // If appointment has session_id, allow interaction; otherwise waiting state handles it
-    const appointmentTimeCheck = isTextSession || isAppointmentTime || (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined);
+    
+    // For call appointments (audio/video), check if appointment time has been reached
+    // This is indicated by call_unlocked_at being set (chat room created)
+    const isCallAppointment = appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video';
+    const appointmentTimeReached = isCallAppointment 
+      ? (chatInfo?.call_unlocked_at !== null && chatInfo?.call_unlocked_at !== undefined)
+      : (isTextSession || isAppointmentTime || (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined));
 
     // Check subscription availability
     const hasAvailableSessions = subscriptionData ? (
       callType === 'voice' ? subscriptionData.voiceCallsRemaining > 0 : subscriptionData.videoCallsRemaining > 0
     ) : true; // Allow if no subscription data yet (will be checked on call initiation)
 
-    const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
+    const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeReached && hasAvailableSessions;
 
     console.log('🔍 [isCallButtonEnabled] Debug:', {
       callTypeEnabled,
       callType,
       appointmentType,
       isTextSession,
+      isCallAppointment,
       webrtcReady,
       webrtcReadyOrFallback,
       showIncomingCall,
       isAppointmentTime,
-      appointmentTimeCheck,
+      appointmentTimeReached,
+      call_unlocked_at: chatInfo?.call_unlocked_at,
       hasAvailableSessions,
       subscriptionData,
       enabled,
@@ -910,95 +916,95 @@ export default function ChatPage() {
     checkAppointmentTime();
   }, [checkAppointmentTime]);
 
-  // Architecture: Session-gated routing - check if appointment has session_id
-  // If session_id exists, navigate to session; if null, show waiting state
+  // Architecture: Session-gated routing - REMOVED to prevent routing crashes
+  // Routing to /sessions/${session_id}/chat has been disabled
   const [isWaitingForSession, setIsWaitingForSession] = useState(false);
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Check appointment session status and route accordingly
-  useEffect(() => {
-    // Skip for instant sessions (they already have session context)
-    if (isInstantSession || isTextSession) {
-      return;
-    }
+  // Check appointment session status and route accordingly - DISABLED
+  // useEffect(() => {
+  //   // Skip for instant sessions (they already have session context)
+  //   if (isInstantSession || isTextSession) {
+  //     return;
+  //   }
 
-    // Skip if we already have a session context
-    if (activeSessionId) {
-      return;
-    }
+  //   // Skip if we already have a session context
+  //   if (activeSessionId) {
+  //     return;
+  //   }
 
-    // Only check for numeric appointment IDs (not text_session_*)
-    const numericAppointmentId = parseInt(appointmentId, 10);
-    if (isNaN(numericAppointmentId)) {
-      return;
-    }
+  //   // Only check for numeric appointment IDs (not text_session_*)
+  //   const numericAppointmentId = parseInt(appointmentId, 10);
+  //   if (isNaN(numericAppointmentId)) {
+  //     return;
+  //   }
 
-    const checkAndRoute = async () => {
-      try {
-        // First check chatInfo.session_id if available
-        if (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined) {
-          console.log('✅ [AppointmentSession] Appointment has session from chatInfo, navigating:', chatInfo.session_id);
-          router.replace(`/sessions/${chatInfo.session_id}/chat`);
-          return;
-        }
+  //   const checkAndRoute = async () => {
+  //     try {
+  //       // First check chatInfo.session_id if available
+  //       if (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined) {
+  //         console.log('✅ [AppointmentSession] Appointment has session from chatInfo, navigating:', chatInfo.session_id);
+  //         router.replace(`/sessions/${chatInfo.session_id}/chat`);
+  //         return;
+  //       }
 
-        // Otherwise, query backend for session status
-        const sessionStatus = await resolveAppointmentSession(numericAppointmentId);
+  //       // Otherwise, query backend for session status
+  //       const sessionStatus = await resolveAppointmentSession(numericAppointmentId);
         
-        if (!sessionStatus) {
-          console.log('⚠️ [AppointmentSession] Appointment not found');
-          return;
-        }
+  //       if (!sessionStatus) {
+  //         console.log('⚠️ [AppointmentSession] Appointment not found');
+  //         return;
+  //       }
 
-        // If appointment has session_id, navigate to session
-        if (sessionStatus.session_id !== null) {
-          console.log('✅ [AppointmentSession] Appointment has session, navigating to session:', sessionStatus.session_id);
+  //       // If appointment has session_id, navigate to session
+  //       if (sessionStatus.session_id !== null) {
+  //         console.log('✅ [AppointmentSession] Appointment has session, navigating to session:', sessionStatus.session_id);
 
-          // Navigate to session (replace current route)
-          router.replace(`/sessions/${sessionStatus.session_id}/chat`);
-          return;
-        }
+  //         // Navigate to session (replace current route)
+  //         router.replace(`/sessions/${sessionStatus.session_id}/chat`);
+  //         return;
+  //       }
 
-        // If session_id is null, show waiting state
-        console.log('⏳ [AppointmentSession] Appointment has no session yet, showing waiting state');
-        setIsWaitingForSession(true);
+  //       // If session_id is null, show waiting state
+  //       console.log('⏳ [AppointmentSession] Appointment has no session yet, showing waiting state');
+  //       setIsWaitingForSession(true);
 
-        // Start polling for session_id (every 8 seconds, within 5-10s range)
-        if (!pollingIntervalRef.current) {
-          const interval = setInterval(async () => {
-            const updatedStatus = await resolveAppointmentSession(numericAppointmentId);
+  //       // Start polling for session_id (every 8 seconds, within 5-10s range)
+  //       if (!pollingIntervalRef.current) {
+  //         const interval = setInterval(async () => {
+  //           const updatedStatus = await resolveAppointmentSession(numericAppointmentId);
             
-            if (updatedStatus && updatedStatus.session_id !== null) {
-              // Session created, navigate to it
-              console.log('✅ [AppointmentSession] Session created, navigating:', updatedStatus.session_id);
-              clearInterval(interval);
-              pollingIntervalRef.current = null;
-              setIsWaitingForSession(false);
+  //           if (updatedStatus && updatedStatus.session_id !== null) {
+  //             // Session created, navigate to it
+  //             console.log('✅ [AppointmentSession] Session created, navigating:', updatedStatus.session_id);
+  //             clearInterval(interval);
+  //             pollingIntervalRef.current = null;
+  //             setIsWaitingForSession(false);
 
-              router.replace(`/sessions/${updatedStatus.session_id}/chat`);
-            }
-          }, 8000); // Poll every 8 seconds (within 5-10s range)
+  //             router.replace(`/sessions/${updatedStatus.session_id}/chat`);
+  //           }
+  //         }, 8000); // Poll every 8 seconds (within 5-10s range)
           
-          pollingIntervalRef.current = interval;
-        }
-      } catch (error) {
-        console.error('❌ [AppointmentSession] Error checking session status:', error);
-      }
-    };
+  //         pollingIntervalRef.current = interval;
+  //       }
+  //     } catch (error) {
+  //       console.error('❌ [AppointmentSession] Error checking session status:', error);
+  //     }
+  //   };
 
-    // Only check if chatInfo is loaded (to avoid race conditions)
-    if (chatInfo) {
-      checkAndRoute();
-    }
+  //   // Only check if chatInfo is loaded (to avoid race conditions)
+  //   if (chatInfo) {
+  //     checkAndRoute();
+  //   }
 
-    // Cleanup polling on unmount
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-    };
-  }, [appointmentId, chatInfo, isInstantSession, isTextSession, activeSessionId]);
+  //   // Cleanup polling on unmount
+  //   return () => {
+  //     if (pollingIntervalRef.current) {
+  //       clearInterval(pollingIntervalRef.current);
+  //       pollingIntervalRef.current = null;
+  //     }
+  //   };
+  // }, [appointmentId, chatInfo, isInstantSession, isTextSession, activeSessionId]);
 
   // Activate session header when doctor responds (for instant sessions) or when text appointment session becomes active
   // Show for both patient and doctor
@@ -4131,103 +4137,207 @@ export default function ChatPage() {
 
 
           {/* Call Icons - Role-based calling */}
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
-            ref={tourRefs['call-buttons']}
-            collapsable={false}
-          >
-            <TouchableOpacity
-              style={{
-                padding: 8,
-                marginRight: 1,
-                opacity: isCallButtonEnabled('video') ? 1 : 0.3
-              }}
-              onPress={() => {
-                if (isCallButtonEnabled('video')) {
-                  console.log('Starting video call...');
-                  setShowVideoCallModal(true);
-                } else {
-                  let message = '';
-                  if (!isVideoCallEnabled()) {
-                    message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
-                  } else if (subscriptionData?.videoCallsRemaining === 0) {
-                    message = 'No video calls remaining in your subscription. Please upgrade your plan.';
-                  } else {
-                    message = 'Video calls are only available during active sessions or when the doctor is online.';
-                  }
-                  Alert.info('Call Not Available', message);
-                }
-              }}
+          {/* For call appointments, show only the matching call button based on appointment_type */}
+          {((appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') && !isTextSession) && (
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
+              ref={tourRefs['call-buttons']}
+              collapsable={false}
             >
-              <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
-            </TouchableOpacity>
+              {/* Video Call Button - Only show for video appointments */}
+              {(appointmentType === 'video') && (
+                <TouchableOpacity
+                  style={{
+                    padding: 8,
+                    marginRight: 1,
+                    opacity: isCallButtonEnabled('video') ? 1 : 0.3
+                  }}
+                  onPress={() => {
+                    if (isCallButtonEnabled('video')) {
+                      console.log('Starting video call...');
+                      setShowVideoCallModal(true);
+                    } else {
+                      let message = '';
+                      if (subscriptionData?.videoCallsRemaining === 0) {
+                        message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                      } else if (!chatInfo?.call_unlocked_at) {
+                        message = 'Appointment time has not been reached yet. Please wait for the scheduled time.';
+                      } else {
+                        message = 'Video call is not available at this time.';
+                      }
+                      Alert.info('Call Not Available', message);
+                    }
+                  }}
+                >
+                  <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
+                </TouchableOpacity>
+              )}
 
-            {/* Audio Call Button - Only patients can initiate calls */}
-            {user?.user_type === 'patient' && (
+              {/* Audio Call Button - Only show for audio/voice appointments, only patients can initiate */}
+              {(appointmentType === 'audio' || appointmentType === 'voice') && user?.user_type === 'patient' && (
+                <TouchableOpacity
+                  style={{
+                    padding: 8,
+                    opacity: isCallButtonEnabled('voice') ? 1 : 0.3
+                  }}
+                  onPress={() => {
+                    console.log('🎯 [CallButton] Press state:', {
+                      userType: user?.user_type,
+                      callEnabled: isCallEnabled(),
+                      webrtcReady,
+                      showIncomingCall,
+                      appointmentType,
+                      isTextSession,
+                      buttonEnabled: isCallButtonEnabled('voice'),
+                      subscriptionData,
+                      call_unlocked_at: chatInfo?.call_unlocked_at
+                    });
+
+                    if (isCallButtonEnabled('voice')) {
+                      console.log('📞 Patient call button pressed:', {
+                        appointmentId,
+                        currentUserId,
+                        isDoctor: user?.user_type === 'doctor',
+                        userType: user?.user_type
+                      });
+
+                      // Clear any pending offer before starting new call
+                      (global as any).pendingOffer = null;
+                      // Clear incoming call flag for outgoing calls
+                      (global as any).isIncomingCall = false;
+
+                      // Initialize audio call
+                      setShowAudioCallModal(true);
+                    } else {
+                      let message = '';
+                      if (subscriptionData?.voiceCallsRemaining === 0) {
+                        message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
+                      } else if (!chatInfo?.call_unlocked_at) {
+                        message = 'Appointment time has not been reached yet. Please wait for the scheduled time.';
+                      } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
+                        message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
+                      } else {
+                        message = 'Call Not Available: Call feature is not available at this time.';
+                      }
+                      Alert.info('Call Not Available', message);
+                    }
+                  }}
+                  disabled={!isCallButtonEnabled('voice')}
+                >
+                  <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
+                </TouchableOpacity>
+              )}
+
+              {/* Doctor Status - Doctors can only answer calls for audio appointments */}
+              {(appointmentType === 'audio' || appointmentType === 'voice') && user?.user_type === 'doctor' && (
+                <View style={{
+                  padding: 8,
+                  opacity: 0.7
+                }}>
+                  <Icon name="voice" size={24} color="#999" />
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* For text sessions/appointments, show both buttons (existing behavior) */}
+          {((appointmentType === 'text' || !appointmentType) && !isTextSession) && (
+            <View
+              style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
+              ref={tourRefs['call-buttons']}
+              collapsable={false}
+            >
               <TouchableOpacity
                 style={{
                   padding: 8,
-                  opacity: isCallButtonEnabled('voice') ? 1 : 0.3
+                  marginRight: 1,
+                  opacity: isCallButtonEnabled('video') ? 1 : 0.3
                 }}
                 onPress={() => {
-                  console.log('🎯 [CallButton] Press state:', {
-                    userType: user?.user_type,
-                    callEnabled: isCallEnabled(),
-                    webrtcReady,
-                    showIncomingCall,
-                    appointmentType,
-                    isTextSession,
-                    buttonEnabled: isCallButtonEnabled('voice'),
-                    subscriptionData
-                  });
-
-                  if (isCallButtonEnabled('voice')) {
-                    console.log('📞 Patient call button pressed:', {
-                      appointmentId,
-                      currentUserId,
-                      isDoctor: user?.user_type === 'doctor',
-                      userType: user?.user_type
-                    });
-
-                    // Clear any pending offer before starting new call
-                    (global as any).pendingOffer = null;
-                    // Clear incoming call flag for outgoing calls
-                    (global as any).isIncomingCall = false;
-
-                    // Initialize audio call
-                    // AudioCallService is already imported as audioCallService
-
-                    setShowAudioCallModal(true);
+                  if (isCallButtonEnabled('video')) {
+                    console.log('Starting video call...');
+                    setShowVideoCallModal(true);
                   } else {
                     let message = '';
-                    if (!isAudioCallEnabled()) {
-                      message = `Audio calls are not available for ${appointmentType} appointments. Audio calls are only available for audio appointments.`;
-                    } else if (subscriptionData?.voiceCallsRemaining === 0) {
-                      message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
-                    } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
-                      message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
+                    if (!isVideoCallEnabled()) {
+                      message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
+                    } else if (subscriptionData?.videoCallsRemaining === 0) {
+                      message = 'No video calls remaining in your subscription. Please upgrade your plan.';
                     } else {
-                      message = 'Call Not Available: Call feature is not available at this time.';
+                      message = 'Video calls are only available during active sessions or when the doctor is online.';
                     }
                     Alert.info('Call Not Available', message);
                   }
                 }}
-                disabled={!isCallButtonEnabled('voice')}
               >
-                <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
+                <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
               </TouchableOpacity>
-            )}
 
-            {/* Doctor Status - Doctors can only answer calls */}
-            {user?.user_type === 'doctor' && (
-              <View style={{
-                padding: 8,
-                opacity: 0.7
-              }}>
-                <Icon name="voice" size={24} color="#999" />
-              </View>
-            )}
-          </View>
+              {/* Audio Call Button - Only patients can initiate calls */}
+              {user?.user_type === 'patient' && (
+                <TouchableOpacity
+                  style={{
+                    padding: 8,
+                    opacity: isCallButtonEnabled('voice') ? 1 : 0.3
+                  }}
+                  onPress={() => {
+                    console.log('🎯 [CallButton] Press state:', {
+                      userType: user?.user_type,
+                      callEnabled: isCallEnabled(),
+                      webrtcReady,
+                      showIncomingCall,
+                      appointmentType,
+                      isTextSession,
+                      buttonEnabled: isCallButtonEnabled('voice'),
+                      subscriptionData
+                    });
+
+                    if (isCallButtonEnabled('voice')) {
+                      console.log('📞 Patient call button pressed:', {
+                        appointmentId,
+                        currentUserId,
+                        isDoctor: user?.user_type === 'doctor',
+                        userType: user?.user_type
+                      });
+
+                      // Clear any pending offer before starting new call
+                      (global as any).pendingOffer = null;
+                      // Clear incoming call flag for outgoing calls
+                      (global as any).isIncomingCall = false;
+
+                      // Initialize audio call
+                      setShowAudioCallModal(true);
+                    } else {
+                      let message = '';
+                      if (!isAudioCallEnabled()) {
+                        message = `Audio calls are not available for ${appointmentType} appointments. Audio calls are only available for audio appointments.`;
+                      } else if (subscriptionData?.voiceCallsRemaining === 0) {
+                        message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
+                      } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
+                        message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
+                      } else {
+                        message = 'Call Not Available: Call feature is not available at this time.';
+                      }
+                      Alert.info('Call Not Available', message);
+                    }
+                  }}
+                  disabled={!isCallButtonEnabled('voice')}
+                >
+                  <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
+                </TouchableOpacity>
+              )}
+
+              {/* Doctor Status - Doctors can only answer calls */}
+              {user?.user_type === 'doctor' && (
+                <View style={{
+                  padding: 8,
+                  opacity: 0.7
+                }}>
+                  <Icon name="voice" size={24} color="#999" />
+                </View>
+              )}
+            </View>
+          )}
 
 
         </View>

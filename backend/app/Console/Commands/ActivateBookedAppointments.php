@@ -113,6 +113,12 @@ class ActivateBookedAppointments extends Command
         if ($appointment->appointment_type === 'text') {
             $this->activateTextSession($appointment);
         } else {
+            // For audio/video appointments, create appointment chat room when time arrives
+            // This allows users to see the chat interface with call button
+            if (in_array($appointment->appointment_type, ['audio', 'voice', 'video'])) {
+                $this->activateCallAppointmentChat($appointment);
+            }
+            
             // Calls must not be auto-started. Only unlock them when eligible.
             if (!$appointment->call_unlocked_at) {
                 $appointment->update([
@@ -250,6 +256,67 @@ class ActivateBookedAppointments extends Command
             ]);
             // Throw to be caught by main loop
             throw $e;
+        }
+    }
+
+    /**
+     * Activate appointment chat for audio/video appointments
+     * Creates a chat room where users can initiate calls
+     */
+    private function activateCallAppointmentChat(Appointment $appointment): void
+    {
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment) {
+                // Check if chat room already exists for this appointment
+                $chatRoomName = "appointment_{$appointment->id}";
+                $existingRoom = \Illuminate\Support\Facades\DB::table('chat_rooms')
+                    ->where('name', $chatRoomName)
+                    ->where('type', 'appointment_chat')
+                    ->first();
+
+                if ($existingRoom) {
+                    $this->info("   Appointment chat room already exists for appointment {$appointment->id}");
+                    return;
+                }
+
+                // Create appointment chat room
+                $roomId = \Illuminate\Support\Facades\DB::table('chat_rooms')->insertGetId([
+                    'name' => $chatRoomName,
+                    'type' => 'appointment_chat',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $this->info("   Created appointment chat room {$roomId} for appointment {$appointment->id}");
+
+                // Add participants (patient and doctor)
+                \Illuminate\Support\Facades\DB::table('chat_room_participants')->insertOrIgnore([
+                    [
+                        'chat_room_id' => $roomId,
+                        'user_id' => $appointment->patient_id,
+                        'role' => 'member',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ],
+                    [
+                        'chat_room_id' => $roomId,
+                        'user_id' => $appointment->doctor_id,
+                        'role' => 'member',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]
+                ]);
+
+                $this->info("   Added participants to appointment chat room {$roomId}");
+            });
+
+        } catch (\Exception $e) {
+            Log::error("Failed to activate appointment chat for call appointment", [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage()
+            ]);
+            // Don't throw - allow appointment to continue activation even if chat creation fails
+            $this->warn("   ⚠️ Failed to create appointment chat room: {$e->getMessage()}");
         }
     }
 

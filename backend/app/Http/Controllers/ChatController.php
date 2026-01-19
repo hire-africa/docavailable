@@ -794,6 +794,7 @@ class ChatController extends Controller
                 'doctor_id' => $appointment->doctor_id,
                 'patient_id' => $appointment->patient_id,
                 'session_id' => $resolvedSessionId,
+                'call_unlocked_at' => $appointment->call_unlocked_at, // When call appointment time was reached
                 'session_context' => $resolvedSessionId ? ('text_session:' . $resolvedSessionId) : null,
                 'session_status' => $sessionStatus,
                 'other_participant_profile_picture' => $otherParticipantProfilePath,

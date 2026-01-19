@@ -145,6 +145,8 @@ export default function DoctorDashboard() {
   const [showAppTour, setShowAppTour] = useState(false);
   const [hasCheckedTour, setHasCheckedTour] = useState(false);
   const tourTabRefs = useRef<Record<string, React.RefObject<View>>>({});
+  const previousAppointmentsRef = useRef<any[]>([]);
+  const appointmentsRef = useRef<any[]>([]);
 
   // Permissions Walkthrough state
   const [showPermissionsWalkthrough, setShowPermissionsWalkthrough] = useState(false);
@@ -452,6 +454,115 @@ export default function DoctorDashboard() {
       }
     }, [user, activeTab])
   );
+
+  // Update refs whenever appointments change
+  useEffect(() => {
+    appointmentsRef.current = appointments;
+    previousAppointmentsRef.current = appointments;
+  }, [appointments]);
+
+  // Real-time polling for appointments that are at or past their appointment time
+  // This detects when a session is created and updates the chat list immediately
+  useEffect(() => {
+    if (!user) return;
+
+    // Check if there are any appointments that are at or past their appointment time
+    const hasAppointmentsNearTime = (appts: any[]) => {
+      const now = new Date();
+      return appts.some((appt: any) => {
+        const dateStr = appt.appointment_date || appt.date;
+        const timeStr = appt.appointment_time || appt.time;
+        if (!dateStr || !timeStr) return false;
+
+        try {
+          let appointmentDateTime: Date;
+          if (dateStr.includes('/')) {
+            // Format: MM/DD/YYYY
+            const [month, day, year] = dateStr.split('/').map(Number);
+            const [hour, minute] = timeStr.split(':').map(Number);
+            appointmentDateTime = new Date(year, month - 1, day, hour, minute);
+          } else {
+            // Format: YYYY-MM-DD
+            appointmentDateTime = new Date(`${dateStr}T${timeStr}`);
+          }
+
+          // Check if appointment time is within the last 5 minutes or up to 10 minutes in the future
+          const timeDiff = appointmentDateTime.getTime() - now.getTime();
+          const isNearTime = timeDiff >= -300000 && timeDiff <= 600000; // -5 min to +10 min
+
+          // Also check if appointment is confirmed and doesn't have a session_id yet
+          const isConfirmed = appt.status === 'confirmed' || appt.status === 1;
+          const hasSessionId = appt.session_id || appt.sessionId;
+          
+          return isNearTime && isConfirmed && !hasSessionId;
+        } catch {
+          return false;
+        }
+      });
+    };
+
+    // Check function that uses ref to get latest appointments
+    const shouldPoll = () => {
+      const currentAppointments = appointmentsRef.current || [];
+      return hasAppointmentsNearTime(currentAppointments);
+    };
+
+    // Initial check - if no appointments near time, don't start polling
+    if (!shouldPoll()) {
+      return;
+    }
+
+    console.log('🔄 [DoctorDashboard] Starting real-time polling for appointment sessions...');
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        // Re-check if we should still be polling using ref
+        if (!shouldPoll()) {
+          console.log('🛑 [DoctorDashboard] No more appointments near time, stopping polling');
+          clearInterval(pollInterval);
+          return;
+        }
+
+        const response = await apiService.get('/appointments');
+        if (response.success && response.data) {
+          const responseData = response.data as any;
+          const appointmentsData = (responseData.data || responseData) as any[];
+          
+          // Check if any appointment gained a session_id
+          const previousAppointments = previousAppointmentsRef.current;
+          const hasNewSession = appointmentsData.some((newAppt: any) => {
+            const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
+            const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
+            const newHasSession = newAppt.session_id || newAppt.sessionId;
+            
+            // If appointment didn't have a session before but now does, refresh
+            return !oldHasSession && newHasSession;
+          });
+
+          if (hasNewSession) {
+            console.log('✅ [DoctorDashboard] Session created for appointment, refreshing chat list...');
+            setAppointments(appointmentsData);
+            appointmentsRef.current = appointmentsData;
+            previousAppointmentsRef.current = appointmentsData;
+            // Refresh confirmed appointments as well
+            fetchBookingRequests();
+          } else {
+            // Update appointments even if no new session (to keep data fresh)
+            setAppointments(appointmentsData);
+            appointmentsRef.current = appointmentsData;
+            previousAppointmentsRef.current = appointmentsData;
+          }
+        }
+      } catch (error) {
+        console.error('Error polling appointments for session updates:', error);
+      }
+    }, 8000); // Poll every 8 seconds (within 5-10s range as per documentation)
+
+    return () => {
+      console.log('🛑 [DoctorDashboard] Stopping real-time polling for appointment sessions');
+      clearInterval(pollInterval);
+    };
+  }, [user]);
 
   // Sidebar functions
   const openSidebar = () => {
@@ -1033,12 +1144,26 @@ export default function DoctorDashboard() {
   const handleSelectPatient = (patient: BookingRequest) => {
     const appointmentType = (patient as any)?.appointment_type ?? (patient as any)?.consultationType ?? (patient as any)?.type ?? null;
     const linkedSessionId = (patient as any)?.session_id ?? (patient as any)?.sessionId ?? null;
-    if (appointmentType === 'text' && linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '') {
-      const chatId = `text_session_${linkedSessionId}`;
-      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
-      return;
+    const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
+    
+    // Handle different appointment types
+    if (appointmentType === 'text' || appointmentType === '') {
+      // Text appointments: Only navigate to chat if session_id exists
+      if (hasLinkedSession) {
+        const chatId = `text_session_${linkedSessionId}`;
+        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: chatId } });
+      } else {
+        // No session yet - show appointment details
+        router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
+      }
+    } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
+      // Call appointments (audio/video): Navigate to appointment chat
+      // The chat will show waiting state before time, and call button after time
+      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
+    } else {
+      // Unknown type - default to appointment details
+      router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
     }
-    router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
   };
 
   // Helper function to check if appointment is upcoming
