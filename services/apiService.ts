@@ -70,7 +70,27 @@ class ApiService {
         }
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}, body: ${responseText.substring(0, 200)}`);
+          // Try to parse error response to get the actual error message
+          let errorMessage = `HTTP error! status: ${response.status}`;
+          try {
+            const errorData = JSON.parse(responseText);
+            if (errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData.error) {
+              errorMessage = errorData.error;
+            } else {
+              errorMessage = `HTTP error! status: ${response.status}`;
+            }
+          } catch (parseError) {
+            // If parsing fails, use the raw text (truncated)
+            errorMessage = responseText.substring(0, 200);
+          }
+          
+          // Create error object with status and message
+          const error: any = new Error(errorMessage);
+          error.status = response.status;
+          error.responseText = responseText;
+          throw error;
         }
 
         // Parse as JSON only if not HTML

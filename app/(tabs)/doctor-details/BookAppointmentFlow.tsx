@@ -401,13 +401,10 @@ export default function BookAppointmentFlow() {
                   const now = new Date();
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
-                  const minSelectableDate = new Date(today);
-                  minSelectableDate.setDate(minSelectableDate.getDate() + 1);
                   const dayDate = new Date(currentYear, currentMonth, day);
                   const isToday = dayDate.toDateString() === now.toDateString();
                   const isPast = dayDate < today;
-                  const isBeforeMin = dayDate < minSelectableDate;
-                  const isDisabled = isPast || isBeforeMin; // Disable today and any date before tomorrow
+                  const isDisabled = isPast; // Only disable past dates, allow today
 
                   // Check if this day is a working day
                   const dayOfWeek = dayDate.getDay();
@@ -837,18 +834,7 @@ export default function BookAppointmentFlow() {
       return;
     }
 
-    // Enforce: booking date must be from tomorrow onwards (no same-day bookings)
-    const minBookingDate = new Date();
-    minBookingDate.setHours(0, 0, 0, 0);
-    minBookingDate.setDate(minBookingDate.getDate() + 1);
-    const selectedDateOnly = new Date(selectedDate);
-    selectedDateOnly.setHours(0, 0, 0, 0);
-    if (selectedDateOnly.getTime() < minBookingDate.getTime()) {
-      Alert.alert('Error', 'Please select a date from tomorrow onwards');
-      return;
-    }
-
-    // Validate that selected date/time is in the future
+    // Validate that selected date/time is in the future (allows same-day bookings)
     const now = new Date();
     const [selHour, selMin] = selectedTime.split(':').map((v) => parseInt(v, 10));
     const apptDateTime = new Date(selectedDate);
@@ -887,7 +873,11 @@ export default function BookAppointmentFlow() {
           setStep(3);
           return;
         }
-        throw new Error(createRes.message || 'Failed to create appointment');
+        // If appointment creation failed, check if it's due to time slot conflict
+        if (createRes.message) {
+          throw new Error(createRes.message);
+        }
+        throw new Error('Failed to create appointment');
       } else {
         // No quota: initiate purchase flow
         const res = await paymentsService.initiatePlanPurchase(1);
@@ -898,23 +888,33 @@ export default function BookAppointmentFlow() {
           Alert.alert('No Sessions Available', 'Please purchase a plan to continue.');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ [BookAppointmentFlow] Appointment creation failed:', error);
       console.error('❌ [BookAppointmentFlow] Error details:', {
         message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
+        status: error?.status,
+        responseText: error?.responseText,
         stack: error?.stack
       });
 
-      // More specific error messages
+      // Extract error message - apiService now includes the backend message in error.message
       let errorMessage = 'Failed to book appointment. Please try again.';
-      if (error?.response?.status === 401) {
+      const statusCode = error?.status;
+      const errorMsg = error?.message || '';
+      
+      // Use the error message from backend if available (apiService now parses it)
+      if (errorMsg && !errorMsg.includes('HTTP error!')) {
+        errorMessage = errorMsg;
+      } else if (statusCode === 409) {
+        errorMessage = 'This time slot is already booked. Please select a different time.';
+      } else if (statusCode === 401) {
         errorMessage = 'Authentication failed. Please login again.';
-      } else if (error?.response?.status === 422) {
+      } else if (statusCode === 422) {
         errorMessage = 'Invalid appointment data. Please check your details.';
-      } else if (error?.response?.status === 500) {
+      } else if (statusCode === 500) {
         errorMessage = 'Server error. Please try again later.';
+      } else if (errorMsg.toLowerCase().includes('already booked') || errorMsg.toLowerCase().includes('time slot')) {
+        errorMessage = 'This time slot is already booked. Please select a different time.';
       }
 
       Alert.alert('Error', errorMessage);
