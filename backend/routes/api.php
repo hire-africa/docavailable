@@ -111,8 +111,10 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/available-doctors', [AppointmentController::class, 'available_doctors']);
     Route::get('/appointments/{id}', [AppointmentController::class, 'getAppointmentById']);
     Route::get('/appointments/{id}/session', [AppointmentController::class, 'getAppointmentSession']); // Lightweight session status query
+    Route::get('/appointments/{id}/status', [AppointmentController::class, 'getStatus']);
     Route::post('/appointments/{id}/start-session', [AppointmentController::class, 'startSession']);
     Route::post('/appointments/{id}/end-session', [AppointmentController::class, 'endSession']);
+    Route::post('/appointments/{id}/end', [AppointmentController::class, 'end']);
     Route::post('/appointments/{id}/process-payment', [AppointmentController::class, 'processPayment']);
 
     // Appointment statistics routes

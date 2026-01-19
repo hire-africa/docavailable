@@ -8,8 +8,8 @@ import {
   RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
+import { contextToString, SessionContext } from '../types/sessionContext';
 import configService from './configService';
-import { SessionContext, contextToString } from '../types/sessionContext';
 
 // Global type for hot-reload persistence
 declare global {
@@ -395,7 +395,7 @@ class AudioCallService {
 
       this.isIncoming = false;
       this.events = events;
-      
+
       // Determine if we received a context or appointmentId
       if (typeof appointmentIdOrContext === 'string') {
         // Legacy: appointmentId string
@@ -408,7 +408,7 @@ class AudioCallService {
         this.appointmentId = contextToString(appointmentIdOrContext); // Use context string for backward compatibility checks
         console.log(`🔌 [AudioCallService] Initializing with session context: ${contextToString(appointmentIdOrContext)}`);
       }
-      
+
       this.userId = userId;
       this.doctorName = doctorName || null;
       this.doctorProfilePicture = doctorProfilePicture || null;
@@ -489,7 +489,7 @@ class AudioCallService {
           // Only call start API if this is NOT a direct session (direct sessions are already created)
           // For direct sessions, the sessionCreationService already created the CallSession
           const isDirectSession = appointmentId.startsWith('direct_session_');
-          
+
           if (!isDirectSession) {
             // For scheduled appointments, ensure the session is started
             const startResp = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/start`, {
@@ -504,7 +504,7 @@ class AudioCallService {
                 doctor_id: finalDoctorId
               })
             });
-            
+
             if (startResp && !startResp.ok) {
               const body = await startResp.text().catch(() => '');
               // Treat "already active" as benign (e.g., another flow already started the session)
@@ -608,7 +608,7 @@ class AudioCallService {
           audioTrackSettings: event.streams[0].getAudioTracks()[0]?.getSettings()
         });
         this.remoteStream = event.streams[0];
-        
+
         // CRITICAL: Ensure all audio tracks are enabled for sound to work
         event.streams[0].getAudioTracks().forEach(track => {
           if (!track.enabled) {
@@ -616,7 +616,7 @@ class AudioCallService {
             track.enabled = true;
           }
         });
-        
+
         this.events?.onRemoteStream(event.streams[0]);
       });
 

@@ -414,10 +414,17 @@ async function handleSessionStatusRequest(appointmentId, ws) {
           'Content-Type': 'application/json'
         }
       });
-    } else {
-      // Use the new dedicated call-sessions status endpoint for all non-text sessions
-      // This correctly handles both direct_session_... keys and numeric appointment IDs
+    } else if (appointmentId.startsWith('direct_session_')) {
+      // Direct sessions use the call-sessions status endpoint
       response = await axios.get(`${CONFIG.API_BASE_URL}/api/call-sessions/${appointmentId}/status`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } else {
+      // Regular appointment numeric IDs use the appointment status endpoint (working version)
+      response = await axios.get(`${CONFIG.API_BASE_URL}/api/appointments/${appointmentId}/status`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -470,11 +477,20 @@ async function handleSessionEndRequest(message, ws) {
           'Content-Type': 'application/json'
         }
       });
-    } else {
-      // Use the existing call-sessions end endpoint (passing appointment_id)
-      // instead of the non-existent appointment end endpoint
+    } else if (appointmentId.startsWith('direct_session_')) {
+      // Direct sessions use the call-sessions end endpoint
       response = await axios.post(`${CONFIG.API_BASE_URL}/api/call-sessions/end`, {
         appointment_id: appointmentId,
+        reason: message.reason || 'manual_end'
+      }, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    } else {
+      // Regular appointment numeric IDs use the appointment end endpoint (working version)
+      response = await axios.post(`${CONFIG.API_BASE_URL}/api/appointments/${appointmentId}/end`, {
         reason: message.reason || 'manual_end'
       }, {
         headers: {

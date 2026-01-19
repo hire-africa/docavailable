@@ -95,19 +95,19 @@ class ChatController extends Controller
             $textSession->applyLazyExpiration();
             return 'text_session:' . $sessionId;
         }
-        
+
         // Try call session
         $callSession = \App\Models\CallSession::find($sessionId);
         if ($callSession) {
             return 'call_session:' . $sessionId;
         }
-        
+
         // Fallback: assume text session (most chat operations are text)
         // This should rarely happen if session_id is properly linked
         Log::warning('SessionContextGuard: Could not determine session type, defaulting to text_session', [
             'session_id' => $sessionId,
         ]);
-        
+
         return 'text_session:' . $sessionId;
     }
 
@@ -147,7 +147,7 @@ class ChatController extends Controller
             if ($textSession) {
                 // Apply lazy expiration at read-time
                 $textSession->applyLazyExpiration();
-                
+
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return [
@@ -241,7 +241,7 @@ class ChatController extends Controller
             if ($textSession) {
                 // Apply lazy expiration at read-time
                 $textSession->applyLazyExpiration();
-                
+
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return response()->json([
@@ -472,7 +472,7 @@ class ChatController extends Controller
                 // Only process if this is the doctor's message
                 if ($user->id === $session->doctor_id) {
                     $now = now();
-                    
+
                     // Atomic update 1: Expire session if deadline passed
                     // Only expire if: status = waiting_for_doctor AND doctor_response_deadline <= now()
                     // Never overwrite: active, ended, cancelled
@@ -504,7 +504,7 @@ class ChatController extends Controller
                         ->where('doctor_id', $user->id)
                         ->where(function ($query) use ($now) {
                             $query->whereNull('doctor_response_deadline')
-                                  ->orWhere('doctor_response_deadline', '>', $now);
+                                ->orWhere('doctor_response_deadline', '>', $now);
                         })
                         ->update([
                             'status' => 'active',
@@ -514,7 +514,7 @@ class ChatController extends Controller
                     if ($activatedCount > 0) {
                         // Refresh session to get updated values
                         $session->refresh();
-                        
+
                         Log::info("Session activated by doctor's first message (atomic update)", [
                             'session_id' => $sessionId,
                             'activated_at' => $now,
@@ -640,7 +640,7 @@ class ChatController extends Controller
             if ($textSession) {
                 // Apply lazy expiration at read-time
                 $textSession->applyLazyExpiration();
-                
+
                 // Check if user is part of this text session
                 if ($textSession->patient_id !== $user->id && $textSession->doctor_id !== $user->id) {
                     return response()->json([
