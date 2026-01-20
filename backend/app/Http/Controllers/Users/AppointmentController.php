@@ -582,6 +582,14 @@ class AppointmentController extends Controller
                 Appointment::STATUS_RESCHEDULE_PROPOSED
             ])
             ->pluck('appointment_time')
+            ->map(function ($time) {
+                // Normalize time to HH:MM format (remove seconds if present)
+                if (strpos($time, ':') !== false) {
+                    $parts = explode(':', $time);
+                    return sprintf('%02d:%02d', (int)$parts[0], isset($parts[1]) ? (int)$parts[1] : 0);
+                }
+                return $time;
+            })
             ->unique()
             ->values()
             ->all();
@@ -609,14 +617,31 @@ class AppointmentController extends Controller
                 ], 404);
             }
 
+            // Safely get patient and doctor names
+            $patientName = 'Unknown Patient';
+            if ($appointment->patient) {
+                $patientName = trim(($appointment->patient->first_name ?? '') . ' ' . ($appointment->patient->last_name ?? ''));
+                if (empty($patientName)) {
+                    $patientName = 'Unknown Patient';
+                }
+            }
+
+            $doctorName = 'Unknown Doctor';
+            if ($appointment->doctor) {
+                $doctorName = trim(($appointment->doctor->first_name ?? '') . ' ' . ($appointment->doctor->last_name ?? ''));
+                if (empty($doctorName)) {
+                    $doctorName = 'Unknown Doctor';
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => [
                     'id' => $appointment->id,
                     'patient_id' => $appointment->patient_id,
                     'doctor_id' => $appointment->doctor_id,
-                    'patient_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
-                    'doctor_name' => $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name,
+                    'patient_name' => $patientName,
+                    'doctor_name' => $doctorName,
                     'date' => $appointment->appointment_date,
                     'time' => $appointment->appointment_time,
                     'status' => $appointment->status,
@@ -632,10 +657,17 @@ class AppointmentController extends Controller
                     'completed_at' => $appointment->completed_at,
                     'earnings_awarded' => $appointment->earnings_awarded,
                     'session_id' => $appointment->session_id, // Include session_id in response
-                    'appointment_type' => $appointment->appointment_type // Include appointment_type
+                    'appointment_type' => $appointment->appointment_type, // Include appointment_type
+                    'call_unlocked_at' => $appointment->call_unlocked_at, // Include call_unlocked_at for voice/video appointments
+                    'user_timezone' => $appointment->user_timezone, // Include timezone
                 ]
             ]);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to fetch appointment by ID', [
+                'appointment_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch appointment: ' . $e->getMessage()

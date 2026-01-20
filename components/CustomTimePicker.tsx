@@ -217,18 +217,17 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
            <ScrollView style={styles.timeOptionsContainer} showsVerticalScrollIndicator={false}>
              <View style={styles.timeGrid}>
                {timeOptions.length > 0 ? (
-                 timeOptions.map((time, index) => (
-                   (() => {
-                     const status = getTimeSlotStatus ? getTimeSlotStatus(time) : 'available';
-                     const isBooked = status === 'booked';
-                     return (
-                   <TouchableOpacity
-                     key={index}
-                     style={[
-                       styles.timeOption,
-                       tempTime === time && styles.selectedTimeOption,
+                 timeOptions.map((time, index) => {
+                   const status = getTimeSlotStatus ? getTimeSlotStatus(time) : 'available';
+                   const isBooked = status === 'booked';
+                   return (
+                     <TouchableOpacity
+                       key={index}
+                       style={[
+                         styles.timeOption,
+                         tempTime === time && styles.selectedTimeOption,
                          isBooked && styles.bookedTimeOption,
-                     ]}
+                       ]}
                        onPress={() => {
                          if (isBooked) {
                            setConflictMessage('Time already booked. Please choose another time.');
@@ -239,19 +238,24 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
                            handleTimeSelect(time);
                          }
                        }}
-                   >
-                     <Text
-                       style={[
-                         styles.timeOptionText,
-                         tempTime === time && styles.selectedTimeOptionText,
-                       ]}
+                       disabled={isBooked}
+                       activeOpacity={isBooked ? 1 : 0.7}
                      >
-                       {time}
-                     </Text>
-                   </TouchableOpacity>
-                     );
-                   })()
-                 ))
+                       <Text
+                         style={[
+                           styles.timeOptionText,
+                           tempTime === time && styles.selectedTimeOptionText,
+                           isBooked && styles.bookedTimeOptionText,
+                         ]}
+                       >
+                         {time}
+                       </Text>
+                       {isBooked && (
+                         <Text style={styles.bookedLabel}>Booked</Text>
+                       )}
+                     </TouchableOpacity>
+                   );
+                 })
                ) : (
                  <View style={styles.noTimesContainer}>
                    <Text style={styles.noTimesText}>No available times for this day</Text>
@@ -491,6 +495,16 @@ const styles = StyleSheet.create({
   bookedTimeOption: {
     backgroundColor: '#F5F5F5',
     borderColor: '#E0E0E0',
+    opacity: 0.6,
+  },
+  bookedTimeOptionText: {
+    color: '#999',
+  },
+  bookedLabel: {
+    fontSize: 10,
+    color: '#E53935',
+    fontWeight: '600',
+    marginTop: 2,
   },
 });
 

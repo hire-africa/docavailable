@@ -1,4 +1,4 @@
-import { FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -168,29 +168,45 @@ const MyAppointments = () => {
   const getStatusColor = (status: any) => {
     const statusStr = getStatusString(status);
     switch (statusStr) {
-      case 'pending': return '#FF9500';
+      case 'pending': return '#FFC107';
       case 'confirmed': return '#4CAF50';
-      case 'cancelled': return '#FF3B30';
-      case 'completed': return '#007AFF';
-      case 'reschedule_proposed': return '#FF9500';
+      case 'cancelled': return '#F44336';
+      case 'completed': return '#2196F3';
+      case 'reschedule_proposed': return '#FFC107';
       case 'reschedule_accepted': return '#4CAF50';
-      case 'reschedule_rejected': return '#FF3B30';
-      default: return '#999';
+      case 'reschedule_rejected': return '#F44336';
+      default: return '#9E9E9E';
     }
   };
 
   const getStatusIcon = (status: any) => {
     const statusStr = getStatusString(status);
     switch (statusStr) {
-      case 'pending': return 'clock-o';
-      case 'confirmed': return 'check-circle';
-      case 'cancelled': return 'times-circle';
-      case 'completed': return 'check-square';
-      case 'reschedule_proposed': return 'clock-o';
-      case 'reschedule_accepted': return 'check-circle';
-      case 'reschedule_rejected': return 'times-circle';
-      default: return 'question-circle';
+      case 'pending': return 'time-outline';
+      case 'confirmed': return 'checkmark-circle';
+      case 'cancelled': return 'close-circle';
+      case 'completed': return 'checkmark-done-circle';
+      case 'reschedule_proposed': return 'time-outline';
+      case 'reschedule_accepted': return 'checkmark-circle';
+      case 'reschedule_rejected': return 'close-circle';
+      default: return 'help-circle';
     }
+  };
+
+  const getAppointmentTypeIcon = (type: string) => {
+    const typeStr = (type || '').toLowerCase();
+    if (typeStr === 'text') return 'chatbubbles';
+    if (typeStr === 'voice' || typeStr === 'audio') return 'call';
+    if (typeStr === 'video') return 'videocam';
+    return 'calendar';
+  };
+
+  const getAppointmentTypeColor = (type: string) => {
+    const typeStr = (type || '').toLowerCase();
+    if (typeStr === 'text') return '#4CAF50';
+    if (typeStr === 'voice' || typeStr === 'audio') return '#FFC107';
+    if (typeStr === 'video') return '#2196F3';
+    return '#9E9E9E';
   };
 
   const getStatusLabel = (status: any): string => {
@@ -237,54 +253,78 @@ const MyAppointments = () => {
   const renderAppointment = (appt: any, keyPrefix: string) => {
     const statusStr = getStatusString(appt.status);
     const statusLabel = getStatusLabel(statusStr);
-    const canCancel = canCancelAppointment(appt);
-
-    // Architecture: Session-gated routing
-    // If appointment has session_id, navigate to session; otherwise show details
-    const handleAppointmentPress = () => {
-      // Check if appointment has a session
-      if (appt.session_id !== null && appt.session_id !== undefined) {
-        console.log('✅ [MyAppointments] Navigating to session:', appt.session_id);
-        router.push(`/sessions/${appt.session_id}/chat`);
-      } else {
-        // No session yet, show appointment details
-        setSelectedAppointment(appt);
-      }
-    };
+    const appointmentType = appt.appointment_type || appt.type || '';
 
     return (
-      <TouchableOpacity
+      <View
         key={`${keyPrefix}${appt.id}`}
-        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, marginBottom: 10, paddingVertical: 14, paddingHorizontal: 20, minHeight: 56, shadowColor: 'rgba(0,0,0,0.02)', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 }}
-        onPress={handleAppointmentPress}
-        activeOpacity={0.8}
+        style={styles.appointmentCard}
       >
-        <View style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E0F2E9', alignItems: 'center', justifyContent: 'center', marginRight: 16 }}>
+        {/* Doctor Avatar */}
+        <View style={styles.avatarContainer}>
           <DoctorProfilePicture
             profilePictureUrl={appt.doctor?.profile_picture_url}
             profilePicture={appt.doctor?.profile_picture}
-            size={48}
+            size={56}
             name={appt.doctorName}
           />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#222', marginBottom: 2 }} numberOfLines={1}>{appt.doctorName}</Text>
-          <Text style={{ color: '#7CB18F', fontSize: 14 }} numberOfLines={1}>
-            {formatDateTime(appt)}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <View style={{ backgroundColor: getStatusColor(appt.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-            <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{statusLabel}</Text>
+
+        {/* Main Content */}
+        <View style={styles.appointmentContent}>
+          <View style={styles.appointmentHeader}>
+            <Text style={styles.doctorName} numberOfLines={1}>
+              {appt.doctorName || 'Dr. Unknown'}
+            </Text>
+            {appt.session_id !== null && appt.session_id !== undefined && (
+              <View style={styles.sessionBadge}>
+                <Ionicons name="chatbubbles" size={12} color="#fff" />
+                <Text style={styles.sessionBadgeText}>Active</Text>
+              </View>
+            )}
           </View>
-          {/* Show session indicator if appointment has a session */}
-          {appt.session_id !== null && appt.session_id !== undefined && (
-            <View style={{ marginTop: 4, backgroundColor: '#4CAF50', borderRadius: 6, paddingVertical: 2, paddingHorizontal: 6 }}>
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '500' }}>Session Active</Text>
+
+          {/* Date & Time */}
+          <View style={styles.dateTimeRow}>
+            <View style={styles.dateTimeItem}>
+              <Ionicons name="calendar-outline" size={14} color="#666" />
+              <Text style={styles.dateTimeText}>
+                {formatDate(appt)}
+              </Text>
+            </View>
+            <View style={styles.dateTimeItem}>
+              <Ionicons name="time-outline" size={14} color="#666" />
+              <Text style={styles.dateTimeText}>
+                {formatTime(appt)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Appointment Type */}
+          {appointmentType && (
+            <View style={styles.typeRow}>
+              <View style={[styles.typeIconContainer, { backgroundColor: getAppointmentTypeColor(appointmentType) + '20' }]}>
+                <Ionicons 
+                  name={getAppointmentTypeIcon(appointmentType)} 
+                  size={14} 
+                  color={getAppointmentTypeColor(appointmentType)} 
+                />
+              </View>
+              <Text style={[styles.typeText, { color: getAppointmentTypeColor(appointmentType) }]}>
+                {(appointmentType || 'Consultation').toUpperCase()}
+              </Text>
             </View>
           )}
         </View>
-      </TouchableOpacity>
+
+        {/* Status Badge */}
+        <View style={styles.statusContainer}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(appt.status) }]}>
+            <Ionicons name={getStatusIcon(appt.status)} size={14} color="#fff" />
+            <Text style={styles.statusText}>{statusLabel}</Text>
+          </View>
+        </View>
+      </View>
     );
   };
 
@@ -310,93 +350,127 @@ const MyAppointments = () => {
         />
       }
     >
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <FontAwesome name="arrow-left" size={24} color="#222" />
-          </TouchableOpacity>
-          <Text style={styles.title}>My Appointments</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-        <Text style={styles.subtitle}>Recent appointments with your doctors</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={24} color="#222" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Appointments</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       {appointments.length === 0 ? (
         <View style={styles.emptyState}>
-          <FontAwesome name="calendar-o" size={48} color={Colors.light.icon} />
+          <View style={styles.emptyIconContainer}>
+            <Ionicons name="calendar-outline" size={64} color="#4CAF50" />
+          </View>
           <Text style={styles.emptyStateTitle}>No Appointments</Text>
           <Text style={styles.emptyStateText}>
-            You haven't booked any appointments yet. Book your first appointment to get started.
+            You haven't booked any appointments yet.{'\n'}Book your first appointment to get started.
           </Text>
         </View>
       ) : (
-        <View style={{ backgroundColor: 'transparent', marginBottom: 8, paddingHorizontal: 2 }}>
+        <View style={styles.appointmentsList}>
           {appointments.map((appt) => renderAppointment(appt, 'appt-'))}
         </View>
       )}
 
       {/* Appointment Details Modal */}
       <Modal visible={!!selectedAppointment} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, width: '90%', maxWidth: 420, position: 'relative' }}>
-            <TouchableOpacity onPress={() => setSelectedAppointment(null)} style={{ position: 'absolute', top: 12, right: 12, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6' }}>
-              <Text style={{ color: '#555', fontWeight: 'bold', fontSize: 16 }}>×</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity 
+              onPress={() => setSelectedAppointment(null)} 
+              style={styles.modalCloseButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close" size={24} color="#666" />
             </TouchableOpacity>
             {selectedAppointment && (
               <>
-                <View style={{ alignItems: 'center', marginBottom: 16 }}>
-                  <DoctorProfilePicture
-                    profilePictureUrl={selectedAppointment.doctor?.profile_picture_url}
-                    profilePicture={selectedAppointment.doctor?.profile_picture}
-                    size={72}
-                    name={selectedAppointment.doctorName}
-                  />
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginTop: 10 }} numberOfLines={1}>{selectedAppointment.doctorName}</Text>
-                  <View style={{ marginTop: 8 }}>
-                    <View style={{ backgroundColor: getStatusColor(selectedAppointment.status), borderRadius: 8, paddingVertical: 4, paddingHorizontal: 8 }}>
-                      <Text style={{ color: '#fff', fontWeight: '600' }}>{getStatusLabel(selectedAppointment.status)}</Text>
-                    </View>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalAvatarContainer}>
+                    <DoctorProfilePicture
+                      profilePictureUrl={selectedAppointment.doctor?.profile_picture_url}
+                      profilePicture={selectedAppointment.doctor?.profile_picture}
+                      size={80}
+                      name={selectedAppointment.doctorName}
+                    />
+                  </View>
+                  <Text style={styles.modalDoctorName} numberOfLines={1}>
+                    {selectedAppointment.doctorName || 'Dr. Unknown'}
+                  </Text>
+                  <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(selectedAppointment.status) }]}>
+                    <Ionicons name={getStatusIcon(selectedAppointment.status)} size={16} color="#fff" />
+                    <Text style={styles.modalStatusText}>
+                      {getStatusLabel(selectedAppointment.status)}
+                    </Text>
                   </View>
                 </View>
-                <View style={{ backgroundColor: '#F8F9FA', borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 8 }}>Appointment Details</Text>
-                  <Text style={{ color: '#4CAF50', marginBottom: 4 }}>
-                    {formatDateTime(selectedAppointment)}
-                  </Text>
+
+                <View style={styles.modalDetailsCard}>
+                  <View style={styles.modalSection}>
+                    <View style={styles.modalSectionHeader}>
+                      <Ionicons name="calendar" size={20} color="#4CAF50" />
+                      <Text style={styles.modalSectionTitle}>Date & Time</Text>
+                    </View>
+                    <Text style={styles.modalSectionValue}>
+                      {formatDateTime(selectedAppointment)}
+                    </Text>
+                  </View>
+
                   {selectedAppointment.appointment_type && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Type</Text>
-                      <Text style={{ color: '#666' }}>{selectedAppointment.appointment_type}</Text>
+                    <View style={styles.modalSection}>
+                      <View style={styles.modalSectionHeader}>
+                        <Ionicons 
+                          name={getAppointmentTypeIcon(selectedAppointment.appointment_type)} 
+                          size={20} 
+                          color={getAppointmentTypeColor(selectedAppointment.appointment_type)} 
+                        />
+                        <Text style={styles.modalSectionTitle}>Type</Text>
+                      </View>
+                      <View style={[styles.modalTypeBadge, { backgroundColor: getAppointmentTypeColor(selectedAppointment.appointment_type) + '20' }]}>
+                        <Text style={[styles.modalTypeText, { color: getAppointmentTypeColor(selectedAppointment.appointment_type) }]}>
+                          {(selectedAppointment.appointment_type || 'Consultation').toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
                   )}
-                  <View style={{ marginTop: 8 }}>
-                    <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                    <Text style={{ color: '#666' }}>
-                      {selectedAppointment.reason && selectedAppointment.reason.trim() !== ''
-                        ? selectedAppointment.reason
-                        : 'No reason provided'}
-                    </Text>
+
+                  <View style={styles.modalSection}>
+                    <View style={styles.modalSectionHeader}>
+                      <Ionicons name="document-text" size={20} color="#9C27B0" />
+                      <Text style={styles.modalSectionTitle}>Reason</Text>
+                    </View>
+                    <View style={styles.modalReasonCard}>
+                      <Text style={styles.modalReasonText}>
+                        {selectedAppointment.reason && selectedAppointment.reason.trim() !== ''
+                          ? selectedAppointment.reason
+                          : 'No reason provided'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
                 {/* Cancel Button - Only show for cancellable appointments */}
                 {canCancelAppointment(selectedAppointment) && (
                   <TouchableOpacity
-                    style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginBottom: 12 }}
+                    style={styles.modalCancelButton}
                     onPress={() => {
                       console.log('🔍 Cancel button pressed for appointment:', selectedAppointment?.id);
                       handleCancelAppointment(selectedAppointment);
                     }}
+                    activeOpacity={0.8}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+                    <Ionicons name="close-circle" size={20} color="#fff" />
+                    <Text style={styles.modalCancelButtonText}>Cancel Appointment</Text>
                   </TouchableOpacity>
                 )}
 
-                {console.log('🔍 Rendering cancel button section, canCancel:', canCancelAppointment(selectedAppointment), 'selectedAppointment:', selectedAppointment?.id)}
-
                 {/* Cancellation Note */}
-                <View style={{ backgroundColor: '#FFF8E1', borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#FFE082' }}>
-                  <Text style={{ color: '#8D6E63', fontSize: 12 }}>
+                <View style={styles.modalNoteCard}>
+                  <Ionicons name="information-circle" size={16} color="#FFC107" />
+                  <Text style={styles.modalNoteText}>
                     Note: Cancelling appointments at short notice may affect your account standing. Please provide a valid reason for cancellation.
                   </Text>
                 </View>
@@ -408,16 +482,29 @@ const MyAppointments = () => {
 
       {/* Cancel Confirmation Modal */}
       <Modal visible={showCancelConfirmModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Confirm Cancellation</Text>
-            <Text style={{ marginBottom: 8 }}>Are you sure you want to cancel this appointment?</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-              <TouchableOpacity onPress={() => setShowCancelConfirmModal(false)} style={{ marginRight: 16 }}>
-                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <View style={styles.confirmModalIcon}>
+              <Ionicons name="alert-circle" size={48} color="#FFC107" />
+            </View>
+            <Text style={styles.confirmModalTitle}>Confirm Cancellation</Text>
+            <Text style={styles.confirmModalText}>
+              Are you sure you want to cancel this appointment?
+            </Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity 
+                onPress={() => setShowCancelConfirmModal(false)} 
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleCancelConfirm} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Confirm</Text>
+              <TouchableOpacity 
+                onPress={handleCancelConfirm} 
+                style={[styles.modalButton, styles.modalButtonDanger]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonDangerText}>Confirm</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -426,23 +513,39 @@ const MyAppointments = () => {
 
       {/* Cancel Reason Input Modal */}
       <Modal visible={showCancelModal} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: 320 }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 12 }}>Cancel Appointment</Text>
-            <Text style={{ marginBottom: 8 }}>Please provide a reason for cancellation:</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.reasonModalContent}>
+            <View style={styles.reasonModalHeader}>
+              <Ionicons name="document-text" size={32} color="#F44336" />
+              <Text style={styles.reasonModalTitle}>Cancel Appointment</Text>
+            </View>
+            <Text style={styles.reasonModalText}>
+              Please provide a reason for cancellation:
+            </Text>
             <TextInput
               value={cancelReason}
               onChangeText={setCancelReason}
-              placeholder="Reason..."
-              style={{ borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8, marginBottom: 16 }}
+              placeholder="Enter reason for cancellation..."
+              placeholderTextColor="#999"
+              style={styles.reasonInput}
               multiline
+              numberOfLines={4}
             />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-              <TouchableOpacity onPress={() => setShowCancelModal(false)} style={{ marginRight: 16 }}>
-                <Text style={{ color: '#888', fontWeight: 'bold' }}>Back</Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity 
+                onPress={() => setShowCancelModal(false)} 
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={confirmCancelAppointment} style={{ backgroundColor: '#FF3B30', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 20 }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Cancel Appointment</Text>
+              <TouchableOpacity 
+                onPress={confirmCancelAppointment} 
+                style={[styles.modalButton, styles.modalButtonDanger]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.modalButtonDangerText}>Cancel Appointment</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -458,38 +561,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   header: {
-    padding: 20,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    marginTop: 70, // Added margin to move title down
-  },
-  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
-  headerSpacer: {
-    width: 48, // Adjust as needed to balance back button and title
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F5F5F5',
   },
-  title: {
-    fontSize: 28,
+  headerTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#222',
-    marginBottom: 0,
-    marginLeft: 30,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#7CB18F',
-    textAlign: 'center',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
+    paddingTop: 100,
   },
   loadingText: {
     marginTop: 16,
@@ -502,14 +602,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    marginTop: 60,
+    paddingTop: 100,
+  },
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
   },
   emptyStateTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#222',
-    marginTop: 16,
-    marginBottom: 8,
+    marginBottom: 12,
     textAlign: 'center',
   },
   emptyStateText: {
@@ -518,10 +626,371 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
+  appointmentsList: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  appointmentCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    minHeight: 100,
+  },
+  avatarContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    backgroundColor: '#E8F5E9',
+    marginRight: 16,
+  },
+  appointmentContent: {
+    flex: 1,
+  },
+  appointmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  doctorName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#222',
+    flex: 1,
+  },
+  sessionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginLeft: 8,
+  },
+  sessionBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    flexWrap: 'wrap',
+  },
+  dateTimeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16,
+    marginBottom: 4,
+  },
+  dateTimeText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 6,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  typeIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  statusContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  statusText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+    marginTop: 8,
+  },
+  modalAvatarContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    overflow: 'hidden',
+    backgroundColor: '#E8F5E9',
+    marginBottom: 12,
+  },
+  modalDoctorName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 12,
+  },
+  modalStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+  },
+  modalStatusText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  modalDetailsCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  modalSection: {
+    marginBottom: 20,
+  },
+  modalSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalSectionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginLeft: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalSectionValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#222',
+    marginLeft: 28,
+  },
+  modalTypeBadge: {
+    alignSelf: 'flex-start',
+    marginLeft: 28,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  modalTypeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  modalReasonCard: {
+    marginLeft: 28,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#9C27B0',
+  },
+  modalReasonText: {
+    fontSize: 15,
+    color: '#222',
+    lineHeight: 22,
+  },
+  modalCancelButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F44336',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  modalCancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalNoteCard: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF9E6',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    alignItems: 'flex-start',
+  },
+  modalNoteText: {
+    color: '#8D6E63',
+    fontSize: 12,
+    lineHeight: 18,
+    marginLeft: 8,
+    flex: 1,
+  },
+  // Confirm Modal
+  confirmModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  confirmModalIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#FFF9E6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  confirmModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  confirmModalText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  confirmModalButtons: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 6,
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#F5F5F5',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+  },
+  modalButtonSecondaryText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalButtonDanger: {
+    backgroundColor: '#F44336',
+    flexDirection: 'row',
+  },
+  modalButtonDangerText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Reason Modal
+  reasonModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  reasonModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  reasonModalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#222',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  reasonModalText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+    lineHeight: 24,
+  },
+  reasonInput: {
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    fontSize: 16,
+    color: '#222',
+    textAlignVertical: 'top',
+    minHeight: 100,
+    backgroundColor: '#F8F9FA',
   },
 });
 

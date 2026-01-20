@@ -752,11 +752,11 @@ export default function PatientDashboard() {
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (activeTextSessions.length > 0) {
+    const activeSession = activeTextSessions.find(session => session.status === 'active');
+    if (activeSession) {
       // Calculate initial elapsed time based on start time if available
-      const session = activeTextSessions[0];
-      if (session.started_at) {
-        const startTime = new Date(session.started_at).getTime();
+      if (activeSession.started_at) {
+        const startTime = new Date(activeSession.started_at).getTime();
         const now = new Date().getTime();
         const elapsed = Math.floor((now - startTime) / 1000);
         setSessionElapsedTime(elapsed > 0 ? elapsed : 0);
@@ -1922,12 +1922,14 @@ export default function PatientDashboard() {
           }
         >
           {/* Active Session Banner */}
-          {activeTextSessions.length > 0 && (
+          {activeTextSessions.filter(session => session.status === 'active').length > 0 && (
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={() => {
-                const session = activeTextSessions[0];
-                router.push(`/sessions/${session.id}/chat`);
+                const activeSession = activeTextSessions.find(session => session.status === 'active');
+                if (activeSession) {
+                  router.push(`/sessions/${activeSession.id}/chat`);
+                }
               }}
               style={{
                 backgroundColor: '#4CAF50',
@@ -1962,20 +1964,9 @@ export default function PatientDashboard() {
                     Session Active
                   </Text>
                   <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13 }}>
-                    {activeTextSessions[0]?.doctor?.display_name || 'Doctor'} • {formatSessionTime(sessionElapsedTime)}
+                    {activeTextSessions.find(session => session.status === 'active')?.doctor?.display_name || 'Doctor'} • {formatSessionTime(sessionElapsedTime)}
                   </Text>
                 </View>
-              </View>
-
-              <View style={{
-                backgroundColor: '#fff',
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                borderRadius: 16,
-              }}>
-                <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 12 }}>
-                  Open Chat
-                </Text>
               </View>
             </TouchableOpacity>
           )}

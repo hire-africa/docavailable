@@ -54,17 +54,17 @@ class NotificationApiService {
 
   // Mark notification as read
   async markAsRead(notificationId: number): Promise<ApiResponse<void>> {
-    return apiService.patch(`/notifications/${notificationId}/read`);
+    return apiService.post('/notifications/mark-read', { notification_id: notificationId.toString() });
   }
 
   // Mark multiple notifications as read
   async markMultipleAsRead(notificationIds: number[]): Promise<ApiResponse<void>> {
-    return apiService.patch('/notifications/mark-read', { notification_ids: notificationIds });
+    return apiService.post('/notifications/mark-read', { notification_ids: notificationIds.map(id => id.toString()) });
   }
 
   // Mark all notifications as read
   async markAllAsRead(): Promise<ApiResponse<void>> {
-    return apiService.patch('/notifications/mark-all-read');
+    return apiService.post('/notifications/mark-all-read', {});
   }
 
   // Delete notification

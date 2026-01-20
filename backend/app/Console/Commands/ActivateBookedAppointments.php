@@ -7,6 +7,7 @@ use App\Models\Appointment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class ActivateBookedAppointments extends Command
 {
@@ -30,8 +31,10 @@ class ActivateBookedAppointments extends Command
     public function handle(): int
     {
         // ⚠️ GUARDRAIL: Check feature flag to disable legacy triggers
-        if (\App\Services\FeatureFlags::disableLegacyAppointmentTriggers()) {
+        $featureFlagDisabled = \App\Services\FeatureFlags::disableLegacyAppointmentTriggers();
+        if ($featureFlagDisabled) {
             $this->info('Legacy appointment triggers disabled via feature flag. Skipping...');
+            Log::warning('🚫 [ActivateBookedAppointments] BLOCKED by feature flag DISABLE_LEGACY_APPOINTMENT_TRIGGERS');
             return Command::SUCCESS;
         }
 
@@ -49,7 +52,9 @@ class ActivateBookedAppointments extends Command
             ->whereNull('session_id') // Only process appointments without session_id
             ->get();
 
-        $appointmentsToActivate = $allConfirmed->filter(function ($appointment) {
+        Log::info("📋 [ActivateBookedAppointments] Found {$allConfirmed->count()} confirmed appointment(s) without session_id");
+
+        $appointmentsToActivate = $allConfirmed->filter(function ($appointment) use ($now) {
             $reached = \App\Services\TimezoneService::isAppointmentTimeReached(
                 $appointment->appointment_date,
                 $appointment->appointment_time,
@@ -60,8 +65,31 @@ class ActivateBookedAppointments extends Command
                 Log::info("🎯 [ActivateBookedAppointments] Appointment {$appointment->id} is ready for activation", [
                     'date' => $appointment->appointment_date,
                     'time' => $appointment->appointment_time,
-                    'tz' => $appointment->user_timezone
+                    'tz' => $appointment->user_timezone,
+                    'type' => $appointment->appointment_type
                 ]);
+            } else {
+                // Log why appointment is not ready (for debugging)
+                try {
+                    $appointmentDateTime = \App\Services\TimezoneService::convertToUTC(
+                        $appointment->appointment_date,
+                        $appointment->appointment_time,
+                        $appointment->user_timezone ?? 'Africa/Blantyre'
+                    );
+                    if ($appointmentDateTime) {
+                        $diffMinutes = $now->diffInMinutes($appointmentDateTime, false);
+                        Log::debug("⏳ [ActivateBookedAppointments] Appointment {$appointment->id} not ready yet", [
+                            'appointment_utc' => $appointmentDateTime->toDateTimeString(),
+                            'current_utc' => $now->toDateTimeString(),
+                            'minutes_until' => $diffMinutes > 0 ? $diffMinutes : -$diffMinutes,
+                            'status' => $diffMinutes > 0 ? 'future' : 'past'
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("⚠️ [ActivateBookedAppointments] Could not calculate time for appointment {$appointment->id}", [
+                        'error' => $e->getMessage()
+                    ]);
+                }
             }
 
             return $reached;
@@ -116,14 +144,54 @@ class ActivateBookedAppointments extends Command
             // For audio/video appointments, create appointment chat room when time arrives
             // This allows users to see the chat interface with call button
             if (in_array($appointment->appointment_type, ['audio', 'voice', 'video'])) {
+                // CRITICAL: Chat room must be created - throw if it fails
                 $this->activateCallAppointmentChat($appointment);
             }
             
             // Calls must not be auto-started. Only unlock them when eligible.
-            if (!$appointment->call_unlocked_at) {
-                $appointment->update([
-                    'call_unlocked_at' => now(),
-                ]);
+            // Set call_unlocked_at to the appointment time (or now if appointment time is in the past)
+            // Check if column exists before updating (migration may not have run)
+            if (\Illuminate\Support\Facades\Schema::hasColumn('appointments', 'call_unlocked_at')) {
+                if (!$appointment->call_unlocked_at) {
+                    // Get appointment UTC time
+                    $appointmentUTC = null;
+                    if ($appointment->appointment_datetime_utc) {
+                        $appointmentUTC = \Carbon\Carbon::parse($appointment->appointment_datetime_utc);
+                    } else {
+                        // Fallback: calculate from date/time/timezone
+                        $appointmentUTC = \App\Services\TimezoneService::convertToUTC(
+                            $appointment->appointment_date,
+                            $appointment->appointment_time,
+                            $appointment->user_timezone ?? 'Africa/Blantyre'
+                        );
+                    }
+                    
+                    // Set to appointment time (or 5 minutes before for buffer), but not in the future
+                    // This ensures call_unlocked_at reflects when the appointment should be unlocked
+                    if ($appointmentUTC) {
+                        // Unlock 5 minutes before appointment time (buffer)
+                        $unlockTime = $appointmentUTC->copy()->subMinutes(5);
+                        // But don't set it in the future - use now() if unlock time hasn't arrived yet
+                        if ($unlockTime->gt(now())) {
+                            $unlockTime = now();
+                        }
+                    } else {
+                        // Fallback: use current time if we can't calculate appointment time
+                        $unlockTime = now();
+                    }
+                    
+                    $appointment->update([
+                        'call_unlocked_at' => $unlockTime,
+                    ]);
+                    
+                    Log::info("Set call_unlocked_at for appointment", [
+                        'appointment_id' => $appointment->id,
+                        'call_unlocked_at' => $unlockTime->toDateTimeString(),
+                        'appointment_utc' => $appointmentUTC ? $appointmentUTC->toDateTimeString() : 'null'
+                    ]);
+                }
+            } else {
+                Log::warning("call_unlocked_at column does not exist in appointments table. Migration may need to be run.");
             }
         }
 
@@ -265,59 +333,129 @@ class ActivateBookedAppointments extends Command
      */
     private function activateCallAppointmentChat(Appointment $appointment): void
     {
-        try {
-            \Illuminate\Support\Facades\DB::transaction(function () use ($appointment) {
-                // Check if chat room already exists for this appointment
-                $chatRoomName = "appointment_{$appointment->id}";
-                $existingRoom = \Illuminate\Support\Facades\DB::table('chat_rooms')
-                    ->where('name', $chatRoomName)
-                    ->where('type', 'appointment_chat')
-                    ->first();
+        // CRITICAL: Chat room creation is essential - retry if it fails
+        $maxRetries = 3;
+        $attempt = 0;
+        $lastError = null;
 
-                if ($existingRoom) {
-                    $this->info("   Appointment chat room already exists for appointment {$appointment->id}");
-                    return;
+        while ($attempt < $maxRetries) {
+            $attempt++;
+            try {
+                \Illuminate\Support\Facades\DB::transaction(function () use ($appointment) {
+                    // Check if chat room already exists for this appointment
+                    $chatRoomName = "appointment_{$appointment->id}";
+                    $existingRoom = \Illuminate\Support\Facades\DB::table('chat_rooms')
+                        ->where('name', $chatRoomName)
+                        ->where('type', 'private') // Use 'private' type (appointment_chat is not in enum)
+                        ->first();
+
+                    if ($existingRoom) {
+                        $this->info("   Appointment chat room already exists for appointment {$appointment->id}");
+                        Log::info("Appointment chat room already exists", [
+                            'appointment_id' => $appointment->id,
+                            'chat_room_id' => $existingRoom->id
+                        ]);
+                        return;
+                    }
+
+                    // Validate required fields
+                    if (!$appointment->patient_id || !$appointment->doctor_id) {
+                        throw new \Exception("Missing patient_id or doctor_id for appointment {$appointment->id}");
+                    }
+
+                    // Create appointment chat room (use 'private' type since appointment_chat is not in enum)
+                    $roomId = \Illuminate\Support\Facades\DB::table('chat_rooms')->insertGetId([
+                        'name' => $chatRoomName,
+                        'type' => 'private', // Changed from 'appointment_chat' to 'private'
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+
+                    $this->info("   Created appointment chat room {$roomId} for appointment {$appointment->id}");
+                    Log::info("Created appointment chat room", [
+                        'appointment_id' => $appointment->id,
+                        'chat_room_id' => $roomId,
+                        'chat_room_name' => $chatRoomName
+                    ]);
+
+                    // Add participants (patient and doctor) - insert separately to catch individual errors
+                    $participants = [
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $appointment->patient_id,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ],
+                        [
+                            'chat_room_id' => $roomId,
+                            'user_id' => $appointment->doctor_id,
+                            'role' => 'member',
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]
+                    ];
+
+                    $participantsAdded = 0;
+                    foreach ($participants as $participant) {
+                        try {
+                            \Illuminate\Support\Facades\DB::table('chat_room_participants')->insertOrIgnore($participant);
+                            $participantsAdded++;
+                            Log::debug("Added participant to appointment chat room", [
+                                'appointment_id' => $appointment->id,
+                                'chat_room_id' => $roomId,
+                                'user_id' => $participant['user_id']
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::warning("Failed to add participant to appointment chat room", [
+                                'appointment_id' => $appointment->id,
+                                'chat_room_id' => $roomId,
+                                'user_id' => $participant['user_id'],
+                                'error' => $e->getMessage()
+                            ]);
+                            // Continue with other participant
+                        }
+                    }
+
+                    if ($participantsAdded === 0) {
+                        throw new \Exception("Failed to add any participants to chat room {$roomId}");
+                    }
+
+                    $this->info("   Added {$participantsAdded} participant(s) to appointment chat room {$roomId}");
+                });
+
+                // Success - break out of retry loop
+                return;
+
+            } catch (\Exception $e) {
+                $lastError = $e;
+                Log::warning("Attempt {$attempt}/{$maxRetries} failed to activate appointment chat", [
+                    'appointment_id' => $appointment->id,
+                    'appointment_type' => $appointment->appointment_type,
+                    'patient_id' => $appointment->patient_id,
+                    'doctor_id' => $appointment->doctor_id,
+                    'error' => $e->getMessage(),
+                    'attempt' => $attempt
+                ]);
+
+                if ($attempt < $maxRetries) {
+                    // Wait a bit before retrying (exponential backoff)
+                    sleep(min($attempt, 2));
+                    continue;
                 }
-
-                // Create appointment chat room
-                $roomId = \Illuminate\Support\Facades\DB::table('chat_rooms')->insertGetId([
-                    'name' => $chatRoomName,
-                    'type' => 'appointment_chat',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                $this->info("   Created appointment chat room {$roomId} for appointment {$appointment->id}");
-
-                // Add participants (patient and doctor)
-                \Illuminate\Support\Facades\DB::table('chat_room_participants')->insertOrIgnore([
-                    [
-                        'chat_room_id' => $roomId,
-                        'user_id' => $appointment->patient_id,
-                        'role' => 'member',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ],
-                    [
-                        'chat_room_id' => $roomId,
-                        'user_id' => $appointment->doctor_id,
-                        'role' => 'member',
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]
-                ]);
-
-                $this->info("   Added participants to appointment chat room {$roomId}");
-            });
-
-        } catch (\Exception $e) {
-            Log::error("Failed to activate appointment chat for call appointment", [
-                'appointment_id' => $appointment->id,
-                'error' => $e->getMessage()
-            ]);
-            // Don't throw - allow appointment to continue activation even if chat creation fails
-            $this->warn("   ⚠️ Failed to create appointment chat room: {$e->getMessage()}");
+            }
         }
+
+        // All retries failed - log error but don't throw (allow appointment activation to continue)
+        Log::error("Failed to activate appointment chat for call appointment after {$maxRetries} attempts", [
+            'appointment_id' => $appointment->id,
+            'appointment_type' => $appointment->appointment_type,
+            'patient_id' => $appointment->patient_id,
+            'doctor_id' => $appointment->doctor_id,
+            'error' => $lastError ? $lastError->getMessage() : 'Unknown error',
+            'trace' => $lastError ? $lastError->getTraceAsString() : null
+        ]);
+        $this->warn("   ⚠️ Failed to create appointment chat room after {$maxRetries} attempts: " . ($lastError ? $lastError->getMessage() : 'Unknown error'));
     }
 
     /**

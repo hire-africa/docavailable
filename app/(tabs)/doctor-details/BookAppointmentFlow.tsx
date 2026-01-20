@@ -161,8 +161,14 @@ export default function BookAppointmentFlow() {
         const res = await apiService.get<{ booked_times: string[] }>(`/doctors/${doctorId}/booked-slots`, { date: dateStr });
 
         if (res.success && res.data && Array.isArray((res.data as any).booked_times)) {
-          setBookedTimes((res.data as any).booked_times);
+          const times = (res.data as any).booked_times.map((time: string) => {
+            // Ensure times are in HH:MM format (remove seconds if present)
+            return time.split(':').slice(0, 2).join(':');
+          });
+          console.log('✅ [BookAppointmentFlow] Fetched booked times:', times);
+          setBookedTimes(times);
         } else {
+          console.log('⚠️ [BookAppointmentFlow] No booked times in response');
           setBookedTimes([]);
         }
       } catch (e) {
@@ -282,7 +288,13 @@ export default function BookAppointmentFlow() {
   const isTimeSlotAvailable = (timeStr: string) => {
     const time24 = to24HourFormat(timeStr);
     if (!time24) return false;
-    return !bookedTimes.includes(time24);
+    // Ensure time24 is in HH:MM format (no seconds)
+    const time24Formatted = time24.split(':').slice(0, 2).join(':');
+    const isBooked = bookedTimes.includes(time24Formatted);
+    if (isBooked) {
+      console.log('🔴 [BookAppointmentFlow] Time slot is booked:', timeStr, '->', time24Formatted, 'bookedTimes:', bookedTimes);
+    }
+    return !isBooked;
   };
 
   // Helper to get time slot status
