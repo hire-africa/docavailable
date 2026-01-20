@@ -235,7 +235,7 @@ class TextSessionController extends Controller
                     'sessions_used' => 0,
                     'sessions_remaining_before_start' => $sessionsRemaining,
                     'reason' => $reason,
-                    'doctor_response_deadline' => now()->addSeconds(config('app.text_session_response_window')), // Configurable response window
+                    'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                 ]);
 
                 // Create chat room
@@ -1508,7 +1508,7 @@ class TextSessionController extends Controller
                 'status' => TextSession::STATUS_WAITING_FOR_DOCTOR, // Use waiting_for_doctor (matches DB enum)
                 'reason' => $reason ?: $appointment->reason,
                 'sessions_remaining_before_start' => $subscription->text_sessions_remaining,
-                'doctor_response_deadline' => now()->addSeconds(config('app.text_session_response_window')), // Configurable response window
+                'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                 'started_at' => now(),
                 'last_activity_at' => now(),
                 'created_at' => now(),

@@ -1,108 +1,104 @@
-import { FontAwesome } from '@expo/vector-icons';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 
 const AppointmentDetails = () => {
-  const router = router;
+  const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { user } = useAuth();
   const [appointment, setAppointment] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [incomingCallId, setIncomingCallId] = useState<string | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
     const fetchAppointment = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        // Try to fetch the appointment from Firestore (mock logic: get all and find by id)
-        // In a real app, you should have a getAppointmentById method
-        const userId = null; // TODO: get current user id from context if needed
-        let appt = null;
-        if (userId) {
-          const all = await apiService.get(`/appointments/user/${userId}`);
-          appt = all.data.find((a: any) => a.id === id);
+        console.log(`🔍 [AppointmentDetails] Fetching appointment ${id} for user ${user.id}`);
+        const response = await apiService.get(`/appointments/user/${user.id}`);
+
+        if (response.success && response.data) {
+          const appt = response.data.find((a: any) => String(a.id) === String(id));
+          if (appt) {
+            setAppointment(appt);
+          } else {
+            setError('Appointment not found.');
+          }
+        } else {
+          setError('Failed to load appointments.');
         }
-        // Fallback: mock data
-        if (!appt) {
-          appt = {
-            id,
-            doctorName: 'Unknown',
-            date: 'N/A',
-            time: 'N/A',
-            status: 'N/A',
-            reason: 'N/A',
-          };
-        }
-        setAppointment(appt);
       } catch (e) {
-        setError('Failed to load appointment.');
+        console.error('❌ [AppointmentDetails] Error fetching appointment:', e);
+        setError('Failed to load appointment details.');
       } finally {
         setLoading(false);
       }
     };
     fetchAppointment();
-  }, [id]);
+  }, [id, user?.id]);
 
-  // Example: Call this when you receive a push notification with a callId
-  const handleIncomingCallNotification = (callId: string) => {
-    setIncomingCallId(callId);
-    setModalVisible(true);
-  };
-
-  // Accept handler
-  const handleAccept = (callId: string, callData: any) => {
-    setModalVisible(false);
-    // Call your answerWebRTCCall logic here, e.g.:
-    // answerWebRTCCall(doctorId, callId);
-  };
-
-  // Reject handler
-  const handleReject = async (callId: string) => {
-    setModalVisible(false);
-    // Optionally update Firestore call status to 'rejected'
-    try {
-      await apiService.post(`/calls/${callId}/reject`);
-    } catch (e) {
-      // Handle error (optional)
-    }
-  };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <FontAwesome name="arrow-left" size={20} color="#4CAF50" />
-        <Text style={styles.backText}>Back</Text>
+        <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
       <Text style={styles.title}>Appointment Details</Text>
       {loading ? (
         <ActivityIndicator size="large" color="#4CAF50" style={{ marginTop: 32 }} />
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
-      ) : (
+        <View style={{ marginTop: 32, alignItems: 'center' }}>
+          <Text style={styles.error}>{error}</Text>
+          <TouchableOpacity
+            style={{ marginTop: 20, padding: 12, backgroundColor: '#4CAF50', borderRadius: 8 }}
+            onPress={() => router.back()}
+          >
+            <Text style={{ color: 'white', fontWeight: 'bold' }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      ) : appointment ? (
         <View style={styles.detailsCard}>
           <Text style={styles.label}>Doctor:</Text>
-          <Text style={styles.value}>{appointment.doctorName}</Text>
+          <Text style={styles.value}>{appointment.doctorName || appointment.doctor_name || 'Dr. Unknown'}</Text>
+
+          <Text style={styles.label}>Type:</Text>
+          <Text style={[styles.value, { textTransform: 'capitalize' }]}>
+            {appointment.appointment_type || appointment.type || 'Consultation'}
+          </Text>
+
           <Text style={styles.label}>Date:</Text>
-          <Text style={styles.value}>{appointment.date}</Text>
+          <Text style={styles.value}>{appointment.appointment_date || appointment.date || 'N/A'}</Text>
+
           <Text style={styles.label}>Time:</Text>
-          <Text style={styles.value}>{appointment.time}</Text>
+          <Text style={styles.value}>{appointment.appointment_time || appointment.time || 'N/A'}</Text>
+
           <Text style={styles.label}>Status:</Text>
-          <Text style={styles.value}>{appointment.status}</Text>
+          <View style={{ alignSelf: 'flex-start', backgroundColor: '#E8F5E8', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, marginTop: 4 }}>
+            <Text style={[styles.value, { color: '#2E7D32', fontSize: 14, fontWeight: 'bold', marginTop: 0 }]}>
+              {String(appointment.status).toUpperCase()}
+            </Text>
+          </View>
+
           <Text style={styles.label}>Reason:</Text>
-          <Text style={styles.value}>{appointment.reason}</Text>
+          <Text style={styles.value}>{appointment.reason || 'No reason provided'}</Text>
         </View>
-      )}
-    </View>
+      ) : null}
+    </ScrollView>
   );
 };
 

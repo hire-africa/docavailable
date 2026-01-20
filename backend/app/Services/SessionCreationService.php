@@ -103,7 +103,7 @@ class SessionCreationService
                     'sessions_used' => 0,
                     'sessions_remaining_before_start' => $sessionsRemaining,
                     'reason' => $reason,
-                    'doctor_response_deadline' => now()->addSeconds($windowSeconds),
+                    'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                 ];
 
                 // Add appointment_id if provided (for appointment-based sessions)

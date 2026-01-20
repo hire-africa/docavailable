@@ -167,7 +167,7 @@ class ActivateBookedAppointments extends Command
                         $session->update([
                             'status' => 'waiting_for_doctor',
                             'started_at' => now(),
-                            'doctor_response_deadline' => now()->addSeconds($windowSeconds),
+                            'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                             'sessions_used' => 0 // Reverted to 0: billing is deferred
                         ]);
                     }
@@ -187,7 +187,7 @@ class ActivateBookedAppointments extends Command
                         'doctor_id' => $appointment->doctor_id,
                         'status' => 'waiting_for_doctor', // Initial status
                         'sessions_remaining_before_start' => $subscription ? $subscription->text_sessions_remaining : 0,
-                        'doctor_response_deadline' => now()->addSeconds($windowSeconds),
+                        'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
                         'started_at' => now(),
                         'last_activity_at' => now(),
                         'created_at' => now(),

@@ -581,10 +581,34 @@ class ChatController extends Controller
                 }
 
                 // FINAL BACKEND RULES: Handle waiting_for_doctor status (or pending) with atomic conditional update
+                $now = now();
+
+                // Handle patient's first message: Set doctor_response_deadline when patient sends first message
+                if ($user->id === $session->patient_id && 
+                    $session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && 
+                    !$session->doctor_response_deadline) {
+                    
+                    // Set deadline to 5 minutes from now when patient sends first message
+                    $deadlineSet = \App\Models\TextSession::where('id', $sessionId)
+                        ->where('status', \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR)
+                        ->where('patient_id', $user->id)
+                        ->whereNull('doctor_response_deadline')
+                        ->update([
+                            'doctor_response_deadline' => $now->copy()->addSeconds(config('app.text_session_response_window')),
+                        ]);
+
+                    if ($deadlineSet > 0) {
+                        $session->refresh();
+                        Log::info("Doctor response deadline set by patient's first message", [
+                            'session_id' => $sessionId,
+                            'deadline' => $session->doctor_response_deadline,
+                            'response_window_seconds' => config('app.text_session_response_window')
+                        ]);
+                    }
+                }
+
                 // Only process if this is the doctor's message
                 if ($user->id === $session->doctor_id) {
-                    $now = now();
-
                     // Atomic update 1: Expire session if deadline passed
                     // Only expire if: status = waiting_for_doctor AND doctor_response_deadline <= now()
                     // Never overwrite: active, ended, cancelled

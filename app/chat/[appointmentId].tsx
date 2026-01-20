@@ -719,11 +719,22 @@ export default function ChatPage() {
 
   // Determine if text input should be enabled (only for text sessions and text appointments)
   const isTextInputEnabled = () => {
+    const isCallAppointmentType =
+      appointmentType === 'audio' ||
+      appointmentType === 'voice' ||
+      appointmentType === 'video';
+
+    // If this is clearly a call appointment (by type or unlock flag), keep text input disabled.
+    // This matches the intent that scheduled call appointments use the call button, not text.
+    if (!isTextSession && (isCallAppointmentType || (chatInfo as any)?.call_unlocked_at)) {
+      return false;
+    }
+
     // Text input only enabled for text sessions and text appointments
     if (isTextSession) return true;
     if (appointmentType === 'text') return true;
-    // If appointment type is unknown/null, allow text input as fallback
-    if (!appointmentType) return true;
+    // If appointment type is unknown/null AND there is no call unlock, allow text input as fallback
+    if (!appointmentType && !(chatInfo as any)?.call_unlocked_at) return true;
     // For audio/video appointments, text input is disabled
     return false;
   };

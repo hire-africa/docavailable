@@ -153,7 +153,7 @@ class TextSession extends Model
             'status' => self::STATUS_WAITING_FOR_DOCTOR,
             'started_at' => now(),
             'last_activity_at' => now(),
-            'doctor_response_deadline' => now()->addSeconds($windowSeconds),
+            'doctor_response_deadline' => null, // Set to null initially - will be set when patient sends first message
         ]);
 
         \Illuminate\Support\Facades\Log::info("Scheduled session activated", [

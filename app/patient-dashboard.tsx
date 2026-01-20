@@ -6,24 +6,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Easing,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -298,23 +298,8 @@ export default function PatientDashboard() {
   };
 
 
-  // Load unread notification count from service
-  const loadUnreadCount = async () => {
-    try {
-      // Only get real notifications from the service (no fake activities)
-      const allNotifications = await NotificationService.getNotificationsForUser('patient', userData?.id?.toString());
-
-      const unreadCount = allNotifications.filter(n => !n.isRead).length;
-      setUnreadNotificationCount(unreadCount);
-    } catch (error) {
-      console.error('Error loading unread count:', error);
-    }
-  };
-
-  // Update unread count when activities change
-  useEffect(() => {
-    loadUnreadCount();
-  }, [activities]);
+  // Notification count is now handled by refreshHomeTab from API
+  // Removed loadUnreadCount to prevent race conditions where local storage count overrides API count
 
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
   const [planToPurchase, setPlanToPurchase] = useState<SubscriptionPlan | null>(null);
@@ -696,7 +681,7 @@ export default function PatientDashboard() {
           // Also check if appointment is confirmed and doesn't have a session_id yet
           const isConfirmed = appt.status === 'confirmed' || appt.status === 1;
           const hasSessionId = appt.session_id || appt.sessionId;
-          
+
           return isNearTime && isConfirmed && !hasSessionId;
         } catch {
           return false;
@@ -716,7 +701,7 @@ export default function PatientDashboard() {
     }
 
     console.log('🔄 [PatientDashboard] Starting real-time polling for appointment sessions...');
-    
+
     const pollInterval = setInterval(async () => {
       try {
         // Re-check if we should still be polling using ref
@@ -727,14 +712,14 @@ export default function PatientDashboard() {
         }
 
         const appointmentsData = await appointmentService.getAppointments();
-        
+
         // Check if any appointment gained a session_id
         const previousAppointments = previousAppointmentsRef.current;
         const hasNewSession = appointmentsData.some((newAppt: any) => {
           const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
           const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
           const newHasSession = newAppt.session_id || newAppt.sessionId;
-          
+
           // If appointment didn't have a session before but now does, refresh
           return !oldHasSession && newHasSession;
         });
@@ -1319,9 +1304,12 @@ export default function PatientDashboard() {
           setActiveTextSessions(data.patient_data.active_sessions);
         }
 
-        // 4. Update Notifications Count
+        // 4. Update Notifications Count (only update if we have a valid value)
         if (data.notifications_stats?.unread_count !== undefined) {
           setUnreadNotificationCount(data.notifications_stats.unread_count);
+        } else {
+          // If API doesn't return count, keep existing count (don't reset to 0)
+          console.log('⚠️ [PatientDashboard] No unread_count in API response, keeping existing count');
         }
 
         // 5. Refresh API health
@@ -2451,7 +2439,7 @@ export default function PatientDashboard() {
                     const appointmentType = (item.appointment_type ?? item.consultationType ?? item.type ?? null);
                     const linkedSessionId = (item.session_id ?? item.sessionId ?? null);
                     const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
-                    
+
                     // Handle different appointment types
                     if (appointmentType === 'text' || appointmentType === '') {
                       // Text appointments: Only navigate to chat if session_id exists
@@ -2463,9 +2451,14 @@ export default function PatientDashboard() {
                         router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
                       }
                     } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
-                      // Call appointments (audio/video): Navigate to appointment chat
-                      // The chat will show waiting state before time, and call button after time
-                      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
+                      // Call appointments (audio/video): Only navigate to chat if session is ready or active
+                      const status = getAppointmentSessionStatus(item);
+                      if (status === 'ready' || status === 'active') {
+                        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: item.id } });
+                      } else {
+                        // Not time yet - show appointment details
+                        router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });
+                      }
                     } else {
                       // Unknown type - default to appointment details
                       router.push({ pathname: '/appointment-details/[id]', params: { id: item.id } });

@@ -562,6 +562,40 @@ class AppointmentController extends Controller
         return response()->json(['appointments' => $appointments]);
     }
 
+    // Get booked time slots for a doctor on a given date
+    public function getDoctorBookedSlots(Request $request, $doctorId)
+    {
+        $date = $request->get('date');
+
+        if (!$date) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Date parameter is required'
+            ], 422);
+        }
+
+        $bookedTimes = Appointment::where('doctor_id', $doctorId)
+            ->where('appointment_date', $date)
+            ->whereIn('status', [
+                Appointment::STATUS_PENDING,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_RESCHEDULE_PROPOSED
+            ])
+            ->pluck('appointment_time')
+            ->unique()
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'doctor_id' => (int) $doctorId,
+                'date' => $date,
+                'booked_times' => $bookedTimes
+            ]
+        ]);
+    }
+
     public function getAppointmentById($id)
     {
         try {

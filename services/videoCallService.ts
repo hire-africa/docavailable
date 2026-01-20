@@ -379,10 +379,10 @@ class VideoCallService {
             appointmentId: this.appointmentId,
           });
         } else if (state === 'disconnected' || state === 'failed') {
-          // CRITICAL: Ignore disconnected/failed during initial setup OR while waiting for answer
-          // For outgoing calls, the peer won't connect until they answer - this is normal and expected
-          if (this.state.connectionState === 'connecting' || (!this.isIncoming && !this.isCallAnswered)) {
-            console.log(`⚠️ Video WebRTC reported ${state} while waiting for answer - ignoring (this is normal during setup)`);
+          // CRITICAL: Ignore disconnected/failed during initial setup - WebRTC can report these transiently during setup
+          // Check if we're still in 'connecting' state (initialization phase)
+          if (this.state.connectionState === 'connecting') {
+            console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
             return;
           }
           // Only update state if call is not answered and not already ended and not being accepted
@@ -533,8 +533,34 @@ class VideoCallService {
         }
       });
 
-      // Connect to the WebSocket
-      await this.signalingChannel.connect();
+      // Actually establish the connection with automatic fallback
+      try {
+        await this.signalingChannel.connect();
+      } catch (error) {
+        const errorMessage = error?.message || '';
+        if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
+          console.warn('⚠️ [VideoCallService] Video signaling SSL/Connection error, attempting fallback...', errorMessage);
+
+          // Try fallback URL from environment
+          const fallbackSignalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL;
+          const wsFallbackUrl = `${fallbackSignalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
+
+          console.log('🔌 [VideoCallService] Retrying with fallback URL:', wsFallbackUrl);
+
+          // Re-instantiate with fallback URL
+          const options = (this.signalingChannel as any).options;
+          this.signalingChannel = new SecureWebSocketService({
+            ...options,
+            url: wsFallbackUrl,
+            ignoreSSLErrors: true,
+          });
+
+          await this.signalingChannel.connect();
+          console.log('✅ [VideoCallService] Connected using fallback signaling URL');
+        } else {
+          throw error;
+        }
+      }
 
     } catch (error) {
       console.error('❌ Failed to create video signaling connection:', error);
@@ -1532,14 +1558,30 @@ class VideoCallService {
   }
 
   private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [VideoCallService] Cannot update call session: no appointmentId');
+      return;
+    }
+
     try {
-      console.log('📞 Updating call session in backend...');
+      console.log('📞 Updating call session in backend...', {
+        appointmentId: this.appointmentId,
+        sessionDuration,
+        wasConnected,
+        connectionState: this.state.connectionState
+      });
+
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [VideoCallService] Cannot update call session: no auth token');
+        return;
+      }
 
       const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${await this.getAuthToken()}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           call_type: 'video',
@@ -1556,7 +1598,15 @@ class VideoCallService {
         // Treat missing session as already ended; avoid loops
         console.log('ℹ️ Backend reported 404 for end update; treating as already ended');
       } else {
-        console.error('❌ Failed to update call session in backend:', response.status);
+        const errorText = await response.text().catch(() => '');
+        let errorData;
+        try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
+        console.error('❌ Failed to update call session in backend:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          appointmentId: this.appointmentId
+        });
       }
     } catch (error) {
       console.error('❌ Error updating call session in backend:', error);

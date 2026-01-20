@@ -17,6 +17,7 @@ interface CustomTimePickerProps {
   availableSlots?: any[];
   workingHours?: any;
   selectedDate?: Date;
+  getTimeSlotStatus?: (time: string) => 'available' | 'booked' | 'past';
 }
 
 const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
@@ -27,9 +28,11 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
   availableSlots = [],
   workingHours,
   selectedDate,
+  getTimeSlotStatus,
 }) => {
   const [tempTime, setTempTime] = useState<string>('');
   const [isValidTime, setIsValidTime] = useState<boolean>(true);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
 
   // Generate time options based on available slots
   const generateTimeOptions = () => {
@@ -167,6 +170,7 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
       });
       setTempTime(selectedTime || '');
       setIsValidTime(true);
+      setConflictMessage(null);
     }
   }, [visible, selectedTime, availableSlots, workingHours, selectedDate]);
 
@@ -214,13 +218,27 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
              <View style={styles.timeGrid}>
                {timeOptions.length > 0 ? (
                  timeOptions.map((time, index) => (
+                   (() => {
+                     const status = getTimeSlotStatus ? getTimeSlotStatus(time) : 'available';
+                     const isBooked = status === 'booked';
+                     return (
                    <TouchableOpacity
                      key={index}
                      style={[
                        styles.timeOption,
                        tempTime === time && styles.selectedTimeOption,
+                         isBooked && styles.bookedTimeOption,
                      ]}
-                     onPress={() => handleTimeSelect(time)}
+                       onPress={() => {
+                         if (isBooked) {
+                           setConflictMessage('Time already booked. Please choose another time.');
+                           setTempTime('');
+                           setIsValidTime(false);
+                         } else {
+                           setConflictMessage(null);
+                           handleTimeSelect(time);
+                         }
+                       }}
                    >
                      <Text
                        style={[
@@ -231,6 +249,8 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
                        {time}
                      </Text>
                    </TouchableOpacity>
+                     );
+                   })()
                  ))
                ) : (
                  <View style={styles.noTimesContainer}>
@@ -245,6 +265,13 @@ const CustomTimePicker: React.FC<CustomTimePickerProps> = ({
             <View style={styles.selectedTimePreview}>
               <FontAwesome name="clock-o" size={16} color="#4CAF50" />
               <Text style={styles.selectedTimeLabel}>Selected: {tempTime}</Text>
+            </View>
+          )}
+
+          {/* Conflict Message */}
+          {conflictMessage && (
+            <View style={styles.conflictMessageContainer}>
+              <Text style={styles.conflictMessageText}>{conflictMessage}</Text>
             </View>
           )}
 
@@ -451,6 +478,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+  },
+  conflictMessageContainer: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+  },
+  conflictMessageText: {
+    fontSize: 13,
+    color: '#E53935',
+    textAlign: 'center',
+  },
+  bookedTimeOption: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E0E0E0',
   },
 });
 

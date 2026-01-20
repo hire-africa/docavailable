@@ -52,6 +52,7 @@ export default function BookAppointmentFlow() {
   const [doctorPicUrl, setDoctorPicUrl] = useState<string | null>(null);
   const [doctorPic, setDoctorPic] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
 
   // Doctor info from params
   const doctorId = params.doctorId as string;
@@ -142,6 +143,36 @@ export default function BookAppointmentFlow() {
       } catch { }
     })();
   }, [user, userSubscription, subscription]);
+
+  // Fetch booked time slots for selected date
+  useEffect(() => {
+    const fetchBookedSlots = async () => {
+      if (!doctorId || !selectedDate) {
+        setBookedTimes([]);
+        return;
+      }
+
+      try {
+        const year = selectedDate.getFullYear();
+        const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
+        const day = selectedDate.getDate().toString().padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+
+        const res = await apiService.get<{ booked_times: string[] }>(`/doctors/${doctorId}/booked-slots`, { date: dateStr });
+
+        if (res.success && res.data && Array.isArray((res.data as any).booked_times)) {
+          setBookedTimes((res.data as any).booked_times);
+        } else {
+          setBookedTimes([]);
+        }
+      } catch (e) {
+        console.error('❌ [BookAppointmentFlow] Error fetching booked slots:', e);
+        setBookedTimes([]);
+      }
+    };
+
+    fetchBookedSlots();
+  }, [doctorId, selectedDate]);
 
   // Helper to check if a consultation type is available
   const isTypeAvailable = (type: string) => {
@@ -249,9 +280,9 @@ export default function BookAppointmentFlow() {
 
   // Helper to check if a time slot is available (not booked)
   const isTimeSlotAvailable = (timeStr: string) => {
-    // This would typically check against booked appointments
-    // For now, we'll assume all slots are available
-    return true;
+    const time24 = to24HourFormat(timeStr);
+    if (!time24) return false;
+    return !bookedTimes.includes(time24);
   };
 
   // Helper to get time slot status
@@ -938,6 +969,7 @@ export default function BookAppointmentFlow() {
         availableSlots={getAvailableSlots()}
         workingHours={workingHours}
         selectedDate={selectedDate}
+        getTimeSlotStatus={getTimeSlotStatus}
       />
     </>
   );

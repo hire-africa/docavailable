@@ -231,6 +231,7 @@ Route::middleware(['auth:api'])->group(function () {
     // Doctor availability routes (accessible to all authenticated users)
     Route::get('/doctors/{id}/availability', [DoctorController::class, 'getAvailability']);
     Route::put('/doctors/{id}/availability', [DoctorController::class, 'updateAvailability']);
+    Route::get('/doctors/{id}/booked-slots', [AppointmentController::class, 'getDoctorBookedSlots']);
 
     // Text session routes
     // Unified Text Session Routes

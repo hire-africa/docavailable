@@ -24,15 +24,14 @@ export const environment = {
   LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
 
   // WebRTC Configuration (Production URLs with dedicated servers)
-  WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://docavailable.org/audio-signaling'),
+  WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://docavailable.org/call-signaling'),
   WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'wss://docavailable.org/chat-signaling'),
   WEBRTC_CHAT_SERVER_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org'),
 
   // WebRTC Fallback Configuration (using direct IP bypassing SSL issues)
-  // Note: Nginx proxies /audio-signaling to port 8081 /chat-signaling
-  WEBRTC_FALLBACK_SIGNALING_URL: 'ws://46.101.123.123:8081/chat-signaling',
-  // Note: Nginx proxies /chat-signaling to port 8081 /
-  WEBRTC_FALLBACK_CHAT_SIGNALING_URL: 'ws://46.101.123.123:8081',
+  // Note: Signaling server runs on 8080, Chat server runs on 8081
+  WEBRTC_FALLBACK_SIGNALING_URL: 'ws://46.101.123.123:8080/call-signaling',
+  WEBRTC_FALLBACK_CHAT_SIGNALING_URL: 'ws://46.101.123.123:8081/chat-signaling',
 
   // App Configuration
   APP_NAME: getEnvVar('EXPO_PUBLIC_APP_NAME', 'DocAvailable'),

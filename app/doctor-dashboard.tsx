@@ -7,22 +7,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppTour from '../components/AppTour';
@@ -493,7 +493,7 @@ export default function DoctorDashboard() {
           // Also check if appointment is confirmed and doesn't have a session_id yet
           const isConfirmed = appt.status === 'confirmed' || appt.status === 1;
           const hasSessionId = appt.session_id || appt.sessionId;
-          
+
           return isNearTime && isConfirmed && !hasSessionId;
         } catch {
           return false;
@@ -513,7 +513,7 @@ export default function DoctorDashboard() {
     }
 
     console.log('🔄 [DoctorDashboard] Starting real-time polling for appointment sessions...');
-    
+
     const pollInterval = setInterval(async () => {
       try {
         // Re-check if we should still be polling using ref
@@ -527,14 +527,14 @@ export default function DoctorDashboard() {
         if (response.success && response.data) {
           const responseData = response.data as any;
           const appointmentsData = (responseData.data || responseData) as any[];
-          
+
           // Check if any appointment gained a session_id
           const previousAppointments = previousAppointmentsRef.current;
           const hasNewSession = appointmentsData.some((newAppt: any) => {
             const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
             const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
             const newHasSession = newAppt.session_id || newAppt.sessionId;
-            
+
             // If appointment didn't have a session before but now does, refresh
             return !oldHasSession && newHasSession;
           });
@@ -914,9 +914,8 @@ export default function DoctorDashboard() {
         return sortedActivities;
       });
 
-      // Update unread notification count
-      const unreadCount = notifications.filter(n => !n.isRead).length;
-      setUnreadNotificationCount(unreadCount);
+      // Don't update unread notification count here - it's handled by refreshHomeTab from API
+      // This prevents race conditions where local storage count overrides API count
     } catch (error) {
       console.error('Error loading activities:', error);
     }
@@ -1145,7 +1144,7 @@ export default function DoctorDashboard() {
     const appointmentType = (patient as any)?.appointment_type ?? (patient as any)?.consultationType ?? (patient as any)?.type ?? null;
     const linkedSessionId = (patient as any)?.session_id ?? (patient as any)?.sessionId ?? null;
     const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
-    
+
     // Handle different appointment types
     if (appointmentType === 'text' || appointmentType === '') {
       // Text appointments: Only navigate to chat if session_id exists
@@ -1157,9 +1156,15 @@ export default function DoctorDashboard() {
         router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
       }
     } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
-      // Call appointments (audio/video): Navigate to appointment chat
-      // The chat will show waiting state before time, and call button after time
-      router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
+      // Call appointments (audio/video): Only navigate to chat if session is NOT upcoming (i.e. it's time or past)
+      // OR if it has a linked session
+      const isUpcoming = isAppointmentUpcoming(patient);
+      if (!isUpcoming || hasLinkedSession) {
+        router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
+      } else {
+        // Not time yet - show appointment details
+        router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
+      }
     } else {
       // Unknown type - default to appointment details
       router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
@@ -1355,9 +1360,12 @@ export default function DoctorDashboard() {
           setTotalRatings(data.doctor_data.stats.total_ratings || 0);
         }
 
-        // 5. Update Notifications Count
+        // 5. Update Notifications Count (only update if we have a valid value)
         if (data.notifications_stats?.unread_count !== undefined) {
           setUnreadNotificationCount(data.notifications_stats.unread_count);
+        } else {
+          // If API doesn't return count, keep existing count (don't reset to 0)
+          console.log('⚠️ [DoctorDashboard] No unread_count in API response, keeping existing count');
         }
       } else {
         // Fallback to individual fetches if summary fails
