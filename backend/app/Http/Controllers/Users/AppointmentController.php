@@ -1579,6 +1579,72 @@ class AppointmentController extends Controller
     }
 
     /**
+     * Get the status of an appointment session for the signaling server.
+     * Restored to handle both numeric IDs and direct_session identifiers.
+     * 
+     * @param string|int $appointmentId
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getStatus($appointmentId)
+    {
+        try {
+            $user = \Illuminate\Support\Facades\Auth::user();
+            if (!$user) {
+                return response()->json(['success' => false, 'message' => 'User not authenticated'], 401);
+            }
+
+            // Architecture: Resolve live session context from call_sessions table.
+            // This handles both direct_session_... keys and numeric appointment IDs
+            $callSession = \App\Models\CallSession::where('appointment_id', (string) $appointmentId)
+                ->whereIn('status', [
+                    \App\Models\CallSession::STATUS_ACTIVE,
+                    \App\Models\CallSession::STATUS_CONNECTING,
+                    \App\Models\CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    \App\Models\CallSession::STATUS_ANSWERED,
+                ])
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if (!$callSession) {
+                return response()->json([
+                    'success' => true,
+                    'data' => null,
+                    'message' => 'No active call session found'
+                ]);
+            }
+
+            // Authorization: must be a participant
+            if ((int) $callSession->patient_id !== (int) $user->id && (int) $callSession->doctor_id !== (int) $user->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to session'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $callSession->id,
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $callSession->appointment_id,
+                    'patient_id' => $callSession->patient_id,
+                    'doctor_id' => $callSession->doctor_id,
+                    'status' => $callSession->status,
+                    'call_type' => $callSession->call_type,
+                    'is_connected' => (bool) $callSession->connected_at,
+                    'started_at' => $callSession->created_at->toISOString(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Error in AppointmentController@getStatus", [
+                'appointment_id' => $appointmentId,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * End appointment session for signaling server
      * 
      * @param int $id

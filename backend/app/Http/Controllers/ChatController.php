@@ -116,6 +116,37 @@ class ChatController extends Controller
      */
     private function handleAppointmentIdAndVerifyAccess($appointmentId, $user)
     {
+        // Handle direct session ID format (direct_session_12345) - instant calls
+        if (strpos($appointmentId, 'direct_session_') === 0) {
+            $callSession = \App\Models\CallSession::with(['patient', 'doctor'])
+                ->where('appointment_id', $appointmentId)
+                ->first();
+
+            if ($callSession) {
+                // Check if user is part of this call session
+                if ($callSession->patient_id !== $user->id && $callSession->doctor_id !== $user->id) {
+                    return [
+                        'success' => false,
+                        'message' => 'Unauthorized access to chat',
+                        'status' => 403
+                    ];
+                }
+
+                return [
+                    'success' => true,
+                    'actualId' => $appointmentId, // Keep the string ID for direct sessions
+                    'type' => 'direct_session',
+                    'data' => $callSession
+                ];
+            }
+
+            return [
+                'success' => false,
+                'message' => 'Direct session not found',
+                'status' => 404
+            ];
+        }
+
         // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
         $isTextSession = false;
@@ -209,6 +240,42 @@ class ChatController extends Controller
     public function getMessages(Request $request, $appointmentId): JsonResponse
     {
         $user = Auth::user();
+
+        // Handle direct session ID format (direct_session_12345) - instant calls
+        if (strpos($appointmentId, 'direct_session_') === 0) {
+            $callSession = \App\Models\CallSession::with(['patient', 'doctor'])
+                ->where('appointment_id', $appointmentId)
+                ->first();
+
+            if ($callSession) {
+                // Check if user is part of this call session
+                if ($callSession->patient_id !== $user->id && $callSession->doctor_id !== $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to chat'
+                    ], 403);
+                }
+
+                // Get messages using the call session ID
+                $messages = $this->messageStorageService->getMessages($callSession->id, 'call_session');
+
+                // Apply anonymization if needed
+                $messages = $this->applyAnonymizationToMessages($messages, $user, (object) [
+                    'patient_id' => $callSession->patient_id,
+                    'doctor_id' => $callSession->doctor_id
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $messages
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Direct session not found'
+            ], 404);
+        }
 
         // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
@@ -347,6 +414,51 @@ class ChatController extends Controller
         }
 
         // Rate limiting disabled
+
+        // Handle direct session ID format (direct_session_12345) - instant calls
+        // IMPORTANT: Direct sessions don't have appointment records
+        if (strpos($appointmentId, 'direct_session_') === 0) {
+            $callSession = \App\Models\CallSession::with(['patient', 'doctor'])
+                ->where('appointment_id', $appointmentId)
+                ->first();
+
+            if ($callSession) {
+                // Check if user is part of this call session
+                if ($callSession->patient_id !== $user->id && $callSession->doctor_id !== $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to chat'
+                    ], 403);
+                }
+
+                // Prepare message data
+                $messageData = [
+                    'sender_id' => $user->id,
+                    'sender_name' => $this->getUserName($user->id),
+                    'message' => $request->message,
+                    'message_type' => $request->message_type ?? 'text',
+                    'media_url' => $request->media_url ?? null,
+                    'temp_id' => $request->temp_id ?? null,
+                    'id' => $request->message_id ?? null
+                ];
+
+                // Store message using call session ID
+                $message = $this->messageStorageService->storeMessage($callSession->id, $messageData, 'call_session');
+
+                // Update chat room keys
+                $this->messageStorageService->updateChatRoomKeys($callSession->id, 'call_session');
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $message
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Direct session not found'
+            ], 404);
+        }
 
         // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;
@@ -597,6 +709,78 @@ class ChatController extends Controller
     public function getChatInfo($appointmentId): JsonResponse
     {
         $user = Auth::user();
+
+        // Handle direct session ID format (direct_session_12345) - instant calls
+        // IMPORTANT: Direct sessions are instant calls with no appointment record
+        if (strpos($appointmentId, 'direct_session_') === 0) {
+            $callSession = \App\Models\CallSession::with(['patient', 'doctor'])
+                ->where('appointment_id', $appointmentId)
+                ->first();
+
+            if ($callSession) {
+                // Check if user is part of this call session
+                if ($callSession->patient_id !== $user->id && $callSession->doctor_id !== $user->id) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access to chat'
+                    ], 403);
+                }
+
+                // Determine the other participant's name
+                $otherParticipantName = '';
+                $otherParticipantId = null;
+                if ($user->id === $callSession->doctor_id) {
+                    $otherParticipantName = $callSession->patient->first_name . ' ' . $callSession->patient->last_name;
+                    $otherParticipantId = $callSession->patient_id;
+                } else {
+                    $otherParticipantName = 'Dr. ' . $callSession->doctor->first_name . ' ' . $callSession->doctor->last_name;
+                    $otherParticipantId = $callSession->doctor_id;
+                }
+
+                // Get profile picture with anonymization check
+                $otherParticipantProfileUrl = null;
+                $otherParticipantProfilePath = null;
+                if ($otherParticipantId) {
+                    $otherUser = \App\Models\User::find($otherParticipantId);
+                    if ($otherUser) {
+                        if ($this->anonymizationService->isAnonymousModeEnabled($otherUser)) {
+                            $anonymizedData = $this->anonymizationService->getAnonymizedUserData($otherUser);
+                            $otherParticipantName = $anonymizedData['display_name'];
+                            $otherParticipantProfilePath = $anonymizedData['profile_picture'];
+                            $otherParticipantProfileUrl = $anonymizedData['profile_picture_url'];
+                        } else {
+                            $otherParticipantProfilePath = $otherUser->profile_picture;
+                            $otherParticipantProfileUrl = $otherUser->profile_picture_url;
+                        }
+                    }
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'appointment_id' => $appointmentId,
+                        'other_participant_name' => $otherParticipantName,
+                        'appointment_date' => $callSession->created_at?->toDateString(),
+                        'appointment_time' => $callSession->created_at?->format('H:i'),
+                        'appointment_type' => $callSession->call_type === 'voice' ? 'audio' : 'video',
+                        'status' => $callSession->status,
+                        'doctor_id' => $callSession->doctor_id,
+                        'patient_id' => $callSession->patient_id,
+                        'session_id' => $callSession->id,
+                        'session_context' => 'call_session:' . $callSession->id,
+                        'other_participant_profile_picture' => $otherParticipantProfilePath,
+                        'other_participant_profile_picture_url' => $otherParticipantProfileUrl,
+                        'is_direct_session' => true
+                    ]
+                ]);
+            }
+
+            // Direct session not found
+            return response()->json([
+                'success' => false,
+                'message' => 'Direct session not found'
+            ], 404);
+        }
 
         // Handle text/call session ID formats (text_session_123, text_session:123, call_session:123)
         $actualId = $appointmentId;

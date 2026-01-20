@@ -12,7 +12,6 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import callDeduplicationService from '../services/callDeduplicationService';
 import pushNotificationService from '../services/pushNotificationService';
 import { SessionNotificationHandler } from '../services/sessionNotificationHandler';
-import { routeIncomingCall } from '../utils/callRouter';
 import { routePushEvent } from '../utils/notificationRouter';
 
 import apiService from './services/apiService';
@@ -571,13 +570,13 @@ export default function RootLayout() {
         <AuthProvider>
           <ThemeProvider>
             <CustomAlertProvider>
-              {isCallBooting ? (
-                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-                  <ActivityIndicator size="large" color="#ffffff" />
-                  <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
-                </View>
-              ) : (
-                <Stack>
+                {isCallBooting ? (
+                  <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator size="large" color="#ffffff" />
+                    <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
+                  </View>
+                ) : (
+                  <Stack>
                   <Stack.Screen name="index" options={{ headerShown: false }} />
                   <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
                   <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
@@ -643,7 +642,7 @@ export default function RootLayout() {
                   }} />
                   <Stack.Screen name="test-webview" options={{ headerShown: false }} />
                   <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-                </Stack>
+                  </Stack>
               )}
             </CustomAlertProvider>
           </ThemeProvider>

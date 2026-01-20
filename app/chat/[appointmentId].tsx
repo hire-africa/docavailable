@@ -5,20 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    AppState,
-    DeviceEventEmitter,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../components/AppTour';
@@ -40,7 +38,6 @@ import { useAnonymousMode } from '../../hooks/useAnonymousMode';
 import { useAppStateListener } from '../../hooks/useAppStateListener';
 import { useInstantSessionDetector } from '../../hooks/useInstantSessionDetector';
 import { useScreenshotPrevention } from '../../hooks/useScreenshotPrevention';
-import { resolveAppointmentSession } from '../../services/appointmentSessionService';
 import appTourService, { CHAT_TOUR_STEPS } from '../../services/appTourService';
 import { AudioCallService } from '../../services/audioCallService';
 import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backgroundSessionTimer';
@@ -49,17 +46,14 @@ import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
 import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
-import { textSessionService } from '../../services/textSessionService';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
-import { SessionContext } from '../../types/sessionContext';
-import { formatAppointmentDateTime } from '../../utils/appointmentDisplayUtils';
 import {
-    getUserTimezone,
-    isAppointmentTimeReached
+  getUserTimezone,
+  isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { Alert } from '../../utils/customAlert';
 import { withDoctorPrefix } from '../../utils/name';
@@ -88,7 +82,6 @@ interface ChatInfo {
   other_participant_profile_picture?: string;
   other_participant_profile_picture_url?: string;
   appointment_type?: string;
-  session_id?: number | null; // Session ID for session-gated routing
 }
 
 interface TextSessionInfo {
@@ -121,9 +114,9 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
 
     // Add all existing messages to map using unique key
     for (const msg of prev) {
-      // For images and voice messages, always use temp_id if available to keep them separate
+      // For images, always use temp_id if available to keep them separate
       // For text, use temp_id or id
-      const key = (msg.message_type === 'image' || msg.message_type === 'voice') && msg.temp_id
+      const key = msg.message_type === 'image' && msg.temp_id
         ? msg.temp_id
         : (msg.temp_id || String(msg.id));
       map.set(key, msg);
@@ -132,21 +125,21 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
 
     // Add incoming messages, avoiding duplicates and handling immediate messages
     for (const msg of incoming) {
-      // For images and voice messages, always use temp_id if available to keep them separate
-      const key = (msg.message_type === 'image' || msg.message_type === 'voice') && msg.temp_id
+      // For images, always use temp_id if available to keep them separate
+      const key = msg.message_type === 'image' && msg.temp_id
         ? msg.temp_id
         : (msg.temp_id || String(msg.id));
 
       console.log(`📨 [safeMerge] Processing incoming: ${key} (type: ${msg.message_type}, id: ${msg.id}, has temp_id: ${!!msg.temp_id})`);
 
       // Check if this is a server response for a temp TEXT message
-      // Only apply this check to text messages, not images or voice
-      const isTempMessageUpdate = msg.message_type === 'text' && prev.some(existingMsg => {
+      // Only apply this check to text messages, not images
+      const isTempMessageUpdate = msg.message_type !== 'image' && prev.some(existingMsg => {
         // Skip if existing message doesn't have temp_id
         if (!existingMsg.temp_id) return false;
 
-        // Skip if it's an image or voice message (they have their own dedup logic below)
-        if (existingMsg.message_type === 'image' || existingMsg.message_type === 'voice') return false;
+        // Skip if it's an image message (images have their own dedup logic below)
+        if (existingMsg.message_type === 'image') return false;
 
         // Check if this is the same TEXT message by comparing:
         // 1. Message content (for text)
@@ -165,17 +158,15 @@ function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMe
         continue;
       }
 
-      // Check if this is a duplicate/update of an existing media message (image or voice)
-      // Both image and voice messages have the same issue: same message text but different media_url
-      if ((msg.message_type === 'image' || msg.message_type === 'voice') && msg.media_url) {
+      // Check if this is a duplicate/update of an existing image message
+      if (msg.message_type === 'image' && msg.media_url) {
         // Look for existing message to update instead of blocking
         let shouldSkip = false;
         let shouldUpdate = false;
 
         for (let i = 0; i < prev.length; i++) {
           const existingMsg = prev[i];
-          // Check both image and voice messages
-          if (existingMsg.message_type !== msg.message_type) continue;
+          if (existingMsg.message_type !== 'image') continue;
 
           // CRITICAL: Check if message IDs match (WebRTC echo has same server ID)
           if (existingMsg.id && msg.id && String(existingMsg.id) === String(msg.id)) {
@@ -482,12 +473,8 @@ export default function ChatPage() {
   // Check if this is an instant session
   const isInstantSession = appointmentId.startsWith('text_session_');
 
-  // State to track the active Unified Session ID for scheduled appointments
-  const [activeSessionId, setActiveSessionId] = useState<string>('');
-
-  // Extract session ID for instant sessions OR use the active session ID for converted appointments
+  // Extract session ID for instant sessions
   const sessionId = isInstantSession ? appointmentId.replace('text_session_', '') : '';
-  const effectiveSessionId = activeSessionId || sessionId;
 
   // Get current user ID
   const currentUserId = user?.id || 0;
@@ -500,8 +487,8 @@ export default function ChatPage() {
   const patientId = chatInfo?.patient_id || textSessionInfo?.patient_id || 0; // Use a single source of truth for patientId
 
   // Determine if the hook should be enabled.
-  // It requires the session to be an instant session OR a converted appointment, and for us to have valid IDs and an auth token.
-  const isDetectorEnabled = (isInstantSession || !!activeSessionId) && doctorId > 0 && patientId > 0 && !!token;
+  // It requires the session to be an instant session, and for us to have valid IDs and an auth token.
+  const isDetectorEnabled = isInstantSession && doctorId > 0 && patientId > 0 && !!token;
 
   // Debug logging for IDs
   // NOTE: This console.log is kept for your debugging purposes.
@@ -513,8 +500,6 @@ export default function ChatPage() {
     textSessionDoctorId: textSessionInfo?.doctor_id,
     isInstantSession,
     sessionId,
-    activeSessionId,
-    effectiveSessionId,
     appointmentId,
     chatInfoLoaded: !!chatInfo,
     textSessionInfoLoaded: !!textSessionInfo,
@@ -537,7 +522,7 @@ export default function ChatPage() {
     forceStateSync,
     updateAuthToken
   } = useInstantSessionDetector({
-    sessionId: effectiveSessionId,
+    sessionId,
     appointmentId,
     patientId: patientId,
     doctorId: doctorId,
@@ -567,43 +552,42 @@ export default function ChatPage() {
   // Debug instant session detector configuration
   useEffect(() => {
     console.log('🔍 [InstantSession] Detector Config Debug:', {
-      sessionId: effectiveSessionId,
+      sessionId,
       appointmentId,
       patientId: patientId,
       doctorId: doctorId,
       chatInfoPatientId: chatInfo?.patient_id,
       textSessionPatientId: textSessionInfo?.patient_id,
       isInstantSession,
-      activeSessionId,
       enabled: isDetectorEnabled
     });
     console.log('🔍 [InstantSession] Full chatInfo object:', chatInfo);
     console.log('🔍 [InstantSession] Full textSessionInfo object:', textSessionInfo);
-  }, [effectiveSessionId, appointmentId, patientId, doctorId, isInstantSession, activeSessionId, isDetectorEnabled, chatInfo, textSessionInfo]);
+  }, [sessionId, appointmentId, patientId, doctorId, isInstantSession, isDetectorEnabled, chatInfo, textSessionInfo]);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Show instant session UI when patient sends first message or when timer is active
   useEffect(() => {
     // Only show the timer UI when the timer is confirmed to be active by the hook
-    if ((isInstantSession || activeSessionId) && isTimerActive && !hasDoctorResponded && !isSessionActivated) {
+    if (isInstantSession && isTimerActive && !hasDoctorResponded && !isSessionActivated) {
       setShowInstantSessionUI(true);
-    } else if ((isInstantSession || activeSessionId) && (hasDoctorResponded || isSessionActivated)) {
+    } else if (isInstantSession && (hasDoctorResponded || isSessionActivated)) {
       setShowInstantSessionUI(false);
     } // When the timer is not active, the component will be hidden.
-  }, [isInstantSession, activeSessionId, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
+  }, [isInstantSession, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
 
   // Log when doctor ID becomes available
   useEffect(() => {
-    if ((isInstantSession || activeSessionId) && doctorId > 0) {
+    if (isInstantSession && doctorId > 0) {
       console.log('✅ [InstantSession] Doctor ID now available:', doctorId);
       console.log('✅ [InstantSession] Detector should now be enabled');
     }
-  }, [isInstantSession, activeSessionId, doctorId]);
+  }, [isInstantSession, doctorId]);
 
   // Log when chat info loads
   useEffect(() => {
-    if (isInstantSession || activeSessionId) {
+    if (isInstantSession) {
       console.log('📊 [InstantSession] Chat info loaded:', {
         chatInfo: chatInfo ? 'loaded' : 'not loaded',
         textSessionInfo: textSessionInfo ? 'loaded' : 'not loaded',
@@ -612,11 +596,11 @@ export default function ChatPage() {
         currentUserId
       });
     }
-  }, [isInstantSession, activeSessionId, chatInfo, textSessionInfo, doctorId, patientId, currentUserId]);
+  }, [isInstantSession, chatInfo, textSessionInfo, doctorId, patientId, currentUserId]);
 
   // Watch for new messages and trigger instant session detection
   useEffect(() => {
-    if ((isInstantSession || activeSessionId) && messages.length > 0) {
+    if (isInstantSession && messages.length > 0) {
       // Check if there are any patient messages
       const patientMessages = messages.filter(msg => msg.sender_id === currentUserId);
       const doctorMessages = messages.filter(msg => msg.sender_id === doctorId);
@@ -652,7 +636,7 @@ export default function ChatPage() {
         triggerDoctorMessageDetection(firstDoctorMessage);
       }
     }
-  }, [isInstantSession, activeSessionId, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
+  }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
 
   // Debug current user ID
   console.log('🔍 Current user ID debug:', {
@@ -816,33 +800,26 @@ export default function ChatPage() {
 
     // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
     const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
-    
-    // For call appointments (audio/video), check if appointment time has been reached
-    // This is indicated by call_unlocked_at being set (chat room created)
-    const isCallAppointment = appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video';
-    const appointmentTimeReached = isCallAppointment 
-      ? (chatInfo?.call_unlocked_at !== null && chatInfo?.call_unlocked_at !== undefined)
-      : (isTextSession || isAppointmentTime || (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined));
+    // For appointments, also check if it's appointment time
+    const appointmentTimeCheck = isTextSession || isAppointmentTime;
 
     // Check subscription availability
     const hasAvailableSessions = subscriptionData ? (
       callType === 'voice' ? subscriptionData.voiceCallsRemaining > 0 : subscriptionData.videoCallsRemaining > 0
     ) : true; // Allow if no subscription data yet (will be checked on call initiation)
 
-    const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeReached && hasAvailableSessions;
+    const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
 
     console.log('🔍 [isCallButtonEnabled] Debug:', {
       callTypeEnabled,
       callType,
       appointmentType,
       isTextSession,
-      isCallAppointment,
       webrtcReady,
       webrtcReadyOrFallback,
       showIncomingCall,
       isAppointmentTime,
-      appointmentTimeReached,
-      call_unlocked_at: chatInfo?.call_unlocked_at,
+      appointmentTimeCheck,
       hasAvailableSessions,
       subscriptionData,
       enabled,
@@ -863,148 +840,81 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, user?.user_type]);
 
-  // Architecture: Countdown display is cosmetic only (no behavior gating)
-  // Time-based availability decisions come from backend (session_id presence), not device clock
+  // Helper function to check if current time is within appointment time
+  // IMPORTANT: This only affects scheduled appointments, NOT instant sessions
   const checkAppointmentTime = useCallback(() => {
-    // Skip for instant sessions
-    if (isInstantSession || isTextSession) {
+    // Skip time checking for instant sessions or if appointment is already in progress/active
+    // This ensures that if the status is active (7), we allow access regardless of time
+    const status = chatInfo?.status;
+    const isActiveStatus = status === 'in_progress' || status === 'active' || status === '7' || status === 7;
+
+    if (isInstantSession || isActiveStatus) {
+      if (isActiveStatus) {
+        console.log('✅ [AppointmentTime] Appointment is explicitly active/in_progress, bypassing time check');
+      }
       setIsAppointmentTime(true);
       setTimeUntilAppointment('');
       return;
     }
 
-    // Cosmetic countdown only - does not gate behavior
     if (!chatInfo?.appointment_date || !chatInfo?.appointment_time) {
-      setIsAppointmentTime(true);
+      setIsAppointmentTime(true); // If no appointment info, allow interaction
       return;
     }
 
     try {
-      // Use the unified appointment time utility for display purposes only
+      // Use the unified appointment time utility
       const userTimezone = getUserTimezone();
       const timeValidation = isAppointmentTimeReached(
         chatInfo.appointment_date,
         chatInfo.appointment_time,
         userTimezone,
-        5 // 5-minute buffer
+        5 // 5-minute buffer to match backend
       );
 
       if (timeValidation.error) {
         console.error('Error checking appointment time:', timeValidation.error);
-        setIsAppointmentTime(true); // Always allow (backend decides via session_id)
-        setTimeUntilAppointment('');
+        // For scheduled appointments, be more conservative on errors
+        setIsAppointmentTime(false);
+        setTimeUntilAppointment(`Error: ${timeValidation.error}`);
         return;
       }
 
       setAppointmentDateTime(timeValidation.appointmentDateTime);
-      setIsAppointmentTime(true); // Always true - backend session_id is the gate
-      setTimeUntilAppointment(timeValidation.timeUntilAppointment); // Display only
+      setIsAppointmentTime(timeValidation.isTimeReached);
+      setTimeUntilAppointment(timeValidation.timeUntilAppointment);
 
-      console.log('🕐 [AppointmentTime] Countdown display (cosmetic):', {
+      // Debug logging for appointment time validation
+      console.log('🕐 [AppointmentTime] Time validation result:', {
+        appointment_date: chatInfo.appointment_date,
+        appointment_time: chatInfo.appointment_time,
+        user_timezone: userTimezone,
+        is_time_reached: timeValidation.isTimeReached,
         time_until_appointment: timeValidation.timeUntilAppointment,
+        time_difference_ms: timeValidation.timeDifference
       });
 
     } catch (error) {
       console.error('Error checking appointment time:', error);
-      setIsAppointmentTime(true); // Always allow
-      setTimeUntilAppointment('');
+      // For scheduled appointments, be conservative on errors
+      setIsAppointmentTime(false);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setTimeUntilAppointment(`Error: ${errorMessage}`);
     }
-  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession, isTextSession]);
+  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession]);
 
-  // Check appointment time when chat info changes (for countdown display only)
+  // Check appointment time when chat info changes
   useEffect(() => {
     checkAppointmentTime();
   }, [checkAppointmentTime]);
 
-  // Architecture: Session-gated routing - REMOVED to prevent routing crashes
-  // Routing to /sessions/${session_id}/chat has been disabled
-  const [isWaitingForSession, setIsWaitingForSession] = useState(false);
-  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Check appointment session status and route accordingly - DISABLED
-  // useEffect(() => {
-  //   // Skip for instant sessions (they already have session context)
-  //   if (isInstantSession || isTextSession) {
-  //     return;
-  //   }
-
-  //   // Skip if we already have a session context
-  //   if (activeSessionId) {
-  //     return;
-  //   }
-
-  //   // Only check for numeric appointment IDs (not text_session_*)
-  //   const numericAppointmentId = parseInt(appointmentId, 10);
-  //   if (isNaN(numericAppointmentId)) {
-  //     return;
-  //   }
-
-  //   const checkAndRoute = async () => {
-  //     try {
-  //       // First check chatInfo.session_id if available
-  //       if (chatInfo?.session_id !== null && chatInfo?.session_id !== undefined) {
-  //         console.log('✅ [AppointmentSession] Appointment has session from chatInfo, navigating:', chatInfo.session_id);
-  //         router.replace(`/sessions/${chatInfo.session_id}/chat`);
-  //         return;
-  //       }
-
-  //       // Otherwise, query backend for session status
-  //       const sessionStatus = await resolveAppointmentSession(numericAppointmentId);
-        
-  //       if (!sessionStatus) {
-  //         console.log('⚠️ [AppointmentSession] Appointment not found');
-  //         return;
-  //       }
-
-  //       // If appointment has session_id, navigate to session
-  //       if (sessionStatus.session_id !== null) {
-  //         console.log('✅ [AppointmentSession] Appointment has session, navigating to session:', sessionStatus.session_id);
-
-  //         // Navigate to session (replace current route)
-  //         router.replace(`/sessions/${sessionStatus.session_id}/chat`);
-  //         return;
-  //       }
-
-  //       // If session_id is null, show waiting state
-  //       console.log('⏳ [AppointmentSession] Appointment has no session yet, showing waiting state');
-  //       setIsWaitingForSession(true);
-
-  //       // Start polling for session_id (every 8 seconds, within 5-10s range)
-  //       if (!pollingIntervalRef.current) {
-  //         const interval = setInterval(async () => {
-  //           const updatedStatus = await resolveAppointmentSession(numericAppointmentId);
-            
-  //           if (updatedStatus && updatedStatus.session_id !== null) {
-  //             // Session created, navigate to it
-  //             console.log('✅ [AppointmentSession] Session created, navigating:', updatedStatus.session_id);
-  //             clearInterval(interval);
-  //             pollingIntervalRef.current = null;
-  //             setIsWaitingForSession(false);
-
-  //             router.replace(`/sessions/${updatedStatus.session_id}/chat`);
-  //           }
-  //         }, 8000); // Poll every 8 seconds (within 5-10s range)
-          
-  //         pollingIntervalRef.current = interval;
-  //       }
-  //     } catch (error) {
-  //       console.error('❌ [AppointmentSession] Error checking session status:', error);
-  //     }
-  //   };
-
-  //   // Only check if chatInfo is loaded (to avoid race conditions)
-  //   if (chatInfo) {
-  //     checkAndRoute();
-  //   }
-
-  //   // Cleanup polling on unmount
-  //   return () => {
-  //     if (pollingIntervalRef.current) {
-  //       clearInterval(pollingIntervalRef.current);
-  //       pollingIntervalRef.current = null;
-  //     }
-  //   };
-  // }, [appointmentId, chatInfo, isInstantSession, isTextSession, activeSessionId]);
+  // Start text appointment session when appointment time is reached
+  useEffect(() => {
+    if (isTextAppointment && isAppointmentTime && !textAppointmentSession.isActive && !textAppointmentSession.isEnded) {
+      console.log('🕐 [TextAppointment] Starting text appointment session');
+      startTextAppointmentSession();
+    }
+  }, [isTextAppointment, isAppointmentTime, textAppointmentSession.isActive, textAppointmentSession.isEnded]);
 
   // Activate session header when doctor responds (for instant sessions) or when text appointment session becomes active
   // Show for both patient and doctor
@@ -1015,22 +925,162 @@ export default function ChatPage() {
       setIsSessionActive(true);
       // Don't reset timer here - it will be calculated from sessionStartTime
     }
-    // For non-instant sessions: activate when unified session context exists
-    else if (!isInstantSession && activeSessionId && !isSessionActive) {
-      console.log('🎬 [SessionHeader] Activating session header - unified session active');
+    // For text appointments: activate when session becomes active (show for both users)
+    else if (!isInstantSession && textAppointmentSession.isActive && !isSessionActive) {
+      console.log('🎬 [SessionHeader] Activating session header - text appointment active');
       setIsSessionActive(true);
+      // Don't reset timer here - it will be calculated from textAppointmentSession.startTime
     }
-    // Deactivate when session ends (unified session removed)
-    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !activeSessionId))) {
+    // Deactivate when session ends
+    else if (isSessionActive && ((isInstantSession && !hasDoctorResponded) || (!isInstantSession && !textAppointmentSession.isActive))) {
       console.log('🛑 [SessionHeader] Deactivating session header');
       setIsSessionActive(false);
     }
-  }, [isInstantSession, hasDoctorResponded, activeSessionId, isSessionActive]);
+  }, [isInstantSession, hasDoctorResponded, textAppointmentSession.isActive, isSessionActive]);
 
-  // Architecture: Frontend no longer starts appointment sessions
-  // Sessions are created by backend auto-start job or manual start-session endpoint
-  // This function is kept for reference but should not be called
-  // REMOVED: startTextAppointmentSession() - frontend does not activate appointments
+  // Function to start text appointment session via API
+  const startTextAppointmentSession = async () => {
+    try {
+      const response = await apiService.post('/text-appointments/start-session', {
+        appointment_id: getNumericAppointmentId(),
+        user_timezone: getUserTimezone() // Include user timezone for backend validation
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Session started successfully:', response.data);
+        setTextAppointmentSession(prev => ({
+          ...prev,
+          isActive: true,
+          startTime: new Date(response.data.start_time),
+          lastActivityTime: new Date(response.data.start_time),
+          sessionsUsed: response.data.sessions_used || 0
+        }));
+      } else {
+        console.error('❌ [TextAppointment] Failed to start session:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error starting session:', error);
+    }
+  };
+
+  // Function to update text appointment activity via API
+  const updateTextAppointmentActivity = async () => {
+    try {
+      const response = await apiService.post('/text-appointments/update-activity', {
+        appointment_id: getNumericAppointmentId(),
+        user_timezone: getUserTimezone(), // Include user timezone for backend validation
+        user_type: user?.user_type
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Activity updated successfully');
+      } else {
+        console.error('❌ [TextAppointment] Failed to update activity:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error updating activity:', error);
+    }
+  };
+
+  // Monitor activity and handle session logic for text appointments
+  useEffect(() => {
+    if (!isTextAppointment || !textAppointmentSession.isActive || textAppointmentSession.isEnded) {
+      return;
+    }
+
+    const checkActivity = () => {
+      const now = new Date();
+      const timeSinceLastActivity = textAppointmentSession.lastActivityTime
+        ? (now.getTime() - textAppointmentSession.lastActivityTime.getTime()) / (1000 * 60) // minutes
+        : 0;
+
+      const timeSinceStart = textAppointmentSession.startTime
+        ? (now.getTime() - textAppointmentSession.startTime.getTime()) / (1000 * 60) // minutes
+        : 0;
+
+      // If no activity in first 10 minutes, end session and deduct 1
+      if (timeSinceLastActivity >= 10 && !textAppointmentSession.hasPatientActivity && !textAppointmentSession.hasDoctorActivity) {
+        console.log('⏰ [TextAppointment] No activity in first 10 minutes, ending session');
+        processTextAppointmentDeduction(1, 'no_activity');
+        endTextAppointmentSession(1); // Deduct 1 session
+        return;
+      }
+
+      // If there was activity, check for 10-minute intervals for additional deductions
+      if (textAppointmentSession.hasPatientActivity || textAppointmentSession.hasDoctorActivity) {
+        // Deduct 1 session every 10 minutes after the first 10 minutes
+        const expectedSessionsUsed = Math.floor(timeSinceStart / 10);
+        if (expectedSessionsUsed > textAppointmentSession.sessionsUsed) {
+          console.log(`⏰ [TextAppointment] 10-minute interval reached, deducting session. Total: ${expectedSessionsUsed}`);
+          const sessionsToDeduct = expectedSessionsUsed - textAppointmentSession.sessionsUsed;
+          processTextAppointmentDeduction(sessionsToDeduct, 'interval');
+          setTextAppointmentSession(prev => ({
+            ...prev,
+            sessionsUsed: expectedSessionsUsed
+          }));
+        }
+      }
+
+      // FIX: Auto-end session if no activity for 20+ minutes (regardless of previous activity)
+      if (timeSinceLastActivity >= 20) {
+        console.log('⏰ [TextAppointment] No activity for 20+ minutes, auto-ending session');
+        const sessionsToDeduct = Math.max(1, Math.floor(timeSinceStart / 10));
+        processTextAppointmentDeduction(sessionsToDeduct, 'timeout');
+        endTextAppointmentSession(sessionsToDeduct);
+        return;
+      }
+    };
+
+    const interval = setInterval(checkActivity, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [isTextAppointment, textAppointmentSession]);
+
+  // Function to process text appointment deduction via API
+  const processTextAppointmentDeduction = async (sessionsToDeduct: number, reason: string) => {
+    try {
+      const response = await apiService.post('/text-appointments/process-deduction', {
+        appointment_id: getNumericAppointmentId(),
+        sessions_to_deduct: sessionsToDeduct,
+        reason: reason
+      });
+
+      if (response.success) {
+        console.log(`✅ [TextAppointment] Deduction processed successfully: ${sessionsToDeduct} sessions, reason: ${reason}`);
+      } else {
+        console.error('❌ [TextAppointment] Failed to process deduction:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error processing deduction:', error);
+    }
+  };
+
+  // Function to end text appointment session
+  const endTextAppointmentSession = async (additionalSessions = 0) => {
+    const totalSessions = textAppointmentSession.sessionsUsed + additionalSessions;
+    console.log(`🏁 [TextAppointment] Ending session, total sessions used: ${totalSessions}`);
+
+    try {
+      const response = await apiService.post('/text-appointments/end-session', {
+        appointment_id: getNumericAppointmentId(),
+        sessions_to_deduct: additionalSessions,
+        user_timezone: getUserTimezone() // Include user timezone for backend validation
+      });
+
+      if (response.success) {
+        console.log('✅ [TextAppointment] Session ended successfully via API');
+      } else {
+        console.error('❌ [TextAppointment] Failed to end session via API:', response.message);
+      }
+    } catch (error) {
+      console.error('❌ [TextAppointment] Error ending session via API:', error);
+    }
+
+    setTextAppointmentSession(prev => ({
+      ...prev,
+      isActive: false,
+      isEnded: true
+    }));
+  };
 
   // Update appointment time check every minute
   useEffect(() => {
@@ -1134,79 +1184,6 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, authLoading]);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const subscription = DeviceEventEmitter.addListener('chat:refresh', async (payload: any) => {
-      try {
-        const incomingAppointmentId = payload?.appointmentId;
-
-        if (incomingAppointmentId) {
-          const currentIdStr = String(appointmentId);
-          const incomingIdStr = String(incomingAppointmentId);
-
-          const currentNumericId = currentIdStr.startsWith('text_session_')
-            ? currentIdStr.replace('text_session_', '')
-            : currentIdStr;
-
-          const matches = incomingIdStr === currentIdStr || incomingIdStr === currentNumericId;
-          if (!matches) return;
-        }
-
-        if (sessionEnded) return;
-        if (isLoadingChat) return;
-
-        if (webrtcChatService) {
-          const synced = await webrtcChatService.syncWithServer();
-          // Merge with existing messages to preserve any that were just added
-          setMessages(prev => safeMergeMessages(prev, synced));
-        } else {
-          const response = await apiService.get(`/chat/${appointmentId}/messages`);
-          if (response.success && response.data) {
-            // Merge with existing messages instead of replacing
-            setMessages(prev => safeMergeMessages(prev, response.data));
-          }
-        }
-      } catch (error) {
-        console.error('❌ [ChatComponent] Failed to refresh messages from push event:', error);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isAuthenticated, appointmentId, isLoadingChat, sessionEnded, webrtcChatService]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const subscription = AppState.addEventListener('change', async (nextState) => {
-      if (nextState !== 'active') return;
-      if (sessionEnded) return;
-      if (isLoadingChat) return;
-
-      try {
-        if (webrtcChatService) {
-          const synced = await webrtcChatService.syncWithServer();
-          // Merge with existing messages to preserve any that were just added
-          setMessages(prev => safeMergeMessages(prev, synced));
-        } else {
-          const response = await apiService.get(`/chat/${appointmentId}/messages`);
-          if (response.success && response.data) {
-            // Merge with existing messages instead of replacing
-            setMessages(prev => safeMergeMessages(prev, response.data));
-          }
-        }
-      } catch (error) {
-        console.error('❌ [ChatComponent] Failed to refresh messages on app active:', error);
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [isAuthenticated, appointmentId, isLoadingChat, sessionEnded, webrtcChatService]);
-
   // Debug chatInfo changes
   useEffect(() => {
     if (chatInfo) {
@@ -1267,43 +1244,10 @@ export default function ChatPage() {
 
         // Determine session type from appointmentId
         const sessionType = appointmentId.startsWith('text_session_') ? 'text_session' : 'appointment';
-        
-        // Architecture: For appointments, start session first to get context
-        let sessionContext: SessionContext | null = null;
-        if (sessionType === 'appointment' && !appointmentId.startsWith('text_session_')) {
-          try {
-            console.log('🔄 [ChatComponent] Starting session from appointment:', appointmentId);
-            // Determine modality from appointment type (if available in chatInfo)
-            const modality = chatInfo?.appointment_type === 'text' ? 'text' : 
-                           chatInfo?.appointment_type === 'voice' ? 'audio' :
-                           chatInfo?.appointment_type === 'video' ? 'video' : 'text';
-            
-            sessionContext = await textSessionService.startSessionFromAppointment(appointmentId, modality);
-            if (sessionContext) {
-              console.log('✅ [ChatComponent] Session started, context:', sessionContext);
-            } else {
-              console.warn('⚠️ [ChatComponent] Failed to start session, using appointmentId (read-only)');
-            }
-          } catch (error) {
-            console.error('❌ [ChatComponent] Error starting session from appointment:', error);
-            // Continue with appointmentId (read-only mode) if session start fails
-          }
-        } else if (sessionType === 'text_session') {
-          // For instant text sessions, parse the session ID from the appointmentId format
-          const sessionId = appointmentId.replace('text_session_', '');
-          if (sessionId && !isNaN(Number(sessionId))) {
-            sessionContext = {
-              context_type: 'text_session',
-              context_id: Number(sessionId)
-            };
-            console.log('✅ [ChatComponent] Using text session context:', sessionContext);
-          }
-        }
 
         console.log('🔍 [ChatComponent] Initializing WebRTC chat service with config:', {
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
-          context: sessionContext,
           userId: currentUserId,
           sessionType: sessionType,
           webrtcConfig: config.webrtc
@@ -1313,17 +1257,15 @@ export default function ChatPage() {
         console.log('🔍 [WebRTC Chat] Service config:', {
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
-          context: sessionContext,
           userId: currentUserId,
           userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
           sessionType: sessionType,
           webrtcConfig: config.webrtc
         });
 
-        const chatService = WebRTCChatService.getInstance({
+        const chatService = new WebRTCChatService({
           baseUrl: config.apiUrl,
           appointmentId: appointmentId,
-          context: sessionContext || undefined, // Pass context if available
           userId: currentUserId,
           userName: `${user?.first_name || ''} ${user?.last_name || ''}`.trim(),
           apiKey: (user as any)?.api_key || '',
@@ -1341,6 +1283,18 @@ export default function ChatPage() {
                 timestamp: message.created_at,
                 isOwnMessage: String(message.sender_id) === String(currentUserId)
               });
+            }
+
+            // Track activity for text appointments when receiving messages
+            if (isTextAppointment && textAppointmentSession.isActive && String(message.sender_id) !== String(currentUserId)) {
+              console.log('📝 [TextAppointment] Message received - tracking activity');
+              updateTextAppointmentActivity();
+              setTextAppointmentSession(prev => ({
+                ...prev,
+                lastActivityTime: new Date(),
+                hasPatientActivity: String(message.sender_id) === String(chatInfo?.patient_id) ? true : prev.hasPatientActivity,
+                hasDoctorActivity: String(message.sender_id) === String(chatInfo?.doctor_id) ? true : prev.hasDoctorActivity
+              }));
             }
 
             setMessages(prev => {
@@ -1432,16 +1386,9 @@ export default function ChatPage() {
           webrtcSessionService.setOnTypingIndicator(handleTypingIndicator);
         }
 
-        // Load existing messages from storage and merge with any existing state
+        // Load existing messages from storage
         const existingMessages = await chatService.getMessages();
-        setMessages(prev => {
-          if (prev.length === 0) {
-            // If no existing messages in state, just set them
-            return existingMessages;
-          }
-          // Otherwise merge to preserve any messages that were just added
-          return safeMergeMessages(prev, existingMessages);
-        });
+        setMessages(existingMessages);
         console.log('✅ [WebRTCChat] Service initialized successfully with', existingMessages.length, 'messages');
 
         // Add debug method to window for testing (only in development)
@@ -2427,18 +2374,12 @@ export default function ChatPage() {
           console.log('🔄 [ChatComponent] Syncing with server to get latest messages...');
           const syncedMessages = await webrtcChatService.syncWithServer();
           console.log('✅ [ChatComponent] Messages synced with server:', syncedMessages.length);
-          // Merge with existing messages to preserve any that were just added
-          setMessages(prev => {
-            const merged = safeMergeMessages(prev, syncedMessages);
-            console.log('🔄 [ChatComponent] Merged messages: prev=', prev.length, 'synced=', syncedMessages.length, 'final=', merged.length);
-            return merged;
-          });
+          setMessages(syncedMessages);
         } catch (error) {
           console.error('❌ [ChatComponent] Failed to sync with server, using local messages only:', error);
           // Fallback to local messages if sync fails
           const loadedMessages = await webrtcChatService.getMessages();
-          // Merge with existing messages
-          setMessages(prev => safeMergeMessages(prev, loadedMessages));
+          setMessages(loadedMessages);
         }
       } else {
         // Fallback to backend API for loading messages
@@ -2446,8 +2387,7 @@ export default function ChatPage() {
         try {
           const response = await apiService.get(`/chat/${appointmentId}/messages`);
           if (response.success && response.data) {
-            // Merge with existing messages instead of replacing
-            setMessages(prev => safeMergeMessages(prev, response.data));
+            setMessages(response.data);
             console.log('✅ [ChatComponent] Messages loaded via backend API:', response.data.length);
           }
         } catch (error) {
@@ -2479,7 +2419,7 @@ export default function ChatPage() {
       isPatient,
       isTextSession,
       isAppointmentTime,
-      textAppointmentSessionActive: false
+      textAppointmentSessionActive: textAppointmentSession.isActive
     });
 
     if (!newMessage.trim()) {
@@ -2491,6 +2431,18 @@ export default function ChatPage() {
     if (!sessionValid) {
       console.error('❌ [ChatComponent] Cannot send message - session is invalid');
       return;
+    }
+
+    // Track activity for text appointments
+    if (isTextAppointment && textAppointmentSession.isActive) {
+      console.log('📝 [TextAppointment] Message sent - tracking activity');
+      updateTextAppointmentActivity();
+      setTextAppointmentSession(prev => ({
+        ...prev,
+        lastActivityTime: new Date(),
+        hasPatientActivity: user?.user_type === 'patient' ? true : prev.hasPatientActivity,
+        hasDoctorActivity: user?.user_type === 'doctor' ? true : prev.hasDoctorActivity
+      }));
     }
 
     // Check if session has expired (for instant sessions)
@@ -3000,8 +2952,19 @@ export default function ChatPage() {
   // Handle back button press
   const handleBackPress = () => {
     if (isPatient) {
-      // Scheduled appointment that hasn't started yet: no session_id and appointment time not reached
-      if (!isTextSession && !isTextAppointment && !isAppointmentTime && !(chatInfo?.session_id)) {
+      // Check if this is a text appointment with active session
+      if (isTextAppointment && textAppointmentSession.isActive) {
+        // Show end session modal for text appointment sessions
+        setShowEndSessionModal(true);
+        return;
+      }
+
+      // Check if this is a scheduled appointment that hasn't started yet
+      const appointmentStatus = String(chatInfo?.status || '');
+      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
+
+      // FIX: Only show "cannot end" message if it's a confirmed appointment AND it's not appointment time AND it's not a text appointment
+      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
         // For confirmed appointments that haven't started, show a different message
         Alert.info(
           'Scheduled Appointment',
@@ -3033,9 +2996,44 @@ export default function ChatPage() {
         sessionId = appointmentId;
       }
 
+      // Handle text appointment session ending
+      if (isTextAppointment && textAppointmentSession.isActive) {
+        console.log('🏁 [TextAppointment] Ending text appointment session manually');
+        processTextAppointmentDeduction(1, 'manual_end');
+        endTextAppointmentSession(1); // Deduct 1 session for manual end
+
+        // IMMEDIATELY show rating modal
+        setShowEndSessionModal(false);
+        setSessionEnded(true);
+        setShowRatingModal(true);
+        setEndingSession(false);
+
+        // FIX: Trigger refresh for both participants (non-blocking)
+        console.log('🔄 [TextAppointment] Triggering chat refresh for both participants...');
+        if (webrtcChatService) {
+          webrtcChatService.sendSessionEndNotification('manual_end').catch((error: any) => {
+            console.error('❌ [TextAppointment] Failed to send session end notification:', error);
+          });
+        }
+
+        // Force refresh chat data (non-blocking)
+        setTimeout(() => {
+          console.log('🔄 [TextAppointment] Forcing chat data refresh...');
+          if (webrtcChatService) {
+            webrtcChatService.requestSessionStatus();
+          }
+          loadChat();
+        }, 1000);
+
+        return;
+      }
+
       // Check if this is a scheduled appointment that hasn't started
-      // Only prevent ending if it's a scheduled appointment with no session_id and it's not appointment time
-      if (!isTextSession && !isTextAppointment && !isAppointmentTime && !(chatInfo?.session_id)) {
+      const appointmentStatus = String(chatInfo?.status || '');
+      const isConfirmedAppointment = appointmentStatus === 'confirmed' || appointmentStatus === '1';
+
+      // FIX: Only prevent ending if it's a confirmed appointment AND it's not a text appointment AND it's not appointment time
+      if (!isTextSession && !isTextAppointment && isConfirmedAppointment && !isAppointmentTime) {
         Alert.warning(
           'Cannot End Session',
           'This is a scheduled appointment that hasn\'t started yet. You can cancel it from your appointments list.'
@@ -3066,12 +3064,7 @@ export default function ChatPage() {
               await sessionService.endTextSession(sessionId);
               console.log('✅ [End Session] Backend call successful');
             } else {
-              const linkedSessionId = (chatInfo?.session_id ?? null);
-              if (linkedSessionId !== null && linkedSessionId !== undefined) {
-                await sessionService.endTextSession(String(linkedSessionId));
-              } else {
-                await sessionService.endTextSession(sessionId);
-              }
+              await sessionService.endTextAppointmentSession(sessionId);
               console.log('✅ [End Session] Backend call successful');
             }
           } catch (backendError: any) {
@@ -3988,37 +3981,6 @@ export default function ChatPage() {
     );
   }
 
-  // Architecture: Show waiting state if appointment has no session yet
-  if (isWaitingForSession && !isInstantSession && !isTextSession) {
-    const appointmentDateTime = chatInfo?.appointment_date && chatInfo?.appointment_time
-      ? new Date(`${chatInfo.appointment_date} ${chatInfo.appointment_time}`)
-      : null;
-    
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
-        <StatusBar barStyle="dark-content" />
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Ionicons name="time-outline" size={64} color="#4CAF50" style={{ marginBottom: 20 }} />
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222', marginBottom: 10, textAlign: 'center' }}>
-            Waiting for Session
-          </Text>
-          <Text style={{ fontSize: 16, color: '#666', textAlign: 'center', marginBottom: 20 }}>
-            Your appointment session will start automatically when the scheduled time arrives.
-          </Text>
-          {appointmentDateTime && (
-            <Text style={{ fontSize: 14, color: '#999', textAlign: 'center', marginTop: 10 }}>
-              {formatAppointmentDateTime(chatInfo!)}
-            </Text>
-          )}
-          <ActivityIndicator size="small" color="#4CAF50" style={{ marginTop: 20 }} />
-          <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', marginTop: 10 }}>
-            Checking for session...
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
       <StatusBar barStyle="dark-content" />
@@ -4137,207 +4099,103 @@ export default function ChatPage() {
 
 
           {/* Call Icons - Role-based calling */}
-          {/* For call appointments, show only the matching call button based on appointment_type */}
-          {((appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') && !isTextSession) && (
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
-              ref={tourRefs['call-buttons']}
-              collapsable={false}
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
+            ref={tourRefs['call-buttons']}
+            collapsable={false}
+          >
+            <TouchableOpacity
+              style={{
+                padding: 8,
+                marginRight: 1,
+                opacity: isCallButtonEnabled('video') ? 1 : 0.3
+              }}
+              onPress={() => {
+                if (isCallButtonEnabled('video')) {
+                  console.log('Starting video call...');
+                  setShowVideoCallModal(true);
+                } else {
+                  let message = '';
+                  if (!isVideoCallEnabled()) {
+                    message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
+                  } else if (subscriptionData?.videoCallsRemaining === 0) {
+                    message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                  } else {
+                    message = 'Video calls are only available during active sessions or when the doctor is online.';
+                  }
+                  Alert.info('Call Not Available', message);
+                }
+              }}
             >
-              {/* Video Call Button - Only show for video appointments */}
-              {(appointmentType === 'video') && (
-                <TouchableOpacity
-                  style={{
-                    padding: 8,
-                    marginRight: 1,
-                    opacity: isCallButtonEnabled('video') ? 1 : 0.3
-                  }}
-                  onPress={() => {
-                    if (isCallButtonEnabled('video')) {
-                      console.log('Starting video call...');
-                      setShowVideoCallModal(true);
-                    } else {
-                      let message = '';
-                      if (subscriptionData?.videoCallsRemaining === 0) {
-                        message = 'No video calls remaining in your subscription. Please upgrade your plan.';
-                      } else if (!chatInfo?.call_unlocked_at) {
-                        message = 'Appointment time has not been reached yet. Please wait for the scheduled time.';
-                      } else {
-                        message = 'Video call is not available at this time.';
-                      }
-                      Alert.info('Call Not Available', message);
-                    }
-                  }}
-                >
-                  <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
-                </TouchableOpacity>
-              )}
+              <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
+            </TouchableOpacity>
 
-              {/* Audio Call Button - Only show for audio/voice appointments, only patients can initiate */}
-              {(appointmentType === 'audio' || appointmentType === 'voice') && user?.user_type === 'patient' && (
-                <TouchableOpacity
-                  style={{
-                    padding: 8,
-                    opacity: isCallButtonEnabled('voice') ? 1 : 0.3
-                  }}
-                  onPress={() => {
-                    console.log('🎯 [CallButton] Press state:', {
-                      userType: user?.user_type,
-                      callEnabled: isCallEnabled(),
-                      webrtcReady,
-                      showIncomingCall,
-                      appointmentType,
-                      isTextSession,
-                      buttonEnabled: isCallButtonEnabled('voice'),
-                      subscriptionData,
-                      call_unlocked_at: chatInfo?.call_unlocked_at
-                    });
-
-                    if (isCallButtonEnabled('voice')) {
-                      console.log('📞 Patient call button pressed:', {
-                        appointmentId,
-                        currentUserId,
-                        isDoctor: user?.user_type === 'doctor',
-                        userType: user?.user_type
-                      });
-
-                      // Clear any pending offer before starting new call
-                      (global as any).pendingOffer = null;
-                      // Clear incoming call flag for outgoing calls
-                      (global as any).isIncomingCall = false;
-
-                      // Initialize audio call
-                      setShowAudioCallModal(true);
-                    } else {
-                      let message = '';
-                      if (subscriptionData?.voiceCallsRemaining === 0) {
-                        message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
-                      } else if (!chatInfo?.call_unlocked_at) {
-                        message = 'Appointment time has not been reached yet. Please wait for the scheduled time.';
-                      } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
-                        message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
-                      } else {
-                        message = 'Call Not Available: Call feature is not available at this time.';
-                      }
-                      Alert.info('Call Not Available', message);
-                    }
-                  }}
-                  disabled={!isCallButtonEnabled('voice')}
-                >
-                  <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
-                </TouchableOpacity>
-              )}
-
-              {/* Doctor Status - Doctors can only answer calls for audio appointments */}
-              {(appointmentType === 'audio' || appointmentType === 'voice') && user?.user_type === 'doctor' && (
-                <View style={{
-                  padding: 8,
-                  opacity: 0.7
-                }}>
-                  <Icon name="voice" size={24} color="#999" />
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* For text sessions/appointments, show both buttons (existing behavior) */}
-          {((appointmentType === 'text' || !appointmentType) && !isTextSession) && (
-            <View
-              style={{ flexDirection: 'row', alignItems: 'center', marginRight: 8 }}
-              ref={tourRefs['call-buttons']}
-              collapsable={false}
-            >
+            {/* Audio Call Button - Only patients can initiate calls */}
+            {user?.user_type === 'patient' && (
               <TouchableOpacity
                 style={{
                   padding: 8,
-                  marginRight: 1,
-                  opacity: isCallButtonEnabled('video') ? 1 : 0.3
+                  opacity: isCallButtonEnabled('voice') ? 1 : 0.3
                 }}
                 onPress={() => {
-                  if (isCallButtonEnabled('video')) {
-                    console.log('Starting video call...');
-                    setShowVideoCallModal(true);
+                  console.log('🎯 [CallButton] Press state:', {
+                    userType: user?.user_type,
+                    callEnabled: isCallEnabled(),
+                    webrtcReady,
+                    showIncomingCall,
+                    appointmentType,
+                    isTextSession,
+                    buttonEnabled: isCallButtonEnabled('voice'),
+                    subscriptionData
+                  });
+
+                  if (isCallButtonEnabled('voice')) {
+                    console.log('📞 Patient call button pressed:', {
+                      appointmentId,
+                      currentUserId,
+                      isDoctor: user?.user_type === 'doctor',
+                      userType: user?.user_type
+                    });
+
+                    // Clear any pending offer before starting new call
+                    (global as any).pendingOffer = null;
+                    // Clear incoming call flag for outgoing calls
+                    (global as any).isIncomingCall = false;
+
+                    // Initialize audio call
+                    // AudioCallService is already imported as audioCallService
+
+                    setShowAudioCallModal(true);
                   } else {
                     let message = '';
-                    if (!isVideoCallEnabled()) {
-                      message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
-                    } else if (subscriptionData?.videoCallsRemaining === 0) {
-                      message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                    if (!isAudioCallEnabled()) {
+                      message = `Audio calls are not available for ${appointmentType} appointments. Audio calls are only available for audio appointments.`;
+                    } else if (subscriptionData?.voiceCallsRemaining === 0) {
+                      message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
+                    } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
+                      message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
                     } else {
-                      message = 'Video calls are only available during active sessions or when the doctor is online.';
+                      message = 'Call Not Available: Call feature is not available at this time.';
                     }
                     Alert.info('Call Not Available', message);
                   }
                 }}
+                disabled={!isCallButtonEnabled('voice')}
               >
-                <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
+                <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
               </TouchableOpacity>
+            )}
 
-              {/* Audio Call Button - Only patients can initiate calls */}
-              {user?.user_type === 'patient' && (
-                <TouchableOpacity
-                  style={{
-                    padding: 8,
-                    opacity: isCallButtonEnabled('voice') ? 1 : 0.3
-                  }}
-                  onPress={() => {
-                    console.log('🎯 [CallButton] Press state:', {
-                      userType: user?.user_type,
-                      callEnabled: isCallEnabled(),
-                      webrtcReady,
-                      showIncomingCall,
-                      appointmentType,
-                      isTextSession,
-                      buttonEnabled: isCallButtonEnabled('voice'),
-                      subscriptionData
-                    });
-
-                    if (isCallButtonEnabled('voice')) {
-                      console.log('📞 Patient call button pressed:', {
-                        appointmentId,
-                        currentUserId,
-                        isDoctor: user?.user_type === 'doctor',
-                        userType: user?.user_type
-                      });
-
-                      // Clear any pending offer before starting new call
-                      (global as any).pendingOffer = null;
-                      // Clear incoming call flag for outgoing calls
-                      (global as any).isIncomingCall = false;
-
-                      // Initialize audio call
-                      setShowAudioCallModal(true);
-                    } else {
-                      let message = '';
-                      if (!isAudioCallEnabled()) {
-                        message = `Audio calls are not available for ${appointmentType} appointments. Audio calls are only available for audio appointments.`;
-                      } else if (subscriptionData?.voiceCallsRemaining === 0) {
-                        message = 'No voice calls remaining in your subscription. Please upgrade your plan.';
-                      } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS !== 'true') {
-                        message = 'Call Not Ready: WebRTC is not ready yet. Please wait a moment.';
-                      } else {
-                        message = 'Call Not Available: Call feature is not available at this time.';
-                      }
-                      Alert.info('Call Not Available', message);
-                    }
-                  }}
-                  disabled={!isCallButtonEnabled('voice')}
-                >
-                  <Icon name="voice" size={24} color={isCallButtonEnabled('voice') ? "#4CAF50" : "#999"} />
-                </TouchableOpacity>
-              )}
-
-              {/* Doctor Status - Doctors can only answer calls */}
-              {user?.user_type === 'doctor' && (
-                <View style={{
-                  padding: 8,
-                  opacity: 0.7
-                }}>
-                  <Icon name="voice" size={24} color="#999" />
-                </View>
-              )}
-            </View>
-          )}
+            {/* Doctor Status - Doctors can only answer calls */}
+            {user?.user_type === 'doctor' && (
+              <View style={{
+                padding: 8,
+                opacity: 0.7
+              }}>
+                <Icon name="voice" size={24} color="#999" />
+              </View>
+            )}
+          </View>
 
 
         </View>
@@ -4416,7 +4274,8 @@ export default function ChatPage() {
                   {sessionStatus.sessionType === 'instant' ? 'Instant Session' : 'Appointment'} •
                   {sessionStatus.status === 'active' ? ' Active' :
                     sessionStatus.status === 'waiting_for_doctor' ? ' Waiting for Doctor' :
-                      sessionStatus.status}
+                      sessionStatus.status === 'in_progress' ? ' In Progress' :
+                        sessionStatus.status}
                 </Text>
 
                 {sessionStatus.remainingTimeMinutes && (
@@ -4963,10 +4822,9 @@ export default function ChatPage() {
                 sessionEnded ||
                 !sessionValid ||
                 selectedImage !== null ||
-                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && isWaitingForSession)
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
               }
               style={{
                 padding: 8,
@@ -4976,10 +4834,9 @@ export default function ChatPage() {
                   sessionEnded ||
                   !sessionValid ||
                   selectedImage !== null ||
-                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
               }}
             >
               <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#4CAF50"} />
@@ -4993,10 +4850,9 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
-                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && isWaitingForSession)
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
               }
               style={{
                 padding: 8,
@@ -5005,10 +4861,9 @@ export default function ChatPage() {
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
-                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
               }}
             >
               <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#4CAF50"} />
@@ -5021,10 +4876,9 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
-                isWaitingForSession ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && isWaitingForSession)
+                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
               }
               style={{
                 padding: 8,
@@ -5032,10 +4886,9 @@ export default function ChatPage() {
                 opacity: (sending ||
                   sessionEnded ||
                   !sessionValid ||
-                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && isWaitingForSession)) ? 0.3 : 1,
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
               }}
             >
               <Ionicons
@@ -5044,10 +4897,9 @@ export default function ChatPage() {
                 color={(sending ||
                   sessionEnded ||
                   !sessionValid ||
-                  isWaitingForSession ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && isWaitingForSession)) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
               />
             </TouchableOpacity>
           </Animated.View>
@@ -5065,7 +4917,7 @@ export default function ChatPage() {
                 }
               }
             }}
-            editable={sessionValid && !sessionEnded && !isWaitingForSession && isTextInputEnabled() && (isTextSession || isAppointmentTime)}
+            editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
             placeholder="Message..."
             placeholderTextColor="#999"
             style={{
@@ -5077,7 +4929,7 @@ export default function ChatPage() {
               paddingVertical: 14,
               fontSize: 16,
               marginRight: 8,
-              opacity: (sessionValid && !sessionEnded && !isWaitingForSession && isTextInputEnabled() && (isTextSession || isAppointmentTime)) ? 1 : 0.5,
+              opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
               maxHeight: 100,
               minHeight: 48,
@@ -5160,9 +5012,9 @@ export default function ChatPage() {
               (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
               sessionEnded ||
               !sessionValid ||
-              isWaitingForSession ||
               (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient)
+              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
               backgroundColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : '#E5E5E5',

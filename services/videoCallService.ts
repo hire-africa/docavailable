@@ -1,6 +1,5 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
-import { Alert } from 'react-native';
 import {
   mediaDevices,
   MediaStream,
@@ -192,47 +191,6 @@ class VideoCallService {
         events?.onCallRejected?.();
         return;
       }
-
-      // CRITICAL: Clean up any existing connections/resources before starting new call
-      if (this.signalingChannel) {
-        console.log('🧹 [VideoCallService] Closing existing signaling channel before new call');
-        try {
-          this.signalingChannel.close();
-        } catch (e) {
-          console.warn('⚠️ Error closing existing signaling channel:', e);
-        }
-        this.signalingChannel = null;
-      }
-
-      if (this.peerConnection) {
-        console.log('🧹 [VideoCallService] Closing existing peer connection before new call');
-        try {
-          this.peerConnection.close();
-        } catch (e) {
-          console.warn('⚠️ Error closing existing peer connection:', e);
-        }
-        this.peerConnection = null;
-      }
-
-      if (this.localStream) {
-        console.log('🧹 [VideoCallService] Stopping existing local stream before new call');
-        try {
-          this.localStream.getTracks().forEach(track => track.stop());
-        } catch (e) {
-          console.warn('⚠️ Error stopping existing local stream:', e);
-        }
-        this.localStream = null;
-      }
-
-      // Reset state flags
-      this.hasEnded = false;
-      this.isCallAnswered = false;
-      this.isIncomingMode = false;
-      this.hasAccepted = false;
-      this.pendingCandidates = [];
-      this.pendingOffer = null;
-      this.processedMessages.clear();
-
       g.activeVideoCall = true;
       g.currentCallType = 'video';
       this.events = events;
@@ -381,15 +339,6 @@ class VideoCallService {
       this.peerConnection.addEventListener('track', (event) => {
         console.log('📹 Remote video stream received');
         this.remoteStream = event.streams[0];
-        
-        // CRITICAL: Ensure all audio tracks are enabled for sound to work
-        event.streams[0].getAudioTracks().forEach(track => {
-          if (!track.enabled) {
-            console.log('🔊 [VideoCallService] Enabling remote audio track:', track.id);
-            track.enabled = true;
-          }
-        });
-        
         this.events?.onRemoteStream(event.streams[0]);
       });
 
@@ -430,6 +379,12 @@ class VideoCallService {
             appointmentId: this.appointmentId,
           });
         } else if (state === 'disconnected' || state === 'failed') {
+          // CRITICAL: Ignore disconnected/failed during initial setup - WebRTC can report these transiently during setup
+          // Check if we're still in 'connecting' state (initialization phase)
+          if (this.state.connectionState === 'connecting') {
+            console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
+            return;
+          }
           // Only update state if call is not answered and not already ended and not being accepted
           if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
             console.log('🔗 Video WebRTC disconnected/failed - updating state');
@@ -626,15 +581,6 @@ class VideoCallService {
       this.peerConnection.addEventListener('track', (event) => {
         console.log('📹 Remote video stream received');
         this.remoteStream = event.streams[0];
-        
-        // CRITICAL: Ensure all audio tracks are enabled for sound to work
-        event.streams[0].getAudioTracks().forEach(track => {
-          if (!track.enabled) {
-            console.log('🔊 [VideoCallService] Enabling remote audio track:', track.id);
-            track.enabled = true;
-          }
-        });
-        
         this.events?.onRemoteStream(event.streams[0]);
       });
 
@@ -681,6 +627,12 @@ class VideoCallService {
             appointmentId: this.appointmentId,
           });
         } else if (state === 'disconnected' || state === 'failed') {
+          // CRITICAL: Ignore disconnected/failed during initial setup - WebRTC can report these transiently during setup
+          // Check if we're still in 'connecting' state (initialization phase)
+          if (this.state.connectionState === 'connecting') {
+            console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
+            return;
+          }
           // Only update state if call is not answered and not already ended
           if (!this.isCallAnswered && !this.hasEnded) {
             console.log('🔗 Video WebRTC disconnected/failed - updating state');
@@ -1522,7 +1474,6 @@ class VideoCallService {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ [VideoCallService] Call marked as answered in backend:', data);
-        Alert.alert('Answer Endpoint Response', JSON.stringify(data, null, 2));
       } else {
         const errorText = await response.text();
         let errorData;
