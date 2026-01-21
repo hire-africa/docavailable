@@ -173,7 +173,11 @@ class CallSessionController extends Controller
                 }
 
                 // Scheduled calls must map appointment_type -> call_type
-                $expectedCallType = ($appointment->appointment_type === 'video') ? 'video' : (($appointment->appointment_type === 'audio') ? 'voice' : null);
+                // Treat legacy 'voice' as audio (maps to call_type 'voice')
+                $apptType = (string) ($appointment->appointment_type ?? '');
+                $expectedCallType = ($apptType === 'video')
+                    ? 'video'
+                    : (in_array($apptType, ['audio', 'voice'], true) ? 'voice' : null);
                 if (!$expectedCallType) {
                     return response()->json([
                         'success' => false,

@@ -6,24 +6,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  AppState,
-  BackHandler,
-  Dimensions,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    AppState,
+    BackHandler,
+    Dimensions,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -789,17 +789,90 @@ export default function PatientDashboard() {
 
   // Check if appointment is ready for session
   const isAppointmentReadyForSession = (appointment: any) => {
-    if (!appointment.date || !appointment.time) return false;
-
-    const now = new Date();
-    const [month, day, year] = (appointment.date || '').split('/').map(Number);
-    const [hour, minute] = (appointment.time || '00:00').split(':').map(Number);
-    const appointmentDate = new Date(year, month - 1, day, hour, minute);
-
-    // Session is ready if appointment time has passed and status is confirmed
     // Handle both string 'confirmed' and numeric 1
     const isConfirmed = appointment.status === 'confirmed' || appointment.status === 1;
-    return isConfirmed && now >= appointmentDate;
+    if (!isConfirmed) {
+      console.log('⏸️ [isAppointmentReadyForSession] Appointment not confirmed:', appointment.id, appointment.status);
+      return false;
+    }
+
+    // Get date/time fields (handle both API formats)
+    const dateStr = appointment.appointment_date || appointment.date;
+    const timeStr = appointment.appointment_time || appointment.time;
+
+    // For video/audio appointments: check call_unlocked_at (most reliable indicator)
+    const appointmentType = appointment.appointment_type || appointment.consultationType || appointment.type;
+    if (appointmentType === 'video' || appointmentType === 'audio' || appointmentType === 'voice') {
+      // If call_unlocked_at exists, the appointment has been activated by the cron job
+      // Check both possible field names
+      const callUnlockedAt = appointment.call_unlocked_at || (appointment as any).call_unlocked_at;
+      if (callUnlockedAt) {
+        console.log('✅ [isAppointmentReadyForSession] Call appointment unlocked:', {
+          appointmentId: appointment.id,
+          appointmentType,
+          callUnlockedAt
+        });
+        return true;
+      }
+      console.log('⏳ [isAppointmentReadyForSession] Call appointment not unlocked yet:', {
+        appointmentId: appointment.id,
+        appointmentType,
+        dateStr,
+        timeStr,
+        call_unlocked_at: appointment.call_unlocked_at
+      });
+      // Fallback: check if appointment time has passed
+      if (dateStr && timeStr) {
+        try {
+          const now = new Date();
+          // Handle different date formats
+          let appointmentDate: Date;
+          if (dateStr.includes('/')) {
+            // Format: MM/DD/YYYY
+            const [month, day, year] = dateStr.split('/').map(Number);
+            const [hour, minute] = timeStr.split(':').map(Number);
+            appointmentDate = new Date(year, month - 1, day, hour, minute);
+          } else {
+            // Format: YYYY-MM-DD
+            appointmentDate = new Date(`${dateStr}T${timeStr}`);
+          }
+          const isTimePassed = now >= appointmentDate;
+          console.log('⏰ [isAppointmentReadyForSession] Time check:', {
+            appointmentId: appointment.id,
+            now: now.toISOString(),
+            appointmentDate: appointmentDate.toISOString(),
+            isTimePassed
+          });
+          return isTimePassed;
+        } catch (error) {
+          console.error('❌ [isAppointmentReadyForSession] Error parsing date/time:', error);
+          return false;
+        }
+      }
+      return false;
+    }
+
+    // For text appointments: check if appointment time has passed
+    if (!dateStr || !timeStr) return false;
+
+    try {
+      const now = new Date();
+      // Handle different date formats
+      let appointmentDate: Date;
+      if (dateStr.includes('/')) {
+        // Format: MM/DD/YYYY
+        const [month, day, year] = dateStr.split('/').map(Number);
+        const [hour, minute] = timeStr.split(':').map(Number);
+        appointmentDate = new Date(year, month - 1, day, hour, minute);
+      } else {
+        // Format: YYYY-MM-DD
+        appointmentDate = new Date(`${dateStr}T${timeStr}`);
+      }
+      return now >= appointmentDate;
+    } catch (error) {
+      console.error('❌ [isAppointmentReadyForSession] Error parsing date/time for text appointment:', error);
+      return false;
+    }
   };
 
   // Get appointment session status
@@ -2475,7 +2548,7 @@ export default function PatientDashboard() {
                         {String(item.doctorName || item.doctor_name || 'Doctor')}
                       </Text>
                       <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        {String(item.reason) || 'Chat'}
+                        {item.reason || 'Chat'}
                       </Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={{ fontSize: 14, color: '#666' }} numberOfLines={1}>
@@ -2512,7 +2585,7 @@ export default function PatientDashboard() {
                         </View>
                       )}
                       <Text style={{ fontSize: 12, color: '#999' }}>
-                        {item.date ? new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                        {item.appointment_date || item.date ? new Date(item.appointment_date || item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
                       </Text>
                     </View>
                   </View>

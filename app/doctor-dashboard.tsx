@@ -1156,10 +1156,13 @@ export default function DoctorDashboard() {
         router.push({ pathname: '/appointment-details/[id]', params: { id: patient.id } });
       }
     } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
-      // Call appointments (audio/video): Only navigate to chat if session is NOT upcoming (i.e. it's time or past)
-      // OR if it has a linked session
+      // Call appointments (audio/video): Navigate to chat if:
+      // 1. call_unlocked_at is set (appointment activated by cron)
+      // 2. OR appointment time has passed
+      // 3. OR it has a linked session
+      const callUnlocked = !!(patient.call_unlocked_at || (patient as any).call_unlocked_at);
       const isUpcoming = isAppointmentUpcoming(patient);
-      if (!isUpcoming || hasLinkedSession) {
+      if (callUnlocked || !isUpcoming || hasLinkedSession) {
         router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
       } else {
         // Not time yet - show appointment details

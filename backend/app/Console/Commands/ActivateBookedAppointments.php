@@ -184,6 +184,12 @@ class ActivateBookedAppointments extends Command
                         'call_unlocked_at' => $unlockTime,
                     ]);
                     
+                    // Clear cache for this user's appointments to ensure fresh data
+                    $patientCacheKey = "user_appointments_{$appointment->patient_id}_patient_*";
+                    $doctorCacheKey = "user_appointments_{$appointment->doctor_id}_doctor_*";
+                    \Illuminate\Support\Facades\Cache::flush(); // Clear all cache (simple approach)
+                    // Alternatively, could use Cache::tags() for more granular clearing
+                    
                     Log::info("Set call_unlocked_at for appointment", [
                         'appointment_id' => $appointment->id,
                         'call_unlocked_at' => $unlockTime->toDateTimeString(),

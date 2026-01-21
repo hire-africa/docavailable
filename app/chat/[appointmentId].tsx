@@ -719,22 +719,32 @@ export default function ChatPage() {
 
   // Determine if text input should be enabled (only for text sessions and text appointments)
   const isTextInputEnabled = () => {
-    const isCallAppointmentType =
-      appointmentType === 'audio' ||
-      appointmentType === 'voice' ||
-      appointmentType === 'video';
+    // CRITICAL: If call_unlocked_at exists, this is a call appointment - disable text input immediately
+    const callUnlockedAt = (chatInfo as any)?.call_unlocked_at;
+    if (callUnlockedAt && !isTextSession) {
+      console.log('🚫 [TextInput] Disabled - call_unlocked_at exists:', callUnlockedAt);
+      return false;
+    }
 
-    // If this is clearly a call appointment (by type or unlock flag), keep text input disabled.
+    // Get appointment type from chatInfo first (most reliable), then fallback to state
+    const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
+    const isCallAppointmentType =
+      currentAppointmentType === 'audio' ||
+      currentAppointmentType === 'voice' ||
+      currentAppointmentType === 'video';
+
+    // If this is clearly a call appointment (by type), keep text input disabled.
     // This matches the intent that scheduled call appointments use the call button, not text.
-    if (!isTextSession && (isCallAppointmentType || (chatInfo as any)?.call_unlocked_at)) {
+    if (!isTextSession && isCallAppointmentType) {
+      console.log('🚫 [TextInput] Disabled for call appointment type:', currentAppointmentType);
       return false;
     }
 
     // Text input only enabled for text sessions and text appointments
     if (isTextSession) return true;
-    if (appointmentType === 'text') return true;
+    if (currentAppointmentType === 'text') return true;
     // If appointment type is unknown/null AND there is no call unlock, allow text input as fallback
-    if (!appointmentType && !(chatInfo as any)?.call_unlocked_at) return true;
+    if (!currentAppointmentType && !callUnlockedAt) return true;
     // For audio/video appointments, text input is disabled
     return false;
   };
@@ -765,7 +775,9 @@ export default function ChatPage() {
   const isAudioCallEnabled = () => {
     // Audio calls available for audio appointments only (NOT text sessions)
     if (isTextSession) return false; // FIX: Disable call buttons for text sessions
-    if (appointmentType === 'audio' || appointmentType === 'voice') return true;
+    // Check both chatInfo and state for appointment type
+    const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
+    if (currentAppointmentType === 'audio' || currentAppointmentType === 'voice') return true;
     return false;
   };
 
@@ -773,7 +785,9 @@ export default function ChatPage() {
   const isVideoCallEnabled = () => {
     // Video calls available for video appointments only (NOT text sessions)
     if (isTextSession) return false; // FIX: Disable call buttons for text sessions
-    if (appointmentType === 'video') return true;
+    // Check both chatInfo and state for appointment type
+    const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
+    if (currentAppointmentType === 'video') return true;
     return false;
   };
 
@@ -825,6 +839,8 @@ export default function ChatPage() {
       callTypeEnabled,
       callType,
       appointmentType,
+      chatInfoAppointmentType: chatInfo?.appointment_type,
+      callUnlockedAt: (chatInfo as any)?.call_unlocked_at,
       isTextSession,
       webrtcReady,
       webrtcReadyOrFallback,
@@ -838,6 +854,60 @@ export default function ChatPage() {
     });
 
     return enabled;
+  };
+
+  // Start call session for scheduled appointments (same as "Talk Now" flow)
+  const startCallSession = async (callType: 'voice' | 'video') => {
+    if (!appointmentId || isTextSession) {
+      console.error('❌ [startCallSession] Invalid appointment ID or text session');
+      Alert.alert('Error', 'Invalid appointment. Please try again.');
+      return false;
+    }
+
+    // Parse appointment ID (should be numeric for scheduled appointments)
+    const appointmentIdNum = parseInt(appointmentId, 10);
+    if (isNaN(appointmentIdNum)) {
+      console.error('❌ [startCallSession] Appointment ID is not numeric:', appointmentId);
+      Alert.alert('Error', 'Invalid appointment ID. Please try again.');
+      return false;
+    }
+
+    if (!doctorId || doctorId === 0) {
+      console.error('❌ [startCallSession] Doctor ID is missing');
+      Alert.alert('Error', 'Doctor information is missing. Please try again.');
+      return false;
+    }
+
+    try {
+      console.log('📞 [startCallSession] Starting call session:', {
+        appointmentId: appointmentIdNum,
+        callType,
+        doctorId,
+        appointmentType: chatInfo?.appointment_type || appointmentType
+      });
+
+      // Call the backend to start the call session (same endpoint as "Talk Now")
+      const response = await apiService.post('/call-sessions/start', {
+        call_type: callType,
+        appointment_id: appointmentIdNum.toString(),
+        reason: chatInfo?.reason || 'Scheduled appointment call'
+      });
+
+      if (response.success || (response as any).data?.success) {
+        console.log('✅ [startCallSession] Call session started successfully:', response);
+        return true;
+      } else {
+        const errorMsg = response.message || (response as any).data?.message || 'Failed to start call session';
+        console.error('❌ [startCallSession] Failed:', errorMsg, response);
+        Alert.alert('Call Failed', errorMsg);
+        return false;
+      }
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.message || error?.message || 'Failed to start call session';
+      console.error('❌ [startCallSession] Error:', error);
+      Alert.alert('Call Failed', errorMsg);
+      return false;
+    }
   };
   const parsedAppointmentId = isTextSession ? appointmentId : (appointmentId ? parseInt(appointmentId, 10) : null);
 
@@ -863,6 +933,18 @@ export default function ChatPage() {
       if (isActiveStatus) {
         console.log('✅ [AppointmentTime] Appointment is explicitly active/in_progress, bypassing time check');
       }
+      setIsAppointmentTime(true);
+      setTimeUntilAppointment('');
+      return;
+    }
+
+    // For video/audio appointments: check call_unlocked_at first (most reliable indicator)
+    const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
+    const isCallAppointment = currentAppointmentType === 'video' || currentAppointmentType === 'audio' || currentAppointmentType === 'voice';
+    const callUnlockedAt = (chatInfo as any)?.call_unlocked_at;
+    
+    if (isCallAppointment && callUnlockedAt) {
+      console.log('✅ [AppointmentTime] Video/Audio appointment unlocked via call_unlocked_at:', callUnlockedAt);
       setIsAppointmentTime(true);
       setTimeUntilAppointment('');
       return;
@@ -899,6 +981,8 @@ export default function ChatPage() {
       console.log('🕐 [AppointmentTime] Time validation result:', {
         appointment_date: chatInfo.appointment_date,
         appointment_time: chatInfo.appointment_time,
+        appointment_type: currentAppointmentType,
+        call_unlocked_at: callUnlockedAt,
         user_timezone: userTimezone,
         is_time_reached: timeValidation.isTimeReached,
         time_until_appointment: timeValidation.timeUntilAppointment,
@@ -912,7 +996,7 @@ export default function ChatPage() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setTimeUntilAppointment(`Error: ${errorMessage}`);
     }
-  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, isInstantSession]);
+  }, [chatInfo?.appointment_date, chatInfo?.appointment_time, chatInfo?.appointment_type, isInstantSession, appointmentType]);
 
   // Check appointment time when chat info changes
   useEffect(() => {
@@ -2815,7 +2899,8 @@ export default function ChatPage() {
     }
 
     // Create WebSocket connection for incoming calls
-    const wsUrl = `wss://docavailable.org/audio-signaling?appointmentId=${appointmentId}&userId=${userId}`;
+    // NOTE: must use currentUserId; `userId` is not defined in this file and will crash WebRTC init
+    const wsUrl = `wss://docavailable.org/audio-signaling?appointmentId=${appointmentId}&userId=${currentUserId}`;
     const signalingChannel = new WebSocket(wsUrl);
 
     // Store reference for cleanup
@@ -4115,40 +4200,53 @@ export default function ChatPage() {
             ref={tourRefs['call-buttons']}
             collapsable={false}
           >
-            <TouchableOpacity
-              style={{
-                padding: 8,
-                marginRight: 1,
-                opacity: isCallButtonEnabled('video') ? 1 : 0.3
-              }}
-              onPress={() => {
-                if (isCallButtonEnabled('video')) {
-                  console.log('Starting video call...');
-                  setShowVideoCallModal(true);
-                } else {
-                  let message = '';
-                  if (!isVideoCallEnabled()) {
-                    message = `Video calls are not available for ${appointmentType} appointments. Video calls are only available for video appointments.`;
-                  } else if (subscriptionData?.videoCallsRemaining === 0) {
-                    message = 'No video calls remaining in your subscription. Please upgrade your plan.';
-                  } else {
-                    message = 'Video calls are only available during active sessions or when the doctor is online.';
-                  }
-                  Alert.info('Call Not Available', message);
-                }
-              }}
-            >
-              <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
-            </TouchableOpacity>
+            {/* Video call button: ONLY show for video appointments AND when video calls are enabled */}
+            {(() => {
+              const config = configService.getWebRTCConfig();
+              const videoFeatureEnabled = !!config.enableVideoCalls;
+              const showVideo = isVideoCallEnabled() && videoFeatureEnabled;
+              if (!showVideo) return null;
 
-            {/* Audio Call Button - Only patients can initiate calls */}
-            {user?.user_type === 'patient' && (
+              return (
+                <TouchableOpacity
+                  style={{
+                    padding: 8,
+                    marginRight: 1,
+                    opacity: isCallButtonEnabled('video') ? 1 : 0.3
+                  }}
+                  onPress={async () => {
+                    if (isCallButtonEnabled('video')) {
+                      console.log('📹 Starting video call for scheduled appointment...');
+                      const started = await startCallSession('video');
+                      if (started) {
+                        setShowVideoCallModal(true);
+                      }
+                    } else {
+                      let message = '';
+                      if (!videoFeatureEnabled) {
+                        message = 'Video calls are currently disabled in configuration.';
+                      } else if (subscriptionData?.videoCallsRemaining === 0) {
+                        message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                      } else {
+                        message = 'Video calls are not available right now. Please wait and try again.';
+                      }
+                      Alert.info('Call Not Available', message);
+                    }
+                  }}
+                >
+                  <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
+                </TouchableOpacity>
+              );
+            })()}
+
+            {/* Audio Call Button - Only patients can initiate calls (ONLY show for audio/voice appointments) */}
+            {user?.user_type === 'patient' && isAudioCallEnabled() && (
               <TouchableOpacity
                 style={{
                   padding: 8,
                   opacity: isCallButtonEnabled('voice') ? 1 : 0.3
                 }}
-                onPress={() => {
+                onPress={async () => {
                   console.log('🎯 [CallButton] Press state:', {
                     userType: user?.user_type,
                     callEnabled: isCallEnabled(),
@@ -4161,7 +4259,7 @@ export default function ChatPage() {
                   });
 
                   if (isCallButtonEnabled('voice')) {
-                    console.log('📞 Patient call button pressed:', {
+                    console.log('📞 Patient call button pressed for scheduled appointment:', {
                       appointmentId,
                       currentUserId,
                       isDoctor: user?.user_type === 'doctor',
@@ -4173,10 +4271,11 @@ export default function ChatPage() {
                     // Clear incoming call flag for outgoing calls
                     (global as any).isIncomingCall = false;
 
-                    // Initialize audio call
-                    // AudioCallService is already imported as audioCallService
-
-                    setShowAudioCallModal(true);
+                    // Start the call session first (same as "Talk Now" flow)
+                    const started = await startCallSession('voice');
+                    if (started) {
+                      setShowAudioCallModal(true);
+                    }
                   } else {
                     let message = '';
                     if (!isAudioCallEnabled()) {
@@ -4832,6 +4931,7 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
+                !isTextInputEnabled() || // Disable for call appointments
                 selectedImage !== null ||
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
@@ -4844,13 +4944,14 @@ export default function ChatPage() {
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  !isTextInputEnabled() || // Disable for call appointments
                   selectedImage !== null ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                   (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
               }}
             >
-              <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null) ? "#999" : "#4CAF50"} />
+              <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
             </TouchableOpacity>
 
             {/* Camera Button */}
@@ -4861,6 +4962,7 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
+                !isTextInputEnabled() || // Disable for call appointments
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
@@ -4872,12 +4974,13 @@ export default function ChatPage() {
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  !isTextInputEnabled() || // Disable for call appointments
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                   (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
               }}
             >
-              <Ionicons name="camera" size={24} color={sendingCameraImage ? "#999" : "#4CAF50"} />
+              <Ionicons name="camera" size={24} color={(sendingCameraImage || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
             </TouchableOpacity>
 
             {/* Voice Recording Button */}
@@ -4887,6 +4990,7 @@ export default function ChatPage() {
                 sending ||
                 sessionEnded ||
                 !sessionValid ||
+                !isTextInputEnabled() || // Disable for call appointments
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
@@ -4897,6 +5001,7 @@ export default function ChatPage() {
                 opacity: (sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  !isTextInputEnabled() || // Disable for call appointments
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                   (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
@@ -4908,6 +5013,7 @@ export default function ChatPage() {
                 color={(sending ||
                   sessionEnded ||
                   !sessionValid ||
+                  !isTextInputEnabled() || // Disable for call appointments
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                   (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
