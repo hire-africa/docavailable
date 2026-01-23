@@ -28,11 +28,6 @@ export const environment = {
   WEBRTC_CHAT_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 'wss://docavailable.org/chat-signaling'),
   WEBRTC_CHAT_SERVER_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org'),
 
-  // WebRTC Fallback Configuration (using direct IP bypassing SSL issues)
-  // Note: Signaling server runs on 8080, Chat server runs on 8081
-  WEBRTC_FALLBACK_SIGNALING_URL: 'ws://46.101.123.123:8080/call-signaling',
-  WEBRTC_FALLBACK_CHAT_SIGNALING_URL: 'ws://46.101.123.123:8081/chat-signaling',
-
   // App Configuration
   APP_NAME: getEnvVar('EXPO_PUBLIC_APP_NAME', 'DocAvailable'),
   APP_VERSION: getEnvVar('EXPO_PUBLIC_APP_VERSION', '1.0.0'),

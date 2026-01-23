@@ -18,7 +18,7 @@ export interface ChatMessage {
   is_own_message?: boolean; // Added for UI purposes
 }
 
-import { SessionContext, contextToString } from './sessionContext';
+import { SessionContext } from './sessionContext';
 
 export interface ChatConfig {
   baseUrl: string;
@@ -38,5 +38,5 @@ export interface ChatConfig {
 export interface ChatEvents {
   onMessage: (message: ChatMessage) => void;
   onError: (error: string) => void;
-  onSessionEnded?: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => void;
+  onSessionEnded?: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment' | 'text_session') => void;
 }

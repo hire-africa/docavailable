@@ -55,38 +55,25 @@ try {
   isHTTPS = false;
 }
 
-// Create WebSocket servers with optimal configuration
-// Using /call-signaling path to match documented URLs: wss://docavailable.org/call-signaling
 const audioWss = new WebSocket.Server({
   server,
   path: '/call-signaling',
-  perMessageDeflate: {
-    threshold: 0, // Disable compression completely
-    concurrencyLimit: 0,
-    memLevel: 0,
-    level: 0,
-    strategy: 0,
-    windowBits: 0
-  },
+  perMessageDeflate: false,
   maxPayload: CONFIG.MAX_PAYLOAD,
-  noServer: false,
-  skipUTF8Validation: false // Keep validation for security
+});
+
+const legacyAudioWss = new WebSocket.Server({
+  server,
+  path: '/audio-signaling',
+  perMessageDeflate: false,
+  maxPayload: CONFIG.MAX_PAYLOAD,
 });
 
 const chatWss = new WebSocket.Server({
   server,
   path: '/chat-signaling',
-  perMessageDeflate: {
-    threshold: 0, // Disable compression completely
-    concurrencyLimit: 0,
-    memLevel: 0,
-    level: 0,
-    strategy: 0,
-    windowBits: 0
-  },
+  perMessageDeflate: false,
   maxPayload: CONFIG.MAX_PAYLOAD,
-  noServer: false,
-  skipUTF8Validation: false // Keep validation for security
 });
 
 // Utility functions
@@ -235,6 +222,7 @@ function handleConnection(ws, req, connectionType) {
   ws.userId = userId;
   ws.authToken = authToken || CONFIG.API_AUTH_TOKEN;
   ws.connectionType = connectionType;
+  ws.lastMessageId = null; // Track last seen message for sync
 
   // Send connection confirmation
   safeSend(ws, {
@@ -284,6 +272,9 @@ function handleConnection(ws, req, connectionType) {
           break;
         case 'session-end-request':
           handleSessionEndRequest(message, ws);
+          break;
+        case 'sync-messages':
+          handleMessageSync(message, ws);
           break;
         default:
           broadcastToOthers(ws, appointmentId, message);
@@ -462,6 +453,71 @@ async function handleSessionStatusRequest(appointmentId, ws) {
   }
 }
 
+async function handleMessageSync(message, ws) {
+  try {
+    const appointmentId = message.appointmentId;
+    const authToken = ws.authToken;
+    const lastMessageId = message.lastMessageId || null;
+
+    log('INFO', 'Handling message sync request', {
+      appointmentId,
+      lastMessageId
+    });
+
+    // Fetch messages from API (encrypted messages will stay encrypted)
+    const response = await axios.get(
+      `${CONFIG.API_BASE_URL}/api/chat/${appointmentId}/messages`,
+      {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        params: {
+          since: lastMessageId // Fetch messages after this ID
+        }
+      }
+    );
+
+    if (response.data.success) {
+      const messages = response.data.data || [];
+      log('INFO', 'Message sync successful', {
+        appointmentId,
+        messageCount: messages.length
+      });
+
+      // Send synced messages to client (encrypted messages stay encrypted)
+      safeSend(ws, {
+        type: 'messages-synced',
+        messages: messages,
+        appointmentId: appointmentId,
+        timestamp: new Date().toISOString()
+      });
+
+      // Update last message ID
+      if (messages.length > 0) {
+        ws.lastMessageId = messages[messages.length - 1].id;
+      }
+    } else {
+      log('ERROR', 'API returned error for message sync', { response: response.data });
+      safeSend(ws, {
+        type: 'error',
+        message: 'Failed to sync messages',
+        appointmentId: appointmentId
+      });
+    }
+  } catch (error) {
+    log('ERROR', 'Error syncing messages', {
+      error: error.message,
+      appointmentId: message.appointmentId
+    });
+    safeSend(ws, {
+      type: 'error',
+      message: 'Failed to sync messages',
+      details: error.message
+    });
+  }
+}
+
 async function handleSessionEndRequest(message, ws) {
   try {
     const appointmentId = message.appointmentId;
@@ -526,6 +582,10 @@ async function handleSessionEndRequest(message, ws) {
 }
 
 // Set up WebSocket server event handlers
+legacyAudioWss.on('connection', (ws, req) => {
+  handleConnection(ws, req, 'audio-legacy');
+});
+
 audioWss.on('connection', (ws, req) => {
   handleConnection(ws, req, 'audio');
 });

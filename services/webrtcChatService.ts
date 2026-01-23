@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { environment } from '../config/environment';
 import { ChatConfig, ChatEvents, ChatMessage } from '../types/chat';
 import { imageService } from './imageService';
 import { mediaUploadQueueService } from './mediaUploadQueueService';
@@ -92,174 +91,59 @@ export class WebRTCChatService {
 
         const token = await this.getAuthToken();
 
-        // CRITICAL: Try WSS first, but have fallback ready
+        // Production-only signaling path
         let base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
-        const fallbackBase = environment.WEBRTC_FALLBACK_CHAT_SIGNALING_URL || 'ws://46.101.123.123:8081/chat-signaling';
 
-        // DIAGNOSTIC: Log all URL sources to identify the problem
-        console.log('🔍 [WebRTCChat] DIAGNOSTIC - URL Resolution:', {
-          fromConfig: this.config.webrtcConfig?.chatSignalingUrl,
-          fallback: 'wss://docavailable.org/chat-signaling',
-          fallbackHttp: fallbackBase,
+        // DIAGNOSTIC: Log URL status
+        console.log('🔍 [WebRTCChat] Connecting to production signaling:', {
           finalBase: base,
           appointmentId: this.config.appointmentId,
           userId: this.config.userId,
-          hasAuthToken: !!token,
-          isWSS: base.startsWith('wss://'),
-          isWS: base.startsWith('ws://')
+          hasAuthToken: !!token
         });
 
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
-        console.log('🔌 [WebRTCChat] Config:', this.config);
 
-        // Set connection timeout
+        // Connection timeout
         const connectionTimeoutId = setTimeout(() => {
           if (!this.isConnected) {
-            console.error('❌ [WebRTCChat] Connection timeout after', this.connectionTimeout, 'ms');
-            console.error('🔍 [WebRTCChat] DIAGNOSTIC - Timeout details:', {
-              url: wsUrl,
-              websocketState: this.secureWebSocket?.readyState,
-              readyStateNames: {
-                0: 'CONNECTING',
-                1: 'OPEN',
-                2: 'CLOSING',
-                3: 'CLOSED'
-              }[this.secureWebSocket?.readyState || 3],
-              baseUrl: base,
-              fallbackAvailable: !!fallbackBase
-            });
-
-            // CRITICAL: Try fallback before rejecting if WSS failed
-            if (base.startsWith('wss://') && fallbackBase && fallbackBase.startsWith('ws://')) {
-              console.log('🔄 [WebRTCChat] WSS connection timed out, trying HTTP fallback:', fallbackBase);
-
-              // Close the failed connection
-              this.secureWebSocket?.close();
-              this.websocket = null;
-
-              // Try HTTP fallback
-              const fallbackUrl = `${fallbackBase}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
-
-              try {
-                console.log('🔄 [WebRTCChat] Attempting HTTP fallback after timeout:', fallbackUrl);
-                this.websocket = new WebSocket(fallbackUrl);
-
-                // Set a new timeout for fallback
-                const fallbackTimeoutId = setTimeout(() => {
-                  if (!this.isConnected) {
-                    console.error('❌ [WebRTCChat] HTTP fallback also timed out');
-                    this.websocket?.close();
-                    reject(new Error(`Both WSS and HTTP WebSocket connections timed out`));
-                  }
-                }, this.connectionTimeout);
-
-                this.websocket.onopen = async () => {
-                  clearTimeout(fallbackTimeoutId);
-                  console.log('✅ [WebRTCChat] HTTP fallback connected successfully after WSS timeout');
-
-                  try {
-                    const testMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
-                    this.websocket?.send(testMessage);
-                    console.log('✅ [WebRTCChat] Test ping sent via HTTP fallback');
-                  } catch (testError) {
-                    console.error('❌ [WebRTCChat] HTTP fallback send() failed:', testError);
-                    reject(new Error('HTTP fallback connected but cannot send'));
-                    return;
-                  }
-
-                  this.isConnected = true;
-                  this.reconnectAttempts = 0;
-                  this.startHealthCheck();
-
-                  try {
-                    await this.syncWithServer();
-                  } catch (error) {
-                    console.error('❌ [WebRTCChat] Auto-sync failed on HTTP fallback:', error);
-                  }
-
-                  resolve();
-                };
-
-                this.websocket.onerror = (fallbackError) => {
-                  clearTimeout(fallbackTimeoutId);
-                  console.error('❌ [WebRTCChat] HTTP fallback connection error:', fallbackError);
-                  reject(new Error('Both WSS and HTTP WebSocket connections failed'));
-                };
-
-                this.websocket.onclose = (event) => {
-                  if (!this.isConnected) {
-                    clearTimeout(fallbackTimeoutId);
-                    console.error('❌ [WebRTCChat] HTTP fallback connection closed before connecting:', event.code, event.reason);
-                    reject(new Error(`HTTP fallback connection closed: ${event.reason || 'Unknown reason'}`));
-                  }
-                };
-
-                // Also create SecureWebSocketService wrapper for consistency
-                this.secureWebSocket = new SecureWebSocketService({
-                  url: fallbackUrl,
-                  ignoreSSLErrors: true,
-                  onOpen: () => { },
-                  onMessage: () => { },
-                  onError: () => { },
-                  onClose: () => { }
-                });
-
-                return; // Don't reject yet, let fallback try
-              } catch (fallbackError) {
-                console.error('❌ [WebRTCChat] HTTP fallback connection failed:', fallbackError);
-                reject(new Error('Both WSS and HTTP WebSocket connections failed'));
-                return;
-              }
-            } else {
-              // No fallback available, reject with timeout error
-              this.secureWebSocket?.close();
-              reject(new Error(`WebSocket connection timeout - URL: ${wsUrl}, State: ${this.secureWebSocket?.readyState}`));
-            }
+            console.error('❌ [WebRTCChat] Connection timeout after 15s');
+            this.secureWebSocket?.close();
+            reject(new Error('Connection timeout'));
           }
-        }, this.connectionTimeout);
+        }, 15000);
 
-        // CRITICAL: Use SecureWebSocketService for preview builds - handles SSL errors
-        // Preview builds have stricter SSL validation, so we need ignoreSSLErrors: true
+        // Use SecureWebSocketService with production URL
         this.secureWebSocket = new SecureWebSocketService({
           url: wsUrl,
-          ignoreSSLErrors: true, // Allow SSL errors for preview builds
+          ignoreSSLErrors: true,
           onOpen: async () => {
             clearTimeout(connectionTimeoutId);
             console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
 
-            // CRITICAL FIX: Assign internal WebSocket reference immediately on open
-            // This ensures sendMessage() has access to it right away
+            // Assign internal WebSocket reference immediately on open
             this.websocket = (this.secureWebSocket as any).ws;
-            console.log('🔧 [WebRTCChat] WebSocket reference set in onOpen:', {
-              hasWebSocket: !!this.websocket,
-              readyState: this.websocket?.readyState
-            });
 
-            // CRITICAL: Verify WebSocket is actually working by sending a test message
+            // Verify WebSocket is working
             try {
               const testMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
               this.secureWebSocket?.send(testMessage);
-              console.log('✅ [WebRTCChat] Test ping sent to verify WebSocket is working');
             } catch (testError) {
-              console.error('❌ [WebRTCChat] CRITICAL: WebSocket reports OPEN but send() failed:', testError);
-              console.error('❌ [WebRTCChat] This indicates the connection is NOT actually working');
+              console.error('❌ [WebRTCChat] WebSocket OPEN but send() failed');
               reject(new Error('WebSocket reports connected but cannot send messages'));
               return;
             }
 
             this.isConnected = true;
             this.reconnectAttempts = 0;
-
-            // Start health monitoring
             this.startHealthCheck();
 
-            // Auto-sync with server when connecting to ensure we have latest messages
+            // Auto-sync with server
             try {
-              console.log('🔄 [WebRTCChat] Auto-syncing with server on connect...');
               await this.syncWithServer();
             } catch (error) {
-              console.error('❌ [WebRTCChat] Auto-sync failed on connect:', error);
+              console.error('❌ [WebRTCChat] Auto-sync failed:', error);
             }
 
             resolve();
@@ -267,340 +151,67 @@ export class WebRTCChatService {
           onMessage: async (event: MessageEvent) => {
             try {
               const data = JSON.parse(event.data);
+              console.log('📨 [WebRTCChat] Message received:', data.type);
 
-              // CRITICAL: Log ALL message types to verify WebSocket is actually receiving data
-              console.log('📨 [WebRTCChat] Message received via WebSocket:', {
-                type: data.type,
-                timestamp: new Date().toISOString(),
-                dataSize: event.data?.length || 0,
-                hasData: !!data
-              });
-
-              // Only log full data for important messages
-              if (data.type === 'chat-message' || data.type === 'session-ended' || data.type === 'typing-indicator') {
-                console.log('📨 [WebRTCChat] Message data:', JSON.stringify(data, null, 2));
-              }
-
-              // Verify pong responses to confirm bidirectional communication
-              if (data.type === 'pong') {
-                this.lastPingTime = Date.now();
-                console.log('🏓 [WebRTCChat] Pong received - WebSocket bidirectional communication confirmed');
-              }
-
-              // Handle session-ended messages for real-time notifications
-              if (data.type === 'session-ended') {
-                console.log('🏁 [WebRTCChat] Session ended message received:', data);
-                if (this.events.onSessionEnded) {
-                  const sessionType = this.config.sessionType === 'text_session' ? 'instant' : (this.config.sessionType || 'appointment');
-                  this.events.onSessionEnded(
-                    this.config.appointmentId,
-                    data.reason || 'manual_end',
-                    sessionType
-                  );
-                }
-                return;
-              }
-
-              // Ignore other session-related messages - these should be handled by the session service
-              if (data.type === 'session-end-request' ||
-                data.type === 'session-end-success' ||
-                data.type === 'session-end-error' ||
-                data.type === 'session-activated' ||
-                data.type === 'session-expired' ||
-                data.type === 'session-deduction' ||
-                data.type === 'session-status-request' ||
-                data.type === 'session-status') {
-                console.log('📨 [WebRTCChat] Ignoring session-related message:', data.type);
-                return;
-              }
-
-              if (data.type === 'chat-message' && (data.message || data.content)) {
-                // Normalize shape whether nested under message or flattened
-                const raw = data.message ? data.message : data;
-                const messageId = String(raw.id ?? raw.temp_id ?? raw.tempId ?? `ws_${Date.now()}`);
-
-                console.log('📨 [WebRTCChat] Processing WebSocket message:', {
-                  messageId,
-                  type: data.type,
-                  hasMessage: !!data.message,
-                  hasContent: !!data.content,
-                  rawId: raw.id,
-                  rawTempId: raw.temp_id,
-                  rawTempId2: raw.tempId
-                });
-
+              if (data.type === 'chat-message') {
+                const raw = data.message || data;
                 const normalized: ChatMessage = {
-                  id: messageId,
-                  sender_id: Number(raw.sender_id ?? raw.senderId ?? 0),
-                  sender_name: raw.sender_name ?? raw.senderName ?? '',
-                  message: raw.message ?? raw.content ?? '',
-                  message_type: raw.message_type ?? raw.messageType ?? 'text',
-                  media_url: raw.media_url ?? raw.mediaUrl,
-                  created_at: raw.created_at ?? raw.createdAt ?? raw.timestamp ?? new Date().toISOString(),
-                  delivery_status: raw.delivery_status ?? 'delivered',
-                  ...(raw.replyTo && { replyTo: raw.replyTo }) // Include replyTo if present
+                  id: String(raw.id || raw.temp_id || `ws_${Date.now()}`),
+                  sender_id: Number(raw.sender_id || 0),
+                  sender_name: raw.sender_name || '',
+                  message: raw.message || raw.content || '',
+                  message_type: raw.message_type || 'text',
+                  media_url: raw.media_url,
+                  created_at: raw.created_at || new Date().toISOString(),
+                  delivery_status: 'delivered'
                 };
 
-                const messageHash = this.createMessageHash({
-                  message: normalized.message,
-                  sender_id: normalized.sender_id,
-                  created_at: normalized.created_at,
-                } as any);
-                console.log('📨 [WebRTCChat] Processing chat message:', normalized.id, 'hash:', messageHash);
-
-                // Ensure processedMessageHashes is initialized
-                if (!this.processedMessageHashes) {
-                  this.processedMessageHashes = new Set();
-                }
-
-                // Check if we've already processed this message (by hash)
-                if (this.processedMessageHashes.has(messageHash)) {
-                  console.log('⚠️ [WebRTCChat] Message already processed, skipping duplicate:', messageHash);
-                  return;
-                }
-
-                console.log('📨 [WebRTCChat] Message sender ID:', normalized.sender_id, 'type:', typeof normalized.sender_id);
-                console.log('📨 [WebRTCChat] Current user ID:', this.config.userId, 'type:', typeof this.config.userId);
-
-                // Convert both IDs to numbers for reliable comparison
-                const senderIdNum = Number(normalized.sender_id);
-                const userIdNum = Number(this.config.userId);
-
-                console.log('🔍 [WebRTCChat] Debug - senderIdNum:', senderIdNum, 'userIdNum:', userIdNum);
-                console.log('🔍 [WebRTCChat] Debug - comparison result:', senderIdNum === userIdNum);
-
-                // Mark message as processed (by hash)
-                this.processedMessageHashes.add(messageHash);
-
-                // Check if this is our own message
-                if (senderIdNum === userIdNum) {
-                  console.log('🔄 [WebRTCChat] Received own message echo - triggering onMessage to update delivery status');
-                  // Trigger onMessage for own messages to update delivery status
-                  // The chat component's deduplication will prevent duplicates while updating status
-                  this.events.onMessage(normalized);
-                } else {
-                  console.log('✅ [WebRTCChat] Received message from other participant');
-
-                  // Store the message and trigger event for other participants' messages
-                  await this.addMessage(normalized);
-                  console.log('📨 [WebRTCChat] Triggering onMessage event for message:', normalized.id);
+                // Deduplicate and add
+                const messageHash = this.createMessageHash(normalized);
+                if (!this.processedMessageHashes.has(messageHash)) {
+                  this.processedMessageHashes.add(messageHash);
+                  if (Number(normalized.sender_id) !== Number(this.config.userId)) {
+                    await this.addMessage(normalized);
+                  }
                   this.events.onMessage(normalized);
                 }
               } else if (data.type === 'typing-indicator') {
-                console.log('⌨️ [WebRTCChat] Typing indicator received:', data.isTyping, 'from sender:', data.senderId);
                 this.onTypingIndicator?.(data.isTyping, data.senderId);
-              } else if (data.type === 'ping') {
-                // Handle ping messages from server (don't log them as they're frequent)
-                this.lastPingTime = Date.now();
-                // Respond with pong
-                if (this.secureWebSocket && this.secureWebSocket.readyState === WebSocket.OPEN) {
-                  this.secureWebSocket.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
-                }
-              } else if (data.type === 'pong') {
-                // Update last ping time when we receive pong
-                this.lastPingTime = Date.now();
-                // Only log pong every 50th time to reduce spam (2% chance)
-                if (Math.random() < 0.02) {
-                  console.log('🏓 [WebRTCChat] Pong received, connection healthy');
-                }
+              } else if (data.type === 'session-ended') {
+                this.events.onSessionEnded?.(this.config.appointmentId, data.reason || 'manual_end', this.config.sessionType || 'appointment');
               }
             } catch (error) {
-              console.error('❌ Error parsing WebRTC chat message:', error);
+              console.error('❌ Error parsing message:', error);
             }
           },
-          onError: (error: Event) => {
-            console.error('❌ [WebRTCChat] WebRTC chat error:', error);
-
-            // Extract detailed error information
-            const errorDetails = {
-              type: (error as any).type,
-              target: (error as any).target?.url,
-              readyState: (error as any).target?.readyState,
-              error: (error as any).error,
-              message: (error as any).message,
-              code: (error as any).code,
-              wasClean: (error as any).wasClean,
-              reason: (error as any).reason,
-              fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
-            };
-
-            console.error('❌ [WebRTCChat] DIAGNOSTIC - Full error details:', errorDetails);
-
-            // Check for SSL certificate specific errors
-            const errorMessage = errorDetails.message || errorDetails.error?.message || '';
-            const errorCode = errorDetails.code || errorDetails.error?.code || '';
-
-            if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
-              errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-              errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-              console.error('🔒 [WebRTCChat] SSL CERTIFICATE ERROR DETECTED!');
-              console.error('🔒 [WebRTCChat] This indicates the SSL certificate may be:');
-              console.error('   - Expired');
-              console.error('   - Self-signed (not trusted)');
-              console.error('   - Missing intermediate certificates');
-              console.error('   - Invalid for the domain');
-              console.error('🔒 [WebRTCChat] To verify, run: node test-ssl-certificate.js');
+          onError: (error: any) => {
+            console.error('❌ [WebRTCChat] Signaling error:', error);
+            if (!this.isConnected) {
+              this.events.onError('Connection error');
+              reject(error);
             }
-
-            // Clear connection timeout on error
-            clearTimeout(connectionTimeoutId);
-
-            // Check if it's a connection error (HTTP 200 instead of 101)
-            // errorMessage is already declared above, reuse it
-            if (errorMessage && errorMessage.includes('Expected HTTP 101')) {
-              console.error('❌ [WebRTCChat] WebSocket server not properly configured - getting HTTP 200 instead of 101');
-              this.events.onError('WebSocket server not available. Using fallback mode.');
-              // Don't try to reconnect if server is misconfigured
-              reject(new Error('WebSocket server not properly configured'));
-              return;
-            }
-
-            // Handle SSL/TLS connection errors with automatic fallback to HTTP
-            if (errorMessage && (
-              errorMessage.includes('Connection reset by peer') ||
-              errorMessage.includes('ssl') ||
-              errorMessage.includes('TLS') ||
-              errorMessage.includes('SSL') ||
-              errorMessage.includes('Connection closed by peer') ||
-              errorMessage.includes('certificate') ||
-              errorMessage.includes('handshake') ||
-              errorCode === 'CERT_HAS_EXPIRED' ||
-              errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-              errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' ||
-              errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
-              errorCode === 'ERR_TLS_CERT_ALTNAME_INVALID'
-            )) {
-              console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected');
-
-              // CRITICAL: If we're using WSS and it fails, automatically try HTTP fallback
-              if (base.startsWith('wss://') && fallbackBase && fallbackBase.startsWith('ws://')) {
-                console.log('🔄 [WebRTCChat] WSS failed, automatically falling back to HTTP:', fallbackBase);
-
-                // Close the failed connection
-                this.secureWebSocket?.close();
-                this.websocket = null;
-
-                // CRITICAL FIX: Use HTTP fallback immediately instead of retrying WSS
-                console.log('🔄 [WebRTCChat] WSS failed, switching to HTTP fallback immediately');
-                base = fallbackBase; // Update base to HTTP for retry
-                const fallbackUrl = `${fallbackBase}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
-
-                try {
-                  console.log('🔄 [WebRTCChat] Attempting HTTP fallback:', fallbackUrl);
-                  // For HTTP fallback, we can use plain WebSocket (no SSL needed)
-                  this.websocket = new WebSocket(fallbackUrl);
-                  // Also create SecureWebSocketService for consistency (though HTTP doesn't need SSL handling)
-                  this.secureWebSocket = new SecureWebSocketService({
-                    url: fallbackUrl,
-                    ignoreSSLErrors: true,
-                    onOpen: () => { },
-                    onMessage: () => { },
-                    onError: () => { },
-                    onClose: () => { }
-                  });
-
-                  // Re-attach all handlers for fallback connection
-                  this.websocket.onopen = async () => {
-                    clearTimeout(connectionTimeoutId);
-                    console.log('✅ [WebRTCChat] HTTP fallback connected successfully');
-
-                    try {
-                      const testMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
-                      this.websocket?.send(testMessage);
-                      console.log('✅ [WebRTCChat] Test ping sent via HTTP fallback');
-                    } catch (testError) {
-                      console.error('❌ [WebRTCChat] HTTP fallback send() failed:', testError);
-                      reject(new Error('HTTP fallback connected but cannot send'));
-                      return;
-                    }
-
-                    this.isConnected = true;
-                    this.reconnectAttempts = 0;
-                    this.startHealthCheck();
-
-                    try {
-                      await this.syncWithServer();
-                    } catch (error) {
-                      console.error('❌ [WebRTCChat] Auto-sync failed on HTTP fallback:', error);
-                    }
-
-                    resolve();
-                  };
-
-                  // Copy all other handlers (onmessage, onerror, onclose) - they're already set up above
-                  // The handlers will work for the new websocket instance
-                  return; // Don't reject, let fallback proceed
-                } catch (fallbackError) {
-                  console.error('❌ [WebRTCChat] HTTP fallback connection failed:', fallbackError);
-                  reject(new Error('Both WSS and HTTP WebSocket connections failed'));
-                  return;
-                }
-              } else {
-                // No fallback available, just retry
-                console.warn('🔄 [WebRTCChat] SSL/TLS connection error detected, will retry...');
-                this.events.onError('Connection error, retrying...');
-
-                setTimeout(() => {
-                  if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                    this.handleReconnect();
-                  } else {
-                    reject(new Error('SSL connection failed after multiple attempts'));
-                  }
-                }, 3000);
-                return;
-              }
-            }
-
-            // For other errors, don't reject immediately if we're already connected
-            if (this.isConnected) {
-              console.warn('⚠️ [WebRTCChat] Connection error but already connected, continuing...');
-              return;
-            }
-
-            this.events.onError('WebRTC connection error');
-            reject(error);
           },
           onClose: (event: CloseEvent) => {
-            console.log('🔌 [WebRTCChat] WebRTC chat disconnected:', event.code);
-            console.log('🔍 [WebRTCChat] DIAGNOSTIC - Close event details:', {
-              code: event.code,
-              reason: event.reason,
-              wasClean: event.wasClean,
-              targetUrl: (event.target as any)?.url,
-              readyState: (event.target as any)?.readyState
-            });
+            console.log('🔌 [WebRTCChat] Disconnected:', event.code, event.reason);
             this.isConnected = false;
             this.stopHealthCheck();
 
             if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
-              console.log('🔄 [WebRTCChat] Attempting reconnection...');
               this.handleReconnect();
-            } else if (event.code !== 1000) {
-              console.error('❌ [WebRTCChat] Max reconnection attempts reached or close code indicates failure:', event.code);
             }
           }
         });
 
-        // Connect the SecureWebSocketService
-        // NOTE: Do NOT assign this.websocket here - it must be done AFTER connect() succeeds
-        // because the internal ws is null until connect() creates it
+        // Connect
         this.secureWebSocket.connect().then(() => {
-          // CRITICAL FIX: Assign the internal WebSocket AFTER connection is established
-          // The ws is created inside connect(), so it's null before this point
           this.websocket = (this.secureWebSocket as any).ws;
-          console.log('🔧 [WebRTCChat] Internal WebSocket reference assigned:', {
-            hasWebSocket: !!this.websocket,
-            readyState: this.websocket?.readyState
-          });
-          // Connection successful - callbacks will handle the rest
         }).catch((error) => {
           clearTimeout(connectionTimeoutId);
-          console.error('❌ [WebRTCChat] SecureWebSocketService connection failed:', error);
           reject(error);
         });
 
       } catch (error) {
-        console.error('❌ Error creating WebRTC chat connection:', error);
+        console.error('❌ Error in connect():', error);
         reject(error);
       }
     });
@@ -627,9 +238,6 @@ export class WebRTCChatService {
 
     // Generate a more unique message ID
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Get auth token for API calls
-    const authToken = await this.getAuthToken();
 
     const messageData: any = {
       type: 'chat-message',
@@ -1401,7 +1009,8 @@ export class WebRTCChatService {
 
     this.healthCheckInterval = setInterval(() => {
       // Only check if we have a websocket and it's in a valid state
-      if (this.websocket && (this.websocket.readyState === WebSocket.OPEN || this.websocket.readyState === WebSocket.CONNECTING)) {
+      const ws = this.websocket as any;
+      if (ws && (ws.readyState === 1 || ws.readyState === 0)) { // 1 = OPEN, 0 = CONNECTING
         const now = Date.now();
         if (now - this.lastPingTime > this.pingTimeout) {
           console.warn('🔄 [WebRTCChat] Health check timeout, reconnecting...');
@@ -1409,17 +1018,17 @@ export class WebRTCChatService {
         } else {
           // Send ping to keep connection alive
           try {
-            this.websocket.send(JSON.stringify({ type: 'ping', timestamp: now }));
+            ws.send(JSON.stringify({ type: 'ping', timestamp: now }));
             this.lastPingTime = now;
           } catch (error) {
             console.error('❌ [WebRTCChat] Failed to send ping:', error);
             // Only reconnect if the connection is actually broken
-            if (this.websocket.readyState === WebSocket.CLOSED || this.websocket.readyState === WebSocket.CLOSING) {
+            if (ws.readyState === 3 || ws.readyState === 2) { // 3 = CLOSED, 2 = CLOSING
               this.handleReconnect();
             }
           }
         }
-      } else if (this.websocket && this.websocket.readyState === WebSocket.CLOSED) {
+      } else if (ws && ws.readyState === 3) { // 3 = CLOSED
         // Only reconnect if the connection is actually closed
         console.warn('🔄 [WebRTCChat] Connection closed, attempting reconnection...');
         this.handleReconnect();

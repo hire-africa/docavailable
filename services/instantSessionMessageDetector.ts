@@ -21,7 +21,7 @@ export async function destroyAllInstantSessionDetectors(): Promise<void> {
     for (const [key, detector] of map.entries()) {
       try {
         await detector.destroy();
-      } catch {}
+      } catch { }
       map.delete(key);
     }
     g.__instantDetectorMap = new Map<string, InstantSessionMessageDetector>();
@@ -83,12 +83,13 @@ export class InstantSessionMessageDetector {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        const wsUrl = `${this.getWebRTCSignalingUrl()}/chat-signaling?appointmentId=${encodeURIComponent(this.config.appointmentId)}&authToken=${encodeURIComponent(this.config.authToken || '')}&userId=${encodeURIComponent(String(this.config.patientId))}`;
+        const base = this.getWebRTCSignalingUrl();
+        const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&authToken=${encodeURIComponent(this.config.authToken || '')}&userId=${encodeURIComponent(String(this.config.patientId))}`;
         console.log('🔌 [InstantSessionDetector] Connecting to WebRTC for message detection:', wsUrl);
         console.log('🔌 [InstantSessionDetector] Auth token:', this.config.authToken ? 'Present' : 'Missing');
-        
+
         this.websocket = new WebSocket(wsUrl);
-        
+
         this.websocket.onopen = () => {
           console.log('✅ [InstantSessionDetector] Connected to WebRTC signaling');
           this.isConnected = true;
@@ -96,26 +97,26 @@ export class InstantSessionMessageDetector {
           this.loadSessionState();
           resolve();
         };
-        
+
         this.websocket.onmessage = (event) => {
           this.handleWebSocketMessage(event);
         };
-        
+
         this.websocket.onerror = (error) => {
           console.error('❌ [InstantSessionDetector] WebSocket error:', error);
           this.events.onError('WebRTC connection error');
           reject(error);
         };
-        
+
         this.websocket.onclose = (event) => {
           console.log('🔌 [InstantSessionDetector] WebSocket closed:', event.code);
           this.isConnected = false;
-          
+
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.handleReconnect();
           }
         };
-        
+
       } catch (error) {
         console.error('❌ [InstantSessionDetector] Failed to create connection:', error);
         reject(error);
@@ -141,18 +142,18 @@ export class InstantSessionMessageDetector {
       }
 
       const data = JSON.parse(event.data);
-      
+
       // Only log non-ping/pong messages to reduce spam
       if (data.type !== 'ping' && data.type !== 'pong') {
         console.log('📨 [InstantSessionDetector] Message received:', data.type);
         console.log('📨 [InstantSessionDetector] Full message data:', data);
       }
-      
+
       switch (data.type) {
         case 'chat-message':
           this.handleChatMessage(data);
           break;
-          
+
         case 'doctor-response-timer-started':
           this.handleTimerStarted(data);
           break;
@@ -161,28 +162,28 @@ export class InstantSessionMessageDetector {
           this.serverTimerActive = false;
           this.stopTimer();
           break;
-          
+
         case 'session-activated':
           this.handleSessionActivated(data);
           break;
-          
+
         case 'session-expired':
           this.handleSessionExpired(data);
           break;
-          
+
         case 'connection-established':
           this.handleConnectionEstablished();
           break;
-          
+
         case 'session-status-response':
           this.handleSessionStatusResponse(data);
           break;
-          
+
         case 'session-status-request':
           // Ignore our own session status requests
           console.log('📨 [InstantSessionDetector] Ignoring own session status request');
           break;
-          
+
         case 'session-end-request':
         case 'session-end-success':
         case 'session-end-error':
@@ -190,16 +191,16 @@ export class InstantSessionMessageDetector {
           // Ignore session end messages - these should be handled by WebRTC session service
           console.log('📨 [InstantSessionDetector] Ignoring session end message:', data.type);
           break;
-          
+
         case 'test-message':
           console.log('🧪 [InstantSessionDetector] Test message received!');
           break;
-          
+
         case 'ping':
         case 'pong':
           // Silently handle ping/pong messages - no logging needed
           break;
-          
+
         default:
           console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
           console.log('📨 [InstantSessionDetector] Full message data:', data);
@@ -215,7 +216,7 @@ export class InstantSessionMessageDetector {
   private handleChatMessage(data: any): void {
     // Handle both nested message format and flattened format
     let message = data?.message || data;
-    
+
     // Check if we have valid message data
     if (!data || (!data.message && !data.content && !data.senderId && !data.sender_id)) {
       console.error('❌ [InstantSessionDetector] Invalid chat message data - missing message object:', data);
@@ -226,7 +227,7 @@ export class InstantSessionMessageDetector {
     if (!data.message && (data.content || data.senderId || data.sender_id)) {
       message = data;
     }
-    
+
     // Validate message object has required properties
     if (!message || typeof message !== 'object') {
       console.error('❌ [InstantSessionDetector] Invalid message object:', message);
@@ -238,7 +239,7 @@ export class InstantSessionMessageDetector {
     // Try multiple possible ID fields - WebRTC might use different field names
     const messageId = message.id || message.messageId || message.tempId || message.temp_id || message.tempId || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const messageContent = message.content || message.message;
-    
+
     // Check if message has required properties
     if (senderId === undefined) {
       console.error('❌ [InstantSessionDetector] Message missing sender ID:', {
@@ -248,7 +249,7 @@ export class InstantSessionMessageDetector {
       });
       return;
     }
-    
+
     // Log if message ID is missing but continue processing (we'll use a generated one)
     if (!message.id && !message.tempId && !message.temp_id) {
       console.warn('⚠️ [InstantSessionDetector] Message missing ID, using generated ID:', messageId);
@@ -269,7 +270,7 @@ export class InstantSessionMessageDetector {
     });
 
     const normalizedSenderId = Number(senderId);
-    
+
     // Check if this is a patient message
     if (normalizedSenderId === this.config.patientId) {
       this.handlePatientMessage(message);
@@ -297,7 +298,7 @@ export class InstantSessionMessageDetector {
     }
 
     console.log('👤 [InstantSessionDetector] Patient message detected:', message.id);
-    
+
     // Remember that a patient message exists
     if (!this.hasPatientMessageSent) {
       this.hasPatientMessageSent = true;
@@ -370,7 +371,7 @@ export class InstantSessionMessageDetector {
       sessionActivated: this.sessionActivated,
       timerActive: this.timerState.isActive
     });
-    
+
     // Trigger events to sync hook state
     if (this.hasPatientMessageSent) {
       this.events.onPatientMessageDetected({ id: 'sync', message: 'State sync' });
@@ -382,7 +383,7 @@ export class InstantSessionMessageDetector {
       this.events.onSessionActivated();
     }
     if (this.timerState.isActive) {
-      this.events.onTimerStarted(this.timerState.timeRemaining);
+      this.events.onTimerStarted(this.timerState.timeRemaining, null);
     }
   }
 
@@ -417,7 +418,7 @@ export class InstantSessionMessageDetector {
       sessionActivated: this.sessionActivated,
       timerActive: this.timerState.isActive
     });
-    
+
     if (!this.hasDoctorResponded) {
       this.hasDoctorResponded = true;
       this.stopTimer();
@@ -451,7 +452,7 @@ export class InstantSessionMessageDetector {
     }
 
     console.log('⏰ [InstantSessionDetector] Starting UI-only timer with deadline:', doctor_response_deadline, 'remaining:', timeRemaining);
-    
+
     this.timerState = {
       isActive: true,
       timeRemaining: timeRemaining,
@@ -460,7 +461,7 @@ export class InstantSessionMessageDetector {
 
     // Start countdown updates every second (UI-only)
     this.startCountdown();
-    
+
     // Set timeout to check backend when deadline would be reached (UI-only, doesn't enforce expiry)
     this.timer = setTimeout(() => {
       this.handleTimerExpired();
@@ -491,14 +492,14 @@ export class InstantSessionMessageDetector {
       const deadlineTimestamp = new Date(this.timerState.doctor_response_deadline).getTime();
       const now = Date.now();
       const remaining = Math.max(0, Math.ceil((deadlineTimestamp - now) / 1000));
-      
+
       this.timerState.timeRemaining = remaining;
-      
+
       // Update every 5 seconds to avoid too many updates
       if (remaining % 5 === 0 || remaining <= 10) {
         console.log('⏰ [InstantSessionDetector] Timer remaining (UI-only):', remaining, 'seconds');
       }
-      
+
       if (remaining <= 0) {
         if (this.countdownInterval) {
           clearInterval(this.countdownInterval);
@@ -521,7 +522,7 @@ export class InstantSessionMessageDetector {
       clearInterval(this.countdownInterval);
       this.countdownInterval = null;
     }
-    
+
     this.timerState.isActive = false;
     console.log('⏹️ [InstantSessionDetector] Timer stopped');
     this.saveSessionState();
@@ -540,11 +541,11 @@ export class InstantSessionMessageDetector {
         headers: { 'Authorization': `Bearer ${this.config.authToken}` }
       });
       console.log('🔍 [InstantSessionDetector] Response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('🔍 [InstantSessionDetector] Response data:', JSON.stringify(data, null, 2));
-        
+
         // Render based on server response only - never enforce expiry locally
         if (data && data.status === 'expired') {
           console.log('❌ [InstantSessionDetector] Server confirms session expired');
@@ -555,20 +556,20 @@ export class InstantSessionMessageDetector {
           this.events.onTimerExpired();
           return;
         }
-        
+
         if (data && data.status === 'waiting' && typeof data.timeRemaining === 'number' && data.timeRemaining > 0 && data.doctor_response_deadline) {
           console.log('⏰ [InstantSessionDetector] Server indicates time remaining, resuming with deadline:', data.doctor_response_deadline);
           this.startTimerWithDeadline(data.doctor_response_deadline, Math.floor(data.timeRemaining));
           return;
         }
-        
+
         if (data && data.status === 'active') {
           console.log('✅ [InstantSessionDetector] Server indicates session is active - stopping timer');
           this.stopTimer();
           this.activateSession();
           return;
         }
-        
+
         console.warn('⚠️ [InstantSessionDetector] Unexpected server response:', data);
         // Don't enforce expiry - keep timer inactive until server provides clear status
         this.timerState.isActive = false;
@@ -598,19 +599,19 @@ export class InstantSessionMessageDetector {
   private handleTimerStarted(data: any): void {
     console.log('⏰ [InstantSessionDetector] Server timer started event received');
     this.serverTimerActive = true;
-    
+
     // Use server-provided doctor_response_deadline and timeRemaining
     if (data?.doctor_response_deadline && typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
       this.startTimerWithDeadline(data.doctor_response_deadline, data.timeRemaining);
       return;
     }
-    
+
     // Fallback: if deadline not provided but timeRemaining is, fetch from backend
     if (typeof data?.timeRemaining === 'number' && data.timeRemaining > 0) {
       this.fetchAndResumeRemainingFromBackend();
       return;
     }
-    
+
     // If no timer info provided, fetch from backend
     if (!this.timerState.isActive) {
       this.fetchAndResumeRemainingFromBackend();
@@ -626,7 +627,7 @@ export class InstantSessionMessageDetector {
       console.log('✅ [InstantSessionDetector] Session activated');
       this.saveSessionState();
       this.events.onSessionActivated();
-      
+
       // Update session status in the backend
       this.updateSessionStatus('active');
     }
@@ -646,7 +647,7 @@ export class InstantSessionMessageDetector {
         },
         body: JSON.stringify({ status })
       });
-      
+
       if (response.ok) {
         console.log('✅ [InstantSessionDetector] Session status updated successfully');
       } else {
@@ -692,7 +693,7 @@ export class InstantSessionMessageDetector {
       // Enter awaiting status mode to avoid starting a fresh 90s from historical messages
       this.awaitingServerStatus = true;
       this.websocket?.send(JSON.stringify({ type: 'session-status-request' }));
-    } catch {}
+    } catch { }
     // Failsafe: clear awaiting flag after 6s even if server doesn't respond
     setTimeout(() => {
       if (this.awaitingServerStatus) {
@@ -716,7 +717,7 @@ export class InstantSessionMessageDetector {
       hasDoctorResponded: this.hasDoctorResponded,
       sessionActivated: this.sessionActivated
     });
-    
+
     // If the server reports an active timer, resume with remaining time and deadline
     if (data.timerActive && typeof data.timeRemaining === 'number' && data.timeRemaining > 0 && data.doctor_response_deadline) {
       console.log('⏰ [InstantSessionDetector] Resuming server timer with remaining:', data.timeRemaining, 'deadline:', data.doctor_response_deadline);
@@ -734,7 +735,7 @@ export class InstantSessionMessageDetector {
     if (data.hasPatientMessage && !this.hasPatientMessageSent) {
       console.log('👤 [InstantSessionDetector] Found existing patient message - checking if timer should start');
       this.hasPatientMessageSent = true;
-      
+
       // Only start timer if doctor hasn't responded yet
       if (!data.hasDoctorResponse) {
         // If server didn't report active timer, only query backend if we don't already have an active timer
@@ -748,14 +749,14 @@ export class InstantSessionMessageDetector {
       } else {
         console.log('👤 [InstantSessionDetector] Doctor already responded - not starting timer');
       }
-      
+
       this.events.onPatientMessageDetected({ id: 'existing', message: 'Patient message detected' });
     } else if (data.hasPatientMessage) {
       console.log('👤 [InstantSessionDetector] Patient message already detected, skipping');
     } else {
       console.log('👤 [InstantSessionDetector] No existing patient message found');
     }
-    
+
     if (data.hasDoctorResponse && !this.hasDoctorResponded) {
       console.log('👨‍⚕️ [InstantSessionDetector] Found existing doctor response - session activated');
       this.hasDoctorResponded = true;
@@ -819,7 +820,7 @@ export class InstantSessionMessageDetector {
           console.log('⏰ [InstantSessionDetector] Timer bootstrapped from backend on attempt', attempt);
           return;
         }
-      } catch {}
+      } catch { }
       await new Promise(res => setTimeout(res, delayMs));
     }
     console.log('⏳ [InstantSessionDetector] Backend did not provide remaining time during bootstrap window');
@@ -851,14 +852,14 @@ export class InstantSessionMessageDetector {
     try {
       // Stop any active timers/intervals
       this.stopTimer();
-    } catch {}
+    } catch { }
     try {
       // Close websocket connection
       if (this.websocket) {
         this.websocket.close(1000, 'Destroyed');
         this.websocket = null;
       }
-    } catch {}
+    } catch { }
     // Reset flags
     this.isConnected = false;
     this.serverTimerActive = false;
@@ -916,7 +917,7 @@ export class InstantSessionMessageDetector {
     // Do NOT stop the timer on disconnect; preserve countdown across navigation/app background
     try {
       await this.saveSessionState();
-    } catch {}
+    } catch { }
   }
 
   /**
@@ -925,7 +926,7 @@ export class InstantSessionMessageDetector {
   private handleReconnect(): void {
     this.reconnectAttempts++;
     console.log(`🔄 [InstantSessionDetector] Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
-    
+
     setTimeout(() => {
       this.connect().catch(error => {
         console.error('❌ [InstantSessionDetector] Reconnection failed:', error);
@@ -949,7 +950,7 @@ export class InstantSessionMessageDetector {
         timerState: this.timerState,
         timestamp: Date.now()
       };
-      
+
       await AsyncStorage.setItem(`instant_session_state_${this.config.sessionId}`, JSON.stringify(state));
       console.log('💾 [InstantSessionDetector] Session state saved for session:', this.config.sessionId);
     } catch (error) {
@@ -965,24 +966,24 @@ export class InstantSessionMessageDetector {
       const stored = await AsyncStorage.getItem(`instant_session_state_${this.config.sessionId}`);
       if (stored) {
         const state = JSON.parse(stored);
-        
+
         // Only restore if state is recent (within last hour) AND for the same session
         const isRecent = Date.now() - state.timestamp < 3600000;
         const isSameSession = state.sessionId === this.config.sessionId;
-        
+
         if (isRecent && isSameSession) {
           this.hasPatientMessageSent = state.hasPatientMessageSent || false;
           this.hasDoctorResponded = state.hasDoctorResponded || false;
           this.sessionActivated = state.sessionActivated || false;
           this.timerState = state.timerState || this.timerState;
-          
+
           console.log('📱 [InstantSessionDetector] Session state restored for session:', this.config.sessionId, {
             hasPatientMessageSent: this.hasPatientMessageSent,
             hasDoctorResponded: this.hasDoctorResponded,
             sessionActivated: this.sessionActivated,
             timerActive: this.timerState.isActive
           });
-          
+
           // If timer was active, restart it with deadline and remaining time
           if (this.timerState.isActive && this.timerState.timeRemaining > 0 && this.timerState.doctor_response_deadline) {
             console.log('⏰ [InstantSessionDetector] Resuming timer with deadline:', this.timerState.doctor_response_deadline, 'remaining:', this.timerState.timeRemaining);
@@ -1035,7 +1036,7 @@ export class InstantSessionMessageDetector {
     try {
       const keys = await AsyncStorage.getAllKeys();
       const instantSessionKeys = keys.filter(key => key.startsWith('instant_session_state_'));
-      
+
       for (const key of instantSessionKeys) {
         try {
           const stored = await AsyncStorage.getItem(key);
@@ -1064,7 +1065,7 @@ export class InstantSessionMessageDetector {
       console.log('🔍 [InstantSessionDetector] Checking for existing patient messages...');
       console.log('🔍 [InstantSessionDetector] WebSocket state:', this.websocket?.readyState);
       console.log('🔍 [InstantSessionDetector] Appointment ID:', this.config.appointmentId);
-      
+
       // Request session status from the server
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const requestData = {
@@ -1075,7 +1076,7 @@ export class InstantSessionMessageDetector {
         console.log('📡 [InstantSessionDetector] Sending session status request:', requestData);
         this.websocket.send(JSON.stringify(requestData));
         console.log('📡 [InstantSessionDetector] Session status request sent successfully');
-        
+
         // Set a timeout to check if we get a response
         setTimeout(() => {
           if (!this.hasPatientMessageSent && !this.hasDoctorResponded) {
@@ -1099,9 +1100,7 @@ export class InstantSessionMessageDetector {
    * Get WebRTC signaling URL
    */
   private getWebRTCSignalingUrl(): string {
-    // Use the chat signaling URL for instant session detection
-    const chatSignalingUrl = process.env.EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL || 'wss://docavailable.org/chat-signaling';
-    // Keep wss:// for secure connections (don't convert to ws://)
-    return chatSignalingUrl.replace(/\/chat-signaling$/, '');
+    // Production signaling URL for chat and session detection
+    return 'wss://docavailable.org/chat-signaling';
   }
 }

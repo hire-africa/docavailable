@@ -216,6 +216,9 @@ Route::middleware(['auth:api'])->group(function () {
     // Reply routes
     Route::post('/chat/{appointmentId}/messages/{messageId}/reply', [ChatController::class, 'replyToMessage']);
 
+    // Paginated chat history for web clients (read-only with decryption)
+    Route::get('/chat/{conversationId}/history', [ChatController::class, 'getChatHistory']);
+
     // Encryption routes
     Route::post('/encryption/generate-keys', [EncryptionController::class, 'generateKeys']);
     Route::get('/encryption/status', [EncryptionController::class, 'getEncryptionStatus']);

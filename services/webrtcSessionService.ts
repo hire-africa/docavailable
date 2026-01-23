@@ -45,7 +45,7 @@ class WebRTCSessionService {
   async initialize(appointmentId: string, events: WebRTCSessionEvents): Promise<void> {
     this.appointmentId = appointmentId;
     this.events = events;
-    
+
     await this.connectSignaling();
   }
 
@@ -56,7 +56,7 @@ class WebRTCSessionService {
         const { apiService } = await import('../app/services/apiService');
         const currentUser = await apiService.getCurrentUser();
         const userId = currentUser?.id;
-        
+
         if (!userId) {
           console.error('❌ [WebRTC] No user ID available for signaling connection');
           reject(new Error('User not authenticated'));
@@ -65,11 +65,12 @@ class WebRTCSessionService {
 
         // Use config service to get WebRTC signaling URL
         const config = configService.getWebRTCConfig();
-        const signalingUrl = config.signalingUrl;
-        
+        const isChatSession = this.appointmentId?.startsWith('text_session_');
+        const signalingUrl = isChatSession ? config.chatSignalingUrl : config.signalingUrl;
+
         // Use query parameters with both appointmentId and userId as required by server
         const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(this.appointmentId!)}&userId=${encodeURIComponent(String(userId))}&userType=doctor`;
-        
+
         console.log('🔧 [WebRTC] Configuration check:', {
           signalingUrl,
           wsUrl,
@@ -77,10 +78,10 @@ class WebRTCSessionService {
           userId,
           config: config
         });
-        
+
         console.log('🔌 [WebRTC] Attempting to connect to:', wsUrl);
         this.signalingChannel = new WebSocket(wsUrl);
-        
+
         // Set connection timeout
         const connectionTimeout = setTimeout(() => {
           if (!this.isConnected) {
@@ -89,7 +90,7 @@ class WebRTCSessionService {
             reject(new Error('WebSocket connection timeout'));
           }
         }, this.connectionTimeout);
-        
+
         this.signalingChannel.onopen = () => {
           console.log('✅ [WebRTC] Connected to session signaling server successfully');
           clearTimeout(connectionTimeout);
@@ -102,7 +103,7 @@ class WebRTCSessionService {
           try {
             const message = JSON.parse(event.data);
             console.log('📨 [WebRTCSession] Message received:', message.type);
-            
+
             // Handle typing indicators
             if (message.type === 'typing-indicator') {
               console.log('⌨️ [WebRTCSession] Typing indicator received:', message.isTyping, 'from sender:', message.senderId);
@@ -117,10 +118,10 @@ class WebRTCSessionService {
 
         this.signalingChannel.onerror = (error) => {
           console.error('❌ Session signaling WebSocket error:', error);
-          
+
           // Clear connection timeout on error
           clearTimeout(connectionTimeout);
-          
+
           // Handle SSL/TLS connection errors with retry logic
           const errorMessage = (error as any).message;
           if (errorMessage && (
@@ -132,7 +133,7 @@ class WebRTCSessionService {
           )) {
             console.warn('🔄 [WebRTC Session] SSL/TLS connection error detected, will retry...');
             this.events?.onError('Connection error, retrying...');
-            
+
             // Don't reject immediately for SSL errors, let reconnection handle it
             setTimeout(() => {
               if (this.reconnectAttempts < this.maxReconnectAttempts) {
@@ -143,7 +144,7 @@ class WebRTCSessionService {
             }, 3000);
             return;
           }
-          
+
           // Don't reject on error if we're already connected - just log it
           if (!this.isConnected) {
             this.events?.onError('Connection error');
@@ -156,13 +157,13 @@ class WebRTCSessionService {
         this.signalingChannel.onclose = () => {
           console.log('🔌 Session signaling connection closed');
           this.isConnected = false;
-          
+
           // If we were in the middle of ending a session, check if it actually ended
           if ((window as any).endSessionTimeoutId) {
             console.log('🔍 [WebRTC Session] Connection closed during session end - checking if session actually ended');
             this.checkSessionEndStatus();
           }
-          
+
           this.attemptReconnect();
         };
 
@@ -179,55 +180,55 @@ class WebRTCSessionService {
         console.log('✅ Session activated:', message.sessionId, message.sessionType);
         this.events?.onSessionActivated(message.sessionId, message.sessionType);
         break;
-        
+
       case 'session-expired':
         console.log('⏰ Session expired:', message.sessionId, message.reason, message.sessionType);
         this.events?.onSessionExpired(message.sessionId, message.reason, message.sessionType);
         break;
-        
+
       case 'session-ended':
         console.log('🏁 Session ended:', message.sessionId, message.reason, message.sessionType);
         this.events?.onSessionEnded(message.sessionId, message.reason, message.sessionType);
         break;
-        
+
       case 'session-end-success':
         console.log('✅ Session end success:', message.sessionId, message.reason, message.sessionType);
         this.events?.onSessionEndSuccess?.(message.sessionId, message.reason, message.sessionType);
         break;
-        
+
       case 'session-end-error':
         console.log('❌ Session end error:', message.message);
         this.events?.onSessionEndError?.(message.message);
         break;
-        
+
       case 'session-deduction':
         console.log('💰 Session deduction:', message.sessionId, message.sessionsDeducted, message.sessionType);
         this.events?.onSessionDeduction(message.sessionId, message, message.sessionType);
         break;
-        
+
       case 'doctor-response-timer-started':
         console.log('⏱️ Doctor response timer started:', message.sessionId, message.timeRemaining);
         this.events?.onDoctorResponseTimerStarted(message.sessionId, message.timeRemaining);
         break;
-        
+
       case 'appointment-started':
         console.log('🚀 Appointment started:', message.sessionId);
         this.events?.onAppointmentStarted(message.sessionId);
         break;
-        
+
       case 'session-status':
         console.log('📊 Session status received:', message.sessionData);
         this.events?.onSessionStatusUpdate(message.sessionData);
         break;
-        
+
       case 'connection-established':
         console.log('✅ Session connection established');
         break;
-        
+
       case 'participant-left':
         console.log('👋 Participant left the session');
         break;
-        
+
       case 'call-not-answered':
         console.log('📞 Call not answered:', message.reason);
         this.events?.onError('Doctor is unavailable to take your call');
@@ -243,7 +244,7 @@ class WebRTCSessionService {
 
     // Get auth token
     const authToken = await apiService.getAuthToken();
-    
+
     this.sendSignalingMessage({
       type: 'chat-message',
       message: message,
@@ -280,7 +281,7 @@ class WebRTCSessionService {
       appointmentId: this.appointmentId,
       connectionState: this.signalingChannel.readyState
     });
-    
+
     try {
       this.sendSignalingMessage({
         type: 'session-end-request',
@@ -298,7 +299,7 @@ class WebRTCSessionService {
     if (!this.isConnected || !this.signalingChannel) return;
 
     const authToken = await apiService.getAuthToken();
-    
+
     this.sendSignalingMessage({
       type: 'appointment-start-request',
       authToken: authToken
@@ -314,12 +315,12 @@ class WebRTCSessionService {
 
       const sessionId = this.appointmentId.replace('text_session_', '');
       console.log('🔍 [WebRTC Session] Checking if session ended:', sessionId);
-      
+
       // Import apiService dynamically to avoid circular imports
       const { apiService } = await import('../app/services/apiService');
-      
+
       const response = await apiService.get(`/text-sessions/${sessionId}/status`);
-      
+
       if (response.data?.success && response.data?.data?.status === 'ended') {
         console.log('✅ [WebRTC Session] Session was ended - triggering UI update');
         this.events?.onSessionEndSuccess?.(sessionId, 'manual_end', 'instant');
@@ -379,20 +380,20 @@ class WebRTCSessionService {
     }
 
     this.reconnectAttempts++;
-    
+
     // Exponential backoff with jitter for better reconnection
     const baseDelay = this.reconnectDelay;
     const exponentialDelay = baseDelay * Math.pow(2, this.reconnectAttempts - 1);
     const jitter = Math.random() * 2000; // Add up to 2 seconds of jitter
     const finalDelay = Math.min(exponentialDelay + jitter, 60000); // Cap at 60 seconds
-    
+
     console.log(`🔄 [WebRTC Session] Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${Math.round(finalDelay)}ms...`);
-    
+
     // Clear any existing reconnection timeout
     if (this.reconnectTimeoutId) {
       clearTimeout(this.reconnectTimeoutId);
     }
-    
+
     this.reconnectTimeoutId = setTimeout(async () => {
       try {
         await this.connectSignaling();
@@ -409,7 +410,7 @@ class WebRTCSessionService {
       clearTimeout(this.reconnectTimeoutId);
       this.reconnectTimeoutId = null;
     }
-    
+
     if (this.signalingChannel) {
       this.signalingChannel.close();
       this.signalingChannel = null;

@@ -584,10 +584,12 @@ class ChatController extends Controller
                 $now = now();
 
                 // Handle patient's first message: Set doctor_response_deadline when patient sends first message
-                if ($user->id === $session->patient_id && 
-                    $session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR && 
-                    !$session->doctor_response_deadline) {
-                    
+                if (
+                    $user->id === $session->patient_id &&
+                    $session->status === \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR &&
+                    !$session->doctor_response_deadline
+                ) {
+
                     // Set deadline to 5 minutes from now when patient sends first message
                     $deadlineSet = \App\Models\TextSession::where('id', $sessionId)
                         ->where('status', \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR)
@@ -1810,5 +1812,152 @@ class ChatController extends Controller
         }
 
         return $anonymizedMessages;
+    }
+
+    /**
+     * Get paginated chat history for web clients (read-only)
+     * 
+     * This endpoint fetches encrypted messages from the database and decrypts them
+     * only after authorization. Supports pagination for efficient loading.
+     * 
+     * @param Request $request
+     * @param string $conversationId - Format: text_session_123 or direct_session_123
+     * @return JsonResponse
+     */
+    public function getChatHistory(Request $request, string $conversationId): JsonResponse
+    {
+        // Validate pagination parameters
+        $request->validate([
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'since_id' => 'nullable|string' // For incremental sync
+        ]);
+
+        $user = Auth::user();
+        $page = $request->input('page', 1);
+        $perPage = $request->input('per_page', 50);
+        $sinceId = $request->input('since_id');
+
+        // Step 1: AUTHORIZATION - Verify user access BEFORE any data retrieval
+        $accessCheck = $this->handleAppointmentIdAndVerifyAccess($conversationId, $user);
+
+        if (!$accessCheck['success']) {
+            return response()->json([
+                'success' => false,
+                'message' => $accessCheck['message']
+            ], $accessCheck['status']);
+        }
+
+        $sessionData = $accessCheck['data'];
+        $sessionType = $accessCheck['type'];
+
+        // Determine sender_id and receiver_id for database query
+        $senderId = null;
+        $receiverId = null;
+
+        if ($sessionType === 'text_session') {
+            $senderId = $user->id;
+            $receiverId = $user->id === $sessionData->patient_id
+                ? $sessionData->doctor_id
+                : $sessionData->patient_id;
+        } elseif ($sessionType === 'direct_session') {
+            $senderId = $user->id;
+            $receiverId = $user->id === $sessionData->patient_id
+                ? $sessionData->doctor_id
+                : $sessionData->patient_id;
+        }
+
+        // Step 2: FETCH ENCRYPTED MESSAGES from database (after authorization)
+        $query = DB::table('chats')
+            ->where(function ($q) use ($senderId, $receiverId) {
+                $q->where(function ($subQ) use ($senderId, $receiverId) {
+                    $subQ->where('sender_id', $senderId)
+                        ->where('receiver_id', $receiverId);
+                })->orWhere(function ($subQ) use ($senderId, $receiverId) {
+                    $subQ->where('sender_id', $receiverId)
+                        ->where('receiver_id', $senderId);
+                });
+            })
+            ->orderBy('created_at', 'desc');
+
+        // Apply incremental sync filter if provided
+        if ($sinceId) {
+            $query->where('id', '>', $sinceId);
+        }
+
+        // Paginate results
+        $offset = ($page - 1) * $perPage;
+        $encryptedMessages = $query->offset($offset)
+            ->limit($perPage)
+            ->get();
+
+        $totalCount = DB::table('chats')
+            ->where(function ($q) use ($senderId, $receiverId) {
+                $q->where(function ($subQ) use ($senderId, $receiverId) {
+                    $subQ->where('sender_id', $senderId)
+                        ->where('receiver_id', $receiverId);
+                })->orWhere(function ($subQ) use ($senderId, $receiverId) {
+                    $subQ->where('sender_id', $receiverId)
+                        ->where('receiver_id', $senderId);
+                });
+            })
+            ->count();
+
+        // Step 3: DECRYPT MESSAGES (only after authorization)
+        $decryptedMessages = [];
+
+        foreach ($encryptedMessages as $encryptedMsg) {
+            try {
+                // Decrypt message content using EncryptionUtil
+                $plaintext = \App\Utils\EncryptionUtil::decryptMessage(
+                    $encryptedMsg->encrypted_content,
+                    $encryptedMsg->encryption_iv,
+                    $encryptedMsg->encryption_tag
+                );
+
+                // Build response message (plaintext not cached)
+                $decryptedMessages[] = [
+                    'id' => $encryptedMsg->id,
+                    'sender_id' => $encryptedMsg->sender_id,
+                    'message' => $plaintext, // Decrypted content
+                    'message_type' => 'text', // Can be enhanced to support other types
+                    'created_at' => $encryptedMsg->created_at,
+                    'origin_platform' => $encryptedMsg->origin_platform,
+                    'is_own_message' => $encryptedMsg->sender_id === $user->id
+                ];
+            } catch (\Exception $e) {
+                // Log decryption failure but don't expose details to client
+                Log::error('Failed to decrypt message', [
+                    'message_id' => $encryptedMsg->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                // Skip message or return placeholder
+                $decryptedMessages[] = [
+                    'id' => $encryptedMsg->id,
+                    'sender_id' => $encryptedMsg->sender_id,
+                    'message' => '[Message decryption failed]',
+                    'message_type' => 'text',
+                    'created_at' => $encryptedMsg->created_at,
+                    'origin_platform' => $encryptedMsg->origin_platform,
+                    'is_own_message' => $encryptedMsg->sender_id === $user->id,
+                    'decryption_error' => true
+                ];
+            }
+        }
+
+        // Step 4: RETURN RESPONSE (decrypted messages not cached)
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'messages' => $decryptedMessages,
+                'pagination' => [
+                    'current_page' => $page,
+                    'per_page' => $perPage,
+                    'total' => $totalCount,
+                    'has_more' => ($offset + count($encryptedMessages)) < $totalCount
+                ]
+            ]
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     }
 }

@@ -477,16 +477,18 @@ export default function ChatPage() {
 
   // Handle navigation from notification actions
   const handledNotificationActionRef = useRef(false);
+  // Extract specific param values to avoid infinite re-renders
+  const actionParam = (params as any)?.action as string | undefined;
+  const callTypeParam = ((params as any)?.callType as string | undefined)?.toLowerCase();
+  const answeredFromCallKeepParam = (params as any)?.answeredFromCallKeep === 'true';
+  
   useEffect(() => {
     if (handledNotificationActionRef.current) return;
-    const action = (params as any)?.action as string | undefined;
-    const callTypeParam = ((params as any)?.callType as string | undefined)?.toLowerCase();
-    const answeredFromCallKeep = (params as any)?.answeredFromCallKeep === 'true'; // ✅ FIX 3
-
-    if (!action) return;
+    if (!actionParam) return;
+    
     handledNotificationActionRef.current = true;
 
-    if (action === 'accept') {
+    if (actionParam === 'accept') {
       if (callTypeParam === 'video') {
         setShowIncomingVideoCall(false);
         setIsAnsweringVideoCall(true);
@@ -494,7 +496,7 @@ export default function ChatPage() {
         setShowVideoCall(true);
 
         // ✅ Already answered from CallKeep system UI
-        if (answeredFromCallKeep) {
+        if (answeredFromCallKeepParam) {
           console.log('✅ [CallKeep] Video call already answered from system UI');
         }
       } else {
@@ -504,15 +506,15 @@ export default function ChatPage() {
         setShowAudioCall(true);
 
         // ✅ Already answered from CallKeep system UI
-        if (answeredFromCallKeep) {
+        if (answeredFromCallKeepParam) {
           console.log('✅ [CallKeep] Audio call already answered from system UI');
         }
       }
-    } else if (action === 'reject') {
+    } else if (actionParam === 'reject') {
       setShowIncomingCall(false);
       setShowIncomingVideoCall(false);
     }
-  }, [params]);
+  }, [actionParam, callTypeParam, answeredFromCallKeepParam]);
 
   // WebRTC session management state
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
