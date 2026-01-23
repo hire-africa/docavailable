@@ -138,17 +138,18 @@ export default function VideoCallModal({
 
   useEffect(() => {
     const setupCall = async () => {
-      console.log('🎯 VideoCallModal useEffect triggered:', {
-        isIncomingCall,
-        appointmentId,
-        userId,
-        isDoctor
-      });
+      // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
+      // console.log('🎯 VideoCallModal useEffect triggered:', {
+      //   isIncomingCall,
+      //   appointmentId,
+      //   userId,
+      //   isDoctor
+      // });
 
       // Global suppression: do not start video if audio call is active or current call is audio
       const g: any = global as any;
       if (g.activeAudioCall || g.currentCallType === 'audio') {
-        console.log('🚫 [VideoCallModal] Suppressing video init because audio call is active/current');
+        // console.log('🚫 [VideoCallModal] Suppressing video init because audio call is active/current');
         return;
       }
 
@@ -395,17 +396,18 @@ export default function VideoCallModal({
     }, 3000);
   };
 
-  // Monitor local stream availability (aggressive polling for outgoing to show camera ASAP)
+  // Monitor local stream availability (optimized polling - less aggressive to reduce re-renders)
   useEffect(() => {
     if (videoCallService.current && !localStream) {
       const checkLocalStream = () => {
         const stream = videoCallService.current?.getLocalStream();
         if (stream) {
-          console.log('📹 [VideoCallModal] Local stream became available:', {
-            streamId: stream.id,
-            videoTracks: stream.getVideoTracks().length,
-            audioTracks: stream.getAudioTracks().length
-          });
+          // Debug logging disabled to prevent console spam
+          // console.log('📹 [VideoCallModal] Local stream became available:', {
+          //   streamId: stream.id,
+          //   videoTracks: stream.getVideoTracks().length,
+          //   audioTracks: stream.getAudioTracks().length
+          // });
           setLocalStream(stream);
           return true;
         }
@@ -415,17 +417,18 @@ export default function VideoCallModal({
       // Immediate check
       if (checkLocalStream()) return;
 
-      // Poll every 200ms up to 4s
+      // Poll every 500ms (reduced from 200ms) up to 5s (increased timeout)
+      // This reduces re-renders while still being responsive
       let elapsed = 0;
       const interval = setInterval(() => {
-        elapsed += 200;
-        if (checkLocalStream() || elapsed >= 4000) {
+        elapsed += 500;
+        if (checkLocalStream() || elapsed >= 5000) {
           clearInterval(interval);
         }
-      }, 200);
+      }, 500);
       return () => clearInterval(interval);
     }
-  }, [videoCallService.current, localStream]);
+  }, [localStream]); // Removed videoCallService.current from deps (refs don't need to be in deps)
 
   const initializeIncomingCall = async () => {
     try {
@@ -444,8 +447,13 @@ export default function VideoCallModal({
           }
         },
         onRemoteStream: (stream) => {
-          console.log('📹 Remote video stream received');
-          setRemoteStream(stream);
+          if (stream) {
+            console.log('📹 Remote video stream received');
+            setRemoteStream(stream);
+          } else {
+            console.log('📹 Remote video stream cleared (null received)');
+            setRemoteStream(null);
+          }
         },
         onPeerMediaStateChange: ({ audioEnabled, videoEnabled }) => {
           setPeerAudioEnabled(audioEnabled);
@@ -475,6 +483,7 @@ export default function VideoCallModal({
             }, 300);
           } else {
             // Remote user hung up: show banner and remove remote stream
+            console.log('📞 [VideoCallModal] Remote user hung up - closing modal');
             if (heroTimerRef.current) { clearTimeout(heroTimerRef.current); heroTimerRef.current = null; }
             clearAutoHide();
             showUI(true);
@@ -482,10 +491,16 @@ export default function VideoCallModal({
             setUsePlaceholderOnReverse(false);
             setPeerLeftVisible(true);
             setRemoteStream(null as any);
+            // Clear local stream reference too
+            setLocalStream(null as any);
+            // Update call state to disconnected
+            setCallState(prev => ({ ...prev, isConnected: false, connectionState: 'disconnected' }));
             if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            // Close modal faster when remote hangs up (reduced from 1200ms to 500ms)
             peerLeftTimerRef.current = setTimeout(() => {
+              console.log('📞 [VideoCallModal] Closing modal after remote hangup');
               onEndCall();
-            }, 1200);
+            }, 500);
           }
         },
         onCallRejected: () => {
@@ -528,8 +543,13 @@ export default function VideoCallModal({
           setCallState(state);
         },
         onRemoteStream: (stream) => {
-          console.log('📹 Remote video stream received');
-          setRemoteStream(stream);
+          if (stream) {
+            console.log('📹 Remote video stream received');
+            setRemoteStream(stream);
+          } else {
+            console.log('📹 Remote video stream cleared (null received)');
+            setRemoteStream(null);
+          }
         },
         onPeerMediaStateChange: ({ audioEnabled, videoEnabled }) => {
           setPeerAudioEnabled(audioEnabled);
@@ -562,10 +582,16 @@ export default function VideoCallModal({
             setUsePlaceholderOnReverse(false);
             setPeerLeftVisible(true);
             setRemoteStream(null as any);
+            // Clear local stream reference too
+            setLocalStream(null as any);
+            // Update call state to disconnected
+            setCallState(prev => ({ ...prev, isConnected: false, connectionState: 'disconnected' }));
             if (peerLeftTimerRef.current) clearTimeout(peerLeftTimerRef.current);
+            // Close modal faster when remote hangs up (reduced from 1200ms to 500ms)
             peerLeftTimerRef.current = setTimeout(() => {
+              console.log('📞 [VideoCallModal] Closing modal after remote hangup (outgoing)');
               onEndCall();
-            }, 1200);
+            }, 500);
           }
         },
         onCallRejected: () => {
@@ -1021,7 +1047,7 @@ export default function VideoCallModal({
           <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
             pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
           >
-            <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
@@ -1030,7 +1056,7 @@ export default function VideoCallModal({
         ) : (
           // Connected call header - vertical: name then duration
           <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
               <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
 

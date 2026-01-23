@@ -265,6 +265,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 8,
     maxHeight: 100,
+    color: '#000',
   },
   textInputDisabled: {
     backgroundColor: Colors.lightGray + '30',

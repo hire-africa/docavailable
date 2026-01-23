@@ -673,7 +673,7 @@ export default function AudioCall({
             activeOpacity={0.8}
           >
             <Ionicons
-              name={isSpeakerOn ? "volume-high" : "call"}
+              name={isSpeakerOn ? "volume-high" : "volume-medium"}
               size={20}
               color="white"
             />

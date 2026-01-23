@@ -22,10 +22,11 @@ export type SessionSource = 'INSTANT' | 'APPOINTMENT';
 
 export interface CreateSessionParams {
   type: SessionType;
-  doctorId: number;
+  doctorId?: number; // Required for INSTANT sessions; optional for APPOINTMENT call sessions
   reason?: string;
   callType?: CallType; // Required for type === 'call'
-  source: SessionSource; // Accepted but not sent to backend yet (to avoid behavior change)
+  source: SessionSource; // Used to preserve request shapes between INSTANT vs APPOINTMENT flows
+  appointmentId?: string; // Required for APPOINTMENT call sessions (scheduled appointments)
 }
 
 export interface TextSessionResult {
@@ -62,15 +63,17 @@ export type CreateSessionResult = TextSessionResult | CallSessionResult | Sessio
  * @returns Structured result with session identifiers or error details
  */
 export async function createSession(params: CreateSessionParams): Promise<CreateSessionResult> {
-  const { type, doctorId, reason, callType, source } = params;
+  const { type, doctorId, reason, callType, source, appointmentId: providedAppointmentId } = params;
 
   // Validation
-  if (!doctorId || doctorId <= 0) {
-    return {
-      success: false,
-      status: 400,
-      message: 'Invalid doctor ID',
-    };
+  if (type === 'text') {
+    if (!doctorId || doctorId <= 0) {
+      return {
+        success: false,
+        status: 400,
+        message: 'Invalid doctor ID',
+      };
+    }
   }
 
   if (type === 'call' && !callType) {
@@ -79,6 +82,26 @@ export async function createSession(params: CreateSessionParams): Promise<Create
       status: 400,
       message: 'callType is required for call sessions',
     };
+  }
+  
+  if (type === 'call' && source === 'APPOINTMENT') {
+    if (!providedAppointmentId || providedAppointmentId.trim() === '') {
+      return {
+        success: false,
+        status: 400,
+        message: 'appointmentId is required for APPOINTMENT call sessions',
+      };
+    }
+  }
+  
+  if (type === 'call' && source === 'INSTANT') {
+    if (!doctorId || doctorId <= 0) {
+      return {
+        success: false,
+        status: 400,
+        message: 'Invalid doctor ID',
+      };
+    }
   }
 
   // Get auth token
@@ -176,17 +199,23 @@ export async function createSession(params: CreateSessionParams): Promise<Create
       // Call session: POST /api/call-sessions/start
       // IMPORTANT: For direct sessions (Talk Now), there is NO appointment record.
       // The "appointment_id" field is just a routing identifier for the CallSession.
-      // Request shape: { call_type: 'voice'|'video', appointment_id: direct_session_${Date.now()}, doctor_id, reason? }
+      // Request shapes:
+      // - INSTANT ("Talk Now"): { call_type, appointment_id: direct_session_${Date.now()}, doctor_id, reason? }
+      // - APPOINTMENT (scheduled): { call_type, appointment_id: <numeric appointment id>, reason? }
       
-      // Generate routing identifier for direct session (NOT an appointment ID)
-      // This is used as a routing key for WebSocket signaling, NOT to look up an appointment
-      const appointmentId = `direct_session_${Date.now()}`;
+      const appointmentId = source === 'APPOINTMENT'
+        ? providedAppointmentId!
+        : `direct_session_${Date.now()}`;
 
       const requestBody: any = {
         call_type: callType === 'audio' ? 'voice' : callType, // Backend expects 'voice' not 'audio'
         appointment_id: appointmentId,
-        doctor_id: doctorId,
       };
+      
+      // Only INSTANT calls include doctor_id (preserves existing behavior and avoids assumptions for scheduled appointments)
+      if (source === 'INSTANT') {
+        requestBody.doctor_id = doctorId;
+      }
 
       // Only include reason if provided (preserves exact behavior)
       if (reason !== undefined && reason !== null && reason.trim() !== '') {
@@ -196,7 +225,7 @@ export async function createSession(params: CreateSessionParams): Promise<Create
       console.log('📞 [SessionCreationService] Creating call session:', {
         callType,
         appointmentId,
-        doctorId,
+        doctorId: source === 'INSTANT' ? doctorId : undefined,
         hasReason: !!reason,
         source, // Logged but not sent to backend
       });

@@ -19,20 +19,21 @@ export function useCustomTheme() {
   // Otherwise use user theme preference or default to light
   const theme = isAnonymousMode ? 'dark' : (userTheme || 'light');
   
-  // Debug logging
-  console.log('🎨 [useCustomTheme] Debug:', {
-    userTheme,
-    finalTheme: theme,
-    isAnonymousMode,
-    userData: userData ? 'present' : 'null',
-    preferences: userData?.preferences,
-    userDataKeys: userData ? Object.keys(userData) : [],
-    hasPreferences: !!userData?.preferences,
-    privacyPreferences: userData?.privacy_preferences,
-    preferencesValue: userData?.preferences,
-    privacyPreferencesValue: userData?.privacy_preferences,
-    note: 'Using custom theme system - NO system theme dependency'
-  });
+  // Debug logging (disabled to prevent console spam - enable only when debugging)
+  // Uncomment below if you need to debug theme issues
+  // console.log('🎨 [useCustomTheme] Debug:', {
+  //   userTheme,
+  //   finalTheme: theme,
+  //   isAnonymousMode,
+  //   userData: userData ? 'present' : 'null',
+  //   preferences: userData?.preferences,
+  //   userDataKeys: userData ? Object.keys(userData) : [],
+  //   hasPreferences: !!userData?.preferences,
+  //   privacyPreferences: userData?.privacy_preferences,
+  //   preferencesValue: userData?.preferences,
+  //   privacyPreferencesValue: userData?.privacy_preferences,
+  //   note: 'Using custom theme system - NO system theme dependency'
+  // });
   
   return {
     theme,

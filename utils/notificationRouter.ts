@@ -1,5 +1,6 @@
 import { getAppointmentId, getCallType, getRole, PushPayload } from './pushTypes';
 import { routeIncomingCall } from './callRouter';
+import authService from '../services/authService';
 
 export type RouteSource = 'foreground' | 'opened' | 'initial';
 
@@ -16,6 +17,13 @@ export function routePushEvent(router: any, data: PushPayload, source: RouteSour
 
   // Incoming call routing (foreground + background)
   if (type === 'incoming_call' || type === 'voice_call_incoming' || type === 'video_call_incoming') {
+    // Check if user is authenticated before routing
+    const currentUser = authService.getCurrentUserSync();
+    if (!currentUser) {
+      console.warn('⚠️ [NotificationRouter] User not authenticated, ignoring incoming call notification');
+      return;
+    }
+    
     // Delegate to existing call router
     const mapped = { ...data, call_type: getCallType(data) } as any;
     routeIncomingCall(router, mapped);

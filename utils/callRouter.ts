@@ -1,3 +1,5 @@
+import authService from '../services/authService';
+
 export type IncomingCallData = {
   type?: string;
   appointment_id?: string;
@@ -29,6 +31,13 @@ setInterval(() => {
 export function routeIncomingCall(router: any, data: IncomingCallData) {
   try {
     console.log('📞 [CallRouter] routeIncomingCall called with:', { data, router: !!router });
+    
+    // Check if user is authenticated before routing
+    const currentUser = authService.getCurrentUserSync();
+    if (!currentUser) {
+      console.warn('⚠️ [CallRouter] User not authenticated, ignoring incoming call');
+      return;
+    }
     
     if (!data || (data.type !== 'incoming_call' && (data as any).event !== 'incoming_call')) {
       console.log('📞 [CallRouter] Invalid data or type, returning');

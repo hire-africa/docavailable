@@ -777,7 +777,8 @@ export default function ChatPage() {
     if (isTextSession) return false; // FIX: Disable call buttons for text sessions
     // Check both chatInfo and state for appointment type
     const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
-    if (currentAppointmentType === 'audio' || currentAppointmentType === 'voice') return true;
+    const type = (currentAppointmentType || '').toLowerCase();
+    if (type === 'audio' || type === 'voice') return true;
     return false;
   };
 
@@ -787,7 +788,8 @@ export default function ChatPage() {
     if (isTextSession) return false; // FIX: Disable call buttons for text sessions
     // Check both chatInfo and state for appointment type
     const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
-    if (currentAppointmentType === 'video') return true;
+    const type = (currentAppointmentType || '').toLowerCase();
+    if (type === 'video') return true;
     return false;
   };
 
@@ -823,8 +825,11 @@ export default function ChatPage() {
     // Check if the specific call type is allowed for this appointment type
     const callTypeEnabled = callType === 'voice' ? isAudioCallEnabled() : isVideoCallEnabled();
 
-    // Allow call button if WebRTC is ready OR if audio calls are enabled in environment
-    const webrtcReadyOrFallback = webrtcReady || process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS === 'true';
+    // Allow call button if WebRTC is ready OR if the corresponding call type is enabled in environment
+    const envFlag = callType === 'voice'
+      ? process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS
+      : process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS;
+    const webrtcReadyOrFallback = webrtcReady || envFlag === 'true';
     // For appointments, also check if it's appointment time
     const appointmentTimeCheck = isTextSession || isAppointmentTime;
 
@@ -850,7 +855,8 @@ export default function ChatPage() {
       hasAvailableSessions,
       subscriptionData,
       enabled,
-      environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS
+      environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS,
+      environmentVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS
     });
 
     return enabled;
@@ -886,22 +892,25 @@ export default function ChatPage() {
         appointmentType: chatInfo?.appointment_type || appointmentType
       });
 
-      // Call the backend to start the call session (same endpoint as "Talk Now")
-      const response = await apiService.post('/call-sessions/start', {
-        call_type: callType,
-        appointment_id: appointmentIdNum.toString(),
-        reason: chatInfo?.reason || 'Scheduled appointment call'
+      // Use the same session creation service used by "Talk Now" to avoid billing/payout drift
+      const { createSession } = await import('../../services/sessionCreationService');
+      const result = await createSession({
+        type: 'call',
+        callType,
+        source: 'APPOINTMENT',
+        appointmentId: appointmentIdNum.toString(),
+        reason: chatInfo?.reason || 'Scheduled appointment call',
       });
 
-      if (response.success || (response as any).data?.success) {
-        console.log('✅ [startCallSession] Call session started successfully:', response);
+      if (result.success) {
+        console.log('✅ [startCallSession] Call session started successfully:', result);
         return true;
-      } else {
-        const errorMsg = response.message || (response as any).data?.message || 'Failed to start call session';
-        console.error('❌ [startCallSession] Failed:', errorMsg, response);
-        Alert.alert('Call Failed', errorMsg);
-        return false;
       }
+
+      const errorMsg = result.message || 'Failed to start call session';
+      console.error('❌ [startCallSession] Failed:', errorMsg, result);
+      Alert.alert('Call Failed', errorMsg);
+      return false;
     } catch (error: any) {
       const errorMsg = error?.response?.data?.message || error?.message || 'Failed to start call session';
       console.error('❌ [startCallSession] Error:', error);
@@ -920,6 +929,34 @@ export default function ChatPage() {
       fetchSubscriptionData();
     }
   }, [isAuthenticated, user?.user_type]);
+
+  // Pre-request camera permissions when video call button is available (for faster initialization)
+  useEffect(() => {
+    const preRequestCameraPermissions = async () => {
+      // Only pre-request if video calls are enabled and button would be visible
+      const videoEnabled = isVideoCallEnabled();
+      const callEnabled = isCallButtonEnabled('video');
+      if (videoEnabled && callEnabled) {
+        try {
+          // Silently check/request camera permissions in background
+          // This warms up the permission system and can speed up camera initialization
+          const { status } = await ImagePicker.getCameraPermissionsAsync();
+          if (status !== 'granted') {
+            // Pre-request permission (user won't see modal until they click button)
+            await ImagePicker.requestCameraPermissionsAsync();
+          }
+          console.log('✅ [Camera] Camera permissions pre-checked for faster video call initialization');
+        } catch (error) {
+          // Silently fail - permissions will be requested when button is clicked
+          console.warn('⚠️ [Camera] Failed to pre-check camera permissions:', error);
+        }
+      }
+    };
+
+    // Delay pre-request slightly to avoid blocking initial render
+    const timer = setTimeout(preRequestCameraPermissions, 1000);
+    return () => clearTimeout(timer);
+  }, [isAppointmentTime, webrtcReady, subscriptionData, chatInfo?.appointment_type, appointmentType]);
 
   // Helper function to check if current time is within appointment time
   // IMPORTANT: This only affects scheduled appointments, NOT instant sessions
@@ -1456,7 +1493,19 @@ export default function ChatPage() {
         try {
           await chatService.connect();
           clearTimeout(connectionTimeout); // Clear timeout on successful connection
-          console.log('✅ [WebRTC Chat] Connected successfully');
+          
+          // Verify connection status before setting service
+          const isActuallyConnected = chatService.getConnectionStatus();
+          console.log('✅ [WebRTC Chat] Connection attempt completed. Status check:', {
+            isActuallyConnected,
+            serviceExists: !!chatService
+          });
+          
+          if (!isActuallyConnected) {
+            throw new Error('WebRTC connection completed but status check shows not connected');
+          }
+          
+          console.log('✅ [WebRTC Chat] ✅✅✅ CONNECTED SUCCESSFULLY - Using WebRTC for messages ✅✅✅');
           console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
           webrtcServiceRef.current = chatService;
           setWebrtcChatService(chatService);
@@ -1464,12 +1513,17 @@ export default function ChatPage() {
           console.log('✅ [WebRTC Chat] WebRTC chat service state set successfully');
         } catch (connectError) {
           clearTimeout(connectionTimeout); // Clear timeout on error
+          console.error('❌ [WebRTC Chat] ❌❌❌ CONNECTION FAILED - Will use HTTP API fallback ❌❌❌');
           console.error('❌ [WebRTC Chat] Connection failed:', connectError);
           console.error('❌ [WebRTC Chat] Connection error details:', {
             message: connectError.message,
             name: connectError.name,
             stack: connectError.stack
           });
+          // Ensure service is NOT set on failure
+          webrtcServiceRef.current = null;
+          setWebrtcChatService(null);
+          setIsWebRTCServiceActive(false);
           throw connectError; // Re-throw to trigger the catch block below
         }
 
@@ -2573,30 +2627,31 @@ export default function ChatPage() {
         });
       }
 
+      // Check WebRTC connection status BEFORE attempting to send
+      const webrtcConnectionStatus = webrtcChatService ? webrtcChatService.getConnectionStatus() : false;
+      
       console.log('🔍 [ChatComponent] WebRTC chat service state:', {
         hasService: !!webrtcChatService,
         isWebRTCServiceActive: isWebRTCServiceActive,
         serviceType: webrtcChatService ? typeof webrtcChatService : 'null',
-        connectionStatus: webrtcChatService ? webrtcChatService.getConnectionStatus() : 'N/A'
+        connectionStatus: webrtcConnectionStatus,
+        isActuallyConnected: webrtcConnectionStatus === true
       });
 
       console.log('🔍 [ChatComponent] WebRTC service details:', {
         service: webrtcChatService,
         hasSendMessage: webrtcChatService ? typeof webrtcChatService.sendMessage === 'function' : false,
-        isConnected: webrtcChatService ? webrtcChatService.getConnectionStatus() : false
+        isConnected: webrtcConnectionStatus
       });
 
-      if (webrtcChatService) {
-        // Use WebRTC chat service if available
-        console.log('📤 [ChatComponent] Sending message via WebRTC:', messageText);
-        console.log('🔍 [ChatComponent] WebRTC connection status:', {
+      // CRITICAL: Only use WebRTC if service exists AND is actually connected
+      if (webrtcChatService && webrtcConnectionStatus) {
+        // Use WebRTC chat service - it's available AND connected
+        console.log('✅ [ChatComponent] WebRTC is CONNECTED - sending via WebRTC:', messageText);
+        console.log('🔍 [ChatComponent] WebRTC connection verified:', {
           hasService: !!webrtcChatService,
           connectionStatus: webrtcChatService.getConnectionStatus(),
           isWebRTCServiceActive: isWebRTCServiceActive
-        });
-        console.log('🔍 [ChatComponent] WebRTC service details:', {
-          serviceType: typeof webrtcChatService,
-          hasSendMessage: typeof webrtcChatService.sendMessage === 'function'
         });
         try {
           // Prepare replyTo data if replying
@@ -2632,7 +2687,7 @@ export default function ChatPage() {
           } else {
             console.error('❌ [ChatComponent] Failed to send message via WebRTC - no message returned');
             // Fallback to backend API
-            console.log('🔄 [ChatComponent] WebRTC returned null, trying backend API fallback');
+            console.log('🔄 [ChatComponent] ⚠️ FALLBACK TO HTTP API: WebRTC returned null');
             await sendMessageViaBackendAPI(tempId, messageText);
           }
         } catch (webrtcError) {
@@ -2643,16 +2698,24 @@ export default function ChatPage() {
             stack: webrtcError.stack
           });
           // Fallback to backend API
-          console.log('🔄 [ChatComponent] WebRTC failed, trying backend API fallback');
+          console.log('🔄 [ChatComponent] ⚠️ FALLBACK TO HTTP API: WebRTC threw error');
           await sendMessageViaBackendAPI(tempId, messageText);
         }
 
       } else {
-        // Fallback to backend API
-        console.log('📤 [ChatComponent] WebRTC not available, using backend API fallback');
-        console.log('📤 [ChatComponent] WebRTC service state when not available:', {
-          webrtcChatService: webrtcChatService,
-          isWebRTCServiceActive: isWebRTCServiceActive
+        // WebRTC service doesn't exist OR is not connected - use HTTP API
+        const reason = !webrtcChatService 
+          ? 'WebRTC service not initialized' 
+          : !webrtcConnectionStatus 
+            ? 'WebRTC service exists but NOT CONNECTED' 
+            : 'Unknown reason';
+        
+        console.log('📤 [ChatComponent] ⚠️ USING HTTP API (not WebRTC):', reason);
+        console.log('📤 [ChatComponent] WebRTC service state:', {
+          hasService: !!webrtcChatService,
+          isConnected: webrtcConnectionStatus,
+          isWebRTCServiceActive: isWebRTCServiceActive,
+          reason: reason
         });
         await sendMessageViaBackendAPI(tempId, messageText);
       }
@@ -2663,14 +2726,15 @@ export default function ChatPage() {
     }
   };
 
-  // Fallback method to send message via backend API
+  // Fallback method to send message via backend API (HTTP polling/API)
   const sendMessageViaBackendAPI = async (tempId: string, messageText: string) => {
     try {
-      console.log('📤 [BackendAPI] Sending message via backend API:', {
+      console.log('📤 [BackendAPI] ⚠️ SENDING VIA HTTP API (NOT WebRTC):', {
         appointmentId,
         messageText: messageText.substring(0, 50),
         isTextSession,
-        isInstantSession
+        isInstantSession,
+        reason: 'WebRTC not available or not connected'
       });
 
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
@@ -4202,9 +4266,9 @@ export default function ChatPage() {
           >
             {/* Video call button: ONLY show for video appointments AND when video calls are enabled */}
             {(() => {
-              const config = configService.getWebRTCConfig();
-              const videoFeatureEnabled = !!config.enableVideoCalls;
-              const showVideo = isVideoCallEnabled() && videoFeatureEnabled;
+              // Scheduled appointment video calls should follow the same flow as "Talk Now":
+              // render based on appointment type; enable/disable based on readiness/subscription/time checks.
+              const showVideo = isVideoCallEnabled();
               if (!showVideo) return null;
 
               return (
@@ -4217,16 +4281,24 @@ export default function ChatPage() {
                   onPress={async () => {
                     if (isCallButtonEnabled('video')) {
                       console.log('📹 Starting video call for scheduled appointment...');
+                      // Pre-request camera permissions to speed up initialization
+                      try {
+                        await ImagePicker.requestCameraPermissionsAsync();
+                      } catch (error) {
+                        console.warn('⚠️ Failed to pre-request camera permissions:', error);
+                      }
                       const started = await startCallSession('video');
                       if (started) {
                         setShowVideoCallModal(true);
                       }
                     } else {
                       let message = '';
-                      if (!videoFeatureEnabled) {
-                        message = 'Video calls are currently disabled in configuration.';
-                      } else if (subscriptionData?.videoCallsRemaining === 0) {
+                      if (subscriptionData?.videoCallsRemaining === 0) {
                         message = 'No video calls remaining in your subscription. Please upgrade your plan.';
+                      } else if (!webrtcReady && process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS !== 'true') {
+                        message = 'Call Not Ready: Video calling is not ready yet. Please wait a moment.';
+                      } else if (!isAppointmentTime) {
+                        message = 'Video calls are not available yet. Please wait until your appointment time.';
                       } else {
                         message = 'Video calls are not available right now. Please wait and try again.';
                       }
@@ -4234,7 +4306,11 @@ export default function ChatPage() {
                     }
                   }}
                 >
-                  <Icon name="video" size={24} color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"} />
+                  <Icon
+                    name="video"
+                    size={24}
+                    color={isCallButtonEnabled('video') ? "#4CAF50" : "#999"}
+                  />
                 </TouchableOpacity>
               );
             })()}
@@ -5045,6 +5121,7 @@ export default function ChatPage() {
               paddingHorizontal: 18,
               paddingVertical: 14,
               fontSize: 16,
+              color: '#000',
               marginRight: 8,
               opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
               backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',

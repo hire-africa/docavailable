@@ -47,7 +47,8 @@ export const textSessionService = {
    */
   startSessionFromAppointment: async (appointmentId: string | number, modality?: 'text' | 'audio' | 'video'): Promise<SessionContext | null> => {
     try {
-      console.log('🔄 [TextSessionService] Starting session from appointment:', appointmentId, 'modality:', modality);
+      // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
+      // console.log('🔄 [TextSessionService] Starting session from appointment:', appointmentId, 'modality:', modality);
       
       // Get user's timezone for backend processing
       const timezoneInfo = getTimezoneInfo();
@@ -58,19 +59,41 @@ export const textSessionService = {
         headers: {
           'X-User-Timezone': timezoneInfo.userTimezone
         }
-      }) as StartSessionResponse;
+      }) as any; // Use any to handle different response structures
 
-      if (response.success && response.context_type && response.context_id) {
-        const context: SessionContext = {
-          context_type: response.context_type,
-          context_id: response.context_id
-        };
-        console.log('✅ [TextSessionService] Session started successfully:', contextToString(context));
-        return context;
-      } else {
-        console.error('❌ [TextSessionService] Failed to start session:', response);
-        return null;
+      // Handle different response structures
+      // New format: { success: true, context_type, context_id }
+      // Legacy format: { success: true, data: { session_id, appointment_id, ... } }
+      if (response.success) {
+        if (response.context_type && response.context_id) {
+          // New format
+          const context: SessionContext = {
+            context_type: response.context_type,
+            context_id: response.context_id
+          };
+          console.log('✅ [TextSessionService] Session started successfully:', contextToString(context));
+          return context;
+        } else if (response.data) {
+          // Legacy format - extract from data
+          const data = response.data;
+          if (data.session_id) {
+            const context: SessionContext = {
+              context_type: 'text_session',
+              context_id: String(data.session_id)
+            };
+            console.log('✅ [TextSessionService] Session started successfully (legacy format):', contextToString(context));
+            return context;
+          }
+        }
       }
+      
+      // Only log error if actually failed
+      if (!response.success) {
+        console.error('❌ [TextSessionService] Failed to start session:', response);
+      } else {
+        console.warn('⚠️ [TextSessionService] Unexpected response format:', response);
+      }
+      return null;
     } catch (error) {
       console.error('❌ [TextSessionService] Error starting session from appointment:', error);
       return null;
@@ -80,7 +103,8 @@ export const textSessionService = {
   // Create a text session from a text appointment (legacy - use startSessionFromAppointment instead)
   createTextSessionFromAppointment: async (appointment: Appointment): Promise<TextSession | null> => {
     try {
-      console.log('🔄 [TextSessionService] Creating text session from appointment (legacy):', appointment.id);
+      // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
+      // console.log('🔄 [TextSessionService] Creating text session from appointment (legacy):', appointment.id);
       
       // Try the new unified endpoint first
       const context = await textSessionService.startSessionFromAppointment(appointment.id, 'text');
@@ -139,15 +163,16 @@ export const textSessionService = {
       // Use timezone utility for consistent time handling
       const isTimeReached = isAppointmentTimeReached(dateStr, timeStr);
       
-      // Debug logging for frontend time validation
-      const timezoneInfo = getTimezoneInfo();
-      console.log('🕐 [TextSessionService] Frontend time validation debug', {
-        appointment_id: appointment.id,
-        appointment_date: dateStr,
-        appointment_time: timeStr,
-        is_time_reached: isTimeReached,
-        ...timezoneInfo
-      });
+      // Debug logging for frontend time validation (disabled to prevent console spam)
+      // Uncomment below if you need to debug time validation issues
+      // const timezoneInfo = getTimezoneInfo();
+      // console.log('🕐 [TextSessionService] Frontend time validation debug', {
+      //   appointment_id: appointment.id,
+      //   appointment_date: dateStr,
+      //   appointment_time: timeStr,
+      //   is_time_reached: isTimeReached,
+      //   ...timezoneInfo
+      // });
       
       return isTimeReached;
     } catch (error) {

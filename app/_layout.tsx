@@ -14,6 +14,7 @@ import pushNotificationService from '../services/pushNotificationService';
 import { SessionNotificationHandler } from '../services/sessionNotificationHandler';
 import { routeIncomingCall } from '../utils/callRouter';
 import { routePushEvent } from '../utils/notificationRouter';
+import authService from '../services/authService';
 
 import apiService from './services/apiService';
 
@@ -137,6 +138,17 @@ export default function RootLayout() {
       };
 
       console.log('📞 [IncomingCallBridge] Routing incoming call from native event', normalizedPayload);
+      
+      // Check if user is authenticated before routing
+      const currentUser = authService.getCurrentUserSync();
+      if (!currentUser) {
+        console.warn('⚠️ [IncomingCallBridge] User not authenticated, ignoring incoming call');
+        if (isMounted) {
+          setIsCallBooting(false);
+        }
+        return;
+      }
+      
       routeIncomingCall(router, normalizedPayload as any);
       if (isMounted) {
         setIsCallBooting(false);
@@ -423,6 +435,13 @@ export default function RootLayout() {
         if (type === 'incoming_call') {
           console.log('📱 [Foreground] Incoming call - routing to call screen');
           console.log('📱 [Foreground] Call data:', data);
+
+          // Check if user is authenticated before routing
+          const currentUser = authService.getCurrentUserSync();
+          if (!currentUser) {
+            console.warn('⚠️ [Foreground] User not authenticated, ignoring incoming call notification');
+            return;
+          }
 
           // Check deduplication service to prevent multiple call screens
           const appointmentId = String(data.appointment_id || '');

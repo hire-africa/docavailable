@@ -505,7 +505,94 @@ class CallSessionController extends Controller
             $appointmentId = $request->input('appointment_id');
             $sessionId = $request->input('session_id');
             $sessionDuration = $request->input('session_duration', 0);
-            $wasConnected = $request->input('was_connected', false);
+            $wasConnected = (bool) $request->input('was_connected', false);
+
+            /**
+             * Fast-path for calls that never connected (patient hung up while still connecting / ringing)
+             *
+             * In this case we want a VERY safe, minimal update:
+             * - Mark the latest non-ended session for this appointment/user as MISSED
+             * - Set ended_at / last_activity_at / is_connected=false / call_duration=0
+             * - Skip ALL billing / wallet logic
+             *
+             * This avoids 500s from the more complex billing flow for simple non-connected hangs.
+             */
+            if (!$wasConnected) {
+                return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId) {
+                    // Find the call session to end with lock (same targeting rules as main flow)
+                    $query = CallSession::query();
+                    if ($sessionId) {
+                        $query->where('id', $sessionId);
+                    } elseif ($appointmentId) {
+                        $query->where('appointment_id', (string) $appointmentId);
+                    } else {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'Session ID or Appointment ID required'
+                        ], 400);
+                    }
+
+                    // Authorization: must be a participant (patient or doctor)
+                    $query->where(function ($q) use ($user) {
+                        $q->where('patient_id', $user->id)
+                            ->orWhere('doctor_id', $user->id);
+                    });
+
+                    /** @var CallSession|null $callSession */
+                    $callSession = $query
+                        ->where('status', '!=', CallSession::STATUS_ENDED)
+                        ->orderByDesc('created_at')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if (!$callSession) {
+                        // Nothing to end; treat as success to avoid blocking new calls
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'No active call session found to end (non-connected)',
+                        ]);
+                    }
+
+                    // If the call never connected, mark as MISSED with zero duration and NO billing
+                    if (!$callSession->connected_at) {
+                        Log::info("Non-connected call ended by user - marking as MISSED (fast-path)", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId,
+                            'patient_id' => $callSession->patient_id,
+                            'doctor_id' => $callSession->doctor_id,
+                            'status_before' => $callSession->status,
+                        ]);
+
+                        $callSession->update([
+                            'status' => CallSession::STATUS_MISSED,
+                            'ended_at' => now(),
+                            'last_activity_at' => now(),
+                            'is_connected' => false,
+                            'call_duration' => 0,
+                        ]);
+
+                        return response()->json([
+                            'success' => true,
+                            'message' => 'Call ended before connection - no billing applied',
+                            'session_duration' => 0,
+                            'was_connected' => false,
+                        ]);
+                    }
+
+                    // If connected_at is somehow set despite was_connected=false, fall through
+                    // to the main billing-aware flow below.
+                    Log::warning("Inconsistent state: was_connected=false but connected_at is set - falling back to main end flow", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId,
+                        'connected_at' => $callSession->connected_at,
+                        'status' => $callSession->status,
+                    ]);
+
+                    // Let the main flow handle this case (re-use logic below)
+                    // Note: We don't re-run the query here; the main transaction below
+                    // will perform its own lookup and billing.
+                });
+            }
 
             return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId, $sessionDuration, $wasConnected) {
                 // Find the call session to end with lock
@@ -883,13 +970,20 @@ class CallSessionController extends Controller
                 'user_id' => Auth::id(),
                 'call_type' => $request->input('call_type'),
                 'appointment_id' => $request->input('appointment_id'),
+                'was_connected' => (bool) $request->input('was_connected', false),
+                'session_id' => $request->input('session_id'),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to end call session'
+                'message' => 'Failed to end call session',
+                'debug' => [
+                    'error' => $e->getMessage(),
+                    'line' => $e->getLine(),
+                    'file' => $e->getFile(),
+                ],
             ], 500);
         }
     }

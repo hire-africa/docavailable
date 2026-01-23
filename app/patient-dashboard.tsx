@@ -152,6 +152,17 @@ export default function PatientDashboard() {
   const [showSubscriptions, setShowSubscriptions] = useState(false);
   const [showCacheManagement, setShowCacheManagement] = useState(false);
   const [isDocBotBottomHidden, setIsDocBotBottomHidden] = useState(false);
+  const [sessionInfoModal, setSessionInfoModal] = useState<{
+    visible: boolean;
+    title: string;
+    body: string;
+    accentColor: string;
+  }>({
+    visible: false,
+    title: '',
+    body: '',
+    accentColor: '#4CAF50',
+  });
 
   const { triggerConversionCheck } = useTextAppointmentConverter({
     appointments: appointments || [],
@@ -2121,89 +2132,131 @@ export default function PatientDashboard() {
             <ThemedView style={styles.remainingSessionsSection}>
               <ThemedText style={styles.sectionTitle}>Your Remaining Sessions</ThemedText>
               <View style={styles.sessionsGrid}>
-                <View style={styles.remainingSessionCard}>
-                  <View style={styles.sessionIcon}>
-                    <Icon name="message" size={24} color="#4CAF50" />
-                  </View>
-                  <View style={styles.sessionInfo}>
-                    <ThemedText style={styles.sessionCount}>
-                      {currentSubscription.textSessionsRemaining || 0}
-                    </ThemedText>
-                    <ThemedText style={styles.sessionLabel}>Text Sessions</ThemedText>
-                  </View>
-                  <View style={styles.sessionProgress}>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${Math.max(0, Math.min(100, ((currentSubscription.textSessionsRemaining || 0) / (currentSubscription.totalTextSessions || 1)) * 100))}%`,
-                            backgroundColor: '#4CAF50'
-                          }
-                        ]}
-                      />
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const sessions = currentSubscription.textSessionsRemaining || 0;
+                    const minutes = sessions * 10;
+                    setSessionInfoModal({
+                      visible: true,
+                      title: 'Text sessions',
+                      body: `1 session = 10 minutes.\n\nYou have ${sessions} text session${sessions === 1 ? '' : 's'} remaining (${minutes} minute${minutes === 1 ? '' : 's'}).`,
+                      accentColor: '#4CAF50',
+                    });
+                  }}
+                >
+                  <View style={[styles.remainingSessionCard, { borderLeftColor: '#4CAF50' }]}>
+                    <View style={[styles.sessionIcon, { backgroundColor: 'rgba(76,175,80,0.10)' }]}>
+                      <Icon name="message" size={24} color="#4CAF50" />
                     </View>
-                    <ThemedText style={styles.progressText}>
-                      {currentSubscription.textSessionsRemaining || 0} / {currentSubscription.totalTextSessions || 0}
-                    </ThemedText>
+                    <View style={styles.sessionInfo}>
+                      <ThemedText style={styles.sessionCount}>
+                        {currentSubscription.textSessionsRemaining || 0}
+                      </ThemedText>
+                      <ThemedText style={styles.sessionLabel}>Text Sessions</ThemedText>
+                    </View>
+                    <View style={styles.sessionProgress}>
+                      <View style={styles.progressBar}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${Math.max(0, Math.min(100, ((currentSubscription.textSessionsRemaining || 0) / (currentSubscription.totalTextSessions || 1)) * 100))}%`,
+                              backgroundColor: '#4CAF50'
+                            }
+                          ]}
+                        />
+                      </View>
+                      <ThemedText style={styles.progressText}>
+                        {currentSubscription.textSessionsRemaining || 0} / {currentSubscription.totalTextSessions || 0}
+                      </ThemedText>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
 
-                <View style={styles.remainingSessionCard}>
-                  <View style={styles.sessionIcon}>
-                    <Icon name="voice" size={24} color="#2196F3" />
-                  </View>
-                  <View style={styles.sessionInfo}>
-                    <ThemedText style={styles.sessionCount}>
-                      {currentSubscription.voiceCallsRemaining || 0}
-                    </ThemedText>
-                    <ThemedText style={styles.sessionLabel}>Voice Calls</ThemedText>
-                  </View>
-                  <View style={styles.sessionProgress}>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${Math.max(0, Math.min(100, ((currentSubscription.voiceCallsRemaining || 0) / (currentSubscription.totalVoiceCalls || 1)) * 100))}%`,
-                            backgroundColor: '#2196F3'
-                          }
-                        ]}
-                      />
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const sessions = currentSubscription.voiceCallsRemaining || 0;
+                    const minutes = sessions * 10;
+                    setSessionInfoModal({
+                      visible: true,
+                      title: 'Voice calls',
+                      body: `1 session = 10 minutes.\n\nYou have ${sessions} voice call session${sessions === 1 ? '' : 's'} remaining (${minutes} minute${minutes === 1 ? '' : 's'}).`,
+                      accentColor: '#2196F3',
+                    });
+                  }}
+                >
+                  <View style={[styles.remainingSessionCard, { borderLeftColor: '#2196F3' }]}>
+                    <View style={[styles.sessionIcon, { backgroundColor: 'rgba(33,150,243,0.10)' }]}>
+                      <Icon name="voice" size={24} color="#2196F3" />
                     </View>
-                    <ThemedText style={styles.progressText}>
-                      {currentSubscription.voiceCallsRemaining || 0} / {currentSubscription.totalVoiceCalls || 0}
-                    </ThemedText>
+                    <View style={styles.sessionInfo}>
+                      <ThemedText style={styles.sessionCount}>
+                        {currentSubscription.voiceCallsRemaining || 0}
+                      </ThemedText>
+                      <ThemedText style={styles.sessionLabel}>Voice Calls</ThemedText>
+                    </View>
+                    <View style={styles.sessionProgress}>
+                      <View style={styles.progressBar}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${Math.max(0, Math.min(100, ((currentSubscription.voiceCallsRemaining || 0) / (currentSubscription.totalVoiceCalls || 1)) * 100))}%`,
+                              backgroundColor: '#2196F3'
+                            }
+                          ]}
+                        />
+                      </View>
+                      <ThemedText style={styles.progressText}>
+                        {currentSubscription.voiceCallsRemaining || 0} / {currentSubscription.totalVoiceCalls || 0}
+                      </ThemedText>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
 
-                <View style={styles.remainingSessionCard}>
-                  <View style={styles.sessionIcon}>
-                    <Icon name="video" size={20} color="#666" />
-                  </View>
-                  <View style={styles.sessionInfo}>
-                    <ThemedText style={styles.sessionCount}>
-                      {currentSubscription.videoCallsRemaining || 0}
-                    </ThemedText>
-                    <ThemedText style={styles.sessionLabel}>Video Calls</ThemedText>
-                  </View>
-                  <View style={styles.sessionProgress}>
-                    <View style={styles.progressBar}>
-                      <View
-                        style={[
-                          styles.progressFill,
-                          {
-                            width: `${Math.max(0, Math.min(100, ((currentSubscription.videoCallsRemaining || 0) / (currentSubscription.totalVideoCalls || 1)) * 100))}%`,
-                            backgroundColor: '#FF9800'
-                          }
-                        ]}
-                      />
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    const sessions = currentSubscription.videoCallsRemaining || 0;
+                    const minutes = sessions * 10;
+                    setSessionInfoModal({
+                      visible: true,
+                      title: 'Video calls',
+                      body: `1 session = 10 minutes.\n\nYou have ${sessions} video call session${sessions === 1 ? '' : 's'} remaining (${minutes} minute${minutes === 1 ? '' : 's'}).`,
+                      accentColor: '#FF9800',
+                    });
+                  }}
+                >
+                  <View style={[styles.remainingSessionCard, { borderLeftColor: '#FF9800' }]}>
+                    <View style={[styles.sessionIcon, { backgroundColor: 'rgba(255,152,0,0.12)' }]}>
+                      <Icon name="video" size={20} color="#FF9800" />
                     </View>
-                    <ThemedText style={styles.progressText}>
-                      {currentSubscription.videoCallsRemaining || 0} / {currentSubscription.totalVideoCalls || 0}
-                    </ThemedText>
+                    <View style={styles.sessionInfo}>
+                      <ThemedText style={styles.sessionCount}>
+                        {currentSubscription.videoCallsRemaining || 0}
+                      </ThemedText>
+                      <ThemedText style={styles.sessionLabel}>Video Calls</ThemedText>
+                    </View>
+                    <View style={styles.sessionProgress}>
+                      <View style={styles.progressBar}>
+                        <View
+                          style={[
+                            styles.progressFill,
+                            {
+                              width: `${Math.max(0, Math.min(100, ((currentSubscription.videoCallsRemaining || 0) / (currentSubscription.totalVideoCalls || 1)) * 100))}%`,
+                              backgroundColor: '#FF9800'
+                            }
+                          ]}
+                        />
+                      </View>
+                      <ThemedText style={styles.progressText}>
+                        {currentSubscription.videoCallsRemaining || 0} / {currentSubscription.totalVideoCalls || 0}
+                      </ThemedText>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               </View>
             </ThemedView>
           )}
@@ -2344,6 +2397,39 @@ export default function PatientDashboard() {
 
               const appointmentTypeRaw = (appt.appointment_type ?? appt.consultationType ?? appt.type ?? null);
               const appointmentType = appointmentTypeRaw ? String(appointmentTypeRaw).toLowerCase() : '';
+              const isCallAppointment = appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video';
+
+              // Hide appointment chats from Messages after 30 minutes (appointments only, not text sessions)
+              // We prefer call_unlocked_at for call appointments, because it’s already UTC and matches backend unlock.
+              if (isCallAppointment) {
+                try {
+                  const cutoffMs = 30 * 60 * 1000;
+                  const unlockedAtRaw = (appt as any)?.call_unlocked_at;
+                  if (unlockedAtRaw) {
+                    const unlockedAt = new Date(unlockedAtRaw);
+                    if (!isNaN(unlockedAt.getTime())) {
+                      if (Date.now() - unlockedAt.getTime() > cutoffMs) {
+                        return false;
+                      }
+                    }
+                  } else {
+                    // Fallback: use scheduled date/time
+                    const dateStr = appt.appointment_date || appt.date;
+                    const timeStr = appt.appointment_time || appt.time;
+                    if (dateStr && timeStr && typeof dateStr === 'string' && typeof timeStr === 'string') {
+                      const scheduled = new Date(`${dateStr}T${timeStr}`);
+                      if (!isNaN(scheduled.getTime())) {
+                        if (Date.now() - scheduled.getTime() > cutoffMs) {
+                          return false;
+                        }
+                      }
+                    }
+                  }
+                } catch {
+                  // If parsing fails, do not hide
+                }
+              }
+
               const linkedSessionId = (appt.session_id ?? appt.sessionId ?? null);
               const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
               const isTextWithLinkedSession = hasLinkedSession && (appointmentType === 'text' || appointmentType === '');
@@ -4289,6 +4375,45 @@ export default function PatientDashboard() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar backgroundColor={isDarkMode ? '#151718' : '#fff'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+
+      {/* Styled session info modal (replaces system Alert for premium UI) */}
+      <Modal
+        visible={sessionInfoModal.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSessionInfoModal(prev => ({ ...prev, visible: false }))}
+      >
+        <View style={styles.sessionInfoOverlay}>
+          <TouchableOpacity
+            style={styles.sessionInfoBackdrop}
+            activeOpacity={1}
+            onPress={() => setSessionInfoModal(prev => ({ ...prev, visible: false }))}
+          />
+          <View style={styles.sessionInfoCard}>
+            <View style={styles.sessionInfoHeaderRow}>
+              <View style={[styles.sessionInfoAccentDot, { backgroundColor: sessionInfoModal.accentColor }]} />
+              <Text style={styles.sessionInfoTitle}>{sessionInfoModal.title}</Text>
+              <TouchableOpacity
+                onPress={() => setSessionInfoModal(prev => ({ ...prev, visible: false }))}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={styles.sessionInfoClose}
+              >
+                <Icon name="close" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sessionInfoBody}>{sessionInfoModal.body}</Text>
+
+            <TouchableOpacity
+              style={[styles.sessionInfoCta, { backgroundColor: sessionInfoModal.accentColor }]}
+              activeOpacity={0.9}
+              onPress={() => setSessionInfoModal(prev => ({ ...prev, visible: false }))}
+            >
+              <Text style={styles.sessionInfoCtaText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       {/* Hide header for DocBot tab */}
       {activeTab !== 'docbot' && (
         <View style={{
@@ -6297,11 +6422,13 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#0A0A0A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 6,
   },
   sessionsGrid: {
     flexDirection: 'column',
@@ -6310,20 +6437,29 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
   remainingSessionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    backgroundColor: '#FBFCFD',
+    borderRadius: 14,
     padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
     borderLeftWidth: 4,
     borderLeftColor: '#4CAF50',
+    shadowColor: '#0A0A0A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   sessionIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E8F5E8',
+    backgroundColor: 'rgba(76,175,80,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
   sessionInfo: {
   },
@@ -6365,36 +6501,103 @@ const createStyles = (colors: ReturnType<typeof useThemedColors>) => StyleSheet.
     fontWeight: 'bold',
   },
   sessionCount: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#222',
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#0F172A',
     marginBottom: 4,
   },
   sessionLabel: {
     fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
+    color: '#475569',
+    fontWeight: '600',
   },
   sessionProgress: {
     alignItems: 'flex-end',
     minWidth: 80,
   },
   progressBar: {
-    width: 80,
-    height: 6,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 3,
+    width: 96,
+    height: 8,
+    backgroundColor: '#EEF2F6',
+    borderRadius: 999,
     marginBottom: 4,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: 999,
   },
   progressText: {
     fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  // Styled modal for "1 session = 10 minutes" explanation
+  sessionInfoOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sessionInfoBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  sessionInfoCard: {
+    width: '88%',
+    maxWidth: 420,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#0A0A0A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  sessionInfoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  sessionInfoAccentDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginRight: 10,
+  },
+  sessionInfoTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  sessionInfoClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(100,116,139,0.10)',
+  },
+  sessionInfoBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  sessionInfoCta: {
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sessionInfoCtaText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   bottomNavDark: {
     backgroundColor: '#1A1A1A',

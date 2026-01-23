@@ -46,6 +46,9 @@ class VideoCallService {
   private isCallAnswered: boolean = false;
   private appointmentId: string | null = null;
   private userId: string | null = null;
+  // Track the specific call_sessions.id returned from backend start API
+  // so we can end the exact row even if multiple sessions share the same appointment_id
+  private sessionId: string | null = null;
   private doctorName: string | null = null;
   private doctorProfilePicture: string | null = null;
   private processedMessages: Set<string> = new Set();
@@ -76,6 +79,30 @@ class VideoCallService {
   constructor() {
     this.instanceId = ++VideoCallService.instanceCounter;
     console.log(`🏗️ [VideoCallService] Instance ${this.instanceId} created`);
+    
+    // Diagnostic check: Verify WebRTC is available
+    const webrtcAvailable = {
+      RTCPeerConnection: typeof RTCPeerConnection !== 'undefined',
+      mediaDevices: typeof mediaDevices !== 'undefined',
+      MediaStream: typeof MediaStream !== 'undefined',
+      RTCIceCandidate: typeof RTCIceCandidate !== 'undefined',
+      RTCSessionDescription: typeof RTCSessionDescription !== 'undefined'
+    };
+    
+    console.log('🔍 [VideoCallService] WebRTC availability check:', webrtcAvailable);
+    
+    if (!webrtcAvailable.RTCPeerConnection) {
+      console.error('❌ [VideoCallService] CRITICAL: RTCPeerConnection is not available!');
+      console.error('❌ [VideoCallService] This usually means react-native-webrtc is not properly installed or linked.');
+      console.error('❌ [VideoCallService] Please check:');
+      console.error('   1. react-native-webrtc is installed: npm list react-native-webrtc');
+      console.error('   2. For bare React Native: npx pod-install (iOS) or rebuild (Android)');
+      console.error('   3. For Expo: Ensure you are using a development build (not Expo Go)');
+    }
+    
+    // Ensure this instance becomes the active singleton so all callers (new/getInstance)
+    // share the same underlying VideoCallService for a given app process
+    VideoCallService.activeInstance = this;
   }
 
   /**
@@ -302,17 +329,89 @@ class VideoCallService {
           }
         } else {
           const startData = await startResp.json().catch(() => ({} as any));
-          console.log('✅ Video call session started on backend:', startData?.data?.session_id ?? startData);
+          // Capture session_id/call_session_id if provided so we can target the exact DB row on end
+          const rawSessionId =
+            startData?.data?.call_session_id ??
+            startData?.data?.session_id ??
+            startData?.call_session_id ??
+            startData?.session_id ??
+            null;
+          this.sessionId = rawSessionId != null ? String(rawSessionId) : null;
+
+          console.log('✅ [VideoCallService] Video call session started on backend:', {
+            appointmentId: appointmentId,
+            sessionId: this.sessionId,
+            hasSessionId: !!this.sessionId,
+            rawResponse: startData,
+            dataKeys: startData?.data ? Object.keys(startData.data) : [],
+            topLevelKeys: Object.keys(startData || {})
+          });
+
+          if (!this.sessionId) {
+            console.warn('⚠️ [VideoCallService] No session_id captured from start response - will rely on appointment_id for end call');
+          }
         }
       } catch (e) {
         console.error('❌ Error starting video call session on backend:', e);
       }
 
-      // Get user media (audio + video)
-      this.localStream = await mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+      // CRITICAL OPTIMIZATION: Start signaling connection FIRST (don't wait for camera)
+      // This allows WebRTC negotiation to begin while camera is initializing
+      const signalingPromise = this.connectSignaling(appointmentId, userId);
+      
+      // Start getting user media with optimized constraints for faster initialization
+      // Use lower resolution initially for faster camera startup (can upgrade later if needed)
+      const mediaPromise = mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 }, // Lower resolution = faster initialization
+          height: { ideal: 480 },
+          frameRate: { ideal: 15 }, // Lower frame rate = faster initialization
+          facingMode: 'user', // Front camera (usually faster to access)
+        },
+        audio: true, // Simplified audio constraints for faster initialization
+      }).catch(error => {
+        console.error('❌ Failed to get user media:', error);
+        throw error;
       });
+
+      // Wait for signaling to be ready (usually faster than camera)
+      await signalingPromise;
+      
+      // Verify RTCPeerConnection is available
+      if (!RTCPeerConnection) {
+        const error = new Error('RTCPeerConnection is not available - react-native-webrtc may not be properly loaded');
+        console.error('❌ [VideoCallService]', error.message);
+        console.error('❌ [VideoCallService] WebRTC imports:', {
+          RTCPeerConnection: typeof RTCPeerConnection,
+          mediaDevices: typeof mediaDevices,
+          MediaStream: typeof MediaStream
+        });
+        throw error;
+      }
+
+      // Create peer connection immediately (before camera is ready)
+      try {
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection with iceServers:', this.iceServers);
+        this.peerConnection = new RTCPeerConnection({
+          iceServers: this.iceServers,
+          iceCandidatePoolSize: 10, // Pre-gather ICE candidates for faster connection
+        });
+        console.log('✅ [VideoCallService] RTCPeerConnection created successfully:', {
+          connectionState: this.peerConnection.connectionState,
+          signalingState: this.peerConnection.signalingState,
+          iceConnectionState: this.peerConnection.iceConnectionState
+        });
+      } catch (pcError) {
+        console.error('❌ [VideoCallService] Failed to create RTCPeerConnection:', pcError);
+        throw new Error(`Failed to create WebRTC peer connection: ${pcError instanceof Error ? pcError.message : String(pcError)}`);
+      }
+
+      // Set up event handlers before we have media (allows ICE gathering to start)
+      // This method sets up track, ICE, and connection state handlers
+      this.setupPeerConnectionEventHandlers();
+
+      // Now wait for camera/media (this is the slow part, but WebRTC is already negotiating)
+      this.localStream = await mediaPromise;
 
       console.log('📹 [VideoCallService] Local stream captured:', {
         streamId: this.localStream.id,
@@ -322,24 +421,129 @@ class VideoCallService {
         audioTrackLabel: this.localStream.getAudioTracks()[0]?.label
       });
 
-      // Configure audio routing for phone calls
-      await this.configureAudioRouting();
-
-      // Create peer connection
-      this.peerConnection = new RTCPeerConnection({
-        iceServers: this.iceServers,
+      // Configure audio routing for phone calls (non-blocking)
+      this.configureAudioRouting().catch(error => {
+        console.warn('⚠️ Audio routing configuration failed (non-critical):', error);
       });
 
-      // Add local tracks to peer connection
+      // Add local tracks to peer connection (now that we have media)
       this.localStream.getTracks().forEach(track => {
+        // Ensure track is enabled before adding
+        if (!track.enabled) {
+          console.log(`🔧 [VideoCallService] Enabling local ${track.kind} track before adding to peer connection:`, track.id);
+          track.enabled = true;
+        }
+        console.log(`📤 [VideoCallService] Adding local ${track.kind} track to peer connection:`, {
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
         this.peerConnection?.addTrack(track, this.localStream!);
       });
 
+      // Event handlers are already set up in setupPeerConnectionEventHandlers() above
+      // No need to add them again here - they're set up before media is ready
+
+      // Signaling connection already started in parallel above, ensure it's complete
+      // (If it failed in Promise.all, it would have thrown, so we're good here)
+      
+      // Create and send offer for outgoing calls
+      await this.createOffer();
+      console.log('📞 Video call offer sent successfully, starting call timeout...');
+
+      // Start call timeout (60 seconds for doctor to answer)
+      this.startCallTimeout();
+
+      // Begin periodic re-offer loop until answered or connected
+      this.startReofferLoop();
+
+      console.log('✅ [VideoCallService] Video call initialization complete');
+    } catch (error) {
+      console.error('❌ [VideoCallService] Error initializing video call:', error);
+      this.updateState({ connectionState: 'failed' });
+      throw error;
+    }
+  }
+
+  /**
+   * Set up peer connection event handlers (can be called before media is ready)
+   */
+  private setupPeerConnectionEventHandlers(): void {
+    if (!this.peerConnection) {
+      console.error('❌ Cannot setup event handlers - no peer connection');
+      return;
+    }
+
       // Handle remote stream
       this.peerConnection.addEventListener('track', (event) => {
-        console.log('📹 Remote video stream received');
-        this.remoteStream = event.streams[0];
-        this.events?.onRemoteStream(event.streams[0]);
+      console.log('📹 Remote stream track received:', {
+        trackKind: event.track.kind,
+        trackId: event.track.id,
+        trackEnabled: event.track.enabled,
+        streamId: event.streams[0]?.id,
+        streamsCount: event.streams.length
+      });
+      
+      const stream = event.streams[0];
+      if (!stream) {
+        console.warn('⚠️ [VideoCallService] Received track event but no stream available');
+        return;
+      }
+
+      // Ensure all tracks in the stream are enabled
+      let hasAudioTrack = false;
+      stream.getTracks().forEach(track => {
+        if (!track.enabled) {
+          console.log(`🔧 [VideoCallService] Enabling remote ${track.kind} track:`, track.id);
+          track.enabled = true;
+        }
+        if (track.kind === 'audio') {
+          hasAudioTrack = true;
+        }
+        console.log(`✅ [VideoCallService] Remote ${track.kind} track:`, {
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          muted: track.muted
+        });
+      });
+
+      // Reconfigure audio routing when remote audio tracks are received
+      if (hasAudioTrack) {
+        console.log('🔊 [VideoCallService] Remote audio track detected - reconfiguring audio routing');
+        this.configureAudioRouting().catch(err => {
+          console.warn('⚠️ [VideoCallService] Failed to reconfigure audio on remote track:', err);
+        });
+      }
+
+      // Update remote stream reference
+      if (this.remoteStream && this.remoteStream.id !== stream.id) {
+        console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
+      }
+      this.remoteStream = stream;
+      
+      // Handle tracks that might be added later to the stream
+      stream.getTracks().forEach(track => {
+        track.addEventListener('ended', () => {
+          console.log(`⚠️ [VideoCallService] Remote ${track.kind} track ended:`, track.id);
+        });
+        track.addEventListener('mute', () => {
+          console.log(`⚠️ [VideoCallService] Remote ${track.kind} track muted:`, track.id);
+        });
+        track.addEventListener('unmute', () => {
+          console.log(`✅ [VideoCallService] Remote ${track.kind} track unmuted:`, track.id);
+        });
+      });
+      
+      // Notify UI of remote stream
+      this.events?.onRemoteStream(stream);
+      
+      console.log('✅ [VideoCallService] Remote stream processed:', {
+        streamId: stream.id,
+        videoTracks: stream.getVideoTracks().length,
+        audioTracks: stream.getAudioTracks().length,
+        allTracksEnabled: stream.getTracks().every(t => t.enabled)
+      });
       });
 
       // Handle ICE candidates
@@ -365,6 +569,7 @@ class VideoCallService {
 
         if (state === 'connected') {
           console.log('🔗 Video WebRTC connected - updating call state');
+        this.clearReofferLoop();
           this.updateState({
             isConnected: true,
             connectionState: 'connected'
@@ -379,13 +584,12 @@ class VideoCallService {
             appointmentId: this.appointmentId,
           });
         } else if (state === 'disconnected' || state === 'failed') {
-          // CRITICAL: Ignore disconnected/failed during initial setup - WebRTC can report these transiently during setup
-          // Check if we're still in 'connecting' state (initialization phase)
+        // CRITICAL: Ignore disconnected/failed during initial setup
           if (this.state.connectionState === 'connecting') {
             console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
             return;
           }
-          // Only update state if call is not answered and not already ended and not being accepted
+        // Only update state if call is not answered and not already ended
           if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
             console.log('🔗 Video WebRTC disconnected/failed - updating state');
             this.updateState({
@@ -397,26 +601,6 @@ class VideoCallService {
           }
         }
       });
-
-      // Connect to signaling server
-      await this.connectSignaling(appointmentId, userId);
-
-      // Create and send offer for outgoing calls
-      await this.createOffer();
-      console.log('📞 Video call offer sent successfully, starting call timeout...');
-
-      // Start call timeout (60 seconds for doctor to answer)
-      this.startCallTimeout();
-
-      // Begin periodic re-offer loop until answered or connected
-      this.startReofferLoop();
-
-      console.log('✅ [VideoCallService] Video call initialization complete');
-    } catch (error) {
-      console.error('❌ [VideoCallService] Error initializing video call:', error);
-      this.updateState({ connectionState: 'failed' });
-      throw error;
-    }
   }
 
   /**
@@ -448,14 +632,29 @@ class VideoCallService {
 
             switch (message.type) {
               case 'offer':
-                console.log('📞 [VideoCallService] Received offer');
+                console.log('📞 [VideoCallService] Received offer', {
+                  isIncomingMode: this.isIncomingMode,
+                  hasAccepted: this.hasAccepted,
+                  hasPeerConnection: !!this.peerConnection,
+                  signalingState: this.peerConnection?.signalingState
+                });
                 if (this.isIncomingMode && !this.hasAccepted) {
                   // Store offer globally for consistency with AudioCallService
                   (global as any).pendingOffer = message.offer;
                   this.pendingOffer = message.offer;
                   console.log('⏸️ [VideoCallService] Buffered incoming offer until accept');
-                } else {
+                } else if (this.isIncomingMode && this.hasAccepted && this.peerConnection) {
+                  // We've accepted but offer arrived after acceptIncomingCall() - handle it now
+                  console.log('📞 [VideoCallService] Received offer after accept - processing immediately');
                   await this.handleOffer(message.offer);
+                } else if (!this.isIncomingMode) {
+                  // Outgoing call receiving offer (shouldn't happen normally, but handle it)
+                  await this.handleOffer(message.offer);
+                } else {
+                  // Incoming mode, accepted, but no peer connection yet - buffer it
+                  console.log('⏸️ [VideoCallService] Received offer but peer connection not ready - buffering');
+                  (global as any).pendingOffer = message.offer;
+                  this.pendingOffer = message.offer;
                 }
                 break;
               case 'answer':
@@ -472,8 +671,32 @@ class VideoCallService {
                 }
                 break;
               case 'call-ended':
-                console.log('📞 [VideoCallService] Received call-ended');
-                this.endCall();
+                console.log('📞 [VideoCallService] Received call-ended from peer');
+                // If call already ended locally, still ensure UI is notified and cleaned up
+                if (this.hasEnded) {
+                  console.log('ℹ️ [VideoCallService] Call already ended locally, but ensuring UI cleanup from peer message');
+                  // Still update state and notify UI even if already ended
+                  this.updateState({
+                    isConnected: false,
+                    connectionState: 'disconnected'
+                  });
+                  // Clear remote stream if still present
+                  if (this.remoteStream) {
+                    try {
+                      this.remoteStream.getTracks().forEach(track => track.stop());
+                      this.remoteStream = null;
+                      this.events?.onRemoteStream(null as any);
+                    } catch (error) {
+                      console.warn('⚠️ Error clearing remote stream on peer call-ended:', error);
+                    }
+                  }
+                  // CRITICAL: Always notify UI when peer ends call, even if we already ended locally
+                  this.events?.onCallEnded();
+                } else {
+                  // End call without sending call-ended message (other side already knows)
+                  // Don't set hasEnded here - let endCallInternal handle it to ensure cleanup happens
+                  this.endCallInternal(false); // false = don't send call-ended message
+                }
                 break;
               case 'call-answered':
                 console.log('📞 [VideoCallService] Received call-answered');
@@ -592,22 +815,124 @@ class VideoCallService {
       this.hasAccepted = true;
 
       // Prepare media and audio routing
-      this.localStream = await mediaDevices.getUserMedia({ video: true, audio: true });
+      // Use optimized constraints for faster camera initialization
+      this.localStream = await mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 }, // Lower resolution = faster initialization
+          height: { ideal: 480 },
+          frameRate: { ideal: 15 }, // Lower frame rate = faster initialization
+          facingMode: 'user', // Front camera (usually faster to access)
+        },
+        audio: true, // Simplified audio constraints for faster initialization
+      });
       await this.configureAudioRouting();
 
+      // Verify RTCPeerConnection is available
+      if (!RTCPeerConnection) {
+        const error = new Error('RTCPeerConnection is not available - react-native-webrtc may not be properly loaded');
+        console.error('❌ [VideoCallService]', error.message);
+        throw error;
+      }
+
       // Create peer connection
-      this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
+      try {
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection for incoming call with iceServers:', this.iceServers);
+        this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
+        console.log('✅ [VideoCallService] RTCPeerConnection created for incoming call:', {
+          connectionState: this.peerConnection.connectionState,
+          signalingState: this.peerConnection.signalingState
+        });
+      } catch (pcError) {
+        console.error('❌ [VideoCallService] Failed to create RTCPeerConnection for incoming call:', pcError);
+        throw new Error(`Failed to create WebRTC peer connection: ${pcError instanceof Error ? pcError.message : String(pcError)}`);
+      }
 
       // Add local tracks
       this.localStream.getTracks().forEach(track => {
+        // Ensure track is enabled before adding
+        if (!track.enabled) {
+          console.log(`🔧 [VideoCallService] Enabling local ${track.kind} track before adding to peer connection:`, track.id);
+          track.enabled = true;
+        }
+        console.log(`📤 [VideoCallService] Adding local ${track.kind} track to peer connection:`, {
+          id: track.id,
+          enabled: track.enabled,
+          readyState: track.readyState
+        });
         this.peerConnection?.addTrack(track, this.localStream!);
       });
 
       // Handle remote stream
       this.peerConnection.addEventListener('track', (event) => {
-        console.log('📹 Remote video stream received');
-        this.remoteStream = event.streams[0];
-        this.events?.onRemoteStream(event.streams[0]);
+        console.log('📹 Remote stream track received:', {
+          trackKind: event.track.kind,
+          trackId: event.track.id,
+          trackEnabled: event.track.enabled,
+          streamId: event.streams[0]?.id,
+          streamsCount: event.streams.length
+        });
+        
+        const stream = event.streams[0];
+        if (!stream) {
+          console.warn('⚠️ [VideoCallService] Received track event but no stream available');
+          return;
+        }
+
+        // Ensure all tracks in the stream are enabled
+        let hasAudioTrack = false;
+        stream.getTracks().forEach(track => {
+          if (!track.enabled) {
+            console.log(`🔧 [VideoCallService] Enabling remote ${track.kind} track:`, track.id);
+            track.enabled = true;
+          }
+          if (track.kind === 'audio') {
+            hasAudioTrack = true;
+          }
+          console.log(`✅ [VideoCallService] Remote ${track.kind} track:`, {
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted
+          });
+        });
+
+        // Reconfigure audio routing when remote audio tracks are received
+        // This ensures audio plays through the correct output
+        if (hasAudioTrack) {
+          console.log('🔊 [VideoCallService] Remote audio track detected - reconfiguring audio routing');
+          this.configureAudioRouting().catch(err => {
+            console.warn('⚠️ [VideoCallService] Failed to reconfigure audio on remote track:', err);
+          });
+        }
+
+        // Update remote stream reference (merge if stream already exists)
+        if (this.remoteStream && this.remoteStream.id !== stream.id) {
+          console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
+        }
+        this.remoteStream = stream;
+        
+        // Handle tracks that might be added later to the stream
+        stream.getTracks().forEach(track => {
+          track.addEventListener('ended', () => {
+            console.log(`⚠️ [VideoCallService] Remote ${track.kind} track ended:`, track.id);
+          });
+          track.addEventListener('mute', () => {
+            console.log(`⚠️ [VideoCallService] Remote ${track.kind} track muted:`, track.id);
+          });
+          track.addEventListener('unmute', () => {
+            console.log(`✅ [VideoCallService] Remote ${track.kind} track unmuted:`, track.id);
+          });
+        });
+        
+        // Notify UI of remote stream
+        this.events?.onRemoteStream(stream);
+        
+        console.log('✅ [VideoCallService] Remote stream processed:', {
+          streamId: stream.id,
+          videoTracks: stream.getVideoTracks().length,
+          audioTracks: stream.getAudioTracks().length,
+          allTracksEnabled: stream.getTracks().every(t => t.enabled)
+        });
       });
 
       // Handle local ICE
@@ -669,15 +994,49 @@ class VideoCallService {
         }
       });
 
+      // Check both global and local pending offers (like processIncomingCall does)
+      const globalPendingOffer = (global as any).pendingOffer;
+      const localPendingOffer = this.pendingOffer;
+      const pendingOffer = localPendingOffer || globalPendingOffer;
+
+      console.log('📞 [VideoCallService] Checking for pending offer in acceptIncomingCall:', {
+        hasGlobalOffer: !!globalPendingOffer,
+        hasLocalOffer: !!localPendingOffer,
+        hasPendingOffer: !!pendingOffer,
+        offerType: pendingOffer?.type,
+        offerSdpLength: pendingOffer?.sdp?.length
+      });
+
+      if (!pendingOffer) {
+        console.warn('⚠️ [VideoCallService] No pending offer found in acceptIncomingCall - requesting re-offer from caller');
+        // Ask caller to resend the current offer
+        this.sendSignalingMessage({
+          type: 'resend-offer-request',
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
+        // Don't return - continue setup so we can process the re-offer when it arrives
+      } else {
       // If an offer was buffered, handle it now
-      if (this.pendingOffer) {
-        await this.handleOffer(this.pendingOffer as any);
+        console.log('📞 [VideoCallService] Processing pending offer in acceptIncomingCall...');
+        await this.handleOffer(pendingOffer as any);
+        
+        // Clear both global and local pending offers
+        (global as any).pendingOffer = null;
         this.pendingOffer = null;
+        
         // Drain queued candidates now that remoteDescription should be set
+        if (this.pendingCandidates.length > 0) {
+          console.log(`📞 [VideoCallService] Draining ${this.pendingCandidates.length} queued ICE candidates`);
         for (const c of this.pendingCandidates) {
-          try { await this.peerConnection!.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+            try { 
+              await this.peerConnection!.addIceCandidate(c as any); 
+            } catch (e) { 
+              console.warn('⚠️ [VideoCallService] ICE drain failed:', e); 
+            }
         }
         this.pendingCandidates = [];
+        }
       }
 
       console.log('✅ [VideoCallService] Incoming call accepted');
@@ -791,18 +1150,30 @@ class VideoCallService {
     }
 
     try {
-      console.log('📞 Handling video offer...');
-      // Avoid duplicate handling if already have remote description
-      if (this.peerConnection.signalingState !== 'stable' && this.peerConnection.remoteDescription) {
-        console.log('ℹ️ [VideoCallService] Ignoring duplicate offer; already have remoteDescription');
+      console.log('📞 Handling video offer...', {
+        signalingState: this.peerConnection.signalingState,
+        hasRemoteDescription: !!this.peerConnection.remoteDescription,
+        offerType: offer.type,
+        hasSDP: !!offer.sdp
+      });
+
+      // Check if we can accept this offer
+      const currentState = this.peerConnection.signalingState;
+      if (currentState !== 'stable' && this.peerConnection.remoteDescription) {
+        console.log('ℹ️ [VideoCallService] Ignoring duplicate offer; already have remoteDescription in state:', currentState);
         return;
       }
 
+      // Set remote description (the offer from the caller)
       await this.peerConnection.setRemoteDescription(offer);
+      console.log('✅ [VideoCallService] Remote description (offer) set, signaling state:', this.peerConnection.signalingState);
 
+      // Create and set local description (the answer)
       const answer = await this.peerConnection.createAnswer();
       await this.peerConnection.setLocalDescription(answer);
+      console.log('✅ [VideoCallService] Local description (answer) set, signaling state:', this.peerConnection.signalingState);
 
+      // Send answer to caller
       this.sendSignalingMessage({
         type: 'answer',
         answer: answer,
@@ -819,9 +1190,29 @@ class VideoCallService {
         appointmentId: this.appointmentId
       });
 
+      // Update connection state to connecting (will be updated to connected when WebRTC connects)
+      this.updateState({ connectionState: 'connecting' });
+
+      // Fallback: If connectionstatechange doesn't fire within 2 seconds, check connection state
+      // Reduced from 5s to 2s for faster connection detection
+      setTimeout(() => {
+        if (this.peerConnection?.connectionState === 'connected' &&
+          this.state.connectionState !== 'connected') {
+          console.log('🔄 [VideoCallService] Fallback: Forcing connected state after timeout');
+          this.updateState({ connectionState: 'connected', isConnected: true });
+          this.startCallTimer();
+        } else if (this.peerConnection?.connectionState === 'connecting' &&
+          this.state.connectionState === 'connecting') {
+          console.log('⏳ [VideoCallService] Still connecting after 2 seconds, connection state:', this.peerConnection.connectionState);
+        }
+      }, 2000);
+
       console.log('✅ Video call answer sent with callType: video');
     } catch (error) {
       console.error('❌ Error handling video offer:', error);
+      // Update state to failed if offer handling fails
+      this.updateState({ connectionState: 'failed' });
+      throw error;
     }
   }
 
@@ -1078,6 +1469,14 @@ class VideoCallService {
    * End the call
    */
   async endCall(): Promise<void> {
+    return this.endCallInternal(true); // true = send call-ended message
+  }
+
+  /**
+   * Internal end call method
+   * @param sendCallEndedMessage - Whether to send call-ended message to peer
+   */
+  private async endCallInternal(sendCallEndedMessage: boolean = true): Promise<void> {
     if (this.hasEnded) {
       console.log('ℹ️ [VideoCallService] endCall already processed');
       return;
@@ -1086,6 +1485,9 @@ class VideoCallService {
     this.hasEnded = true;
     console.log('📞 Ending video call...');
     console.log('📞 Call state when ending:', {
+      appointmentId: this.appointmentId,
+      sessionId: this.sessionId,
+      userId: this.userId,
       connectionState: this.state.connectionState,
       isConnected: this.state.isConnected,
       isCallAnswered: this.isCallAnswered
@@ -1095,43 +1497,115 @@ class VideoCallService {
     const sessionDuration = this.state.callDuration;
     const wasConnected = this.state.isConnected && this.isCallAnswered;
 
-    // Clear call timeout and timer first
+    // CRITICAL: Send call-ended message FIRST before any cleanup (only if we initiated the hangup)
+    // This ensures the other side is notified even if cleanup fails
+    if (sendCallEndedMessage) {
+      try {
+        console.log('📤 [VideoCallService] Sending call-ended message to peer (with retries)');
+        // Send message multiple times to ensure it's received (in case of network issues)
+        for (let i = 0; i < 3; i++) {
+          this.sendSignalingMessage({
+            type: 'call-ended',
+            callType: 'video',
+            userId: this.userId,
+            appointmentId: this.appointmentId,
+            sessionDuration: sessionDuration,
+            wasConnected: wasConnected
+          });
+          if (i < 2) {
+            // Small delay between retries
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+        }
+        // Give more time for the message to be sent before closing signaling
+        await new Promise(resolve => setTimeout(resolve, 200));
+    } catch (error) {
+        console.error('❌ Failed to send call-ended message:', error);
+        // Continue with cleanup even if message send fails
+      }
+    } else {
+      console.log('ℹ️ [VideoCallService] Skipping call-ended message (received from peer)');
+    }
+
+    // Update connection state to disconnected immediately
+    this.updateState({
+      isConnected: false,
+      connectionState: 'disconnected'
+    });
+
+    // Clear call timeout and timer
     this.clearCallTimeout();
     this.stopCallTimer();
 
-    // Notify UI first so it can detach/hide RTCViews before media teardown
+    // Stop and clear remote stream FIRST (before notifying UI)
+    if (this.remoteStream) {
+      try {
+        this.remoteStream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`🛑 [VideoCallService] Stopped remote ${track.kind} track:`, track.id);
+        });
+        const streamToClear = this.remoteStream;
+        this.remoteStream = null;
+        console.log('🛑 [VideoCallService] Remote stream cleared');
+        
+        // Notify UI that remote stream is gone (so it can clear the RTCView)
+        // This prevents frozen video
+        try {
+          // Pass null to indicate stream is cleared
+          this.events?.onRemoteStream(null as any);
+        } catch (error) {
+          console.warn('⚠️ Error notifying UI of remote stream clear:', error);
+        }
+      } catch (error) {
+        console.error('❌ Error stopping remote stream tracks:', error);
+      }
+    }
+
+    // Notify UI immediately so it can start cleanup animations
+    // This must happen AFTER clearing remote stream so UI sees the stream is gone
     try {
       this.events?.onCallEnded();
-    } catch { }
-    // Give UI a brief moment to update before tearing down tracks/PC
-    await new Promise(resolve => setTimeout(resolve, 80));
+    } catch (error) {
+      console.error('❌ Error in onCallEnded callback:', error);
+    }
 
-    // Now stop local stream after UI updated
+    // Stop local stream tracks immediately
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      try {
+        this.localStream.getTracks().forEach(track => {
+          track.stop();
+          console.log(`🛑 [VideoCallService] Stopped local ${track.kind} track:`, track.id);
+        });
+      } catch (error) {
+        console.error('❌ Error stopping local stream tracks:', error);
+      }
     }
 
-    // Reset audio routing to default
-    await this.resetAudioRouting();
-
-    // Close peer connection
+    // Close peer connection immediately
     if (this.peerConnection) {
+      try {
       this.peerConnection.close();
+        console.log('🔌 [VideoCallService] Peer connection closed');
+      } catch (error) {
+        console.error('❌ Error closing peer connection:', error);
+      }
     }
 
-    // Send call ended message with session info
-    this.sendSignalingMessage({
-      type: 'call-ended',
-      callType: 'video',
-      userId: this.userId,
-      appointmentId: this.appointmentId,
-      sessionDuration: sessionDuration,
-      wasConnected: wasConnected
+    // Reset audio routing to default (non-blocking)
+    this.resetAudioRouting().catch(error => {
+      console.error('❌ Error resetting audio routing:', error);
     });
 
-    // Update call session in backend
-    await this.updateCallSessionInBackend(sessionDuration, wasConnected);
+    // CRITICAL: Update backend AFTER sending call-ended message
+    // This ensures the other side is notified first
+    try {
+      await this.updateCallSessionInBackend(sessionDuration, wasConnected);
+    } catch (error) {
+      console.error('❌ CRITICAL: Failed to update backend on endCall - this will leave stale session:', error);
+      // Don't throw - continue with cleanup even if backend update fails
+    }
 
+    // Final cleanup (closes signaling channel last)
     this.cleanup();
   }
 
@@ -1168,15 +1642,29 @@ class VideoCallService {
    * Send signaling message
    */
   private sendSignalingMessage(message: any): void {
+    try {
     if (this.signalingChannel && this.signalingChannel.readyState === 1) { // WebSocket.OPEN = 1
-      this.signalingChannel.send(JSON.stringify({
+        const messageStr = JSON.stringify({
         ...message,
         appointmentId: this.appointmentId,
         userId: this.userId,
         timestamp: new Date().toISOString()
-      }));
+        });
+        this.signalingChannel.send(messageStr);
+        console.log('📤 [VideoCallService] Signaling message sent:', message.type);
     } else {
-      console.error('❌ Signaling channel not available');
+        const state = this.signalingChannel?.readyState;
+        console.warn('⚠️ [VideoCallService] Signaling channel not available for sending:', {
+          hasChannel: !!this.signalingChannel,
+          readyState: state,
+          messageType: message.type
+        });
+      }
+    } catch (error) {
+      console.error('❌ [VideoCallService] Error sending signaling message:', error, {
+        messageType: message.type,
+        hasChannel: !!this.signalingChannel
+      });
     }
   }
 
@@ -1313,12 +1801,13 @@ class VideoCallService {
    * Get local stream
    */
   getLocalStream(): MediaStream | null {
-    console.log('📹 [VideoCallService] getLocalStream called:', {
-      hasLocalStream: !!this.localStream,
-      streamId: this.localStream?.id,
-      videoTracks: this.localStream?.getVideoTracks().length || 0,
-      audioTracks: this.localStream?.getAudioTracks().length || 0
-    });
+    // Debug logging disabled to prevent console spam (uncomment if needed for debugging)
+    // console.log('📹 [VideoCallService] getLocalStream called:', {
+    //   hasLocalStream: !!this.localStream,
+    //   streamId: this.localStream?.id,
+    //   videoTracks: this.localStream?.getVideoTracks().length || 0,
+    //   audioTracks: this.localStream?.getAudioTracks().length || 0
+    // });
     return this.localStream;
   }
 
@@ -1339,17 +1828,64 @@ class VideoCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
 
-    if (this.signalingChannel) {
-      try { this.signalingChannel.close(); } catch { }
-    }
+    // Close peer connection first (if not already closed)
     if (this.peerConnection) {
-      try { this.peerConnection.close(); } catch { }
-    }
-    if (this.localStream) {
-      try { this.localStream.getTracks().forEach(track => track.stop()); } catch { }
+      try {
+        // Check if already closed to avoid errors
+        if (this.peerConnection.connectionState !== 'closed') {
+          this.peerConnection.close();
+        }
+      } catch (error) {
+        console.warn('⚠️ Error closing peer connection in cleanup:', error);
+      }
     }
 
-    this.resetAudioRouting();
+    // Stop local stream tracks (if not already stopped)
+    if (this.localStream) {
+      try {
+        this.localStream.getTracks().forEach(track => {
+          if (track.readyState !== 'ended') {
+            track.stop();
+          }
+        });
+      } catch (error) {
+        console.warn('⚠️ Error stopping local stream in cleanup:', error);
+      }
+    }
+
+    // Reset audio routing (non-blocking)
+    this.resetAudioRouting().catch(error => {
+      console.warn('⚠️ Error resetting audio routing in cleanup:', error);
+    });
+
+    // Close signaling channel LAST (after all messages are sent)
+    // Store reference before nulling to avoid race condition
+    const signalingChannelRef = this.signalingChannel;
+    if (signalingChannelRef) {
+      try {
+        // Give a brief moment for any pending messages to be sent, then close
+        setTimeout(() => {
+          try {
+            if (signalingChannelRef && signalingChannelRef.readyState === 1) {
+              signalingChannelRef.close();
+              console.log('🔌 [VideoCallService] Signaling channel closed in cleanup');
+            }
+          } catch (error) {
+            console.warn('⚠️ Error closing signaling channel:', error);
+          }
+        }, 150); // Increased timeout to ensure messages are sent
+      } catch (error) {
+        console.warn('⚠️ Error scheduling signaling channel close:', error);
+        // Fallback: close immediately if scheduling fails
+        try {
+          if (signalingChannelRef && signalingChannelRef.readyState === 1) {
+            signalingChannelRef.close();
+          }
+        } catch (closeError) {
+          console.warn('⚠️ Error in fallback signaling channel close:', closeError);
+        }
+      }
+    }
 
     // Reset all state variables properly
     this.peerConnection = null;
@@ -1361,6 +1897,7 @@ class VideoCallService {
     this.events = null;
     this.appointmentId = null;
     this.userId = null;
+    this.sessionId = null;
     this.processedMessages.clear();
     this.isProcessingIncomingCall = false;
     this.isCallAnswered = false;
@@ -1392,14 +1929,19 @@ class VideoCallService {
 
   /**
    * Start periodic re-offer loop while waiting for callee to connect
+   * OPTIMIZED: Faster initial re-offers for quicker connection
    */
   private startReofferLoop(): void {
     try {
       this.clearReofferLoop();
-      this.reofferTimer = setInterval(() => {
+      let attemptCount = 0;
+      const maxFastAttempts = 3; // First 3 attempts are faster
+      
+      const sendOffer = () => {
         if (
           this.peerConnection?.localDescription &&
-          this.state.connectionState !== 'connected'
+          this.state.connectionState !== 'connected' &&
+          !this.hasEnded
         ) {
           this.sendSignalingMessage({
             type: 'offer',
@@ -1407,7 +1949,25 @@ class VideoCallService {
             senderId: this.userId,
           });
         }
-      }, 4000);
+      };
+
+      // Send initial offer immediately
+      sendOffer();
+      
+      // Fast re-offers for first few attempts (every 1.5s)
+      const fastInterval = setInterval(() => {
+        attemptCount++;
+        if (attemptCount >= maxFastAttempts) {
+          clearInterval(fastInterval);
+          // Switch to slower interval after initial attempts
+          this.reofferTimer = setInterval(sendOffer, 4000);
+        } else {
+          sendOffer();
+        }
+      }, 1500);
+      
+      // Store fast interval reference for cleanup
+      (this as any).fastReofferTimer = fastInterval;
     } catch (e) {
       console.warn('⚠️ [VideoCallService] Failed to start re-offer loop:', e);
     }
@@ -1417,6 +1977,11 @@ class VideoCallService {
     if (this.reofferTimer) {
       clearInterval(this.reofferTimer);
       this.reofferTimer = null;
+    }
+    // Also clear fast re-offer timer if it exists
+    if ((this as any).fastReofferTimer) {
+      clearInterval((this as any).fastReofferTimer);
+      (this as any).fastReofferTimer = null;
     }
   }
 
@@ -1559,23 +2124,42 @@ class VideoCallService {
 
   private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
     if (!this.appointmentId) {
-      console.warn('⚠️ [VideoCallService] Cannot update call session: no appointmentId');
+      console.error('❌ [VideoCallService] CRITICAL: Cannot update call session - no appointmentId!', {
+        hasAppointmentId: !!this.appointmentId,
+        hasSessionId: !!this.sessionId,
+        userId: this.userId
+      });
       return;
     }
 
     try {
-      console.log('📞 Updating call session in backend...', {
-        appointmentId: this.appointmentId,
-        sessionDuration,
-        wasConnected,
-        connectionState: this.state.connectionState
-      });
-
       const authToken = await this.getAuthToken();
       if (!authToken) {
-        console.error('❌ [VideoCallService] Cannot update call session: no auth token');
+        console.error('❌ [VideoCallService] CRITICAL: Cannot update call session - no auth token!');
         return;
       }
+
+      const requestBody = {
+        call_type: 'video',
+        appointment_id: this.appointmentId,
+        session_duration: sessionDuration,
+        was_connected: wasConnected
+      };
+
+      // Add session_id if we have it (helps target exact DB row)
+      if (this.sessionId) {
+        (requestBody as any).session_id = this.sessionId;
+      }
+
+      console.log('📞 [VideoCallService] Sending end request to backend:', {
+        url: `${environment.LARAVEL_API_URL}/api/call-sessions/end`,
+        appointmentId: this.appointmentId,
+        sessionId: this.sessionId,
+        sessionDuration,
+        wasConnected,
+        connectionState: this.state.connectionState,
+        requestBody
+      });
 
       const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
         method: 'POST',
@@ -1583,33 +2167,53 @@ class VideoCallService {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify({
-          call_type: 'video',
-          appointment_id: this.appointmentId,
-          session_duration: sessionDuration,
-          was_connected: wasConnected
-        })
+        body: JSON.stringify(requestBody)
+      });
+
+      const responseText = await response.text().catch(() => '');
+      console.log('📞 [VideoCallService] Backend end response:', {
+        status: response.status,
+        statusText: response.statusText,
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200)
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Call session updated in backend:', data);
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = { raw: responseText };
+        }
+        console.log('✅ [VideoCallService] Call session updated in backend successfully:', data);
       } else if (response.status === 404) {
         // Treat missing session as already ended; avoid loops
-        console.log('ℹ️ Backend reported 404 for end update; treating as already ended');
+        console.log('ℹ️ [VideoCallService] Backend reported 404 for end update; treating as already ended');
       } else {
-        const errorText = await response.text().catch(() => '');
         let errorData;
-        try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
-        console.error('❌ Failed to update call session in backend:', {
+        try {
+          errorData = JSON.parse(responseText);
+        } catch {
+          errorData = { raw: responseText };
+        }
+        console.error('❌ [VideoCallService] FAILED to update call session in backend:', {
           status: response.status,
           statusText: response.statusText,
           error: errorData,
-          appointmentId: this.appointmentId
+          appointmentId: this.appointmentId,
+          sessionId: this.sessionId,
+          requestBody
         });
+        // Don't throw - we've logged the error, but don't block cleanup
       }
     } catch (error) {
-      console.error('❌ Error updating call session in backend:', error);
+      console.error('❌ [VideoCallService] EXCEPTION updating call session in backend:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        appointmentId: this.appointmentId,
+        sessionId: this.sessionId
+      });
+      // Don't throw - we've logged the error, but don't block cleanup
     }
   }
 }

@@ -81,7 +81,12 @@ const MyAppointments = () => {
   // Convert numeric status to string
   const getStatusString = (status: any): string => {
     if (typeof status === 'string') {
-      return status.toLowerCase();
+      const s = status.toLowerCase();
+      // Normalize common variants
+      if (s === 'inprogress') return 'in_progress';
+      if (s === 'in-progress') return 'in_progress';
+      if (s === 'active') return 'in_progress';
+      return s;
     }
 
     // Convert numeric status to string
@@ -93,6 +98,7 @@ const MyAppointments = () => {
       case 4: return 'reschedule_proposed';
       case 5: return 'reschedule_accepted';
       case 6: return 'reschedule_rejected';
+      case 7: return 'in_progress';
       default: return 'unknown';
     }
   };
@@ -170,6 +176,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return '#FFC107';
       case 'confirmed': return '#4CAF50';
+      case 'in_progress': return '#4CAF50';
       case 'cancelled': return '#F44336';
       case 'completed': return '#2196F3';
       case 'reschedule_proposed': return '#FFC107';
@@ -184,6 +191,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'time-outline';
       case 'confirmed': return 'checkmark-circle';
+      case 'in_progress': return 'radio-button-on';
       case 'cancelled': return 'close-circle';
       case 'completed': return 'checkmark-done-circle';
       case 'reschedule_proposed': return 'time-outline';
@@ -214,6 +222,7 @@ const MyAppointments = () => {
     switch (statusStr) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
+      case 'in_progress': return 'In Progress';
       case 'cancelled': return 'Cancelled';
       case 'completed': return 'Completed';
       case 'reschedule_proposed': return 'Reschedule Proposed';

@@ -88,8 +88,19 @@ export class WebRTCChatService {
         await mediaUploadQueueService.initialize();
         
         const token = await this.getAuthToken();
-const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
+        const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.org/chat-signaling';
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&userId=${encodeURIComponent(String(this.config.userId))}&authToken=${encodeURIComponent(token || '')}`;
+        
+        // DIAGNOSTIC: Log all URL sources to identify the problem
+        console.log('🔍 [WebRTCChat] DIAGNOSTIC - URL Resolution:', {
+          fromConfig: this.config.webrtcConfig?.chatSignalingUrl,
+          fallback: 'wss://docavailable.org/chat-signaling',
+          finalBase: base,
+          finalUrl: wsUrl,
+          appointmentId: this.config.appointmentId,
+          userId: this.config.userId,
+          hasAuthToken: !!token
+        });
         console.log('🔌 [WebRTCChat] Connecting to WebRTC chat signaling:', wsUrl);
         console.log('🔌 [WebRTCChat] Config:', this.config);
         
@@ -99,8 +110,18 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         const connectionTimeoutId = setTimeout(() => {
           if (!this.isConnected) {
             console.error('❌ [WebRTCChat] Connection timeout after', this.connectionTimeout, 'ms');
+            console.error('🔍 [WebRTCChat] DIAGNOSTIC - Timeout details:', {
+              url: wsUrl,
+              websocketState: this.websocket?.readyState,
+              readyStateNames: {
+                0: 'CONNECTING',
+                1: 'OPEN',
+                2: 'CLOSING',
+                3: 'CLOSED'
+              }[this.websocket?.readyState || 3]
+            });
             this.websocket?.close();
-            reject(new Error('WebSocket connection timeout'));
+            reject(new Error(`WebSocket connection timeout - URL: ${wsUrl}, State: ${this.websocket?.readyState}`));
           }
         }, this.connectionTimeout);
         
@@ -261,10 +282,16 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         
         this.websocket.onerror = (error) => {
           console.error('❌ [WebRTCChat] WebRTC chat error:', error);
-          console.error('❌ [WebRTCChat] Error details:', {
+          console.error('❌ [WebRTCChat] DIAGNOSTIC - Full error details:', {
             type: (error as any).type,
             target: (error as any).target?.url,
-            readyState: (error as any).target?.readyState
+            readyState: (error as any).target?.readyState,
+            error: (error as any).error,
+            message: (error as any).message,
+            code: (error as any).code,
+            wasClean: (error as any).wasClean,
+            reason: (error as any).reason,
+            fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
           });
           
           // Clear connection timeout on error
@@ -313,12 +340,22 @@ const base = this.config.webrtcConfig?.chatSignalingUrl || 'wss://docavailable.o
         };
         
         this.websocket.onclose = (event) => {
-          console.log('🔌 WebRTC chat disconnected:', event.code);
+          console.log('🔌 [WebRTCChat] WebRTC chat disconnected:', event.code);
+          console.log('🔍 [WebRTCChat] DIAGNOSTIC - Close event details:', {
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean,
+            targetUrl: (event.target as any)?.url,
+            readyState: (event.target as any)?.readyState
+          });
           this.isConnected = false;
           this.stopHealthCheck();
           
           if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+            console.log('🔄 [WebRTCChat] Attempting reconnection...');
             this.handleReconnect();
+          } else if (event.code !== 1000) {
+            console.error('❌ [WebRTCChat] Max reconnection attempts reached or close code indicates failure:', event.code);
           }
         };
         

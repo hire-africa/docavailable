@@ -2179,6 +2179,37 @@ export default function DoctorDashboard() {
             const linkedSessionId = (appt as any)?.session_id ?? (appt as any)?.sessionId ?? null;
             const hasLinkedSession = linkedSessionId !== null && linkedSessionId !== undefined && String(linkedSessionId) !== '';
             const isTextWithLinkedSession = hasLinkedSession && (appointmentType === 'text' || appointmentType === '');
+            const isCallAppointment = appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video';
+
+            // Hide appointment chats from Messages after 30 minutes (appointments only, not text sessions)
+            if (isCallAppointment) {
+              try {
+                const cutoffMs = 30 * 60 * 1000;
+                const unlockedAtRaw = (appt as any)?.call_unlocked_at;
+                if (unlockedAtRaw) {
+                  const unlockedAt = new Date(unlockedAtRaw);
+                  if (!isNaN(unlockedAt.getTime())) {
+                    if (Date.now() - unlockedAt.getTime() > cutoffMs) {
+                      return false;
+                    }
+                  }
+                } else {
+                  const dateStr = (appt as any)?.appointment_date || (appt as any)?.date;
+                  const timeStr = (appt as any)?.appointment_time || (appt as any)?.time;
+                  if (dateStr && timeStr && typeof dateStr === 'string' && typeof timeStr === 'string') {
+                    const scheduled = new Date(`${dateStr}T${timeStr}`);
+                    if (!isNaN(scheduled.getTime())) {
+                      if (Date.now() - scheduled.getTime() > cutoffMs) {
+                        return false;
+                      }
+                    }
+                  }
+                }
+              } catch {
+                // If parsing fails, do not hide
+              }
+            }
+
             return !isTextWithLinkedSession;
           });
 

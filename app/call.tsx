@@ -202,8 +202,8 @@ export default function CallScreen() {
           // Incoming call: render UI and let component initialize for incoming
           setShowVideoCall(true);
         } else {
-          // Outgoing call
-          videoCallService.current = new VideoCallService();
+          // Outgoing call - always use the singleton instance so UI + service share state
+          videoCallService.current = VideoCallService.getInstance();
           await videoCallService.current.initialize(
             appointmentId,
             userId,
