@@ -44,11 +44,11 @@ import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backg
 import callDeduplicationService from '../../services/callDeduplicationService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
+import { SecureWebSocketService } from '../../services/secureWebSocketService';
 import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
-import { SecureWebSocketService } from '../../services/secureWebSocketService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
@@ -333,11 +333,11 @@ export default function ChatPage() {
           }
           return String(arg);
         }).join(' ');
-        
+
         // Capture ALL logs when showLogs is true, or WebRTC-related logs always
-        const isWebRTCRelated = message.includes('WebRTC') || 
-          message.includes('WebRTCChat') || 
-          message.includes('SecureWebSocket') || 
+        const isWebRTCRelated = message.includes('WebRTC') ||
+          message.includes('WebRTCChat') ||
+          message.includes('SecureWebSocket') ||
           message.includes('ConfigService') ||
           message.includes('SendVoice') ||
           message.includes('VideoCallService') ||
@@ -350,8 +350,8 @@ export default function ChatPage() {
           message.includes('❌') ||
           message.includes('✅') ||
           message.includes('🔍');
-        
-        if (isWebRTCRelated || showLogs) {
+
+        if (showLogs && (isWebRTCRelated || showLogs)) {
           setWebrtcLogs(prev => {
             const newLogs = [...prev, {
               timestamp: new Date().toLocaleTimeString(),
@@ -361,7 +361,7 @@ export default function ChatPage() {
             // Keep only last 200 logs
             return newLogs.slice(-200);
           });
-          
+
           // Auto-scroll to bottom
           setTimeout(() => {
             logsScrollViewRef.current?.scrollToEnd({ animated: true });
@@ -481,11 +481,11 @@ export default function ChatPage() {
   const actionParam = (params as any)?.action as string | undefined;
   const callTypeParam = ((params as any)?.callType as string | undefined)?.toLowerCase();
   const answeredFromCallKeepParam = (params as any)?.answeredFromCallKeep === 'true';
-  
+
   useEffect(() => {
     if (handledNotificationActionRef.current) return;
     if (!actionParam) return;
-    
+
     handledNotificationActionRef.current = true;
 
     if (actionParam === 'accept') {
@@ -583,21 +583,22 @@ export default function ChatPage() {
   const isDetectorEnabled = isInstantSession && doctorId > 0 && patientId > 0 && !!token;
 
   // Debug logging for IDs
-  // NOTE: This console.log is kept for your debugging purposes.
-  console.log('🔍 [InstantSession] IDs Debug:', {
-    currentUserId,
-    doctorId,
-    patientId,
-    chatInfoDoctorId: chatInfo?.doctor_id,
-    textSessionDoctorId: textSessionInfo?.doctor_id,
-    isInstantSession,
-    sessionId,
-    appointmentId,
-    chatInfoLoaded: !!chatInfo,
-    textSessionInfoLoaded: !!textSessionInfo,
-    loading: loading,
-    isDetectorEnabled,
-  });
+  useEffect(() => {
+    console.log('🔍 [InstantSession] IDs Debug:', {
+      currentUserId,
+      doctorId,
+      patientId,
+      chatInfoDoctorId: chatInfo?.doctor_id,
+      textSessionDoctorId: textSessionInfo?.doctor_id,
+      isInstantSession,
+      sessionId,
+      appointmentId,
+      chatInfoLoaded: !!chatInfo,
+      textSessionInfoLoaded: !!textSessionInfo,
+      loading: loading,
+      isDetectorEnabled,
+    });
+  }, [currentUserId, doctorId, patientId, chatInfo, textSessionInfo, isInstantSession, sessionId, appointmentId, loading, isDetectorEnabled]);
 
   // Instant session detector hook
   const {
@@ -731,12 +732,14 @@ export default function ChatPage() {
   }, [isInstantSession, messages, currentUserId, doctorId, hasPatientSentMessage, hasDoctorResponded, triggerPatientMessageDetection, triggerDoctorMessageDetection]);
 
   // Debug current user ID
-  console.log('🔍 Current user ID debug:', {
-    userId: user?.id,
-    currentUserId,
-    userType: typeof currentUserId,
-    userObject: user
-  });
+  useEffect(() => {
+    console.log('🔍 Current user ID debug:', {
+      userId: user?.id,
+      currentUserId,
+      userType: typeof currentUserId,
+      userObject: user
+    });
+  }, [user, currentUserId]);
 
   // Auto-scroll functionality
   const scrollToBottom = useCallback(() => {
@@ -814,7 +817,6 @@ export default function ChatPage() {
     // CRITICAL: If call_unlocked_at exists, this is a call appointment - disable text input immediately
     const callUnlockedAt = (chatInfo as any)?.call_unlocked_at;
     if (callUnlockedAt && !isTextSession) {
-      console.log('🚫 [TextInput] Disabled - call_unlocked_at exists:', callUnlockedAt);
       return false;
     }
 
@@ -828,7 +830,6 @@ export default function ChatPage() {
     // If this is clearly a call appointment (by type), keep text input disabled.
     // This matches the intent that scheduled call appointments use the call button, not text.
     if (!isTextSession && isCallAppointmentType) {
-      console.log('🚫 [TextInput] Disabled for call appointment type:', currentAppointmentType);
       return false;
     }
 
@@ -931,25 +932,6 @@ export default function ChatPage() {
     ) : true; // Allow if no subscription data yet (will be checked on call initiation)
 
     const enabled = callTypeEnabled && webrtcReadyOrFallback && !showIncomingCall && appointmentTimeCheck && hasAvailableSessions;
-
-    console.log('🔍 [isCallButtonEnabled] Debug:', {
-      callTypeEnabled,
-      callType,
-      appointmentType,
-      chatInfoAppointmentType: chatInfo?.appointment_type,
-      callUnlockedAt: (chatInfo as any)?.call_unlocked_at,
-      isTextSession,
-      webrtcReady,
-      webrtcReadyOrFallback,
-      showIncomingCall,
-      isAppointmentTime,
-      appointmentTimeCheck,
-      hasAvailableSessions,
-      subscriptionData,
-      enabled,
-      environmentAudioCalls: process.env.EXPO_PUBLIC_ENABLE_AUDIO_CALLS,
-      environmentVideoCalls: process.env.EXPO_PUBLIC_ENABLE_VIDEO_CALLS
-    });
 
     return enabled;
   };
@@ -1071,7 +1053,7 @@ export default function ChatPage() {
     const currentAppointmentType = chatInfo?.appointment_type || appointmentType;
     const isCallAppointment = currentAppointmentType === 'video' || currentAppointmentType === 'audio' || currentAppointmentType === 'voice';
     const callUnlockedAt = (chatInfo as any)?.call_unlocked_at;
-    
+
     if (isCallAppointment && callUnlockedAt) {
       console.log('✅ [AppointmentTime] Video/Audio appointment unlocked via call_unlocked_at:', callUnlockedAt);
       setIsAppointmentTime(true);
@@ -1585,18 +1567,18 @@ export default function ChatPage() {
         try {
           await chatService.connect();
           clearTimeout(connectionTimeout); // Clear timeout on successful connection
-          
+
           // Verify connection status before setting service
           const isActuallyConnected = chatService.getConnectionStatus();
           console.log('✅ [WebRTC Chat] Connection attempt completed. Status check:', {
             isActuallyConnected,
             serviceExists: !!chatService
           });
-          
+
           if (!isActuallyConnected) {
             throw new Error('WebRTC connection completed but status check shows not connected');
           }
-          
+
           console.log('✅ [WebRTC Chat] ✅✅✅ CONNECTED SUCCESSFULLY - Using WebRTC for messages ✅✅✅');
           console.log('🔧 [WebRTC Chat] Setting WebRTC chat service state...');
           webrtcServiceRef.current = chatService;
@@ -2729,7 +2711,7 @@ export default function ChatPage() {
 
       // Check WebRTC connection status BEFORE attempting to send
       const webrtcConnectionStatus = webrtcChatService ? webrtcChatService.getConnectionStatus() : false;
-      
+
       console.log('🔍 [ChatComponent] WebRTC chat service state:', {
         hasService: !!webrtcChatService,
         isWebRTCServiceActive: isWebRTCServiceActive,
@@ -2804,12 +2786,12 @@ export default function ChatPage() {
 
       } else {
         // WebRTC service doesn't exist OR is not connected - use HTTP API
-        const reason = !webrtcChatService 
-          ? 'WebRTC service not initialized' 
-          : !webrtcConnectionStatus 
-            ? 'WebRTC service exists but NOT CONNECTED' 
+        const reason = !webrtcChatService
+          ? 'WebRTC service not initialized'
+          : !webrtcConnectionStatus
+            ? 'WebRTC service exists but NOT CONNECTED'
             : 'Unknown reason';
-        
+
         console.log('📤 [ChatComponent] ⚠️ USING HTTP API (not WebRTC):', reason);
         console.log('📤 [ChatComponent] WebRTC service state:', {
           hasService: !!webrtcChatService,
@@ -3079,129 +3061,129 @@ export default function ChatPage() {
         console.log('✅ [IncomingCall] WebSocket connected successfully');
       },
       onMessage: async (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log('📨 Incoming call message:', message.type);
+        try {
+          const message = JSON.parse(event.data);
+          console.log('📨 Incoming call message:', message.type);
 
-        // If we receive an offer, handle the incoming call
-        if (message.type === 'offer') {
-          // CRITICAL: Generate unique message ID for deduplication
-          const messageId = `${message.senderId}-${message.appointmentId}-${message.callType || 'audio'}-${Date.now()}`;
-          const offerHash = message.offer?.sdp ? message.offer.sdp.substring(0, 50) : messageId;
+          // If we receive an offer, handle the incoming call
+          if (message.type === 'offer') {
+            // CRITICAL: Generate unique message ID for deduplication
+            const messageId = `${message.senderId}-${message.appointmentId}-${message.callType || 'audio'}-${Date.now()}`;
+            const offerHash = message.offer?.sdp ? message.offer.sdp.substring(0, 50) : messageId;
 
-          // Check if we've already processed this offer (within last 5 seconds)
-          if (processedOffersRef.current.has(offerHash)) {
-            console.log('📞 Duplicate offer detected and ignored:', offerHash.substring(0, 20));
-            return;
+            // Check if we've already processed this offer (within last 5 seconds)
+            if (processedOffersRef.current.has(offerHash)) {
+              console.log('📞 Duplicate offer detected and ignored:', offerHash.substring(0, 20));
+              return;
+            }
+
+            console.log('📞 Offer received - FULL MESSAGE:', JSON.stringify(message, null, 2));
+            console.log('📞 Offer received - checking senderId filter:', {
+              messageSenderId: message.senderId,
+              messageUserId: message.userId,
+              currentUserId: currentUserId,
+              currentUserIdString: currentUserId.toString(),
+              userType: user?.user_type,
+              appointmentId: appointmentId,
+              userObject: user,
+              callType: message.callType || 'audio', // Check if it's video or audio call
+              offerHash: offerHash.substring(0, 20)
+            });
+
+            // Check if this offer is from ourselves (ignore our own offers)
+            const messageSenderId = message.senderId || message.userId;
+            const currentUserIdStr = currentUserId.toString();
+
+            console.log('📞 Comparing sender IDs:', {
+              messageSenderId,
+              currentUserIdStr,
+              areEqual: messageSenderId === currentUserIdStr,
+              messageKeys: Object.keys(message),
+              messageType: typeof messageSenderId,
+              currentType: typeof currentUserIdStr
+            });
+
+            // Convert both to strings for comparison
+            const senderIdStr = String(messageSenderId || '');
+            const currentIdStr = String(currentUserIdStr || '');
+
+            console.log('📞 Final comparison:', {
+              senderIdStr,
+              currentIdStr,
+              areEqual: senderIdStr === currentIdStr,
+              senderIdLength: senderIdStr.length,
+              currentIdLength: currentIdStr.length
+            });
+
+            if (senderIdStr && currentIdStr && senderIdStr === currentIdStr) {
+              console.log('📞 Ignoring own offer - not showing incoming call screen');
+              return;
+            }
+
+            // Additional check: if currentUserId is 0 or invalid, don't show incoming call
+            if (!currentUserId || currentUserId === 0) {
+              console.log('📞 Invalid currentUserId, not showing incoming call screen');
+              return;
+            }
+
+            console.log('📞 Incoming call detected! Showing incoming call screen...', {
+              from: user?.user_type,
+              messageType: message.type,
+              callType: message.callType || 'audio',
+              isReceivingCall: true,
+              senderId: message.senderId,
+              currentUserId,
+              doctorName: message.doctorName,
+              doctor_name: message.doctor_name,
+              doctorProfilePicture: message.doctorProfilePicture,
+              doctor_profile_picture: message.doctor_profile_picture
+            });
+
+            // Store the offer for the appropriate service to use
+            (global as any).pendingOffer = message.offer;
+
+            // Set caller information for the incoming call screen
+            // Use the caller information from the WebSocket message if available
+            const callerName = message.doctorName || message.doctor_name ||
+              (user?.user_type === 'doctor' ?
+                (chatInfo?.other_participant_name || 'Patient') :
+                (chatInfo?.other_participant_name || 'Doctor'));
+            const callerProfilePicture = message.doctorProfilePicture || message.doctor_profile_picture ||
+              chatInfo?.other_participant_profile_picture;
+
+            setIncomingCallerName(callerName);
+            setIncomingCallerProfilePicture(callerProfilePicture);
+
+            // Mark this offer as processed immediately to prevent race conditions
+            processedOffersRef.current.add(offerHash);
+
+            // Clean up old processed offers after 10 seconds to prevent memory leak
+            setTimeout(() => {
+              processedOffersRef.current.delete(offerHash);
+            }, 10000);
+
+            // Determine call type and show appropriate incoming call screen
+            const callType = message.callType || 'audio';
+
+            // CRITICAL FIX: Use deduplication service to prevent multiple call screens
+            if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'websocket')) {
+              console.log(`📞 Duplicate ${callType} call blocked by deduplication service`);
+              return;
+            }
+
+            if (callType === 'video') {
+              console.log('📹 Showing incoming video call screen');
+              incomingCallShownRef.current = true;
+              setShowIncomingVideoCall(true);
+            } else {
+              console.log('📞 Showing incoming audio call screen');
+              incomingCallShownRef.current = true;
+              setShowIncomingCall(true);
+            }
           }
-
-          console.log('📞 Offer received - FULL MESSAGE:', JSON.stringify(message, null, 2));
-          console.log('📞 Offer received - checking senderId filter:', {
-            messageSenderId: message.senderId,
-            messageUserId: message.userId,
-            currentUserId: currentUserId,
-            currentUserIdString: currentUserId.toString(),
-            userType: user?.user_type,
-            appointmentId: appointmentId,
-            userObject: user,
-            callType: message.callType || 'audio', // Check if it's video or audio call
-            offerHash: offerHash.substring(0, 20)
-          });
-
-          // Check if this offer is from ourselves (ignore our own offers)
-          const messageSenderId = message.senderId || message.userId;
-          const currentUserIdStr = currentUserId.toString();
-
-          console.log('📞 Comparing sender IDs:', {
-            messageSenderId,
-            currentUserIdStr,
-            areEqual: messageSenderId === currentUserIdStr,
-            messageKeys: Object.keys(message),
-            messageType: typeof messageSenderId,
-            currentType: typeof currentUserIdStr
-          });
-
-          // Convert both to strings for comparison
-          const senderIdStr = String(messageSenderId || '');
-          const currentIdStr = String(currentUserIdStr || '');
-
-          console.log('📞 Final comparison:', {
-            senderIdStr,
-            currentIdStr,
-            areEqual: senderIdStr === currentIdStr,
-            senderIdLength: senderIdStr.length,
-            currentIdLength: currentIdStr.length
-          });
-
-          if (senderIdStr && currentIdStr && senderIdStr === currentIdStr) {
-            console.log('📞 Ignoring own offer - not showing incoming call screen');
-            return;
-          }
-
-          // Additional check: if currentUserId is 0 or invalid, don't show incoming call
-          if (!currentUserId || currentUserId === 0) {
-            console.log('📞 Invalid currentUserId, not showing incoming call screen');
-            return;
-          }
-
-          console.log('📞 Incoming call detected! Showing incoming call screen...', {
-            from: user?.user_type,
-            messageType: message.type,
-            callType: message.callType || 'audio',
-            isReceivingCall: true,
-            senderId: message.senderId,
-            currentUserId,
-            doctorName: message.doctorName,
-            doctor_name: message.doctor_name,
-            doctorProfilePicture: message.doctorProfilePicture,
-            doctor_profile_picture: message.doctor_profile_picture
-          });
-
-          // Store the offer for the appropriate service to use
-          (global as any).pendingOffer = message.offer;
-
-          // Set caller information for the incoming call screen
-          // Use the caller information from the WebSocket message if available
-          const callerName = message.doctorName || message.doctor_name ||
-            (user?.user_type === 'doctor' ?
-              (chatInfo?.other_participant_name || 'Patient') :
-              (chatInfo?.other_participant_name || 'Doctor'));
-          const callerProfilePicture = message.doctorProfilePicture || message.doctor_profile_picture ||
-            chatInfo?.other_participant_profile_picture;
-
-          setIncomingCallerName(callerName);
-          setIncomingCallerProfilePicture(callerProfilePicture);
-
-          // Mark this offer as processed immediately to prevent race conditions
-          processedOffersRef.current.add(offerHash);
-
-          // Clean up old processed offers after 10 seconds to prevent memory leak
-          setTimeout(() => {
-            processedOffersRef.current.delete(offerHash);
-          }, 10000);
-
-          // Determine call type and show appropriate incoming call screen
-          const callType = message.callType || 'audio';
-
-          // CRITICAL FIX: Use deduplication service to prevent multiple call screens
-          if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'websocket')) {
-            console.log(`📞 Duplicate ${callType} call blocked by deduplication service`);
-            return;
-          }
-
-          if (callType === 'video') {
-            console.log('📹 Showing incoming video call screen');
-            incomingCallShownRef.current = true;
-            setShowIncomingVideoCall(true);
-          } else {
-            console.log('📞 Showing incoming audio call screen');
-            incomingCallShownRef.current = true;
-            setShowIncomingCall(true);
-          }
+        } catch (error) {
+          console.error('❌ Error handling incoming call message:', error);
         }
-      } catch (error) {
-        console.error('❌ Error handling incoming call message:', error);
-      }
       },
       onError: (error) => {
         console.error('❌ [IncomingCall] WebSocket error:', error);
@@ -4244,11 +4226,7 @@ export default function ChatPage() {
     }
   };
 
-  // Debug modal state
-  // console.log('🔍 showEndSessionModal state:', showEndSessionModal);
-  console.log('🔍 showRatingModal state:', showRatingModal);
-  console.log('🔍 sessionEnded state:', sessionEnded);
-  console.log('🔍 endingSession state:', endingSession);
+  // Debug modal state logs removed from render path
 
   // console.log('🔍 endingSession state:', endingSession);
 
@@ -5535,9 +5513,9 @@ export default function ChatPage() {
                 <View key={index} style={{
                   marginBottom: 4,
                   padding: 4,
-                  backgroundColor: log.level === 'error' ? 'rgba(255, 68, 68, 0.2)' : 
-                                   log.level === 'warn' ? 'rgba(255, 193, 7, 0.2)' : 
-                                   'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: log.level === 'error' ? 'rgba(255, 68, 68, 0.2)' :
+                    log.level === 'warn' ? 'rgba(255, 193, 7, 0.2)' :
+                      'rgba(255, 255, 255, 0.1)',
                   borderRadius: 4
                 }}>
                   <Text style={{ color: '#999', fontSize: 10 }}>
