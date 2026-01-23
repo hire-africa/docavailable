@@ -4,14 +4,14 @@ module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "Doc_available",
-    owner: "sleeky77",
+    owner: "questmw",
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "light",
     runtimeVersion: "1.0.0",
     updates: {
-      url: "https://u.expo.dev/2eb40af4-b32e-462e-b070-a1b171e65485"
+      url: "https://u.expo.dev/8ea330ee-1ee0-4778-ac7c-459de9eb9dfc"
     },
     splash: {
       image: "./assets/images/icon.png",
@@ -68,12 +68,13 @@ module.exports = {
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
+      "./plugins/withWebRTC", // ✅ WebRTC permissions and hardware features
       "./plugins/withCallKeep",
       "./plugins/withMainActivityFlags" // ✅ Lock screen flags (showWhenLocked, turnScreenOn)
     ],
     extra: {
       eas: {
-        projectId: "2eb40af4-b32e-462e-b070-a1b171e65485"
+        projectId: "8ea330ee-1ee0-4778-ac7c-459de9eb9dfc"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

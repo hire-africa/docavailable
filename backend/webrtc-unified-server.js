@@ -56,9 +56,10 @@ try {
 }
 
 // Create WebSocket servers with optimal configuration
+// Using /call-signaling path to match documented URLs: wss://docavailable.org/call-signaling
 const audioWss = new WebSocket.Server({
   server,
-  path: '/audio-signaling',
+  path: '/call-signaling',
   perMessageDeflate: {
     threshold: 0, // Disable compression completely
     concurrencyLimit: 0,
@@ -92,12 +93,12 @@ const chatWss = new WebSocket.Server({
 function log(level, message, data = null) {
   const timestamp = new Date().toISOString();
   const prefix = `[${timestamp}] [${level}]`;
-  
+
   // Filter out DEBUG level ping/pong messages to reduce spam
   if (level === 'DEBUG' && (message.includes('Ping received') || message.includes('Pong received'))) {
     return; // Skip logging ping/pong messages
   }
-  
+
   console.log(`${prefix} ${message}`);
   if (data) {
     console.log(`${prefix} Data:`, JSON.stringify(data, null, 2));
@@ -122,10 +123,10 @@ function safeSend(ws, message) {
 function extractAppointmentId(req) {
   const urlParts = url.parse(req.url, true);
   const pathParts = urlParts.pathname.split('/');
-  
+
   // Try to get appointment ID from query parameter first
   let appointmentId = urlParts.query.appointmentId;
-  
+
   // If not in query, try to extract from path
   if (!appointmentId) {
     // Handle paths like /audio-signaling/text_session_123
@@ -133,7 +134,7 @@ function extractAppointmentId(req) {
       appointmentId = pathParts[pathParts.length - 1];
     }
   }
-  
+
   return appointmentId;
 }
 
@@ -142,9 +143,9 @@ function addConnection(appointmentId, ws) {
     connections.set(appointmentId, new Set());
   }
   connections.get(appointmentId).add(ws);
-  log('INFO', `Connection added for appointment ${appointmentId}`, { 
+  log('INFO', `Connection added for appointment ${appointmentId}`, {
     totalConnections: connections.get(appointmentId).size,
-    totalAppointments: connections.size 
+    totalAppointments: connections.size
   });
 }
 
@@ -156,8 +157,8 @@ function removeConnection(appointmentId, ws) {
       connections.delete(appointmentId);
       log('INFO', `Cleaned up connections for appointment ${appointmentId}`);
     } else {
-      log('INFO', `Removed connection for appointment ${appointmentId}`, { 
-        remainingConnections: appointmentConnections.size 
+      log('INFO', `Removed connection for appointment ${appointmentId}`, {
+        remainingConnections: appointmentConnections.size
       });
     }
   }
@@ -175,11 +176,11 @@ function broadcastToOthers(senderWs, appointmentId, message) {
       }
     }
   });
-  
-  log('INFO', `Broadcasted message to ${sentCount} connections`, { 
-    appointmentId, 
+
+  log('INFO', `Broadcasted message to ${sentCount} connections`, {
+    appointmentId,
     messageType: message.type,
-    totalConnections: appointmentConnections.size 
+    totalConnections: appointmentConnections.size
   });
 }
 
@@ -195,10 +196,10 @@ function broadcastToAll(appointmentId, message) {
       }
     }
   });
-  
-  log('INFO', `Broadcasted message to all ${sentCount} connections`, { 
-    appointmentId, 
-    messageType: message.type 
+
+  log('INFO', `Broadcasted message to all ${sentCount} connections`, {
+    appointmentId,
+    messageType: message.type
   });
 }
 
@@ -220,15 +221,15 @@ function handleConnection(ws, req, connectionType) {
     return;
   }
 
-  log('INFO', `New ${connectionType} WebSocket connection`, { 
-    appointmentId, 
-    userId, 
-    hasAuthToken: !!authToken 
+  log('INFO', `New ${connectionType} WebSocket connection`, {
+    appointmentId,
+    userId,
+    hasAuthToken: !!authToken
   });
 
   // Store connection
   addConnection(appointmentId, ws);
-  
+
   // Store metadata
   ws.appointmentId = appointmentId;
   ws.userId = userId;
@@ -247,10 +248,10 @@ function handleConnection(ws, req, connectionType) {
   ws.on('message', (data) => {
     try {
       const message = JSON.parse(data.toString());
-      log('INFO', `Message received`, { 
-        type: message.type, 
-        appointmentId, 
-        userId 
+      log('INFO', `Message received`, {
+        type: message.type,
+        appointmentId,
+        userId
       });
 
       // Add metadata to message
@@ -311,20 +312,20 @@ function handleConnection(ws, req, connectionType) {
 
   // Handle errors
   ws.on('error', (error) => {
-    log('ERROR', 'WebSocket error', { 
-      error: error.message, 
-      appointmentId, 
-      userId 
+    log('ERROR', 'WebSocket error', {
+      error: error.message,
+      appointmentId,
+      userId
     });
   });
 
   // Handle connection close
   ws.on('close', (code, reason) => {
-    log('INFO', 'Connection closed', { 
-      code, 
-      reason: reason.toString(), 
-      appointmentId, 
-      userId 
+    log('INFO', 'Connection closed', {
+      code,
+      reason: reason.toString(),
+      appointmentId,
+      userId
     });
     removeConnection(appointmentId, ws);
   });
@@ -334,16 +335,16 @@ function handleConnection(ws, req, connectionType) {
 function handleOffer(message, ws) {
   const appointmentId = message.appointmentId;
   const userId = message.userId;
-  
+
   // Check for duplicate offers
   const offerKey = `${appointmentId}_${userId}_${message.offer?.sdp?.substring(0, 50) || 'unknown'}`;
   if (processedOffers.has(offerKey)) {
     log('WARN', 'Duplicate offer detected and ignored', { offerKey });
     return;
   }
-  
+
   processedOffers.set(offerKey, Date.now());
-  
+
   // Clean up old offers (older than 5 minutes)
   const now = Date.now();
   for (const [key, timestamp] of processedOffers.entries()) {
@@ -351,7 +352,7 @@ function handleOffer(message, ws) {
       processedOffers.delete(key);
     }
   }
-  
+
   log('INFO', 'Processing offer', { appointmentId, userId });
   broadcastToOthers(ws, appointmentId, message);
 }
@@ -360,10 +361,10 @@ async function handleChatMessage(message, ws) {
   try {
     const appointmentId = message.appointmentId;
     const authToken = ws.authToken;
-    
-    log('INFO', 'Handling chat message', { 
-      appointmentId, 
-      messageId: message.message?.id 
+
+    log('INFO', 'Handling chat message', {
+      appointmentId,
+      messageId: message.message?.id
     });
 
     // Send to API
@@ -385,10 +386,10 @@ async function handleChatMessage(message, ws) {
     );
 
     if (response.data.success) {
-      log('INFO', 'Message sent to API successfully', { 
-        messageId: response.data.data?.id 
+      log('INFO', 'Message sent to API successfully', {
+        messageId: response.data.data?.id
       });
-      
+
       // Broadcast to all participants
       broadcastToAll(appointmentId, {
         type: 'chat-message',
@@ -398,9 +399,9 @@ async function handleChatMessage(message, ws) {
       log('ERROR', 'API returned error', { response: response.data });
     }
   } catch (error) {
-    log('ERROR', 'Error handling chat message', { 
+    log('ERROR', 'Error handling chat message', {
       error: error.message,
-      status: error.response?.status 
+      status: error.response?.status
     });
     safeSend(ws, {
       type: 'error',
@@ -413,9 +414,9 @@ async function handleChatMessage(message, ws) {
 async function handleSessionStatusRequest(appointmentId, ws) {
   try {
     const authToken = ws.authToken;
-    
+
     log('INFO', 'Handling session status request', { appointmentId });
-    
+
     let response;
     if (appointmentId.startsWith('text_session_')) {
       const sessionId = appointmentId.replace('text_session_', '');
@@ -449,9 +450,9 @@ async function handleSessionStatusRequest(appointmentId, ws) {
       });
     }
   } catch (error) {
-    log('ERROR', 'Error getting session status', { 
-      error: error.message, 
-      appointmentId 
+    log('ERROR', 'Error getting session status', {
+      error: error.message,
+      appointmentId
     });
     safeSend(ws, {
       type: 'error',
@@ -465,9 +466,9 @@ async function handleSessionEndRequest(message, ws) {
   try {
     const appointmentId = message.appointmentId;
     const authToken = ws.authToken;
-    
+
     log('INFO', 'Handling session end request', { appointmentId });
-    
+
     let response;
     if (appointmentId.startsWith('text_session_')) {
       const sessionId = appointmentId.replace('text_session_', '');
@@ -497,7 +498,7 @@ async function handleSessionEndRequest(message, ws) {
         reason: message.reason || 'General Checkup',
         endedAt: new Date().toISOString()
       });
-      
+
       // Notify all participants
       broadcastToAll(appointmentId, {
         type: 'session-ended',
@@ -512,9 +513,9 @@ async function handleSessionEndRequest(message, ws) {
       });
     }
   } catch (error) {
-    log('ERROR', 'Error ending session', { 
-      error: error.message, 
-      appointmentId: message.appointmentId 
+    log('ERROR', 'Error ending session', {
+      error: error.message,
+      appointmentId: message.appointmentId
     });
     safeSend(ws, {
       type: 'error',
@@ -533,17 +534,43 @@ chatWss.on('connection', (ws, req) => {
   handleConnection(ws, req, 'chat');
 });
 
-// Health check endpoint
+// Health check endpoints matching documented URLs:
+// - https://docavailable.org/call-health
+// - https://docavailable.org/chat-health  
+// - https://docavailable.org/webrtc-health (combined)
 server.on('request', (req, res) => {
-  if (req.url === '/health') {
-    const totalConnections = Array.from(connections.values()).reduce((sum, conns) => sum + conns.size, 0);
+  const totalConnections = Array.from(connections.values()).reduce((sum, conns) => sum + conns.size, 0);
+  const healthResponse = {
+    status: 'healthy',
+    protocol: isHTTPS ? 'https' : 'http',
+    activeAppointments: connections.size,
+    totalConnections: totalConnections,
+    timestamp: new Date().toISOString()
+  };
+
+  // Support multiple health check paths
+  if (req.url === '/call-health' || req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      status: 'healthy',
-      protocol: isHTTPS ? 'https' : 'http',
-      activeAppointments: connections.size,
-      totalConnections: totalConnections,
-      timestamp: new Date().toISOString()
+      ...healthResponse,
+      service: 'call-signaling',
+      endpoint: 'wss://docavailable.org/call-signaling'
+    }));
+  } else if (req.url === '/chat-health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ...healthResponse,
+      service: 'chat-signaling',
+      endpoint: 'wss://docavailable.org/chat-signaling'
+    }));
+  } else if (req.url === '/webrtc-health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      ...healthResponse,
+      services: {
+        call: { endpoint: 'wss://docavailable.org/call-signaling', status: 'healthy' },
+        chat: { endpoint: 'wss://docavailable.org/chat-signaling', status: 'healthy' }
+      }
     }));
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -559,16 +586,20 @@ server.listen(CONFIG.PORT, () => {
   log('INFO', 'WebRTC Signaling Server started', {
     port: CONFIG.PORT,
     protocol: PROTOCOL.toUpperCase(),
-    audioEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/audio-signaling`,
+    callEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/call-signaling`,
     chatEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/chat-signaling`,
-    healthCheck: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/health`
+    healthChecks: {
+      call: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/call-health`,
+      chat: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/chat-health`,
+      combined: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/webrtc-health`
+    }
   });
 });
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   log('INFO', 'Shutting down WebRTC Signaling Server...');
-  
+
   // Close all connections
   connections.forEach((appointmentConnections, appointmentId) => {
     appointmentConnections.forEach(ws => {
@@ -577,7 +608,7 @@ process.on('SIGINT', () => {
       }
     });
   });
-  
+
   server.close(() => {
     log('INFO', 'Server closed');
     process.exit(0);

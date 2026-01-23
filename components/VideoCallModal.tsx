@@ -658,6 +658,16 @@ export default function VideoCallModal({
       }
 
       console.log('✅ Video call processed - resetting processing state');
+      
+      // Stop ringtone when call is answered
+      try {
+        const ringtoneService = (await import('../services/ringtoneService')).default;
+        await ringtoneService.stop();
+        console.log('🔕 Ringtone stopped - video call answered');
+      } catch (error) {
+        console.error('❌ Failed to stop ringtone:', error);
+      }
+      
       // Reset processing state after successful processing
       setIsProcessingAnswer(false);
 

@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSecureScreen } from '../hooks/useSecureScreen';
 import { AudioCallService } from '../services/audioCallService';
 import { VideoCallService } from '../services/videoCallService';
+import ringtoneService from '../services/ringtoneService';
 
 export default function CallScreen() {
   // Enable screenshot prevention for all calls (audio/video)
@@ -152,7 +153,14 @@ export default function CallScreen() {
         // Explicitly ensure video modal is hidden for audio flows
         setShowVideoCall(false);
         if (incomingParam) {
-          // Incoming call: render UI and let component initialize for incoming
+          // Incoming call: Start ringtone and render UI
+          console.log('📞 [CallScreen] Starting ringtone for incoming audio call');
+          try {
+            await ringtoneService.start();
+            console.log('✅ [CallScreen] Ringtone started successfully');
+          } catch (ringtoneError) {
+            console.error('❌ [CallScreen] Failed to start ringtone:', ringtoneError);
+          }
           setShowAudioCall(true);
         } else {
           // Outgoing call - show UI immediately
@@ -199,7 +207,14 @@ export default function CallScreen() {
         // Explicitly ensure audio modal is hidden for video flows
         setShowAudioCall(false);
         if (incomingParam) {
-          // Incoming call: render UI and let component initialize for incoming
+          // Incoming call: Start ringtone and render UI
+          console.log('📞 [CallScreen] Starting ringtone for incoming video call');
+          try {
+            await ringtoneService.start();
+            console.log('✅ [CallScreen] Ringtone started successfully');
+          } catch (ringtoneError) {
+            console.error('❌ [CallScreen] Failed to start ringtone:', ringtoneError);
+          }
           setShowVideoCall(true);
         } else {
           // Outgoing call - always use the singleton instance so UI + service share state
@@ -248,7 +263,15 @@ export default function CallScreen() {
     }
   };
 
-  const handleCallEnd = () => {
+  const handleCallEnd = async () => {
+    // Stop ringtone if playing
+    try {
+      await ringtoneService.stop();
+      console.log('🔕 Ringtone stopped');
+    } catch (error) {
+      console.error('❌ Failed to stop ringtone:', error);
+    }
+    
     // Clean up call services
     if (audioCallService.current) {
       audioCallService.current.endCall();

@@ -222,8 +222,18 @@ export default function AudioCall({
             Alert.error('Call Error', error);
           }
         },
-        onCallAnswered: () => {
+        onCallAnswered: async () => {
           console.log('✅ Call answered');
+          
+          // Stop ringtone when call is answered
+          try {
+            const ringtoneService = (await import('../services/ringtoneService')).default;
+            await ringtoneService.stop();
+            console.log('🔕 Ringtone stopped - call answered');
+          } catch (error) {
+            console.error('❌ Failed to stop ringtone:', error);
+          }
+          
           // Ensure UI flips to connected immediately on answered
           if (!freezeConnectedRef.current) freezeConnectedRef.current = true;
           setIsRinging(false);

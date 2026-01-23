@@ -30,6 +30,9 @@ export class SecureWebSocketService {
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      let connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+      let isResolved = false;
+      
       try {
         console.log('🔌 [SecureWebSocket] Connecting to:', this.options.url);
         
@@ -38,16 +41,58 @@ export class SecureWebSocketService {
         this.ws = new WebSocket(this.options.url, this.options.protocols);
         
         this.ws.onopen = () => {
+          // Clear timeout since we connected successfully
+          if (connectionTimeoutId) {
+            clearTimeout(connectionTimeoutId);
+            connectionTimeoutId = null;
+          }
+          
+          if (isResolved) {
+            console.warn('⚠️ [SecureWebSocket] onopen fired after timeout - connection succeeded but timeout already rejected');
+            return;
+          }
+          
           console.log('✅ [SecureWebSocket] Connected successfully');
+          
+          // CRITICAL: Verify WebSocket is actually working by sending a test message
+          try {
+            const testMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+            this.ws?.send(testMessage);
+            console.log('✅ [SecureWebSocket] Test ping sent to verify connection is working');
+          } catch (testError) {
+            console.error('❌ [SecureWebSocket] CRITICAL: WebSocket reports OPEN but send() failed:', testError);
+            isResolved = true;
+            reject(new Error('WebSocket reports connected but cannot send messages'));
+            return;
+          }
+          
+          isResolved = true;
           this.options.onOpen?.();
           resolve();
         };
 
         this.ws.onmessage = (event) => {
+          // CRITICAL: Log message reception to verify bidirectional communication
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'pong') {
+              console.log('🏓 [SecureWebSocket] Pong received - bidirectional communication confirmed');
+            } else if (data.type !== 'ping') {
+              console.log('📨 [SecureWebSocket] Message received:', data.type);
+            }
+          } catch (e) {
+            // Not JSON, that's okay
+          }
           this.options.onMessage?.(event);
         };
 
         this.ws.onclose = (event) => {
+          // Clear timeout on close
+          if (connectionTimeoutId) {
+            clearTimeout(connectionTimeoutId);
+            connectionTimeoutId = null;
+          }
+          
           console.log('🔌 [SecureWebSocket] Connection closed:', event.code, event.reason);
           this.options.onClose?.(event);
         };
@@ -62,20 +107,58 @@ export class SecureWebSocketService {
             return;
           }
           
-          this.options.onError?.(event);
-          reject(new Error('WebSocket connection failed'));
+          // Clear timeout on error
+          if (connectionTimeoutId) {
+            clearTimeout(connectionTimeoutId);
+            connectionTimeoutId = null;
+          }
+          
+          if (!isResolved) {
+            isResolved = true;
+            this.options.onError?.(event);
+            reject(new Error('WebSocket connection failed'));
+          }
         };
 
         // Set a timeout for connection
-        setTimeout(() => {
-          if (this.ws?.readyState !== WebSocket.OPEN) {
-            reject(new Error('WebSocket connection timeout'));
+        connectionTimeoutId = setTimeout(() => {
+          if (this.ws?.readyState !== WebSocket.OPEN && !isResolved) {
+            console.error('❌ [SecureWebSocket] Connection timeout after 10 seconds');
+            console.error('🔍 [SecureWebSocket] WebSocket state:', {
+              readyState: this.ws?.readyState,
+              readyStateName: {
+                0: 'CONNECTING',
+                1: 'OPEN',
+                2: 'CLOSING',
+                3: 'CLOSED'
+              }[this.ws?.readyState || 3],
+              url: this.options.url
+            });
+            
+            // Close the WebSocket before rejecting
+            try {
+              this.ws?.close();
+            } catch (closeError) {
+              console.warn('⚠️ [SecureWebSocket] Error closing WebSocket on timeout:', closeError);
+            }
+            
+            isResolved = true;
+            reject(new Error(`WebSocket connection timeout - URL: ${this.options.url}, State: ${this.ws?.readyState}`));
           }
         }, 10000); // 10 second timeout
 
       } catch (error) {
+        // Clear timeout on exception
+        if (connectionTimeoutId) {
+          clearTimeout(connectionTimeoutId);
+          connectionTimeoutId = null;
+        }
+        
         console.error('❌ [SecureWebSocket] Failed to create connection:', error);
-        reject(error);
+        if (!isResolved) {
+          isResolved = true;
+          reject(error);
+        }
       }
     });
   }

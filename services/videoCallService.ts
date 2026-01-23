@@ -370,8 +370,23 @@ class VideoCallService {
         },
         audio: true, // Simplified audio constraints for faster initialization
       }).catch(error => {
-        console.error('❌ Failed to get user media:', error);
-        throw error;
+        console.error('❌ [VideoCallService] CRITICAL: Failed to get user media:', error);
+        console.error('❌ [VideoCallService] Media error details:', {
+          name: error.name,
+          message: error.message,
+          constraint: error.constraint,
+          error: error.toString(),
+          stack: error.stack
+        });
+        // Provide more helpful error message
+        const errorMessage = error.message || String(error);
+        if (errorMessage.includes('permission') || errorMessage.includes('Permission')) {
+          throw new Error('Camera/microphone permission denied. Please grant permissions in app settings.');
+        } else if (errorMessage.includes('not found') || errorMessage.includes('device')) {
+          throw new Error('Camera or microphone not found on this device.');
+        } else {
+          throw new Error(`Failed to access camera/microphone: ${errorMessage}`);
+        }
       });
 
       // Wait for signaling to be ready (usually faster than camera)
@@ -411,15 +426,64 @@ class VideoCallService {
       this.setupPeerConnectionEventHandlers();
 
       // Now wait for camera/media (this is the slow part, but WebRTC is already negotiating)
-      this.localStream = await mediaPromise;
+      try {
+        this.localStream = await mediaPromise;
 
-      console.log('📹 [VideoCallService] Local stream captured:', {
-        streamId: this.localStream.id,
-        videoTracks: this.localStream.getVideoTracks().length,
-        audioTracks: this.localStream.getAudioTracks().length,
-        videoTrackLabel: this.localStream.getVideoTracks()[0]?.label,
-        audioTrackLabel: this.localStream.getAudioTracks()[0]?.label
-      });
+        console.log('📹 [VideoCallService] Local stream captured:', {
+          streamId: this.localStream.id,
+          videoTracks: this.localStream.getVideoTracks().length,
+          audioTracks: this.localStream.getAudioTracks().length,
+          videoTrackLabel: this.localStream.getVideoTracks()[0]?.label,
+          audioTrackLabel: this.localStream.getAudioTracks()[0]?.label
+        });
+
+        // CRITICAL: Verify tracks are actually working
+        const videoTracks = this.localStream.getVideoTracks();
+        const audioTracks = this.localStream.getAudioTracks();
+        
+        if (videoTracks.length === 0) {
+          console.error('❌ [VideoCallService] CRITICAL: No video tracks in stream!');
+          throw new Error('No video tracks available - camera may not be accessible');
+        }
+        
+        if (audioTracks.length === 0) {
+          console.error('❌ [VideoCallService] CRITICAL: No audio tracks in stream!');
+          throw new Error('No audio tracks available - microphone may not be accessible');
+        }
+
+        // Verify tracks are enabled and have correct state
+        videoTracks.forEach((track, idx) => {
+          console.log(`📹 [VideoCallService] Video track ${idx}:`, {
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            settings: track.getSettings()
+          });
+          if (track.readyState !== 'live') {
+            console.error(`❌ [VideoCallService] CRITICAL: Video track ${idx} is not live! State:`, track.readyState);
+          }
+        });
+
+        audioTracks.forEach((track, idx) => {
+          console.log(`🎤 [VideoCallService] Audio track ${idx}:`, {
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            settings: track.getSettings()
+          });
+          if (track.readyState !== 'live') {
+            console.error(`❌ [VideoCallService] CRITICAL: Audio track ${idx} is not live! State:`, track.readyState);
+          }
+        });
+      } catch (mediaError) {
+        console.error('❌ [VideoCallService] CRITICAL: Media stream initialization failed:', mediaError);
+        this.updateState({ connectionState: 'failed' });
+        throw mediaError;
+      }
 
       // Configure audio routing for phone calls (non-blocking)
       this.configureAudioRouting().catch(error => {
@@ -619,12 +683,14 @@ class VideoCallService {
       console.log('🔧 [VideoCallService] User ID:', userId);
 
       // Create secure WebSocket connection that handles self-signed certificates
-      this.signalingChannel = new SecureWebSocketService({
-        url: wsUrl,
-        ignoreSSLErrors: true, // Allow self-signed certificates
-        onOpen: () => {
-          console.log('🔌 Connected to video signaling server');
-        },
+        this.signalingChannel = new SecureWebSocketService({
+          url: wsUrl,
+          ignoreSSLErrors: true, // Allow self-signed certificates
+          onOpen: () => {
+            console.log('✅ [VideoCallService] Connected to video signaling server');
+            console.log('🔍 [VideoCallService] Signaling WebSocket URL:', wsUrl);
+            console.log('🔍 [VideoCallService] Signaling readyState:', this.signalingChannel?.readyState);
+          },
         onMessage: async (event) => {
           try {
             const message = JSON.parse(event.data);
@@ -761,6 +827,21 @@ class VideoCallService {
         await this.signalingChannel.connect();
       } catch (error) {
         const errorMessage = error?.message || '';
+        const errorCode = (error as any)?.code || '';
+        
+        // Check for SSL certificate specific errors
+        if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
+            errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+            errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+          console.error('🔒 [VideoCallService] SSL CERTIFICATE ERROR DETECTED!');
+          console.error('🔒 [VideoCallService] This indicates the SSL certificate may be:');
+          console.error('   - Expired');
+          console.error('   - Self-signed (not trusted)');
+          console.error('   - Missing intermediate certificates');
+          console.error('   - Invalid for the domain');
+          console.error('🔒 [VideoCallService] To verify, run: node test-ssl-certificate.js');
+        }
+        
         if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
           console.warn('⚠️ [VideoCallService] Video signaling SSL/Connection error, attempting fallback...', errorMessage);
 

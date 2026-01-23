@@ -56,9 +56,10 @@ try {
 }
 
 // Create WebSocket servers with optimal configuration
+// Using /call-signaling path to match documented URLs: wss://docavailable.org/call-signaling
 const audioWss = new WebSocket.Server({
   server,
-  path: '/audio-signaling',
+  path: '/call-signaling',
   perMessageDeflate: false, // Disable compression completely
   maxPayload: CONFIG.MAX_PAYLOAD,
   noServer: false,
@@ -584,7 +585,7 @@ server.listen(CONFIG.PORT, () => {
   log('INFO', 'WebRTC Signaling Server started', {
     port: CONFIG.PORT,
     protocol: PROTOCOL.toUpperCase(),
-    audioEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/audio-signaling`,
+    callEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/call-signaling`,
     chatEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/chat-signaling`,
     healthCheck: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/health`
   });

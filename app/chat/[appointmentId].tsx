@@ -48,6 +48,7 @@ import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { WebRTCChatService } from '../../services/webrtcChatService';
+import { SecureWebSocketService } from '../../services/secureWebSocketService';
 import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
@@ -308,6 +309,95 @@ export default function ChatPage() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [sendingVoiceMessage, setSendingVoiceMessage] = useState(false);
+
+  // TEMPORARY: WebRTC diagnostic logs viewer
+  const [webrtcLogs, setWebrtcLogs] = useState<Array<{ timestamp: string; message: string; level: string }>>([]);
+  const [showLogs, setShowLogs] = useState(false);
+  const logsScrollViewRef = useRef<ScrollView>(null);
+
+  // TEMPORARY: Intercept console logs for WebRTC diagnostics
+  useEffect(() => {
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    const addLog = (level: string, ...args: any[]) => {
+      try {
+        const message = args.map(arg => {
+          if (typeof arg === 'object' && arg !== null) {
+            try {
+              return JSON.stringify(arg, null, 2);
+            } catch {
+              return String(arg);
+            }
+          }
+          return String(arg);
+        }).join(' ');
+        
+        // Capture ALL logs when showLogs is true, or WebRTC-related logs always
+        const isWebRTCRelated = message.includes('WebRTC') || 
+          message.includes('WebRTCChat') || 
+          message.includes('SecureWebSocket') || 
+          message.includes('ConfigService') ||
+          message.includes('SendVoice') ||
+          message.includes('VideoCallService') ||
+          message.includes('AudioCallService') ||
+          message.includes('webrtc') ||
+          message.includes('WebSocket') ||
+          message.includes('signaling') ||
+          message.includes('🔌') ||
+          message.includes('📤') ||
+          message.includes('❌') ||
+          message.includes('✅') ||
+          message.includes('🔍');
+        
+        if (isWebRTCRelated || showLogs) {
+          setWebrtcLogs(prev => {
+            const newLogs = [...prev, {
+              timestamp: new Date().toLocaleTimeString(),
+              message: message.substring(0, 500), // Limit message length
+              level
+            }];
+            // Keep only last 200 logs
+            return newLogs.slice(-200);
+          });
+          
+          // Auto-scroll to bottom
+          setTimeout(() => {
+            logsScrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        }
+      } catch (err) {
+        // Silently fail if log capture has issues
+      }
+    };
+
+    console.log = (...args: any[]) => {
+      originalLog(...args);
+      addLog('log', ...args);
+    };
+
+    console.error = (...args: any[]) => {
+      originalError(...args);
+      addLog('error', ...args);
+    };
+
+    console.warn = (...args: any[]) => {
+      originalWarn(...args);
+      addLog('warn', ...args);
+    };
+
+    // Add a test log to verify it's working
+    setTimeout(() => {
+      console.log('🧪 [LogViewer] Log capture system initialized - this should appear in logs');
+    }, 1000);
+
+    return () => {
+      console.log = originalLog;
+      console.error = originalError;
+      console.warn = originalWarn;
+    };
+  }, [showLogs]);
 
   // Image handling state
   const [sendingCameraImage, setSendingCameraImage] = useState(false);
@@ -1801,7 +1891,15 @@ export default function ChatPage() {
       webrtcSessionService.disconnect();
       // Clean up incoming call WebSocket
       if ((global as any).incomingCallWebSocket) {
-        (global as any).incomingCallWebSocket.close();
+        try {
+          if (typeof (global as any).incomingCallWebSocket.close === 'function') {
+            (global as any).incomingCallWebSocket.close();
+          } else if ((global as any).incomingCallWebSocket.ws) {
+            (global as any).incomingCallWebSocket.ws?.close();
+          }
+        } catch (e) {
+          console.warn('Error closing incoming call WebSocket:', e);
+        }
         (global as any).incomingCallWebSocket = null;
       }
     };
@@ -2942,39 +3040,43 @@ export default function ChatPage() {
   };
 
   // Set up incoming call listener
+  // CRITICAL: For direct calls, we listen by userId only - appointmentId is not needed
   const setupIncomingCallListener = () => {
-    if (!appointmentId || !currentUserId) return;
+    if (!currentUserId) {
+      console.warn('⚠️ [IncomingCall] Cannot setup listener - no currentUserId');
+      return;
+    }
 
-    console.log('📞 Setting up incoming call listener...');
+    console.log('📞 Setting up incoming call listener for direct calls...');
 
     // Clean up any existing connection
     if ((global as any).incomingCallWebSocket) {
       console.log('🧹 Cleaning up existing incoming call WebSocket');
       try {
-        // Remove event handlers before closing to prevent stale listeners
-        (global as any).incomingCallWebSocket.onopen = null;
-        (global as any).incomingCallWebSocket.onmessage = null;
-        (global as any).incomingCallWebSocket.onerror = null;
-        (global as any).incomingCallWebSocket.onclose = null;
-        (global as any).incomingCallWebSocket.close();
+        // SecureWebSocketService has a close() method
+        if (typeof (global as any).incomingCallWebSocket.close === 'function') {
+          (global as any).incomingCallWebSocket.close();
+        } else if ((global as any).incomingCallWebSocket.ws) {
+          // Fallback for SecureWebSocketService internal WebSocket
+          (global as any).incomingCallWebSocket.ws?.close();
+        }
       } catch (e) {
         console.warn('Error cleaning up WebSocket:', e);
       }
     }
 
     // Create WebSocket connection for incoming calls
-    // NOTE: must use currentUserId; `userId` is not defined in this file and will crash WebRTC init
-    const wsUrl = `wss://docavailable.org/audio-signaling?appointmentId=${appointmentId}&userId=${currentUserId}`;
-    const signalingChannel = new WebSocket(wsUrl);
-
-    // Store reference for cleanup
-    (global as any).incomingCallWebSocket = signalingChannel;
-
-    signalingChannel.onopen = () => {
-      console.log('📞 Incoming call WebSocket connected');
-    };
-
-    signalingChannel.onmessage = async (event) => {
+    // CRITICAL: For direct calls, we only need userId - appointmentId is NOT required
+    // The signaling server routes calls by userId, not appointmentId
+    // CRITICAL: Use SecureWebSocketService to handle SSL errors in preview builds
+    const wsUrl = `wss://docavailable.org/audio-signaling?userId=${currentUserId}`;
+    const signalingChannel = new SecureWebSocketService({
+      url: wsUrl,
+      ignoreSSLErrors: true, // Allow SSL errors for preview builds
+      onOpen: () => {
+        console.log('✅ [IncomingCall] WebSocket connected successfully');
+      },
+      onMessage: async (event) => {
       try {
         const message = JSON.parse(event.data);
         console.log('📨 Incoming call message:', message.type);
@@ -3098,15 +3200,22 @@ export default function ChatPage() {
       } catch (error) {
         console.error('❌ Error handling incoming call message:', error);
       }
-    };
+      },
+      onError: (error) => {
+        console.error('❌ [IncomingCall] WebSocket error:', error);
+      },
+      onClose: () => {
+        console.log('📞 [IncomingCall] WebSocket closed');
+      }
+    });
 
-    signalingChannel.onerror = (error) => {
-      console.error('❌ Incoming call WebSocket error:', error);
-    };
+    // Connect the WebSocket
+    signalingChannel.connect().catch((error) => {
+      console.error('❌ [IncomingCall] Failed to connect WebSocket:', error);
+    });
 
-    signalingChannel.onclose = () => {
-      console.log('📞 Incoming call WebSocket closed');
-    };
+    // Store reference for cleanup
+    (global as any).incomingCallWebSocket = signalingChannel;
   };
 
   // Handle back button press
@@ -3784,6 +3893,14 @@ export default function ChatPage() {
 
     try {
       setSendingVoiceMessage(true);
+      // TEMPORARY: Show logs and clear old ones when starting
+      setShowLogs(true);
+      setWebrtcLogs([]);
+      console.log('📤 [SendVoice] Starting voice message send...');
+      console.log('📤 [SendVoice] Recording URI:', recordingUri);
+      console.log('📤 [SendVoice] Appointment ID:', appointmentId);
+      console.log('📤 [SendVoice] WebRTC Chat Service available:', !!webrtcChatService);
+      console.log('📤 [SendVoice] WebRTC Chat Service connected:', webrtcChatService?.getConnectionStatus());
 
       if (webrtcChatService) {
         // Use WebRTC for voice messages
@@ -3792,7 +3909,7 @@ export default function ChatPage() {
         if (message) {
           setRecordingUri(null);
           setRecordingDuration(0);
-          console.log('✅ Voice message sent via WebRTC:', message.id);
+          console.log('✅ [SendVoice] Voice message sent via WebRTC:', message.id);
         }
       } else {
         // Fallback to backend API
@@ -3800,14 +3917,18 @@ export default function ChatPage() {
         await sendVoiceMessageViaBackendAPI();
       }
     } catch (error) {
-      console.error('❌ Error sending voice message:', error);
+      console.error('❌ [SendVoice] Error sending voice message:', error);
+      console.error('❌ [SendVoice] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       // Try backend API fallback if WebRTC fails
       if (webrtcChatService) {
-        console.log('🔄 WebRTC failed, trying backend API fallback');
+        console.log('🔄 [SendVoice] WebRTC failed, trying backend API fallback');
         try {
           await sendVoiceMessageViaBackendAPI();
         } catch (fallbackError) {
-          console.error('❌ Backend API fallback also failed:', fallbackError);
+          console.error('❌ [SendVoice] Backend API fallback also failed:', fallbackError);
         }
       }
     } finally {
@@ -5305,6 +5426,29 @@ export default function ChatPage() {
               </Text>
             </View>
             <TouchableOpacity
+              onPress={() => {
+                const newShowLogs = !showLogs;
+                setShowLogs(newShowLogs);
+                if (newShowLogs) {
+                  // Add a test log when opening
+                  console.log('🧪 [LogViewer] Log viewer opened - capturing all logs now');
+                  setWebrtcLogs(prev => [...prev, {
+                    timestamp: new Date().toLocaleTimeString(),
+                    message: '🧪 Log viewer opened - all WebRTC logs will be captured',
+                    level: 'log'
+                  }]);
+                }
+              }}
+              style={{
+                padding: 8,
+                backgroundColor: showLogs ? '#2196F3' : '#999',
+                borderRadius: 20,
+                marginRight: 8
+              }}
+            >
+              <Ionicons name="bug" size={20} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={sendVoiceMessage}
               disabled={sendingVoiceMessage}
               style={{
@@ -5333,6 +5477,100 @@ export default function ChatPage() {
             >
               <Ionicons name="close" size={20} color="white" />
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* TEMPORARY: WebRTC Diagnostic Logs Viewer */}
+        {showLogs && (
+          <View style={{
+            position: 'absolute',
+            bottom: recordingUri ? 180 : 100,
+            left: 0,
+            right: 0,
+            height: 300,
+            backgroundColor: 'rgba(0, 0, 0, 0.95)',
+            zIndex: 10000,
+            borderTopWidth: 2,
+            borderTopColor: '#4CAF50',
+            padding: 8,
+            elevation: 10,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -2 },
+            shadowOpacity: 0.5,
+            shadowRadius: 4
+          }}>
+            <View style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 8,
+              paddingBottom: 8,
+              borderBottomWidth: 1,
+              borderBottomColor: '#333'
+            }}>
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>
+                WebRTC Diagnostics ({webrtcLogs.length} logs)
+              </Text>
+              <TouchableOpacity
+                onPress={() => setWebrtcLogs([])}
+                style={{ padding: 4 }}
+              >
+                <Text style={{ color: '#ff4444', fontSize: 12 }}>Clear</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowLogs(false)}
+                style={{ padding: 4 }}
+              >
+                <Ionicons name="close" size={20} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              ref={logsScrollViewRef}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              {webrtcLogs.map((log, index) => (
+                <View key={index} style={{
+                  marginBottom: 4,
+                  padding: 4,
+                  backgroundColor: log.level === 'error' ? 'rgba(255, 68, 68, 0.2)' : 
+                                   log.level === 'warn' ? 'rgba(255, 193, 7, 0.2)' : 
+                                   'rgba(255, 255, 255, 0.1)',
+                  borderRadius: 4
+                }}>
+                  <Text style={{ color: '#999', fontSize: 10 }}>
+                    {log.timestamp} [{log.level.toUpperCase()}]
+                  </Text>
+                  <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'monospace' }}>
+                    {log.message}
+                  </Text>
+                </View>
+              ))}
+              {webrtcLogs.length === 0 && (
+                <View style={{ marginTop: 20 }}>
+                  <Text style={{ color: '#999', textAlign: 'center', marginBottom: 10 }}>
+                    No WebRTC logs yet. Try sending a voice note.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      console.log('🧪 [LogViewer] Test log button pressed');
+                      console.log('🔍 [WebRTCChat] Test diagnostic log');
+                      console.log('✅ [ConfigService] Test config log');
+                    }}
+                    style={{
+                      backgroundColor: '#4CAF50',
+                      padding: 10,
+                      borderRadius: 5,
+                      marginTop: 10
+                    }}
+                  >
+                    <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold' }}>
+                      Test Log Capture
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
           </View>
         )}
       </KeyboardAvoidingView>

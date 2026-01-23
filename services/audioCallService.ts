@@ -473,25 +473,68 @@ class AudioCallService {
       }
 
       // Get user media (audio only) with specific constraints
-      this.localStream = await mediaDevices.getUserMedia({
-        video: false,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 44100,
-          channelCount: 1,
-        } as any,
-      });
+      try {
+        this.localStream = await mediaDevices.getUserMedia({
+          video: false,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,
+            channelCount: 1,
+          } as any,
+        }).catch(error => {
+          console.error('❌ [AudioCallService] CRITICAL: Failed to get user media:', error);
+          console.error('❌ [AudioCallService] Media error details:', {
+            name: error.name,
+            message: error.message,
+            constraint: error.constraint,
+            error: error.toString()
+          });
+          const errorMessage = error.message || String(error);
+          if (errorMessage.includes('permission') || errorMessage.includes('Permission')) {
+            throw new Error('Microphone permission denied. Please grant permissions in app settings.');
+          } else if (errorMessage.includes('not found') || errorMessage.includes('device')) {
+            throw new Error('Microphone not found on this device.');
+          } else {
+            throw new Error(`Failed to access microphone: ${errorMessage}`);
+          }
+        });
 
-      // Log audio stream details
-      console.log('🎵 [AudioCallService] Local audio stream captured:', {
-        streamId: this.localStream.id,
-        audioTracks: this.localStream.getAudioTracks().length,
-        audioTrackLabel: this.localStream.getAudioTracks()[0]?.label,
-        audioTrackSettings: this.localStream.getAudioTracks()[0]?.getSettings(),
-        audioTrackConstraints: this.localStream.getAudioTracks()[0]?.getConstraints()
-      });
+        // Log audio stream details
+        console.log('🎵 [AudioCallService] Local audio stream captured:', {
+          streamId: this.localStream.id,
+          audioTracks: this.localStream.getAudioTracks().length,
+          audioTrackLabel: this.localStream.getAudioTracks()[0]?.label,
+          audioTrackSettings: this.localStream.getAudioTracks()[0]?.getSettings(),
+          audioTrackConstraints: this.localStream.getAudioTracks()[0]?.getConstraints()
+        });
+
+        // CRITICAL: Verify audio track is actually working
+        const audioTracks = this.localStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          console.error('❌ [AudioCallService] CRITICAL: No audio tracks in stream!');
+          throw new Error('No audio tracks available - microphone may not be accessible');
+        }
+
+        audioTracks.forEach((track, idx) => {
+          console.log(`🎤 [AudioCallService] Audio track ${idx}:`, {
+            id: track.id,
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label,
+            settings: track.getSettings()
+          });
+          if (track.readyState !== 'live') {
+            console.error(`❌ [AudioCallService] CRITICAL: Audio track ${idx} is not live! State:`, track.readyState);
+          }
+        });
+      } catch (mediaError) {
+        console.error('❌ [AudioCallService] CRITICAL: Media stream initialization failed:', mediaError);
+        this.updateState({ connectionState: 'failed' });
+        throw mediaError;
+      }
 
       // Configure audio routing for phone calls (caller side)
       await this.configureAudioRouting();
@@ -795,6 +838,21 @@ class AudioCallService {
   await this.signalingChannel.connect();
 } catch (error) {
   const errorMessage = error?.message || '';
+  const errorCode = (error as any)?.code || '';
+  
+  // Check for SSL certificate specific errors
+  if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
+      errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+      errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+    console.error('🔒 [AudioCallService] SSL CERTIFICATE ERROR DETECTED!');
+    console.error('🔒 [AudioCallService] This indicates the SSL certificate may be:');
+    console.error('   - Expired');
+    console.error('   - Self-signed (not trusted)');
+    console.error('   - Missing intermediate certificates');
+    console.error('   - Invalid for the domain');
+    console.error('🔒 [AudioCallService] To verify, run: node test-ssl-certificate.js');
+  }
+  
   if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
     console.warn('⚠️ [AudioCallService] Signaling SSL/Connection error, attempting fallback...', errorMessage);
 

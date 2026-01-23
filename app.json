@@ -2,7 +2,7 @@
   "expo": {
     "name": "DocAvailable",
     "slug": "Doc_available",
-    "owner": "sleeky77",
+    "owner": "questmw",
     "platforms": [
       "ios",
       "android"
@@ -12,9 +12,6 @@
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "runtimeVersion": "1.0.0",
-    "updates": {
-      "url": "https://u.expo.dev/2eb40af4-b32e-462e-b070-a1b171e65485"
-    },
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
@@ -80,6 +77,7 @@
       "expo-router",
       "@react-native-firebase/app",
       "@react-native-firebase/messaging",
+      "./plugins/withWebRTC",
       "./plugins/withCallKeep",
       "./plugins/withMainActivityFlags",
       [
