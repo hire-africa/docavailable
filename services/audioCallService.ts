@@ -700,1331 +700,1335 @@ class AudioCallService {
             resolve();
           },
           onMessage: async (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            console.log('📨 Signaling message received:', message.type);
+            try {
+              const message = JSON.parse(event.data);
+              console.log('📨 Signaling message received:', message.type);
 
-            switch(message.type) {
+              switch (message.type) {
                 case 'offer':
-          console.log('📞 [AudioCallService] Received offer:', {
-            isIncomingMode: this.isIncomingMode,
-            hasAccepted: this.hasAccepted,
-            isIncoming: this.isIncoming,
-            messageSenderId: message.senderId,
-            currentUserId: this.userId
-          });
+                  console.log('📞 [AudioCallService] Received offer:', {
+                    isIncomingMode: this.isIncomingMode,
+                    hasAccepted: this.hasAccepted,
+                    isIncoming: this.isIncoming,
+                    messageSenderId: message.senderId,
+                    currentUserId: this.userId
+                  });
 
-          // Always store offers for incoming calls, regardless of mode
-          if (this.isIncoming || this.isIncomingMode) {
-            (global as any).pendingOffer = message.offer;
-            this.pendingOffer = message.offer; // Also store in instance to prevent loss during reset
+                  // Always store offers for incoming calls, regardless of mode
+                  if (this.isIncoming || this.isIncomingMode) {
+                    (global as any).pendingOffer = message.offer;
+                    this.pendingOffer = message.offer; // Also store in instance to prevent loss during reset
 
-            // If user has already accepted, process the offer immediately
-            if (this.hasAccepted && this.isIncomingMode && this.appointmentId) {
-              console.log('📞 [AudioCallService] Received offer after user accepted - processing immediately');
-              // Ensure media and PC are ready
-              if (!this.localStream) {
-                this.localStream = await mediaDevices.getUserMedia({
-                  video: false,
-                  audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 44100,
-                    channelCount: 1,
-                  } as any
-                });
-                await this.configureAudioRouting();
-              }
-              if (!this.peerConnection) {
-                await this.initializePeerConnection();
-              }
-              // Process the offer immediately
-              await this.handleOffer(message.offer);
-              // Drain queued ICE candidates
-              if (this.peerConnection && this.pendingCandidates.length > 0) {
-                for (const c of this.pendingCandidates) {
-                  try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
-                }
-                this.pendingCandidates = [];
-              }
-              // Clear pending offer after processing
-              (global as any).pendingOffer = null;
-              this.pendingOffer = null;
-              return; // Don't continue with normal offer handling
-            } else {
-              console.log('📞 [AudioCallService] Stored pending offer for incoming call; awaiting user acceptance');
-            }
-          } else if (!this.hasAccepted) {
-            // For outgoing calls, handle offer immediately
-            await this.handleOffer(message.offer);
-          } else {
-            console.log('📞 [AudioCallService] Ignoring offer - call already accepted');
-          }
-          break;
+                    // If user has already accepted, process the offer immediately
+                    if (this.hasAccepted && this.isIncomingMode && this.appointmentId) {
+                      console.log('📞 [AudioCallService] Received offer after user accepted - processing immediately');
+                      // Ensure media and PC are ready
+                      if (!this.localStream) {
+                        this.localStream = await mediaDevices.getUserMedia({
+                          video: false,
+                          audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                            sampleRate: 44100,
+                            channelCount: 1,
+                          } as any
+                        });
+                        await this.configureAudioRouting();
+                      }
+                      if (!this.peerConnection) {
+                        await this.initializePeerConnection();
+                      }
+                      // Process the offer immediately
+                      await this.handleOffer(message.offer);
+                      // Drain queued ICE candidates
+                      if (this.peerConnection && this.pendingCandidates.length > 0) {
+                        for (const c of this.pendingCandidates) {
+                          try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+                        }
+                        this.pendingCandidates = [];
+                      }
+                      // Clear pending offer after processing
+                      (global as any).pendingOffer = null;
+                      this.pendingOffer = null;
+                      return; // Don't continue with normal offer handling
+                    } else {
+                      console.log('📞 [AudioCallService] Stored pending offer for incoming call; awaiting user acceptance');
+                    }
+                  } else if (!this.hasAccepted) {
+                    // For outgoing calls, handle offer immediately
+                    await this.handleOffer(message.offer);
+                  } else {
+                    console.log('📞 [AudioCallService] Ignoring offer - call already accepted');
+                  }
+                  break;
                 case 'answer':
-          await this.handleAnswer(message.answer);
-          break;
+                  await this.handleAnswer(message.answer);
+                  break;
                 case 'ice-candidate':
-          if (this.isIncomingMode && (!this.peerConnection || !this.peerConnection.remoteDescription)) {
-            this.pendingCandidates.push(message.candidate);
-            console.log('⏸️ [AudioCallService] Queued ICE candidate (awaiting remoteDescription)');
-          } else {
-            await this.handleIceCandidate(message.candidate);
-          }
-          break;
+                  if (this.isIncomingMode && (!this.peerConnection || !this.peerConnection.remoteDescription)) {
+                    this.pendingCandidates.push(message.candidate);
+                    console.log('⏸️ [AudioCallService] Queued ICE candidate (awaiting remoteDescription)');
+                  } else {
+                    await this.handleIceCandidate(message.candidate);
+                  }
+                  break;
                 case 'call-ended':
-          console.log('📞 [AudioCallService] Received call-ended message:', {
-            message,
-            currentState: this.state.connectionState,
-            isCallAnswered: this.isCallAnswered,
-            hasEnded: this.hasEnded
-          });
-          this.endCall();
-          break;
+                  console.log('📞 [AudioCallService] Received call-ended message:', {
+                    message,
+                    currentState: this.state.connectionState,
+                    isCallAnswered: this.isCallAnswered,
+                    hasEnded: this.hasEnded
+                  });
+                  this.endCall();
+                  break;
                 case 'call-answered':
-          this.handleCallAnswered();
-          break;
+                  this.handleCallAnswered();
+                  break;
                 case 'call-rejected':
-          this.handleCallRejected(message.reason);
-          break;
+                  this.handleCallRejected(message.reason);
+                  break;
                 case 'call-timeout':
-          this.handleCallTimeout();
-          break;
+                  this.handleCallTimeout();
+                  break;
                 case 'resend-offer-request':
-          if (this.peerConnection) {
-            if (!this.peerConnection.localDescription) {
-              try {
-                console.log('📨 [AudioCallService] Resend requested but no localDescription; creating fresh offer');
-                await this.createOffer();
-              } catch (e) {
-                console.warn('⚠️ [AudioCallService] Failed to create fresh offer on resend request:', e);
+                  if (this.peerConnection) {
+                    if (!this.peerConnection.localDescription) {
+                      try {
+                        console.log('📨 [AudioCallService] Resend requested but no localDescription; creating fresh offer');
+                        await this.createOffer();
+                      } catch (e) {
+                        console.warn('⚠️ [AudioCallService] Failed to create fresh offer on resend request:', e);
+                      }
+                    }
+                    if (this.peerConnection?.localDescription) {
+                      console.log('📨 [AudioCallService] Received resend-offer-request; resending offer');
+                      this.sendSignalingMessage({
+                        type: 'offer',
+                        offer: this.peerConnection.localDescription,
+                        senderId: this.userId,
+                        appointmentId: this.appointmentId,
+                        userId: this.userId,
+                      });
+                    } else {
+                      console.warn('⚠️ [AudioCallService] Cannot resend offer - still no localDescription available');
+                    }
+                  }
+                  break;
               }
+            } catch (error) {
+              console.error('❌ Error handling signaling message:', error);
             }
-            if (this.peerConnection?.localDescription) {
-              console.log('📨 [AudioCallService] Received resend-offer-request; resending offer');
-              this.sendSignalingMessage({
-                type: 'offer',
-                offer: this.peerConnection.localDescription,
-                senderId: this.userId,
-                appointmentId: this.appointmentId,
-                userId: this.userId,
-              });
-            } else {
-              console.warn('⚠️ [AudioCallService] Cannot resend offer - still no localDescription available');
+          },
+          onError: (error) => {
+            console.error('❌ Signaling WebSocket error:', error);
+          },
+          onClose: () => {
+            console.log('🔌 Signaling connection closed');
+            if (this.signalingFlushTimer) {
+              clearInterval(this.signalingFlushTimer);
+              this.signalingFlushTimer = null;
             }
-          }
-          break;
-        }
-      } catch (error) {
-        console.error('❌ Error handling signaling message:', error);
-      }
-    },
-      onError: (error) => {
-        console.error('❌ Signaling WebSocket error:', error);
-      },
-      onClose: () => {
-        console.log('🔌 Signaling connection closed');
-        if (this.signalingFlushTimer) {
-          clearInterval(this.signalingFlushTimer);
-          this.signalingFlushTimer = null;
-        }
-        this.updateState({ connectionState: 'disconnected' });
-      },
+            this.updateState({ connectionState: 'disconnected' });
+          },
         });
 
         // Actually establish the connection with automatic fallback
         try {
-  await this.signalingChannel.connect();
-} catch (error) {
-  const errorMessage = error?.message || '';
-  const errorCode = (error as any)?.code || '';
-  
-  // Check for SSL certificate specific errors
-  if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
-      errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-      errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-    console.error('🔒 [AudioCallService] SSL CERTIFICATE ERROR DETECTED!');
-    console.error('🔒 [AudioCallService] This indicates the SSL certificate may be:');
-    console.error('   - Expired');
-    console.error('   - Self-signed (not trusted)');
-    console.error('   - Missing intermediate certificates');
-    console.error('   - Invalid for the domain');
-    console.error('🔒 [AudioCallService] To verify, run: node test-ssl-certificate.js');
-  }
-  
-  if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
-    console.warn('⚠️ [AudioCallService] Signaling SSL/Connection error, attempting fallback...', errorMessage);
+          await this.signalingChannel.connect();
+        } catch (error) {
+          const errorMessage = error?.message || '';
+          const errorCode = (error as any)?.code || '';
 
-    // Try fallback URL from environment
-    const fallbackSignalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL;
-    const wsFallbackUrl = `${fallbackSignalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
+          // Check for SSL certificate specific errors
+          if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
+            errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+            errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+            console.error('🔒 [AudioCallService] SSL CERTIFICATE ERROR DETECTED!');
+            console.error('🔒 [AudioCallService] This indicates the SSL certificate may be:');
+            console.error('   - Expired');
+            console.error('   - Self-signed (not trusted)');
+            console.error('   - Missing intermediate certificates');
+            console.error('   - Invalid for the domain');
+            console.error('🔒 [AudioCallService] To verify, run: node test-ssl-certificate.js');
+          }
 
-    console.log('🔌 [AudioCallService] Retrying with fallback URL:', wsFallbackUrl);
+          if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
+            console.warn('⚠️ [AudioCallService] Signaling SSL/Connection error, attempting fallback...', errorMessage);
 
-    // Re-instantiate with fallback URL (using private access for simplicity here, or we copy options)
-    const options = (this.signalingChannel as any).options;
-    this.signalingChannel = new SecureWebSocketService({
-      ...options,
-      url: wsFallbackUrl,
-      ignoreSSLErrors: true,
-    });
+            // Try fallback URL from environment
+            const fallbackSignalingUrl =
+              environment.WEBRTC_FALLBACK_SIGNALING_URL ||
+              environment.WEBRTC_SIGNALING_URL ||
+              'wss://docavailable.org/call-signaling';
 
-    await this.signalingChannel.connect();
-    console.log('✅ [AudioCallService] Connected using fallback signaling URL');
-  } else {
-    throw error;
-  }
-}
+            const wsFallbackUrl = `${fallbackSignalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
+
+            console.log('🔌 [AudioCallService] Retrying with fallback URL:', wsFallbackUrl);
+
+            // Re-instantiate with fallback URL (using private access for simplicity here, or we copy options)
+            const options = (this.signalingChannel as any).options;
+            this.signalingChannel = new SecureWebSocketService({
+              ...options,
+              url: wsFallbackUrl,
+              ignoreSSLErrors: true,
+            });
+
+            await this.signalingChannel.connect();
+            console.log('✅ [AudioCallService] Connected using fallback signaling URL');
+          } else {
+            throw error;
+          }
+        }
 
       } catch (error) {
-  console.error('❌ Failed to create signaling connection:', error);
-  reject(error);
-}
+        console.error('❌ Failed to create signaling connection:', error);
+        reject(error);
+      }
     });
   }
 
   /**
    * Process offer when user accepts incoming call
    */
-  async processIncomingOffer(): Promise < void> {
-  // Check both global and instance - instance survives reset() calls
-  const globalPendingOffer = (global as any).pendingOffer;
-  const instancePendingOffer = this.pendingOffer;
-  const pendingOffer = instancePendingOffer || globalPendingOffer;
-  if(pendingOffer) {
-    console.log('📞 Processing pending offer for incoming call');
-    console.log('📞 Pending offer details:', {
-      type: pendingOffer.type,
-      sdpLength: pendingOffer.sdp?.length,
-      hasSdp: !!pendingOffer.sdp
-    });
+  async processIncomingOffer(): Promise<void> {
+    // Check both global and instance - instance survives reset() calls
+    const globalPendingOffer = (global as any).pendingOffer;
+    const instancePendingOffer = this.pendingOffer;
+    const pendingOffer = instancePendingOffer || globalPendingOffer;
+    if (pendingOffer) {
+      console.log('📞 Processing pending offer for incoming call');
+      console.log('📞 Pending offer details:', {
+        type: pendingOffer.type,
+        sdpLength: pendingOffer.sdp?.length,
+        hasSdp: !!pendingOffer.sdp
+      });
 
-    // Wait for WebSocket connection to be established
-    let retryCount = 0;
-    const maxRetries = 50; // 5 seconds max wait
-    const retryInterval = 100; // 100ms
+      // Wait for WebSocket connection to be established
+      let retryCount = 0;
+      const maxRetries = 50; // 5 seconds max wait
+      const retryInterval = 100; // 100ms
 
-    while (!this.isConnectedToSignaling() && retryCount < maxRetries) {
-      console.log(`⏳ Waiting for WebSocket connection... (${retryCount + 1}/${maxRetries})`);
-      await new Promise(resolve => setTimeout(resolve, retryInterval));
-      retryCount++;
-    }
+      while (!this.isConnectedToSignaling() && retryCount < maxRetries) {
+        console.log(`⏳ Waiting for WebSocket connection... (${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
+        retryCount++;
+      }
 
-    if (!this.isConnectedToSignaling()) {
-      console.log('⚠️ WebSocket connection not established after waiting, but proceeding anyway');
+      if (!this.isConnectedToSignaling()) {
+        console.log('⚠️ WebSocket connection not established after waiting, but proceeding anyway');
+      } else {
+        console.log('✅ WebSocket connection established, proceeding with offer processing');
+      }
+
+      // Ensure peer connection is ready
+      if (!this.peerConnection) {
+        console.log('📞 Peer connection not ready, initializing...');
+        await this.initializePeerConnection();
+      }
+
+      console.log('📞 About to handle offer - signaling state:', this.peerConnection?.signalingState);
+      await this.handleOffer(pendingOffer);
+      console.log('📞 Offer handled successfully');
+
+      // Clear the pending offer after successful processing (both global and instance)
+      (global as any).pendingOffer = null;
+      this.pendingOffer = null;
     } else {
-      console.log('✅ WebSocket connection established, proceeding with offer processing');
+      console.log('📞 No pending offer found');
     }
-
-    // Ensure peer connection is ready
-    if (!this.peerConnection) {
-      console.log('📞 Peer connection not ready, initializing...');
-      await this.initializePeerConnection();
-    }
-
-    console.log('📞 About to handle offer - signaling state:', this.peerConnection?.signalingState);
-    await this.handleOffer(pendingOffer);
-    console.log('📞 Offer handled successfully');
-
-    // Clear the pending offer after successful processing (both global and instance)
-    (global as any).pendingOffer = null;
-    this.pendingOffer = null;
-  } else {
-    console.log('📞 No pending offer found');
   }
-}
 
 
   /**
    * Initialize peer connection
    */
-  private async initializePeerConnection(): Promise < void> {
-  // Create peer connection
-  this.peerConnection = new RTCPeerConnection({
-    iceServers: this.getIceServers(),
-  });
-
-  // Add local audio track to peer connection
-  if(this.localStream) {
-  this.localStream.getAudioTracks().forEach(track => {
-    this.peerConnection?.addTrack(track, this.localStream!);
-  });
-}
-
-// Handle remote stream
-this.peerConnection.addEventListener('track', (event) => {
-  console.log('🎵 Remote audio stream received');
-  this.remoteStream = event.streams[0];
-  this.events?.onRemoteStream(event.streams[0]);
-  // Fallback: mark connected on receiving remote track (RN WebRTC may delay connectionstatechange)
-  this.markConnectedOnce();
-});
-
-// Handle ICE candidates
-this.peerConnection.addEventListener('icecandidate', (event) => {
-  if (event.candidate) {
-    this.sendSignalingMessage({
-      type: 'ice-candidate',
-      candidate: event.candidate,
-      senderId: this.userId,
+  private async initializePeerConnection(): Promise<void> {
+    // Create peer connection
+    this.peerConnection = new RTCPeerConnection({
+      iceServers: this.getIceServers(),
     });
-  }
-});
 
-// Handle connection state changes (incoming path)
-this.peerConnection.addEventListener('connectionstatechange', () => {
-  const state = this.peerConnection?.connectionState;
-  console.log('🔗 Connection state changed:', state);
-  console.log('🔗 Current call state:', {
-    connectionState: this.state.connectionState,
-    isCallAnswered: this.isCallAnswered,
-    hasEnded: this.hasEnded
-  });
+    // Add local audio track to peer connection
+    if (this.localStream) {
+      this.localStream.getAudioTracks().forEach(track => {
+        this.peerConnection?.addTrack(track, this.localStream!);
+      });
+    }
 
-  if (state === 'connected') {
-    console.log('🔗 WebRTC connected - updating call state');
-    // Clear any pending disconnect grace timer
-    if (this.disconnectGraceTimer) {
-      clearTimeout(this.disconnectGraceTimer);
-      this.disconnectGraceTimer = null;
-    }
-    // Clear reconnection state if reconnecting
-    if (this.isReconnecting) {
-      console.log('🔄 Reconnection successful');
-      this.isReconnecting = false;
-      if (this.reconnectionTimer) {
-        clearTimeout(this.reconnectionTimer);
-        this.reconnectionTimer = null;
+    // Handle remote stream
+    this.peerConnection.addEventListener('track', (event) => {
+      console.log('🎵 Remote audio stream received');
+      this.remoteStream = event.streams[0];
+      this.events?.onRemoteStream(event.streams[0]);
+      // Fallback: mark connected on receiving remote track (RN WebRTC may delay connectionstatechange)
+      this.markConnectedOnce();
+    });
+
+    // Handle ICE candidates
+    this.peerConnection.addEventListener('icecandidate', (event) => {
+      if (event.candidate) {
+        this.sendSignalingMessage({
+          type: 'ice-candidate',
+          candidate: event.candidate,
+          senderId: this.userId,
+        });
       }
-      this.reconnectionAttempts = 0;
-    }
-    this.markConnectedOnce();
-  } else if (state === 'disconnected' || state === 'failed') {
-    // CRITICAL: Ignore disconnected/failed during initialization OR while waiting for answer
-    if (this.isInitializing || (!this.isIncoming && !this.isCallAnswered)) {
-      console.log(`⚠️ [AudioCallService ${this.instanceId}] WebRTC reported ${state} while waiting for answer - ignoring (expected)`);
-      return;
-    }
-    // If call is already answered/connected, trigger reconnection
-    if (this.isCallAnswered && !this.hasEnded && !this.isReconnecting) {
-      console.log('🔄 WebRTC disconnected/failed during active call - starting reconnection');
-      this.attemptReconnection();
-    } else if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
-      // Only start grace timer if call is not being answered and not already ended
-      console.log('🔗 WebRTC disconnected/failed - starting grace timer');
-      if (this.disconnectGraceTimer) {
-        clearTimeout(this.disconnectGraceTimer);
-        this.disconnectGraceTimer = null;
-      }
-      this.disconnectGraceTimer = setTimeout(() => {
-        const cs = this.peerConnection?.connectionState;
-        // Only end call if still disconnected/failed AND not answered AND not already ended AND not accepted
-        if ((cs === 'disconnected' || cs === 'failed') && !this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
-          console.log('🔗 Grace timer expired - ending call due to persistent disconnection');
-          this.updateState({
-            isConnected: false,
-            connectionState: 'disconnected'
-          });
-          this.stopCallTimer();
-          this.endCall();
+    });
+
+    // Handle connection state changes (incoming path)
+    this.peerConnection.addEventListener('connectionstatechange', () => {
+      const state = this.peerConnection?.connectionState;
+      console.log('🔗 Connection state changed:', state);
+      console.log('🔗 Current call state:', {
+        connectionState: this.state.connectionState,
+        isCallAnswered: this.isCallAnswered,
+        hasEnded: this.hasEnded
+      });
+
+      if (state === 'connected') {
+        console.log('🔗 WebRTC connected - updating call state');
+        // Clear any pending disconnect grace timer
+        if (this.disconnectGraceTimer) {
+          clearTimeout(this.disconnectGraceTimer);
+          this.disconnectGraceTimer = null;
         }
-      }, 5000); // Increased grace period to 5 seconds
-    } else {
-      console.log('🔗 WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
-    }
-  }
-});
+        // Clear reconnection state if reconnecting
+        if (this.isReconnecting) {
+          console.log('🔄 Reconnection successful');
+          this.isReconnecting = false;
+          if (this.reconnectionTimer) {
+            clearTimeout(this.reconnectionTimer);
+            this.reconnectionTimer = null;
+          }
+          this.reconnectionAttempts = 0;
+        }
+        this.markConnectedOnce();
+      } else if (state === 'disconnected' || state === 'failed') {
+        // CRITICAL: Ignore disconnected/failed during initialization OR while waiting for answer
+        if (this.isInitializing || (!this.isIncoming && !this.isCallAnswered)) {
+          console.log(`⚠️ [AudioCallService ${this.instanceId}] WebRTC reported ${state} while waiting for answer - ignoring (expected)`);
+          return;
+        }
+        // If call is already answered/connected, trigger reconnection
+        if (this.isCallAnswered && !this.hasEnded && !this.isReconnecting) {
+          console.log('🔄 WebRTC disconnected/failed during active call - starting reconnection');
+          this.attemptReconnection();
+        } else if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
+          // Only start grace timer if call is not being answered and not already ended
+          console.log('🔗 WebRTC disconnected/failed - starting grace timer');
+          if (this.disconnectGraceTimer) {
+            clearTimeout(this.disconnectGraceTimer);
+            this.disconnectGraceTimer = null;
+          }
+          this.disconnectGraceTimer = setTimeout(() => {
+            const cs = this.peerConnection?.connectionState;
+            // Only end call if still disconnected/failed AND not answered AND not already ended AND not accepted
+            if ((cs === 'disconnected' || cs === 'failed') && !this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
+              console.log('🔗 Grace timer expired - ending call due to persistent disconnection');
+              this.updateState({
+                isConnected: false,
+                connectionState: 'disconnected'
+              });
+              this.stopCallTimer();
+              this.endCall();
+            }
+          }, 5000); // Increased grace period to 5 seconds
+        } else {
+          console.log('🔗 WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
+        }
+      }
+    });
   }
 
   /**
    * Attempt to reconnect after disconnection during active call
    * Frontend-only transport recovery (WhatsApp-style)
    */
-  private async attemptReconnection(): Promise < void> {
-  if(this.isReconnecting || !this.appointmentId || !this.userId || this.hasEnded) {
-  console.log('🔄 Reconnection already in progress or call ended - skipping');
-  return;
-}
+  private async attemptReconnection(): Promise<void> {
+    if (this.isReconnecting || !this.appointmentId || !this.userId || this.hasEnded) {
+      console.log('🔄 Reconnection already in progress or call ended - skipping');
+      return;
+    }
 
-console.log('🔄 Starting reconnection attempt...');
-this.isReconnecting = true;
-this.reconnectionAttempts++;
+    console.log('🔄 Starting reconnection attempt...');
+    this.isReconnecting = true;
+    this.reconnectionAttempts++;
 
-// Update UI to show reconnecting state
-this.updateState({ connectionState: 'reconnecting' });
+    // Update UI to show reconnecting state
+    this.updateState({ connectionState: 'reconnecting' });
 
-// Set 30s timeout - if reconnection fails, end call normally
-if (this.reconnectionTimer) {
-  clearTimeout(this.reconnectionTimer);
-}
-this.reconnectionTimer = setTimeout(() => {
-  if (this.isReconnecting) {
-    console.log('🔄 Reconnection timeout (30s) - ending call');
-    this.isReconnecting = false;
-    this.endCall();
-  }
-}, 30000);
+    // Set 30s timeout - if reconnection fails, end call normally
+    if (this.reconnectionTimer) {
+      clearTimeout(this.reconnectionTimer);
+    }
+    this.reconnectionTimer = setTimeout(() => {
+      if (this.isReconnecting) {
+        console.log('🔄 Reconnection timeout (30s) - ending call');
+        this.isReconnecting = false;
+        this.endCall();
+      }
+    }, 30000);
 
-try {
-  // Close old peer connection
-  if (this.peerConnection) {
-    console.log('🔄 Closing old peer connection...');
-    this.peerConnection.close();
-    this.peerConnection = null;
-  }
+    try {
+      // Close old peer connection
+      if (this.peerConnection) {
+        console.log('🔄 Closing old peer connection...');
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
 
-  // Recreate peer connection
-  console.log('🔄 Recreating peer connection...');
-  await this.initializePeerConnection();
+      // Recreate peer connection
+      console.log('🔄 Recreating peer connection...');
+      await this.initializePeerConnection();
 
-  // Ensure signaling connection is still active
-  if (!this.isConnectedToSignaling()) {
-    console.log('🔄 Signaling connection lost - reconnecting...');
-    if (this.appointmentId && this.userId) {
-      await this.connectSignaling(this.appointmentId, this.userId);
+      // Ensure signaling connection is still active
+      if (!this.isConnectedToSignaling()) {
+        console.log('🔄 Signaling connection lost - reconnecting...');
+        if (this.appointmentId && this.userId) {
+          await this.connectSignaling(this.appointmentId, this.userId);
+        }
+      }
+
+      // Ensure we have local stream
+      if (!this.localStream) {
+        console.log('🔄 Recreating local audio stream...');
+        this.localStream = await mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+
+        // Add local audio track to peer connection
+        this.localStream.getAudioTracks().forEach(track => {
+          this.peerConnection?.addTrack(track, this.localStream!);
+        });
+      }
+
+      // Renegotiate based on call direction
+      if (this.isIncoming) {
+        // For incoming calls, wait for new offer from caller
+        console.log('🔄 Waiting for new offer from caller...');
+        // The signaling server will handle re-offer
+      } else {
+        // For outgoing calls, create new offer
+        console.log('🔄 Creating new offer for reconnection...');
+        this.offerCreated = false; // Reset flag to allow new offer
+        this.creatingOffer = false; // Reset flag
+        await this.createOffer();
+      }
+
+      console.log('🔄 Reconnection attempt initiated');
+    } catch (error) {
+      console.error('🔄 Reconnection error:', error);
+      // If reconnection fails, end call after timeout
+      // The timeout will handle ending the call
     }
   }
 
-  // Ensure we have local stream
-  if (!this.localStream) {
-    console.log('🔄 Recreating local audio stream...');
-    this.localStream = await mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
-
-    // Add local audio track to peer connection
-    this.localStream.getAudioTracks().forEach(track => {
-      this.peerConnection?.addTrack(track, this.localStream!);
-    });
+  /**
+   * Set event listeners without initializing the call
+   * Used for incoming calls where the service is already initialized
+   */
+  setEvents(events: AudioCallEvents): void {
+    console.log('📞 Setting event listeners for incoming call');
+    this.events = events;
   }
 
-  // Renegotiate based on call direction
-  if (this.isIncoming) {
-    // For incoming calls, wait for new offer from caller
-    console.log('🔄 Waiting for new offer from caller...');
-    // The signaling server will handle re-offer
-  } else {
-    // For outgoing calls, create new offer
-    console.log('🔄 Creating new offer for reconnection...');
-    this.offerCreated = false; // Reset flag to allow new offer
-    this.creatingOffer = false; // Reset flag
-    await this.createOffer();
+  /**
+   * Check if already connected to signaling server
+   */
+  isConnectedToSignaling(): boolean {
+    return this.signalingChannel?.readyState === WebSocket.OPEN &&
+      this.appointmentId !== null &&
+      this.userId !== null;
   }
-
-  console.log('🔄 Reconnection attempt initiated');
-} catch (error) {
-  console.error('🔄 Reconnection error:', error);
-  // If reconnection fails, end call after timeout
-  // The timeout will handle ending the call
-}
-  }
-
-/**
- * Set event listeners without initializing the call
- * Used for incoming calls where the service is already initialized
- */
-setEvents(events: AudioCallEvents): void {
-  console.log('📞 Setting event listeners for incoming call');
-  this.events = events;
-}
-
-/**
- * Check if already connected to signaling server
- */
-isConnectedToSignaling(): boolean {
-  return this.signalingChannel?.readyState === WebSocket.OPEN &&
-    this.appointmentId !== null &&
-    this.userId !== null;
-}
 
   /**
    * Configure audio routing for phone calls
    */
-  private async configureAudioRouting(): Promise < void> {
-  try {
-    console.log('📞 Configuring audio routing for earpiece (default)...');
+  private async configureAudioRouting(): Promise<void> {
+    try {
+      console.log('📞 Configuring audio routing for earpiece (default)...');
 
-    // Set audio mode for phone calls (earpiece by default like normal phone calls)
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: true, // Start with earpiece mode
-      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-    });
+      // Set audio mode for phone calls (earpiece by default like normal phone calls)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: true, // Start with earpiece mode
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
 
-    console.log('✅ Audio routing configured for earpiece (default)');
-  } catch(error) {
-    console.warn('⚠️ Could not configure audio routing:', error);
+      console.log('✅ Audio routing configured for earpiece (default)');
+    } catch (error) {
+      console.warn('⚠️ Could not configure audio routing:', error);
+    }
   }
-}
 
   /**
    * Reset audio routing to default
    */
-  private async resetAudioRouting(): Promise < void> {
-  try {
-    console.log('📞 Resetting audio routing to default...');
+  private async resetAudioRouting(): Promise<void> {
+    try {
+      console.log('📞 Resetting audio routing to default...');
 
-    // Reset audio mode to default
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: false,
-      playsInSilentModeIOS: false,
-      shouldDuckAndroid: false,
-      playThroughEarpieceAndroid: false,
-      interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-    });
+      // Reset audio mode to default
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: false,
+        playsInSilentModeIOS: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+        interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
 
-    console.log('✅ Audio routing reset to default');
-  } catch(error) {
-    console.warn('⚠️ Could not reset audio routing:', error);
+      console.log('✅ Audio routing reset to default');
+    } catch (error) {
+      console.warn('⚠️ Could not reset audio routing:', error);
+    }
   }
-}
 
   /**
    * Handle incoming offer
    */
-  private async handleOffer(offer: RTCSessionDescription): Promise < void> {
-  if(!this.peerConnection) {
-  console.error('❌ No peer connection available for offer handling');
-  return;
-}
-
-// Prevent duplicate offer handling, BUT allow re-offers if remote description isn't set yet
-// This handles the case where the original offer was lost and a re-offer arrives after hasAccepted=true
-if (this.hasAccepted && this.peerConnection?.remoteDescription) {
-  console.warn('⚠️ [handleOffer] Call already accepted and remote description set - ignoring duplicate offer');
-  return;
-}
-
-// If hasAccepted is true but no remote description, this is a re-offer that needs processing
-if (this.hasAccepted && !this.peerConnection?.remoteDescription) {
-  console.log('📞 [handleOffer] Processing re-offer after hasAccepted=true (original offer was lost)');
-}
-
-try {
-  // Check if we're in the right state to set remote description
-  const currentState = this.peerConnection.signalingState;
-  console.log('📞 [handleOffer] Current signaling state:', currentState);
-  console.log('📞 [handleOffer] Offer details:', {
-    type: offer.type,
-    sdpLength: offer.sdp?.length,
-    hasSdp: !!offer.sdp
-  });
-  console.log('📞 [handleOffer] Peer connection state:', {
-    connectionState: this.peerConnection.connectionState,
-    iceConnectionState: this.peerConnection.iceConnectionState
-  });
-
-  // Handle offer if we're in 'stable' state (incoming call)
-  if (currentState === 'stable') {
-    console.log('📞 Setting remote description (offer)...');
-    await this.peerConnection.setRemoteDescription(offer);
-    console.log('📞 Creating answer...');
-    const answer = await this.peerConnection.createAnswer();
-    console.log('📞 Answer created:', {
-      type: answer.type,
-      sdpLength: answer.sdp?.length,
-      hasSdp: !!answer.sdp
-    });
-    console.log('📞 Setting local description (answer)...');
-    const mungedAnswer = {
-      type: answer.type,
-      sdp: this.mungeSdpForAudio(answer.sdp || '')
-    } as RTCSessionDescriptionInit;
-    await this.peerConnection.setLocalDescription(mungedAnswer);
-
-    console.log('📞 Sending answer message...');
-    this.sendSignalingMessage({
-      type: 'answer',
-      answer: mungedAnswer,
-      senderId: this.userId,
-      appointmentId: this.appointmentId,
-      userId: this.userId,
-    });
-    // Notify caller that call has been answered
-    this.isCallAnswered = true;
-    this.sendSignalingMessage({
-      type: 'call-answered',
-      callType: 'voice',
-      userId: this.userId,
-      appointmentId: this.appointmentId
-    });
-    // Mark callee UI connected once we answered
-    if (!this.state.isConnected) {
-      this.updateState({ isConnected: true, connectionState: 'connected' });
-      this.startCallTimer();
+  private async handleOffer(offer: RTCSessionDescription): Promise<void> {
+    if (!this.peerConnection) {
+      console.error('❌ No peer connection available for offer handling');
+      return;
     }
-    // Fallback in case UI event ordering delays connection
-    this.ensureConnectedSoon();
 
-    console.log('✅ Offer handled and answer sent successfully');
-    // For receiver side: Update connection state after sending answer
-    // This ensures UI transitions properly even if WebRTC connection event is delayed
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    this.startCallTimer(); // Start the call duration timer
-    this.events?.onCallAnswered();
-  } else {
-    console.warn('⚠️ Cannot handle offer in current state:', currentState);
-    // Reset peer connection to stable state
-    console.log('📞 Resetting peer connection to stable state');
-    this.peerConnection.close();
-    await this.initializePeerConnection();
+    // Prevent duplicate offer handling, BUT allow re-offers if remote description isn't set yet
+    // This handles the case where the original offer was lost and a re-offer arrives after hasAccepted=true
+    if (this.hasAccepted && this.peerConnection?.remoteDescription) {
+      console.warn('⚠️ [handleOffer] Call already accepted and remote description set - ignoring duplicate offer');
+      return;
+    }
 
-    // Try again
-    console.log('📞 Retrying offer handling...');
-    await this.peerConnection.setRemoteDescription(offer);
-    const answer = await this.peerConnection.createAnswer();
-    const mungedAnswer = {
-      type: answer.type,
-      sdp: this.mungeSdpForAudio(answer.sdp || '')
-    } as RTCSessionDescriptionInit;
-    await this.peerConnection.setLocalDescription(mungedAnswer);
+    // If hasAccepted is true but no remote description, this is a re-offer that needs processing
+    if (this.hasAccepted && !this.peerConnection?.remoteDescription) {
+      console.log('📞 [handleOffer] Processing re-offer after hasAccepted=true (original offer was lost)');
+    }
 
-    this.sendSignalingMessage({
-      type: 'answer',
-      answer: mungedAnswer,
-      senderId: this.userId,
-    });
-    console.log('✅ Offer handled and answer sent successfully after reset');
+    try {
+      // Check if we're in the right state to set remote description
+      const currentState = this.peerConnection.signalingState;
+      console.log('📞 [handleOffer] Current signaling state:', currentState);
+      console.log('📞 [handleOffer] Offer details:', {
+        type: offer.type,
+        sdpLength: offer.sdp?.length,
+        hasSdp: !!offer.sdp
+      });
+      console.log('📞 [handleOffer] Peer connection state:', {
+        connectionState: this.peerConnection.connectionState,
+        iceConnectionState: this.peerConnection.iceConnectionState
+      });
 
-    // For receiver side: Update connection state after sending answer (retry path)
-    this.isCallAnswered = true;
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    this.startCallTimer(); // Start the call duration timer
-    this.events?.onCallAnswered();
-  }
-} catch (error) {
-  console.error('❌ Error handling offer:', error);
-  this.events?.onError('Failed to handle incoming call');
-}
+      // Handle offer if we're in 'stable' state (incoming call)
+      if (currentState === 'stable') {
+        console.log('📞 Setting remote description (offer)...');
+        await this.peerConnection.setRemoteDescription(offer);
+        console.log('📞 Creating answer...');
+        const answer = await this.peerConnection.createAnswer();
+        console.log('📞 Answer created:', {
+          type: answer.type,
+          sdpLength: answer.sdp?.length,
+          hasSdp: !!answer.sdp
+        });
+        console.log('📞 Setting local description (answer)...');
+        const mungedAnswer = {
+          type: answer.type,
+          sdp: this.mungeSdpForAudio(answer.sdp || '')
+        } as RTCSessionDescriptionInit;
+        await this.peerConnection.setLocalDescription(mungedAnswer);
+
+        console.log('📞 Sending answer message...');
+        this.sendSignalingMessage({
+          type: 'answer',
+          answer: mungedAnswer,
+          senderId: this.userId,
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
+        // Notify caller that call has been answered
+        this.isCallAnswered = true;
+        this.sendSignalingMessage({
+          type: 'call-answered',
+          callType: 'voice',
+          userId: this.userId,
+          appointmentId: this.appointmentId
+        });
+        // Mark callee UI connected once we answered
+        if (!this.state.isConnected) {
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+          this.startCallTimer();
+        }
+        // Fallback in case UI event ordering delays connection
+        this.ensureConnectedSoon();
+
+        console.log('✅ Offer handled and answer sent successfully');
+        // For receiver side: Update connection state after sending answer
+        // This ensures UI transitions properly even if WebRTC connection event is delayed
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.startCallTimer(); // Start the call duration timer
+        this.events?.onCallAnswered();
+      } else {
+        console.warn('⚠️ Cannot handle offer in current state:', currentState);
+        // Reset peer connection to stable state
+        console.log('📞 Resetting peer connection to stable state');
+        this.peerConnection.close();
+        await this.initializePeerConnection();
+
+        // Try again
+        console.log('📞 Retrying offer handling...');
+        await this.peerConnection.setRemoteDescription(offer);
+        const answer = await this.peerConnection.createAnswer();
+        const mungedAnswer = {
+          type: answer.type,
+          sdp: this.mungeSdpForAudio(answer.sdp || '')
+        } as RTCSessionDescriptionInit;
+        await this.peerConnection.setLocalDescription(mungedAnswer);
+
+        this.sendSignalingMessage({
+          type: 'answer',
+          answer: mungedAnswer,
+          senderId: this.userId,
+        });
+        console.log('✅ Offer handled and answer sent successfully after reset');
+
+        // For receiver side: Update connection state after sending answer (retry path)
+        this.isCallAnswered = true;
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.startCallTimer(); // Start the call duration timer
+        this.events?.onCallAnswered();
+      }
+    } catch (error) {
+      console.error('❌ Error handling offer:', error);
+      this.events?.onError('Failed to handle incoming call');
+    }
   }
 
   /**
    * Handle incoming answer
    */
-  private async handleAnswer(answer: RTCSessionDescription): Promise < void> {
-  if(!this.peerConnection) return;
+  private async handleAnswer(answer: RTCSessionDescription): Promise<void> {
+    if (!this.peerConnection) return;
 
-  try {
-    console.log(`📞 [AudioCallService ${this.instanceId}] Handling answer...`);
-    console.log(`📞 [AudioCallService ${this.instanceId}] Current signaling state:`, this.peerConnection.signalingState);
+    try {
+      console.log(`📞 [AudioCallService ${this.instanceId}] Handling answer...`);
+      console.log(`📞 [AudioCallService ${this.instanceId}] Current signaling state:`, this.peerConnection.signalingState);
 
-    // Check if we're in the right state to set remote description
-    if(this.peerConnection.signalingState === 'have-local-offer') {
-  console.log('📞 Setting remote description (answer)...');
-  await this.peerConnection.setRemoteDescription(answer);
-  console.log('✅ Answer set successfully');
+      // Check if we're in the right state to set remote description
+      if (this.peerConnection.signalingState === 'have-local-offer') {
+        console.log('📞 Setting remote description (answer)...');
+        await this.peerConnection.setRemoteDescription(answer);
+        console.log('✅ Answer set successfully');
 
-  // Drain any queued ICE candidates now that remoteDescription is set
-  if (this.pendingCandidates.length > 0 && this.peerConnection) {
-    for (const c of this.pendingCandidates) {
-      try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
-    }
-    this.pendingCandidates = [];
-  }
+        // Drain any queued ICE candidates now that remoteDescription is set
+        if (this.pendingCandidates.length > 0 && this.peerConnection) {
+          for (const c of this.pendingCandidates) {
+            try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+          }
+          this.pendingCandidates = [];
+        }
 
-  // Mark call as answered
-  this.isCallAnswered = true;
-  this.clearCallTimeout();
-  this.updateState({ connectionState: 'connected', isConnected: true });
-  if (!this.didEmitAnswered) {
-    this.didEmitAnswered = true;
-    this.events?.onCallAnswered();
-  }
-  this.clearReofferLoop();
-  this.markConnectedOnce();
-
-  // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
-  setTimeout(() => {
-    if (this.peerConnection?.connectionState === 'connected' &&
-      this.state.connectionState !== 'connected') {
-      console.log('🔄 Fallback: Forcing connected state after timeout');
-      this.updateState({ connectionState: 'connected', isConnected: true });
-      this.startCallTimer();
-    }
-  }, 3000);
-} else if (this.peerConnection.signalingState === 'stable') {
-  console.log('📞 Already in stable state - connection established, marking as answered');
-  // Drain queued ICE if any
-  if (this.pendingCandidates.length > 0 && this.peerConnection) {
-    for (const c of this.pendingCandidates) {
-      try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
-    }
-    this.pendingCandidates = [];
-  }
-  this.isCallAnswered = true;
-  this.clearCallTimeout();
-  this.updateState({ connectionState: 'connected', isConnected: true });
-  this.events?.onCallAnswered();
-  this.markConnectedOnce();
-
-  // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
-  setTimeout(() => {
-    if (this.peerConnection?.connectionState === 'connected' &&
-      this.state.connectionState !== 'connected') {
-      console.log('🔄 Fallback: Forcing connected state after timeout');
-      this.updateState({ connectionState: 'connected', isConnected: true });
-      this.startCallTimer();
-    }
-  }, 3000);
-} else {
-  console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
-  // Try to set remote description anyway for other states
-  try {
-    console.log('📞 Attempting to set remote description despite state...');
-    await this.peerConnection.setRemoteDescription(answer);
-    console.log('✅ Answer set successfully despite state');
-    // Drain queued ICE if any
-    if (this.pendingCandidates.length > 0 && this.peerConnection) {
-      for (const c of this.pendingCandidates) {
-        try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
-      }
-      this.pendingCandidates = [];
-    }
-    this.isCallAnswered = true;
-    this.clearCallTimeout();
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    if (!this.didEmitAnswered) {
-      this.didEmitAnswered = true;
-      this.events?.onCallAnswered();
-    }
-    this.markConnectedOnce();
-
-    // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
-    setTimeout(() => {
-      if (this.peerConnection?.connectionState === 'connected' &&
-        this.state.connectionState !== 'connected') {
-        console.log('🔄 Fallback: Forcing connected state after timeout');
+        // Mark call as answered
+        this.isCallAnswered = true;
+        this.clearCallTimeout();
         this.updateState({ connectionState: 'connected', isConnected: true });
-        this.startCallTimer();
-      }
-    }, 3000);
-  } catch (stateError) {
-    console.log('⚠️ Failed to set remote description due to state, but marking as answered');
-    this.isCallAnswered = true;
-    this.clearCallTimeout();
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    this.events?.onCallAnswered();
-  }
-}
-    } catch (error) {
-  console.error('❌ Error handling answer:', error);
-  console.log('📞 Current signaling state during error:', this.peerConnection.signalingState);
+        if (!this.didEmitAnswered) {
+          this.didEmitAnswered = true;
+          this.events?.onCallAnswered();
+        }
+        this.clearReofferLoop();
+        this.markConnectedOnce();
 
-  // If it's a state error but we're already connected, just mark as answered
-  if (error.message.includes('wrong state') && this.peerConnection.signalingState === 'stable') {
-    console.log('📞 State error but already connected, marking as answered');
-    this.isCallAnswered = true;
-    this.clearCallTimeout();
-    this.updateState({ connectionState: 'connected', isConnected: true });
-    this.events?.onCallAnswered();
-  } else {
-    this.events?.onError('Failed to establish call connection');
-  }
-}
+        // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+        setTimeout(() => {
+          if (this.peerConnection?.connectionState === 'connected' &&
+            this.state.connectionState !== 'connected') {
+            console.log('🔄 Fallback: Forcing connected state after timeout');
+            this.updateState({ connectionState: 'connected', isConnected: true });
+            this.startCallTimer();
+          }
+        }, 3000);
+      } else if (this.peerConnection.signalingState === 'stable') {
+        console.log('📞 Already in stable state - connection established, marking as answered');
+        // Drain queued ICE if any
+        if (this.pendingCandidates.length > 0 && this.peerConnection) {
+          for (const c of this.pendingCandidates) {
+            try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+          }
+          this.pendingCandidates = [];
+        }
+        this.isCallAnswered = true;
+        this.clearCallTimeout();
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.events?.onCallAnswered();
+        this.markConnectedOnce();
+
+        // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+        setTimeout(() => {
+          if (this.peerConnection?.connectionState === 'connected' &&
+            this.state.connectionState !== 'connected') {
+            console.log('🔄 Fallback: Forcing connected state after timeout');
+            this.updateState({ connectionState: 'connected', isConnected: true });
+            this.startCallTimer();
+          }
+        }, 3000);
+      } else {
+        console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
+        // Try to set remote description anyway for other states
+        try {
+          console.log('📞 Attempting to set remote description despite state...');
+          await this.peerConnection.setRemoteDescription(answer);
+          console.log('✅ Answer set successfully despite state');
+          // Drain queued ICE if any
+          if (this.pendingCandidates.length > 0 && this.peerConnection) {
+            for (const c of this.pendingCandidates) {
+              try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+            }
+            this.pendingCandidates = [];
+          }
+          this.isCallAnswered = true;
+          this.clearCallTimeout();
+          this.updateState({ connectionState: 'connected', isConnected: true });
+          if (!this.didEmitAnswered) {
+            this.didEmitAnswered = true;
+            this.events?.onCallAnswered();
+          }
+          this.markConnectedOnce();
+
+          // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+          setTimeout(() => {
+            if (this.peerConnection?.connectionState === 'connected' &&
+              this.state.connectionState !== 'connected') {
+              console.log('🔄 Fallback: Forcing connected state after timeout');
+              this.updateState({ connectionState: 'connected', isConnected: true });
+              this.startCallTimer();
+            }
+          }, 3000);
+        } catch (stateError) {
+          console.log('⚠️ Failed to set remote description due to state, but marking as answered');
+          this.isCallAnswered = true;
+          this.clearCallTimeout();
+          this.updateState({ connectionState: 'connected', isConnected: true });
+          this.events?.onCallAnswered();
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling answer:', error);
+      console.log('📞 Current signaling state during error:', this.peerConnection.signalingState);
+
+      // If it's a state error but we're already connected, just mark as answered
+      if (error.message.includes('wrong state') && this.peerConnection.signalingState === 'stable') {
+        console.log('📞 State error but already connected, marking as answered');
+        this.isCallAnswered = true;
+        this.clearCallTimeout();
+        this.updateState({ connectionState: 'connected', isConnected: true });
+        this.events?.onCallAnswered();
+      } else {
+        this.events?.onError('Failed to establish call connection');
+      }
+    }
   }
 
   /**
    * Handle ICE candidate
    */
-  private async handleIceCandidate(candidate: RTCIceCandidate): Promise < void> {
-  if(!this.peerConnection) return;
+  private async handleIceCandidate(candidate: RTCIceCandidate): Promise<void> {
+    if (!this.peerConnection) return;
 
-  try {
-    if(!this.peerConnection.remoteDescription) {
-  this.pendingCandidates.push(candidate as any);
-  console.log('⏸️ [AudioCallService] Queued ICE candidate (no remoteDescription)');
-  return;
-}
-await this.peerConnection.addIceCandidate(candidate);
+    try {
+      if (!this.peerConnection.remoteDescription) {
+        this.pendingCandidates.push(candidate as any);
+        console.log('⏸️ [AudioCallService] Queued ICE candidate (no remoteDescription)');
+        return;
+      }
+      await this.peerConnection.addIceCandidate(candidate);
     } catch (error) {
-  console.error('❌ Error handling ICE candidate:', error);
-}
+      console.error('❌ Error handling ICE candidate:', error);
+    }
   }
 
   /**
    * Send signaling message
    */
   private sendSignalingMessage(message: any): void {
-  if(this.signalingChannel?.readyState === WebSocket.OPEN) {
-  console.log('📤 [AudioCallService] Sending message:', message.type, 'to audio signaling');
-  this.signalingChannel.send(JSON.stringify(message));
-  return;
-}
-// Queue the message until signaling opens
-console.warn('⚠️ Signaling channel not open, queuing message:', message.type);
-this.messageQueue.push(message);
-
-// If there is an active socket, rely on onopen flush; otherwise try periodic flush for a short window
-if (!this.signalingFlushTimer) {
-  let tries = 0;
-  this.signalingFlushTimer = setInterval(() => {
-    tries++;
-    if (this.isConnectedToSignaling()) {
-      try { this.flushSignalingQueue(); } catch { }
-      if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
-    } else if (tries >= 10) { // ~5s at 500ms
-      console.warn('⚠️ [AudioCallService] Discarding queued signaling messages after timeout');
-      this.messageQueue = [];
-      if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
+    if (this.signalingChannel?.readyState === WebSocket.OPEN) {
+      console.log('📤 [AudioCallService] Sending message:', message.type, 'to audio signaling');
+      this.signalingChannel.send(JSON.stringify(message));
+      return;
     }
-  }, 500);
-}
+    // Queue the message until signaling opens
+    console.warn('⚠️ Signaling channel not open, queuing message:', message.type);
+    this.messageQueue.push(message);
+
+    // If there is an active socket, rely on onopen flush; otherwise try periodic flush for a short window
+    if (!this.signalingFlushTimer) {
+      let tries = 0;
+      this.signalingFlushTimer = setInterval(() => {
+        tries++;
+        if (this.isConnectedToSignaling()) {
+          try { this.flushSignalingQueue(); } catch { }
+          if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
+        } else if (tries >= 10) { // ~5s at 500ms
+          console.warn('⚠️ [AudioCallService] Discarding queued signaling messages after timeout');
+          this.messageQueue = [];
+          if (this.signalingFlushTimer) { clearInterval(this.signalingFlushTimer); this.signalingFlushTimer = null; }
+        }
+      }, 500);
+    }
   }
 
-/**
- * Send signaling message (public method)
- */
-sendMessage(message: any): void {
-  this.sendSignalingMessage(message);
-}
+  /**
+   * Send signaling message (public method)
+   */
+  sendMessage(message: any): void {
+    this.sendSignalingMessage(message);
+  }
 
   // Flush queued signaling messages once the socket is open
   private flushSignalingQueue(): void {
-  if(this.signalingChannel?.readyState !== WebSocket.OPEN) return;
-  while(this.messageQueue.length > 0) {
-  const msg = this.messageQueue.shift();
-  try {
-    console.log('📤 [AudioCallService] Flushing queued message:', msg?.type);
-    this.signalingChannel.send(JSON.stringify(msg));
-  } catch (e) {
-    console.warn('⚠️ [AudioCallService] Failed to send queued message, re-queuing');
-    this.messageQueue.unshift(msg);
-    break;
-  }
-}
+    if (this.signalingChannel?.readyState !== WebSocket.OPEN) return;
+    while (this.messageQueue.length > 0) {
+      const msg = this.messageQueue.shift();
+      try {
+        console.log('📤 [AudioCallService] Flushing queued message:', msg?.type);
+        this.signalingChannel.send(JSON.stringify(msg));
+      } catch (e) {
+        console.warn('⚠️ [AudioCallService] Failed to send queued message, re-queuing');
+        this.messageQueue.unshift(msg);
+        break;
+      }
+    }
   }
 
   /**
    * Process incoming call when user accepts (for receiver)
    */
-  async processIncomingCall(): Promise < void> {
-  try {
-    console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
+  async processIncomingCall(): Promise<void> {
+    try {
+      console.log('📞 [AudioCallService] Processing incoming call after user acceptance...');
 
-    // Ensure we're not in a stale state from hot reload
-    // If hasAccepted is true but we're not connected, something went wrong - reset it
-    if(this.hasAccepted && this.state.connectionState !== 'connected' && !this.state.isConnected) {
-  console.log('🧹 [AudioCallService] Resetting stale hasAccepted state - call not actually connected');
-  this.hasAccepted = false;
-}
+      // Ensure we're not in a stale state from hot reload
+      // If hasAccepted is true but we're not connected, something went wrong - reset it
+      if (this.hasAccepted && this.state.connectionState !== 'connected' && !this.state.isConnected) {
+        console.log('🧹 [AudioCallService] Resetting stale hasAccepted state - call not actually connected');
+        this.hasAccepted = false;
+      }
 
-// CRITICAL: Call answer endpoint to update database (answered_at)
-// This must happen BEFORE WebRTC processing to ensure lifecycle correctness
-if (this.appointmentId) {
-  try {
-    await this.markCallAsAnsweredInBackend();
-  } catch (error) {
-    console.error('❌ [AudioCallService] Failed to mark call as answered in backend:', error);
-    // Continue with WebRTC processing even if backend call fails
-  }
-}
+      // CRITICAL: Call answer endpoint to update database (answered_at)
+      // This must happen BEFORE WebRTC processing to ensure lifecycle correctness
+      if (this.appointmentId) {
+        try {
+          await this.markCallAsAnsweredInBackend();
+        } catch (error) {
+          console.error('❌ [AudioCallService] Failed to mark call as answered in backend:', error);
+          // Continue with WebRTC processing even if backend call fails
+        }
+      }
 
-// Clear any pending disconnect grace timer since we're actively answering
-if (this.disconnectGraceTimer) {
-  console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
-  clearTimeout(this.disconnectGraceTimer);
-  this.disconnectGraceTimer = null;
-}
+      // Clear any pending disconnect grace timer since we're actively answering
+      if (this.disconnectGraceTimer) {
+        console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
 
-// Check both global and instance - instance survives reset() calls
-const globalPendingOffer = (global as any).pendingOffer;
-const instancePendingOffer = this.pendingOffer;
-const pendingOffer = instancePendingOffer || globalPendingOffer;
+      // Check both global and instance - instance survives reset() calls
+      const globalPendingOffer = (global as any).pendingOffer;
+      const instancePendingOffer = this.pendingOffer;
+      const pendingOffer = instancePendingOffer || globalPendingOffer;
 
-console.log('📞 [AudioCallService] Checking for pending offer:', {
-  hasGlobalOffer: !!globalPendingOffer,
-  hasInstanceOffer: !!instancePendingOffer,
-  hasPendingOffer: !!pendingOffer,
-  offerType: pendingOffer?.type,
-  offerSdpLength: pendingOffer?.sdp?.length
-});
+      console.log('📞 [AudioCallService] Checking for pending offer:', {
+        hasGlobalOffer: !!globalPendingOffer,
+        hasInstanceOffer: !!instancePendingOffer,
+        hasPendingOffer: !!pendingOffer,
+        offerType: pendingOffer?.type,
+        offerSdpLength: pendingOffer?.sdp?.length
+      });
 
-if (!pendingOffer) {
-  console.warn('⚠️ [AudioCallService] No pending offer found - requesting re-offer from caller');
-  // Prepare media and PC so we can immediately process the re-offer when it arrives
-  if (!this.localStream) {
-    this.localStream = await mediaDevices.getUserMedia({
-      video: false,
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        sampleRate: 44100,
-        channelCount: 1,
-      } as any
-    });
-    await this.configureAudioRouting();
-  }
-  if (!this.peerConnection) {
-    await this.initializePeerConnection();
-  }
-  // Ask caller to resend the current offer
-  this.sendSignalingMessage({
-    type: 'resend-offer-request',
-    appointmentId: this.appointmentId,
-    userId: this.userId,
-  });
-  this.hasAccepted = true;
-  // Do NOT mark connected yet; wait for offer -> answer handshake
-  return;
-}
+      if (!pendingOffer) {
+        console.warn('⚠️ [AudioCallService] No pending offer found - requesting re-offer from caller');
+        // Prepare media and PC so we can immediately process the re-offer when it arrives
+        if (!this.localStream) {
+          this.localStream = await mediaDevices.getUserMedia({
+            video: false,
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+              sampleRate: 44100,
+              channelCount: 1,
+            } as any
+          });
+          await this.configureAudioRouting();
+        }
+        if (!this.peerConnection) {
+          await this.initializePeerConnection();
+        }
+        // Ask caller to resend the current offer
+        this.sendSignalingMessage({
+          type: 'resend-offer-request',
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+        });
+        this.hasAccepted = true;
+        // Do NOT mark connected yet; wait for offer -> answer handshake
+        return;
+      }
 
-// On accept, prepare media and create PC if needed
-if (!this.localStream) {
-  this.localStream = await mediaDevices.getUserMedia({
-    video: false,
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      sampleRate: 44100,
-      channelCount: 1,
-    } as any
-  });
-  await this.configureAudioRouting();
-}
-if (!this.peerConnection) {
-  await this.initializePeerConnection();
-}
+      // On accept, prepare media and create PC if needed
+      if (!this.localStream) {
+        this.localStream = await mediaDevices.getUserMedia({
+          video: false,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 44100,
+            channelCount: 1,
+          } as any
+        });
+        await this.configureAudioRouting();
+      }
+      if (!this.peerConnection) {
+        await this.initializePeerConnection();
+      }
 
-console.log('📞 [AudioCallService] Processing pending offer...');
-await this.handleOffer(pendingOffer);
+      console.log('📞 [AudioCallService] Processing pending offer...');
+      await this.handleOffer(pendingOffer);
 
-console.log('📞 [AudioCallService] Offer processed successfully, clearing pending offer');
-// Clear the pending offer after processing (both global and instance)
-(global as any).pendingOffer = null;
-this.pendingOffer = null;
+      console.log('📞 [AudioCallService] Offer processed successfully, clearing pending offer');
+      // Clear the pending offer after processing (both global and instance)
+      (global as any).pendingOffer = null;
+      this.pendingOffer = null;
 
-// Drain queued ICE candidates now that remoteDescription is set
-if (this.peerConnection && this.pendingCandidates.length > 0) {
-  for (const c of this.pendingCandidates) {
-    try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
-  }
-  this.pendingCandidates = [];
-}
+      // Drain queued ICE candidates now that remoteDescription is set
+      if (this.peerConnection && this.pendingCandidates.length > 0) {
+        for (const c of this.pendingCandidates) {
+          try { await this.peerConnection.addIceCandidate(c as any); } catch (e) { console.warn('ICE drain failed', e); }
+        }
+        this.pendingCandidates = [];
+      }
 
-// Clear the pending offer (both global and instance)
-(global as any).pendingOffer = null;
-this.pendingOffer = null;
-this.hasAccepted = true;
+      // Clear the pending offer (both global and instance)
+      (global as any).pendingOffer = null;
+      this.pendingOffer = null;
+      this.hasAccepted = true;
 
-// Clear any existing disconnect grace timer since we're actively answering
-if (this.disconnectGraceTimer) {
-  console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
-  clearTimeout(this.disconnectGraceTimer);
-  this.disconnectGraceTimer = null;
-}
+      // Clear any existing disconnect grace timer since we're actively answering
+      if (this.disconnectGraceTimer) {
+        console.log('📞 [AudioCallService] Clearing disconnect grace timer - call is being answered');
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
 
-console.log('✅ [AudioCallService] Incoming call processed successfully');
-// Additional fallback after full processing
-this.ensureConnectedSoon(1000);
+      console.log('✅ [AudioCallService] Incoming call processed successfully');
+      // Additional fallback after full processing
+      this.ensureConnectedSoon(1000);
 
-// Debug: Check WebRTC connection state after processing
-if (this.peerConnection) {
-  console.log('🔍 [AudioCallService] Post-processing WebRTC state:', {
-    connectionState: this.peerConnection.connectionState,
-    iceConnectionState: this.peerConnection.iceConnectionState,
-    signalingState: this.peerConnection.signalingState,
-    currentCallState: this.state.connectionState
-  });
-}
+      // Debug: Check WebRTC connection state after processing
+      if (this.peerConnection) {
+        console.log('🔍 [AudioCallService] Post-processing WebRTC state:', {
+          connectionState: this.peerConnection.connectionState,
+          iceConnectionState: this.peerConnection.iceConnectionState,
+          signalingState: this.peerConnection.signalingState,
+          currentCallState: this.state.connectionState
+        });
+      }
 
     } catch (error) {
-  console.error('❌ [AudioCallService] Failed to process incoming call:', error);
-  this.events?.onError(`Failed to process incoming call: ${error.message}`);
-  throw error;
-}
+      console.error('❌ [AudioCallService] Failed to process incoming call:', error);
+      this.events?.onError(`Failed to process incoming call: ${error.message}`);
+      throw error;
+    }
   }
 
 
   /**
    * Create and send offer (for caller)
    */
-  async createOffer(): Promise < void> {
-  if(!this.peerConnection) {
-  console.warn('⚠️ [AudioCallService] Cannot create offer - no peer connection');
-  return;
-}
+  async createOffer(): Promise<void> {
+    if (!this.peerConnection) {
+      console.warn('⚠️ [AudioCallService] Cannot create offer - no peer connection');
+      return;
+    }
 
-if (this.offerCreated) {
-  console.warn('⚠️ [AudioCallService] Offer already created - preventing duplicate');
-  return;
-}
+    if (this.offerCreated) {
+      console.warn('⚠️ [AudioCallService] Offer already created - preventing duplicate');
+      return;
+    }
 
-if (this.creatingOffer) {
-  console.warn('⚠️ [AudioCallService] Offer creation in progress - skipping');
-  return;
-}
+    if (this.creatingOffer) {
+      console.warn('⚠️ [AudioCallService] Offer creation in progress - skipping');
+      return;
+    }
 
-this.creatingOffer = true;
+    this.creatingOffer = true;
 
-try {
-  console.log('📞 [AudioCallService] Creating offer...');
-  console.log('📞 [AudioCallService] Peer connection state:', this.peerConnection?.connectionState);
-  console.log('📞 [AudioCallService] Local stream available:', !!this.localStream);
+    try {
+      console.log('📞 [AudioCallService] Creating offer...');
+      console.log('📞 [AudioCallService] Peer connection state:', this.peerConnection?.connectionState);
+      console.log('📞 [AudioCallService] Local stream available:', !!this.localStream);
 
-  const offer = await this.peerConnection.createOffer();
-  console.log('📞 [AudioCallService] Offer created, setting local description...');
-  const mungedOffer = {
-    type: offer.type,
-    sdp: this.mungeSdpForAudio(offer.sdp || '')
-  } as RTCSessionDescriptionInit;
-  await this.peerConnection.setLocalDescription(mungedOffer);
+      const offer = await this.peerConnection.createOffer();
+      console.log('📞 [AudioCallService] Offer created, setting local description...');
+      const mungedOffer = {
+        type: offer.type,
+        sdp: this.mungeSdpForAudio(offer.sdp || '')
+      } as RTCSessionDescriptionInit;
+      await this.peerConnection.setLocalDescription(mungedOffer);
 
-  console.log('📞 [AudioCallService] Sending offer via signaling...');
-  this.sendSignalingMessage({
-    type: 'offer',
-    offer: mungedOffer,
-    senderId: this.userId,
-    appointmentId: this.appointmentId,
-    userId: this.userId,
-    callType: 'audio',
-    doctorName: this.doctorName || 'Unknown',
-    doctorProfilePicture: this.doctorProfilePicture || '',
-  });
+      console.log('📞 [AudioCallService] Sending offer via signaling...');
+      this.sendSignalingMessage({
+        type: 'offer',
+        offer: mungedOffer,
+        senderId: this.userId,
+        appointmentId: this.appointmentId,
+        userId: this.userId,
+        callType: 'audio',
+        doctorName: this.doctorName || 'Unknown',
+        doctorProfilePicture: this.doctorProfilePicture || '',
+      });
 
-  this.offerCreated = true;
-  console.log('✅ [AudioCallService] Offer created and sent successfully');
-} catch (error) {
-  console.error('❌ Error creating offer:', error);
-  console.error('❌ Error details:', {
-    message: (error as any).message,
-    stack: (error as any).stack,
-    peerConnectionState: this.peerConnection?.connectionState,
-    hasLocalStream: !!this.localStream
-  });
-  this.events?.onError('Failed to initiate call');
-  throw error; // Re-throw to be caught by caller
-} finally {
-  this.creatingOffer = false;
-}
+      this.offerCreated = true;
+      console.log('✅ [AudioCallService] Offer created and sent successfully');
+    } catch (error) {
+      console.error('❌ Error creating offer:', error);
+      console.error('❌ Error details:', {
+        message: (error as any).message,
+        stack: (error as any).stack,
+        peerConnectionState: this.peerConnection?.connectionState,
+        hasLocalStream: !!this.localStream
+      });
+      this.events?.onError('Failed to initiate call');
+      throw error; // Re-throw to be caught by caller
+    } finally {
+      this.creatingOffer = false;
+    }
   }
 
   /**
    * Start call timeout timer
    */
   private startCallTimeout(): void {
-  this.callTimeoutTimer = setTimeout(() => {
-    console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered - checking if answered:`, {
-      isCallAnswered: this.isCallAnswered,
-      connectionState: this.state.connectionState,
-      signalingState: this.peerConnection?.signalingState
-    });
+    this.callTimeoutTimer = setTimeout(() => {
+      console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered - checking if answered:`, {
+        isCallAnswered: this.isCallAnswered,
+        connectionState: this.state.connectionState,
+        signalingState: this.peerConnection?.signalingState
+      });
 
-    // Only timeout if we're still in connecting state and not answered
-    if (!this.isCallAnswered && this.state.connectionState === 'connecting') {
-      console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout - call not answered`);
-      this.handleCallTimeout();
-    } else if (this.isCallAnswered) {
-      console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered but call was already answered - ignoring`);
-    } else {
-      console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered but connection state is ${this.state.connectionState} - ignoring`);
-    }
-  }, 60000); // 60 seconds timeout
-}
+      // Only timeout if we're still in connecting state and not answered
+      if (!this.isCallAnswered && this.state.connectionState === 'connecting') {
+        console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout - call not answered`);
+        this.handleCallTimeout();
+      } else if (this.isCallAnswered) {
+        console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered but call was already answered - ignoring`);
+      } else {
+        console.log(`⏰ [AudioCallService ${this.instanceId}] Call timeout triggered but connection state is ${this.state.connectionState} - ignoring`);
+      }
+    }, 60000); // 60 seconds timeout
+  }
 
   /**
    * Deduct call session when call is answered
    */
-  private async deductCallSession(): Promise < void> {
-  try {
-    console.log('💰 [AudioCallService] Deducting call session...');
-    const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/deduct`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${await this.getAuthToken()}`
-      },
-      body: JSON.stringify({
-        call_type: 'voice',
-        appointment_id: this.appointmentId
-      })
-    });
+  private async deductCallSession(): Promise<void> {
+    try {
+      console.log('💰 [AudioCallService] Deducting call session...');
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/deduct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await this.getAuthToken()}`
+        },
+        body: JSON.stringify({
+          call_type: 'voice',
+          appointment_id: this.appointmentId
+        })
+      });
 
-    if(response.ok) {
-  const data = await response.json();
-  console.log('✅ [AudioCallService] Call session deducted successfully:', data);
-} else {
-  console.error('❌ [AudioCallService] Failed to deduct call session:', response.status);
-}
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [AudioCallService] Call session deducted successfully:', data);
+      } else {
+        console.error('❌ [AudioCallService] Failed to deduct call session:', response.status);
+      }
     } catch (error) {
-  console.error('❌ [AudioCallService] Error deducting call session:', error);
-}
+      console.error('❌ [AudioCallService] Error deducting call session:', error);
+    }
   }
 
   /**
    * Handle call answered
    */
   private handleCallAnswered(): void {
-  console.log(`✅ [AudioCallService ${this.instanceId}] Call answered by peer`);
-  console.log(`📞 [AudioCallService ${this.instanceId}] Current call state when answered:`, {
-    isCallAnswered: this.isCallAnswered,
-    connectionState: this.state.connectionState,
-    signalingState: this.peerConnection?.signalingState
-  });
-  this.isCallAnswered = true;
-  this.clearCallTimeout();
-  this.updateState({ connectionState: 'connected', isConnected: true });
+    console.log(`✅ [AudioCallService ${this.instanceId}] Call answered by peer`);
+    console.log(`📞 [AudioCallService ${this.instanceId}] Current call state when answered:`, {
+      isCallAnswered: this.isCallAnswered,
+      connectionState: this.state.connectionState,
+      signalingState: this.peerConnection?.signalingState
+    });
+    this.isCallAnswered = true;
+    this.clearCallTimeout();
+    this.updateState({ connectionState: 'connected', isConnected: true });
 
-  // FIX: Do NOT deduct immediately - deductions happen after 10 minutes and on hangup
-  // this.deductCallSession();
+    // FIX: Do NOT deduct immediately - deductions happen after 10 minutes and on hangup
+    // this.deductCallSession();
 
-  // Do not echo call-answered back
-  if(!this.didEmitAnswered) {
-  this.didEmitAnswered = true;
-  this.events?.onCallAnswered();
-}
-this.markConnectedOnce();
+    // Do not echo call-answered back
+    if (!this.didEmitAnswered) {
+      this.didEmitAnswered = true;
+      this.events?.onCallAnswered();
+    }
+    this.markConnectedOnce();
   }
 
   /**
    * Handle call rejected
    */
-  private handleCallRejected(reason ?: string): void {
-  console.log('❌ Call rejected by doctor, reason:', reason || 'unknown');
-  this.clearCallTimeout();
-  this.events?.onCallRejected();
-  this.endCall();
-}
+  private handleCallRejected(reason?: string): void {
+    console.log('❌ Call rejected by doctor, reason:', reason || 'unknown');
+    this.clearCallTimeout();
+    this.events?.onCallRejected();
+    this.endCall();
+  }
 
   /**
    * Handle call timeout
    */
   private handleCallTimeout(): void {
-  console.log('⏰ Call timeout');
-  this.clearCallTimeout();
-  this.events?.onCallTimeout();
-  this.endCall();
-}
+    console.log('⏰ Call timeout');
+    this.clearCallTimeout();
+    this.events?.onCallTimeout();
+    this.endCall();
+  }
 
   /**
    * Clear call timeout timer
    */
   private clearCallTimeout(): void {
-  if(this.callTimeoutTimer) {
-  clearTimeout(this.callTimeoutTimer);
-  this.callTimeoutTimer = null;
-}
+    if (this.callTimeoutTimer) {
+      clearTimeout(this.callTimeoutTimer);
+      this.callTimeoutTimer = null;
+    }
   }
 
   /**
    * Compute ICE servers, including optional TURN from env/config
    */
   private getIceServers() {
-  try {
-    const w = configService.getWebRTCConfig();
-    const servers: any[] = [];
-    const stun = Array.isArray(w.stunServers) && w.stunServers.length ? w.stunServers : [
-      'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302',
-      'stun:stun2.l.google.com:19302',
-    ];
-    stun.forEach(u => servers.push({ urls: u }));
-    if (w.turnServerUrl && w.turnUsername && w.turnPassword) {
-      servers.push({ urls: w.turnServerUrl, username: w.turnUsername, credential: w.turnPassword } as any);
-      console.log('🌐 [AudioCallService] TURN server configured via configService');
-    } else {
-      // Fallback to env if present
-      const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
-      const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
-      const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
-      if (turnUrl && turnUsername && turnCredential) {
-        servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
-        console.log('🌐 [AudioCallService] TURN server configured via env fallback');
+    try {
+      const w = configService.getWebRTCConfig();
+      const servers: any[] = [];
+      const stun = Array.isArray(w.stunServers) && w.stunServers.length ? w.stunServers : [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+      ];
+      stun.forEach(u => servers.push({ urls: u }));
+      if (w.turnServerUrl && w.turnUsername && w.turnPassword) {
+        servers.push({ urls: w.turnServerUrl, username: w.turnUsername, credential: w.turnPassword } as any);
+        console.log('🌐 [AudioCallService] TURN server configured via configService');
       } else {
-        console.log('🌐 [AudioCallService] No TURN configured (using STUN only)');
+        // Fallback to env if present
+        const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
+        const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
+        const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
+        if (turnUrl && turnUsername && turnCredential) {
+          servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
+          console.log('🌐 [AudioCallService] TURN server configured via env fallback');
+        } else {
+          console.log('🌐 [AudioCallService] No TURN configured (using STUN only)');
+        }
       }
+      return servers;
+    } catch (e) {
+      console.warn('⚠️ [AudioCallService] Failed to read ICE config:', e);
+      return [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ];
     }
-    return servers;
-  } catch (e) {
-    console.warn('⚠️ [AudioCallService] Failed to read ICE config:', e);
-    return [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-    ];
   }
-}
 
   private mungeSdpForAudio(sdp: string): string {
-  let out = sdp;
-  out = this.preferCodec(out, 'audio', 'opus');
-  out = this.setMediaBitrate(out, 'audio', 64); // kbps target budget
-  out = this.setOpusAttributes(out, { maxaveragebitrate: 48000, stereo: 0, usedtx: 1, ptime: 20 });
-  return out;
-}
+    let out = sdp;
+    out = this.preferCodec(out, 'audio', 'opus');
+    out = this.setMediaBitrate(out, 'audio', 64); // kbps target budget
+    out = this.setOpusAttributes(out, { maxaveragebitrate: 48000, stereo: 0, usedtx: 1, ptime: 20 });
+    return out;
+  }
 
   private preferCodec(sdp: string, kind: 'audio' | 'video', codec: string): string {
-  const lines = sdp.split('\n');
-  const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
-  if (mLineIndex === -1) return sdp;
-  const rtpMap: Record<string, string> = {};
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^a=rtpmap:(\d+)\s+([^\/]+)\//i);
-    if (m) rtpMap[m[1]] = m[2].toUpperCase();
+    const lines = sdp.split('\n');
+    const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
+    if (mLineIndex === -1) return sdp;
+    const rtpMap: Record<string, string> = {};
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^a=rtpmap:(\d+)\s+([^\/]+)\//i);
+      if (m) rtpMap[m[1]] = m[2].toUpperCase();
+    }
+    const parts = lines[mLineIndex].split(' ');
+    const header = parts.slice(0, 3);
+    const pts = parts.slice(3);
+    const preferred: string[] = [];
+    const others: string[] = [];
+    pts.forEach(pt => {
+      const name = rtpMap[pt];
+      if (name && name.includes(codec.toUpperCase())) preferred.push(pt); else others.push(pt);
+    });
+    if (preferred.length) lines[mLineIndex] = [...header, ...preferred, ...others].join(' ');
+    return lines.join('\n');
   }
-  const parts = lines[mLineIndex].split(' ');
-  const header = parts.slice(0, 3);
-  const pts = parts.slice(3);
-  const preferred: string[] = [];
-  const others: string[] = [];
-  pts.forEach(pt => {
-    const name = rtpMap[pt];
-    if (name && name.includes(codec.toUpperCase())) preferred.push(pt); else others.push(pt);
-  });
-  if (preferred.length) lines[mLineIndex] = [...header, ...preferred, ...others].join(' ');
-  return lines.join('\n');
-}
 
   private setMediaBitrate(sdp: string, kind: 'audio' | 'video', kbps: number): string {
-  const lines = sdp.split('\n');
-  const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
-  if (mLineIndex === -1) return sdp;
-  let i = mLineIndex + 1;
-  while (i < lines.length && lines[i].startsWith('i=')) i++;
-  if (i < lines.length && lines[i].startsWith('b=')) {
-    lines[i] = 'b=AS:' + kbps;
-  } else {
-    lines.splice(i, 0, 'b=AS:' + kbps);
+    const lines = sdp.split('\n');
+    const mLineIndex = lines.findIndex(l => l.startsWith('m=' + kind));
+    if (mLineIndex === -1) return sdp;
+    let i = mLineIndex + 1;
+    while (i < lines.length && lines[i].startsWith('i=')) i++;
+    if (i < lines.length && lines[i].startsWith('b=')) {
+      lines[i] = 'b=AS:' + kbps;
+    } else {
+      lines.splice(i, 0, 'b=AS:' + kbps);
+    }
+    return lines.join('\n');
   }
-  return lines.join('\n');
-}
 
   private setOpusAttributes(sdp: string, opts: { maxaveragebitrate?: number; stereo?: 0 | 1; usedtx?: 0 | 1; ptime?: number; }): string {
-  const lines = sdp.split('\n');
-  const opusPt = (() => {
-    for (const l of lines) {
-      const m = l.match(/^a=rtpmap:(\d+)\s+opus\//i);
-      if (m) return m[1];
+    const lines = sdp.split('\n');
+    const opusPt = (() => {
+      for (const l of lines) {
+        const m = l.match(/^a=rtpmap:(\d+)\s+opus\//i);
+        if (m) return m[1];
+      }
+      return null;
+    })();
+    if (!opusPt) return sdp;
+    const fmtpIndex = lines.findIndex(l => l.startsWith('a=fmtp:' + opusPt));
+    const params: Record<string, string> = {};
+    if (fmtpIndex !== -1) {
+      const cur = lines[fmtpIndex].split(' ');
+      const kv = cur.slice(1).join(' ').split(';');
+      kv.forEach(p => {
+        const [k, v] = p.split('=');
+        if (k) params[k.trim()] = (v || '').trim();
+      });
     }
-    return null;
-  })();
-  if (!opusPt) return sdp;
-  const fmtpIndex = lines.findIndex(l => l.startsWith('a=fmtp:' + opusPt));
-  const params: Record<string, string> = {};
-  if (fmtpIndex !== -1) {
-    const cur = lines[fmtpIndex].split(' ');
-    const kv = cur.slice(1).join(' ').split(';');
-    kv.forEach(p => {
-      const [k, v] = p.split('=');
-      if (k) params[k.trim()] = (v || '').trim();
-    });
+    if (opts.maxaveragebitrate) params['maxaveragebitrate'] = String(opts.maxaveragebitrate);
+    if (typeof opts.stereo === 'number') params['stereo'] = String(opts.stereo);
+    if (typeof opts.usedtx === 'number') params['usedtx'] = String(opts.usedtx);
+    if (opts.ptime) params['ptime'] = String(opts.ptime);
+    const serialized = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(';');
+    const line = `a=fmtp:${opusPt} ${serialized}`;
+    if (fmtpIndex !== -1) lines[fmtpIndex] = line; else lines.push(line);
+    return lines.join('\n');
   }
-  if (opts.maxaveragebitrate) params['maxaveragebitrate'] = String(opts.maxaveragebitrate);
-  if (typeof opts.stereo === 'number') params['stereo'] = String(opts.stereo);
-  if (typeof opts.usedtx === 'number') params['usedtx'] = String(opts.usedtx);
-  if (opts.ptime) params['ptime'] = String(opts.ptime);
-  const serialized = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(';');
-  const line = `a=fmtp:${opusPt} ${serialized}`;
-  if (fmtpIndex !== -1) lines[fmtpIndex] = line; else lines.push(line);
-  return lines.join('\n');
-}
 
-/**
- * Toggle audio mute/unmute
- */
-toggleAudio(): boolean {
-  if (!this.localStream) return false;
+  /**
+   * Toggle audio mute/unmute
+   */
+  toggleAudio(): boolean {
+    if (!this.localStream) return false;
 
-  const audioTrack = this.localStream.getAudioTracks()[0];
-  if (audioTrack) {
-    audioTrack.enabled = !audioTrack.enabled;
-    this.updateState({ isAudioEnabled: audioTrack.enabled });
-    return audioTrack.enabled;
+    const audioTrack = this.localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      this.updateState({ isAudioEnabled: audioTrack.enabled });
+      return audioTrack.enabled;
+    }
+    return false;
   }
-  return false;
-}
 
   /**
    * Toggle speaker on/off
    */
-  async toggleSpeaker(speakerOn: boolean): Promise < void> {
-  try {
-    console.log('🔊 Toggling speaker:', speakerOn ? 'ON' : 'OFF');
+  async toggleSpeaker(speakerOn: boolean): Promise<void> {
+    try {
+      console.log('🔊 Toggling speaker:', speakerOn ? 'ON' : 'OFF');
 
-    // Import Audio from expo-av for proper audio routing
-    const { Audio, InterruptionModeAndroid, InterruptionModeIOS } = await import('expo-av');
+      // Import Audio from expo-av for proper audio routing
+      const { Audio, InterruptionModeAndroid, InterruptionModeIOS } = await import('expo-av');
 
-    // Set audio mode to control speaker/earpiece routing
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      staysActiveInBackground: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: false,
-      playThroughEarpieceAndroid: !speakerOn, // false = speaker, true = earpiece
-      interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-    });
+      // Set audio mode to control speaker/earpiece routing
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        staysActiveInBackground: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: !speakerOn, // false = speaker, true = earpiece
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      });
 
-    console.log('✅ Speaker mode updated successfully:', speakerOn ? 'speaker' : 'earpiece');
-  } catch(error) {
-    console.error('❌ Error toggling speaker:', error);
+      console.log('✅ Speaker mode updated successfully:', speakerOn ? 'speaker' : 'earpiece');
+    } catch (error) {
+      console.error('❌ Error toggling speaker:', error);
+    }
   }
-}
 
   private startReofferLoop(): void {
-  try {
-    this.clearReofferLoop();
-    this.reofferTimer = setInterval(() => {
-      if (
-        this.peerConnection?.localDescription &&
-        this.state.connectionState !== 'connected' &&
-        !this.state.isConnected
-      ) {
-        this.sendSignalingMessage({
-          type: 'offer',
-          offer: this.peerConnection.localDescription,
-          senderId: this.userId,
-          appointmentId: this.appointmentId,
-          userId: this.userId,
-        });
-      }
-    }, 4000);
-  } catch(e) {
-    console.warn('⚠️ [AudioCallService] Failed to start re-offer loop:', e);
+    try {
+      this.clearReofferLoop();
+      this.reofferTimer = setInterval(() => {
+        if (
+          this.peerConnection?.localDescription &&
+          this.state.connectionState !== 'connected' &&
+          !this.state.isConnected
+        ) {
+          this.sendSignalingMessage({
+            type: 'offer',
+            offer: this.peerConnection.localDescription,
+            senderId: this.userId,
+            appointmentId: this.appointmentId,
+            userId: this.userId,
+          });
+        }
+      }, 4000);
+    } catch (e) {
+      console.warn('⚠️ [AudioCallService] Failed to start re-offer loop:', e);
+    }
   }
-}
 
   private clearReofferLoop(): void {
-  if(this.reofferTimer) {
-  clearInterval(this.reofferTimer);
-  this.reofferTimer = null;
-}
+    if (this.reofferTimer) {
+      clearInterval(this.reofferTimer);
+      this.reofferTimer = null;
+    }
   }
 
   /**
    * Start call duration timer
    */
   private ensureConnectedSoon(delayMs: number = 800): void {
-  try {
-    setTimeout(() => {
-  if (!this.state.isConnected) {
-    console.log('⏳ [AudioCallService] Ensuring connected UI after answer/track');
-    this.updateState({ isConnected: true, connectionState: 'connected' });
-    this.startCallTimer();
-  }
-}, delayMs);
+    try {
+      setTimeout(() => {
+        if (!this.state.isConnected) {
+          console.log('⏳ [AudioCallService] Ensuring connected UI after answer/track');
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+          this.startCallTimer();
+        }
+      }, delayMs);
     } catch { }
   }
 
   private startCallTimer(): void {
-  this.callStartTime = Date.now();
-  if(this.callTimer) {
-  clearInterval(this.callTimer);
-  this.callTimer = null;
-}
-this.callTimer = setInterval(() => {
-  const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
-  this.updateState({ callDuration: duration });
-}, 1000);
+    this.callStartTime = Date.now();
+    if (this.callTimer) {
+      clearInterval(this.callTimer);
+      this.callTimer = null;
+    }
+    this.callTimer = setInterval(() => {
+      const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
+      this.updateState({ callDuration: duration });
+    }, 1000);
   }
 
   /**
@@ -2035,36 +2039,36 @@ this.callTimer = setInterval(() => {
    * IMPORTANT: Backend call is fire-and-forget to avoid blocking connection flow
    */
   private markConnectedOnce(): void {
-  try {
-    if(!this.didConnect) {
-  this.didConnect = true;
-  this.clearCallTimeout();
-  if (!this.state.isConnected || this.state.connectionState !== 'connected') {
-    this.updateState({ isConnected: true, connectionState: 'connected' });
-  }
+    try {
+      if (!this.didConnect) {
+        this.didConnect = true;
+        this.clearCallTimeout();
+        if (!this.state.isConnected || this.state.connectionState !== 'connected') {
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+        }
 
-  // Start timer immediately (don't wait for backend)
-  if (!this.callTimer) {
-    this.startCallTimer();
-  }
+        // Start timer immediately (don't wait for backend)
+        if (!this.callTimer) {
+          this.startCallTimer();
+        }
 
-  // OPTIONAL: Send WebRTC confirmation to backend (fire-and-forget)
-  // NOTE: Backend automatically promotes answered -> connected after grace period
-  // This is just a confirmation signal, not the source of truth
-  // Server-owned lifecycle is the source of truth
-  if (this.appointmentId) {
-    this.markConnectedInBackend().catch((error) => {
-      // Silently fail - server will promote automatically
-      console.log('ℹ️ [AudioCallService] WebRTC confirmation sent (optional - server will auto-promote)');
-    });
-  }
+        // OPTIONAL: Send WebRTC confirmation to backend (fire-and-forget)
+        // NOTE: Backend automatically promotes answered -> connected after grace period
+        // This is just a confirmation signal, not the source of truth
+        // Server-owned lifecycle is the source of truth
+        if (this.appointmentId) {
+          this.markConnectedInBackend().catch((error) => {
+            // Silently fail - server will promote automatically
+            console.log('ℹ️ [AudioCallService] WebRTC confirmation sent (optional - server will auto-promote)');
+          });
+        }
 
-  // Audio routing is already configured for earpiece by default
-  // Users can toggle to speaker using the speaker button if desired
-}
+        // Audio routing is already configured for earpiece by default
+        // Users can toggle to speaker using the speaker button if desired
+      }
     } catch (e) {
-  console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);
-}
+      console.warn('⚠️ [AudioCallService] markConnectedOnce failed:', e);
+    }
   }
 
   /**
@@ -2076,370 +2080,370 @@ this.callTimer = setInterval(() => {
    * Mark call as answered in backend (sets answered_at)
    * CRITICAL: This must be called when doctor accepts call from call screen
    */
-  private async markCallAsAnsweredInBackend(): Promise < void> {
-  if(!this.appointmentId) {
-  console.warn('⚠️ [AudioCallService] Cannot mark answered: no appointmentId');
-  return;
-}
-try {
-  const authToken = await this.getAuthToken();
-  if (!authToken) {
-    console.error('❌ [AudioCallService] Cannot mark answered: no auth token');
-    return;
-  }
-  const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/answer`;
-  console.log('🔗 [AudioCallService] Marking call as answered in backend:', {
-    appointmentId: this.appointmentId,
-    apiUrl: apiUrl
-  });
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-    body: JSON.stringify({
-      appointment_id: this.appointmentId,
-      caller_id: this.userId, // Current user (doctor or patient)
-      action: 'answered'
-    })
-  });
-  if (response.ok) {
-    const data = await response.json();
-    console.log('✅ [AudioCallService] Call marked as answered in backend:', data);
-  } else {
-    const errorText = await response.text();
-    let errorData;
-    try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
-    console.error('❌ [AudioCallService] Failed to mark call as answered:', {
-      status: response.status,
-      statusText: response.statusText,
-      error: errorData,
-      appointmentId: this.appointmentId
-    });
-  }
-} catch (apiError) {
-  console.error('❌ [AudioCallService] Error calling answer API:', apiError);
-  throw apiError;
-}
-  }
-
-  private async markConnectedInBackend(): Promise < void> {
-  if(!this.appointmentId) {
-  console.warn('⚠️ [AudioCallService] Cannot mark connected: no appointmentId');
-  return;
-}
-
-try {
-  const authToken = await this.getAuthToken();
-  if (!authToken) {
-    console.error('❌ [AudioCallService] Cannot mark connected: no auth token');
-    return;
+  private async markCallAsAnsweredInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [AudioCallService] Cannot mark answered: no appointmentId');
+      return;
+    }
+    try {
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [AudioCallService] Cannot mark answered: no auth token');
+        return;
+      }
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/answer`;
+      console.log('🔗 [AudioCallService] Marking call as answered in backend:', {
+        appointmentId: this.appointmentId,
+        apiUrl: apiUrl
+      });
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          caller_id: this.userId, // Current user (doctor or patient)
+          action: 'answered'
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [AudioCallService] Call marked as answered in backend:', data);
+      } else {
+        const errorText = await response.text();
+        let errorData;
+        try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
+        console.error('❌ [AudioCallService] Failed to mark call as answered:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          appointmentId: this.appointmentId
+        });
+      }
+    } catch (apiError) {
+      console.error('❌ [AudioCallService] Error calling answer API:', apiError);
+      throw apiError;
+    }
   }
 
-  const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
+  private async markConnectedInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [AudioCallService] Cannot mark connected: no appointmentId');
+      return;
+    }
 
-  console.log('🔗 [AudioCallService] Sending WebRTC confirmation (optional - server auto-promotes):', {
-    appointmentId: this.appointmentId,
-    callType: 'voice'
-  });
+    try {
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [AudioCallService] Cannot mark connected: no auth token');
+        return;
+      }
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
-    },
-    body: JSON.stringify({
-      appointment_id: this.appointmentId,
-      call_type: 'voice'
-    })
-  });
+      const apiUrl = `${environment.LARAVEL_API_URL}/api/call-sessions/mark-connected`;
 
-  if (response.ok) {
-    const data = await response.json();
-    console.log('✅ [AudioCallService] WebRTC confirmation sent (server will handle promotion):', data);
-  } else {
-    // Silently handle - server will auto-promote anyway
-    console.log('ℹ️ [AudioCallService] WebRTC confirmation failed (non-critical - server auto-promotes)');
-  }
-} catch (apiError: any) {
-  // Silently handle - server will auto-promote anyway
-  console.log('ℹ️ [AudioCallService] WebRTC confirmation error (non-critical - server auto-promotes)');
-}
+      console.log('🔗 [AudioCallService] Sending WebRTC confirmation (optional - server auto-promotes):', {
+        appointmentId: this.appointmentId,
+        callType: 'voice'
+      });
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          call_type: 'voice'
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ [AudioCallService] WebRTC confirmation sent (server will handle promotion):', data);
+      } else {
+        // Silently handle - server will auto-promote anyway
+        console.log('ℹ️ [AudioCallService] WebRTC confirmation failed (non-critical - server auto-promotes)');
+      }
+    } catch (apiError: any) {
+      // Silently handle - server will auto-promote anyway
+      console.log('ℹ️ [AudioCallService] WebRTC confirmation error (non-critical - server auto-promotes)');
+    }
   }
 
   /**
    * Stop call duration timer
    */
   private stopCallTimer(): void {
-  if(this.callTimer) {
-  clearInterval(this.callTimer);
-  this.callTimer = null;
-}
+    if (this.callTimer) {
+      clearInterval(this.callTimer);
+      this.callTimer = null;
+    }
   }
 
   /**
    * Update call state and notify listeners
    */
   private updateState(updates: Partial<AudioCallState>): void {
-  const oldState = { ...this.state };
-  const next: AudioCallState = { ...this.state, ...updates } as AudioCallState;
+    const oldState = { ...this.state };
+    const next: AudioCallState = { ...this.state, ...updates } as AudioCallState;
 
-  // Prevent downgrading connection state from connected -> connecting
-  if(oldState.connectionState === 'connected' && updates.connectionState === 'connecting') {
-  next.connectionState = 'connected';
-}
+    // Prevent downgrading connection state from connected -> connecting
+    if (oldState.connectionState === 'connected' && updates.connectionState === 'connecting') {
+      next.connectionState = 'connected';
+    }
 
-// Ensure callDuration is monotonic while connected (avoid resets to 0 mid-call)
-if (typeof updates.callDuration === 'number' && oldState.connectionState === 'connected' && updates.callDuration < oldState.callDuration) {
-  next.callDuration = oldState.callDuration;
-}
+    // Ensure callDuration is monotonic while connected (avoid resets to 0 mid-call)
+    if (typeof updates.callDuration === 'number' && oldState.connectionState === 'connected' && updates.callDuration < oldState.callDuration) {
+      next.callDuration = oldState.callDuration;
+    }
 
-this.state = next;
-console.log('📊 Call state changed:', {
-  from: oldState,
-  to: this.state,
-  updates: updates
-});
-this.events?.onStateChange(this.state);
+    this.state = next;
+    console.log('📊 Call state changed:', {
+      from: oldState,
+      to: this.state,
+      updates: updates
+    });
+    this.events?.onStateChange(this.state);
   }
 
-/**
- * Get current call state
- */
-getState(): AudioCallState {
-  return { ...this.state };
-}
+  /**
+   * Get current call state
+   */
+  getState(): AudioCallState {
+    return { ...this.state };
+  }
 
-/**
- * Get remote audio stream
- */
-getRemoteStream(): MediaStream | null {
-  return this.remoteStream;
-}
+  /**
+   * Get remote audio stream
+   */
+  getRemoteStream(): MediaStream | null {
+    return this.remoteStream;
+  }
 
-/**
- * Get local audio stream
- */
-getLocalStream(): MediaStream | null {
-  return this.localStream;
-}
+  /**
+   * Get local audio stream
+   */
+  getLocalStream(): MediaStream | null {
+    return this.localStream;
+  }
 
   /**
    * End the call
    */
-  async endCall(): Promise < void> {
-  try {
-    if(this.hasEnded) {
-  console.log('ℹ️ [AudioCallService] endCall already processed');
-  return;
-}
+  async endCall(): Promise<void> {
+    try {
+      if (this.hasEnded) {
+        console.log('ℹ️ [AudioCallService] endCall already processed');
+        return;
+      }
 
-// Prevent ending call if it's being actively answered
-if (this.isCallAnswered && this.state.connectionState === 'connecting') {
-  console.log('⚠️ [AudioCallService] Preventing call end - call is being answered and connecting');
-  return;
-}
+      // Prevent ending call if it's being actively answered
+      if (this.isCallAnswered && this.state.connectionState === 'connecting') {
+        console.log('⚠️ [AudioCallService] Preventing call end - call is being answered and connecting');
+        return;
+      }
 
-this.hasEnded = true;
+      this.hasEnded = true;
 
-// Clean up reconnection timers
-if (this.reconnectionTimer) {
-  clearTimeout(this.reconnectionTimer);
-  this.reconnectionTimer = null;
-}
-this.isReconnecting = false;
-this.reconnectionAttempts = 0;
+      // Clean up reconnection timers
+      if (this.reconnectionTimer) {
+        clearTimeout(this.reconnectionTimer);
+        this.reconnectionTimer = null;
+      }
+      this.isReconnecting = false;
+      this.reconnectionAttempts = 0;
 
-console.log('📞 Ending audio call...');
-console.log('📞 Call state when ending:', {
-  connectionState: this.state.connectionState,
-  isConnected: this.state.isConnected,
-  isCallAnswered: this.isCallAnswered
-});
+      console.log('📞 Ending audio call...');
+      console.log('📞 Call state when ending:', {
+        connectionState: this.state.connectionState,
+        isConnected: this.state.isConnected,
+        isCallAnswered: this.isCallAnswered
+      });
 
-// Calculate session duration
-const sessionDuration = this.state.callDuration;
-const wasConnected = this.state.isConnected && this.isCallAnswered;
+      // Calculate session duration
+      const sessionDuration = this.state.callDuration;
+      const wasConnected = this.state.isConnected && this.isCallAnswered;
 
-// CRITICAL: Log if call is ending without being connected
-if (!wasConnected) {
-  console.warn('⚠️ [AudioCallService] Call ending without being connected:', {
-    appointmentId: this.appointmentId,
-    connectionState: this.state.connectionState,
-    isConnected: this.state.isConnected,
-    isCallAnswered: this.isCallAnswered,
-    peerConnectionState: this.peerConnection?.connectionState,
-    didConnect: this.didConnect
-  });
-  console.warn('⚠️ [AudioCallService] This call will skip connected state and go directly to ended');
-  console.warn('⚠️ [AudioCallService] Check if WebRTC connection state reached "connected" before call ended');
-}
+      // CRITICAL: Log if call is ending without being connected
+      if (!wasConnected) {
+        console.warn('⚠️ [AudioCallService] Call ending without being connected:', {
+          appointmentId: this.appointmentId,
+          connectionState: this.state.connectionState,
+          isConnected: this.state.isConnected,
+          isCallAnswered: this.isCallAnswered,
+          peerConnectionState: this.peerConnection?.connectionState,
+          didConnect: this.didConnect
+        });
+        console.warn('⚠️ [AudioCallService] This call will skip connected state and go directly to ended');
+        console.warn('⚠️ [AudioCallService] Check if WebRTC connection state reached "connected" before call ended');
+      }
 
-// Clear call timeout
-this.clearCallTimeout();
+      // Clear call timeout
+      this.clearCallTimeout();
 
-// Stop call timer
-this.stopCallTimer();
+      // Stop call timer
+      this.stopCallTimer();
 
-// Stop local stream
-if (this.localStream) {
-  this.localStream.getTracks().forEach(track => track.stop());
-  this.localStream = null;
-}
+      // Stop local stream
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+      }
 
-// Reset audio routing to default
-await this.resetAudioRouting();
+      // Reset audio routing to default
+      await this.resetAudioRouting();
 
-// Close peer connection
-if (this.peerConnection) {
-  this.peerConnection.close();
-  this.peerConnection = null;
-}
+      // Close peer connection
+      if (this.peerConnection) {
+        this.peerConnection.close();
+        this.peerConnection = null;
+      }
 
-// Clear any pending disconnect grace timer
-if (this.disconnectGraceTimer) {
-  clearTimeout(this.disconnectGraceTimer);
-  this.disconnectGraceTimer = null;
-}
+      // Clear any pending disconnect grace timer
+      if (this.disconnectGraceTimer) {
+        clearTimeout(this.disconnectGraceTimer);
+        this.disconnectGraceTimer = null;
+      }
 
-// Send call ended message with session info
-this.sendSignalingMessage({
-  type: 'call-ended',
-  callType: 'voice',
-  userId: this.userId,
-  appointmentId: this.appointmentId,
-  sessionDuration: sessionDuration,
-  wasConnected: wasConnected
-});
+      // Send call ended message with session info
+      this.sendSignalingMessage({
+        type: 'call-ended',
+        callType: 'voice',
+        userId: this.userId,
+        appointmentId: this.appointmentId,
+        sessionDuration: sessionDuration,
+        wasConnected: wasConnected
+      });
 
-// Update call session in backend
-await this.updateCallSessionInBackend(sessionDuration, wasConnected);
+      // Update call session in backend
+      await this.updateCallSessionInBackend(sessionDuration, wasConnected);
 
-// Close signaling connection
-if (this.signalingChannel) {
-  this.signalingChannel.close();
-  this.signalingChannel = null;
-}
+      // Close signaling connection
+      if (this.signalingChannel) {
+        this.signalingChannel.close();
+        this.signalingChannel = null;
+      }
 
-// Clear re-offer loop
-this.clearReofferLoop();
+      // Clear re-offer loop
+      this.clearReofferLoop();
 
-// Reset state
-this.updateState({
-  isConnected: false,
-  isAudioEnabled: true,
-  callDuration: 0,
-  connectionState: 'disconnected',
-});
+      // Reset state
+      this.updateState({
+        isConnected: false,
+        isAudioEnabled: true,
+        callDuration: 0,
+        connectionState: 'disconnected',
+      });
 
-this.events?.onCallEnded();
+      this.events?.onCallEnded();
 
-// Clear global markers
-(global as any).activeAudioCall = false;
-if ((global as any).currentCallType === 'audio') {
-  (global as any).currentCallType = null;
-}
+      // Clear global markers
+      (global as any).activeAudioCall = false;
+      if ((global as any).currentCallType === 'audio') {
+        (global as any).currentCallType = null;
+      }
     } catch (error) {
-  console.error('❌ Error ending call:', error);
-}
+      console.error('❌ Error ending call:', error);
+    }
   }
 
-/**
- * Check if call is active
- */
-isCallActive(): boolean {
-  return this.state.isConnected && this.peerConnection !== null;
-}
+  /**
+   * Check if call is active
+   */
+  isCallActive(): boolean {
+    return this.state.isConnected && this.peerConnection !== null;
+  }
 
-/**
- * Get call duration in formatted string
- */
-getFormattedDuration(): string {
-  const { callDuration } = this.state;
-  const minutes = Math.floor(callDuration / 60);
-  const seconds = callDuration % 60;
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-}
+  /**
+   * Get call duration in formatted string
+   */
+  getFormattedDuration(): string {
+    const { callDuration } = this.state;
+    const minutes = Math.floor(callDuration / 60);
+    const seconds = callDuration % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
 
   /**
    * Reset the service state (for new calls)
    */
-  async reset(): Promise < void> {
-  console.log('🔄 Resetting AudioCallService state...');
+  async reset(): Promise<void> {
+    console.log('🔄 Resetting AudioCallService state...');
 
-  // Clear all timers
-  this.clearCallTimeout();
-  this.stopCallTimer();
+    // Clear all timers
+    this.clearCallTimeout();
+    this.stopCallTimer();
 
-  // Close existing connections
-  if(this.signalingChannel) {
-  this.signalingChannel.close();
-}
-if (this.peerConnection) {
-  this.peerConnection.close();
-}
+    // Close existing connections
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+    }
+    if (this.peerConnection) {
+      this.peerConnection.close();
+    }
 
-// Stop local stream
-if (this.localStream) {
-  this.localStream.getTracks().forEach(track => track.stop());
-}
+    // Stop local stream
+    if (this.localStream) {
+      this.localStream.getTracks().forEach(track => track.stop());
+    }
 
-// Reset audio routing to default
-await this.resetAudioRouting();
+    // Reset audio routing to default
+    await this.resetAudioRouting();
 
-// Reset all state variables
-this.peerConnection = null;
-this.localStream = null;
-this.remoteStream = null;
-this.clearReofferLoop();
-this.signalingChannel = null;
-this.callTimer = null;
-this.callStartTime = 0;
-this.events = null;
-this.appointmentId = null;
-this.userId = null;
-this.processedMessages.clear();
-this.isProcessingIncomingCall = false;
-this.isCallAnswered = false;
-this.didConnect = false;
+    // Reset all state variables
+    this.peerConnection = null;
+    this.localStream = null;
+    this.remoteStream = null;
+    this.clearReofferLoop();
+    this.signalingChannel = null;
+    this.callTimer = null;
+    this.callStartTime = 0;
+    this.events = null;
+    this.appointmentId = null;
+    this.userId = null;
+    this.processedMessages.clear();
+    this.isProcessingIncomingCall = false;
+    this.isCallAnswered = false;
+    this.didConnect = false;
 
-// Reset call state
-this.state = {
-  isConnected: false,
-  isAudioEnabled: true,
-  callDuration: 0,
-  connectionState: 'disconnected',
-};
+    // Reset call state
+    this.state = {
+      isConnected: false,
+      isAudioEnabled: true,
+      callDuration: 0,
+      connectionState: 'disconnected',
+    };
 
-// Reset new state variables
-this.offerCreated = false;
-this.creatingOffer = false;
-this.isInitializing = false;
-this.connectionState = 'disconnected';
-this.isIncoming = false;
-this.isIncomingMode = false;
-this.hasAccepted = false;
-this.pendingCandidates = [];
-this.hasEnded = false;
-this.reNotifyAttempted = false;
-this.callStartAttempted = false;
-this.didEmitAnswered = false;
+    // Reset new state variables
+    this.offerCreated = false;
+    this.creatingOffer = false;
+    this.isInitializing = false;
+    this.connectionState = 'disconnected';
+    this.isIncoming = false;
+    this.isIncomingMode = false;
+    this.hasAccepted = false;
+    this.pendingCandidates = [];
+    this.hasEnded = false;
+    this.reNotifyAttempted = false;
+    this.callStartAttempted = false;
+    this.didEmitAnswered = false;
 
-// Only clear global pending offer if we're not in the middle of an incoming call
-// This prevents losing the offer if reset() is called during initialization
-if (!this.isIncomingMode && !this.isIncoming) {
-  (global as any).pendingOffer = null;
-}
-// Always clear instance pending offer on reset (it will be restored from global if needed)
-this.pendingOffer = null;
+    // Only clear global pending offer if we're not in the middle of an incoming call
+    // This prevents losing the offer if reset() is called during initialization
+    if (!this.isIncomingMode && !this.isIncoming) {
+      (global as any).pendingOffer = null;
+    }
+    // Always clear instance pending offer on reset (it will be restored from global if needed)
+    this.pendingOffer = null;
 
-console.log('✅ AudioCallService state reset complete');
-(global as any).activeAudioCall = false;
+    console.log('✅ AudioCallService state reset complete');
+    (global as any).activeAudioCall = false;
   }
 
   /**
    * Update call session in backend when call ends
    */
-  private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise < void> {
+  private async updateCallSessionInBackend(sessionDuration: number, wasConnected: boolean): Promise<void> {
     if (!this.appointmentId) {
       console.warn('⚠️ [AudioCallService] Cannot update call session: no appointmentId');
       return;
@@ -2473,7 +2477,7 @@ console.log('✅ AudioCallService state reset complete');
         })
       });
 
-      if(response.ok) {
+      if (response.ok) {
         const data = await response.json();
         console.log('✅ Call session updated in backend:', data);
       } else if (response.status === 404) {
@@ -2497,25 +2501,25 @@ console.log('✅ AudioCallService state reset complete');
   /**
    * Reject an incoming call (callee)
    */
-  async rejectIncomingCall(reason: string = 'declined'): Promise < void> {
-  try {
-    console.log('📞 Rejecting incoming audio call...');
-    this.sendSignalingMessage({
-      type: 'call-rejected',
-      callType: 'voice',
-      userId: this.userId,
-      appointmentId: this.appointmentId,
-      reason,
-    });
-    await this.updateCallSessionInBackend(0, false);
-    await this.endCall();
-    this.events?.onCallRejected();
-  } catch(e) {
-    console.error('❌ Error rejecting audio call:', e);
-    await this.endCall();
-    this.events?.onCallRejected();
+  async rejectIncomingCall(reason: string = 'declined'): Promise<void> {
+    try {
+      console.log('📞 Rejecting incoming audio call...');
+      this.sendSignalingMessage({
+        type: 'call-rejected',
+        callType: 'voice',
+        userId: this.userId,
+        appointmentId: this.appointmentId,
+        reason,
+      });
+      await this.updateCallSessionInBackend(0, false);
+      await this.endCall();
+      this.events?.onCallRejected();
+    } catch (e) {
+      console.error('❌ Error rejecting audio call:', e);
+      await this.endCall();
+      this.events?.onCallRejected();
+    }
   }
-}
 }
 
 export { AudioCallService };

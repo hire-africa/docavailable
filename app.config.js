@@ -5,11 +5,11 @@ module.exports = {
     name: "DocAvailable",
     slug: "Doc_available",
     owner: "questmw",
-    version: "1.0.0",
+    version: "1.1.2",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "light",
-    runtimeVersion: "1.0.0",
+    runtimeVersion: "1.1.2",
     updates: {
       url: "https://u.expo.dev/8ea330ee-1ee0-4778-ac7c-459de9eb9dfc"
     },
