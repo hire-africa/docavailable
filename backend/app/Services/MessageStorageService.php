@@ -171,25 +171,51 @@ class MessageStorageService
                 throw new \Exception("Message encryption failed. Message not stored.");
             }
 
-            // Determine receiver_id from appointment context
-            // For now, we'll use a placeholder - this should be derived from appointment/session data
-            $receiverId = $messageData['receiver_id'] ?? 0;
-
             try {
-                DB::table('chats')->insert([
-                    'sender_id' => $messageData['sender_id'],
-                    'receiver_id' => $receiverId,
-                    'encrypted_content' => $encryptedData['ciphertext'],
-                    'encryption_iv' => $encryptedData['iv'],
-                    'encryption_tag' => $encryptedData['tag'],
-                    'encryption_key_id' => 'default', // Can be enhanced for key rotation
-                    'origin_platform' => $messageData['origin_platform'] ?? 'mobile',
-                    'client_instance_id' => $messageData['client_instance_id'] ?? null,
-                    'browser_metadata' => isset($messageData['browser_metadata'])
-                        ? json_encode($messageData['browser_metadata'])
-                        : null,
-                    'created_at' => now()
+                // Determine receiver_id from appointment context
+                // For now, we'll use a placeholder - this should be derived from appointment/session data
+                $receiverId = $messageData['receiver_id'] ?? 0;
+
+                // Sync with chat_messages table (the canonical table for chat history)
+                Log::debug("[MessageStorageService] Storing message in chat_messages table", [
+                    'appointment_id' => $appointmentId,
+                    'message_id' => $messageId,
+                    'session_type' => $sessionType
                 ]);
+
+                DB::table('chat_messages')->insert([
+                    'message_id' => $messageId,
+                    'appointment_id' => $appointmentId,
+                    'sender_id' => $messageData['sender_id'],
+                    'sender_name' => $messageData['sender_name'],
+                    'message' => '[ENCRYPTED]', // Plaintext not stored for security
+                    'message_type' => $messageData['message_type'] ?? 'text',
+                    'media_url' => $messageData['media_url'] ?? null,
+                    'temp_id' => $messageData['temp_id'] ?? null,
+                    'delivery_status' => 'sent',
+                    'encrypted_content' => $encryptedData['ciphertext'],
+                    'iv' => $encryptedData['iv'],
+                    'tag' => $encryptedData['tag'],
+                    'algorithm' => 'aes-256-gcm',
+                    'is_encrypted' => true,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                // Also keep legacy chats table updated if needed (optional, keeping for safety)
+                try {
+                    DB::table('chats')->insert([
+                        'sender_id' => $messageData['sender_id'],
+                        'receiver_id' => $receiverId,
+                        'encrypted_content' => $encryptedData['ciphertext'],
+                        'encryption_iv' => $encryptedData['iv'],
+                        'encryption_tag' => $encryptedData['tag'],
+                        'encryption_key_id' => 'default',
+                        'created_at' => now()
+                    ]);
+                } catch (\Exception $legacyErr) {
+                    Log::warning("Legacy chats table insert failed - ignoring", ['error' => $legacyErr->getMessage()]);
+                }
 
                 Log::info("Message stored in database with encryption", [
                     'appointment_id' => $appointmentId,
@@ -242,7 +268,24 @@ class MessageStorageService
     {
         try {
             $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
-            $messages = Cache::get($cacheKey, []);
+            $messages = Cache::get($cacheKey);
+
+            Log::debug("[MessageStorageService] Retrieving messages", [
+                'appointment_id' => $appointmentId,
+                'session_type' => $sessionType,
+                'cache_key' => $cacheKey,
+                'cache_exists' => $messages !== null,
+                'count' => $messages !== null ? count($messages) : 0
+            ]);
+
+            // If cache is empty, try to hydrate from database
+            if ($messages === null) {
+                Log::info("Cache miss for messages, attempting hydration from database", [
+                    'appointment_id' => $appointmentId,
+                    'session_type' => $sessionType
+                ]);
+                $messages = $this->hydrateCacheFromDatabase($appointmentId, $sessionType);
+            }
 
             // Debug: Log media URLs in retrieved messages
             $mediaMessages = array_filter($messages, function ($msg) {
@@ -250,29 +293,98 @@ class MessageStorageService
             });
 
             if (!empty($mediaMessages)) {
-                Log::info("Media messages found in cache", [
+                Log::info("Media messages found", [
                     'appointment_id' => $appointmentId,
-                    'media_message_count' => count($mediaMessages),
-                    'sample_media_urls' => array_map(function ($msg) {
-                        return [
-                            'id' => $msg['id'],
-                            'type' => $msg['message_type'],
-                            'media_url' => substr($msg['media_url'], 0, 100) . '...',
-                            'media_url_length' => strlen($msg['media_url'])
-                        ];
-                    }, array_slice($mediaMessages, 0, 3))
+                    'media_message_count' => count($mediaMessages)
                 ]);
             }
-
-            Log::info("Messages retrieved from cache", [
-                'appointment_id' => $appointmentId,
-                'message_count' => count($messages)
-            ]);
 
             return $messages;
 
         } catch (\Exception $e) {
             Log::error("Failed to get messages", [
+                'appointment_id' => $appointmentId,
+                'error' => $e->getMessage()
+            ]);
+            return [];
+        }
+    }
+
+    /**
+     * Hydrate cache from database history
+     */
+    private function hydrateCacheFromDatabase(int $appointmentId, string $sessionType): array
+    {
+        try {
+            Log::debug("[MessageStorageService] Querying DB for hydration", [
+                'appointment_id' => $appointmentId,
+                'session_type' => $sessionType
+            ]);
+
+            // Retrieve messages from chat_messages table
+            $dbMessages = DB::table('chat_messages')
+                ->where('appointment_id', $appointmentId)
+                ->orderBy('created_at', 'asc')
+                ->get();
+
+            Log::debug("[MessageStorageService] DB query result", [
+                'count' => count($dbMessages)
+            ]);
+
+            $hydratedMessages = [];
+
+            foreach ($dbMessages as $msg) {
+                $plaintext = $msg->message;
+
+                // Decrypt if message is encrypted
+                if ($msg->is_encrypted && !empty($msg->encrypted_content)) {
+                    try {
+                        $plaintext = EncryptionUtil::decryptMessage(
+                            $msg->encrypted_content,
+                            $msg->iv,
+                            $msg->tag
+                        );
+                    } catch (\Exception $decryptionErr) {
+                        Log::error("Decryption failed for message during hydration", [
+                            'message_id' => $msg->message_id,
+                            'error' => $decryptionErr->getMessage()
+                        ]);
+                        $plaintext = "[Decryption Failed]";
+                    }
+                }
+
+                $hydratedMessages[] = [
+                    'id' => $msg->message_id,
+                    'appointment_id' => (int) $msg->appointment_id,
+                    'sender_id' => (int) $msg->sender_id,
+                    'sender_name' => $msg->sender_name,
+                    'message' => $plaintext,
+                    'message_type' => $msg->message_type,
+                    'media_url' => $msg->media_url,
+                    'temp_id' => $msg->temp_id,
+                    'delivery_status' => $msg->delivery_status,
+                    'reactions' => $msg->reactions ? json_decode($msg->reactions, true) : [],
+                    'read_by' => $msg->read_by ? json_decode($msg->read_by, true) : [],
+                    'timestamp' => \Carbon\Carbon::parse($msg->created_at)->toISOString(),
+                    'created_at' => \Carbon\Carbon::parse($msg->created_at)->toISOString(),
+                    'updated_at' => \Carbon\Carbon::parse($msg->updated_at)->toISOString()
+                ];
+            }
+
+            // Store in cache if we found messages
+            if (!empty($hydratedMessages)) {
+                $cacheKey = $this->getCacheKey($appointmentId, $sessionType);
+                Cache::put($cacheKey, $hydratedMessages, self::CACHE_TTL);
+                Log::info("Cache hydrated successfully from database", [
+                    'appointment_id' => $appointmentId,
+                    'message_count' => count($hydratedMessages)
+                ]);
+            }
+
+            return $hydratedMessages;
+
+        } catch (\Exception $e) {
+            Log::error("Hydration failed", [
                 'appointment_id' => $appointmentId,
                 'error' => $e->getMessage()
             ]);

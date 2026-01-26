@@ -240,6 +240,10 @@ class ChatController extends Controller
     public function getMessages(Request $request, $appointmentId): JsonResponse
     {
         $user = Auth::user();
+        Log::info("[ChatController] getMessages requested", [
+            'appointmentId_param' => $appointmentId,
+            'user_id' => $user->id
+        ]);
 
         // Handle direct session ID format (direct_session_12345) - instant calls
         if (strpos($appointmentId, 'direct_session_') === 0) {

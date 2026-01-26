@@ -872,11 +872,41 @@ export class WebRTCChatService {
       const serverMessages = data.data;
       console.log('📨 [WebRTCChat] Server returned', serverMessages.length, 'messages');
 
-      // Replace local messages with server messages to ensure consistency
-      // This prevents duplicates when navigating back to chat
-      this.messages = serverMessages;
-      await this.saveMessages();
+      // SAFETY MECHANISM: If server returns 0 messages but we have local messages,
+      // do NOT overwrite local messages. This prevents history wipe on cache miss or server restarts.
+      if (serverMessages.length === 0 && this.messages.length > 0) {
+        console.warn('⚠️ [WebRTCChat] Server returned 0 messages but local has', this.messages.length, '. Keeping local messages.');
+        // Don't save empty list over local history
+        return this.messages;
+      }
 
+      // If we have messages, merge them to avoid duplicates and preserve unsent messages
+      if (serverMessages.length > 0) {
+        // Simple merge: prefer server messages but keep local-only messages (like ones currently sending)
+        const merged = [...serverMessages];
+
+        // Add local messages that are NOT in the server set (match by id or temp_id)
+        this.messages.forEach(localMsg => {
+          const exists = merged.some(m => m.id === localMsg.id || (localMsg.temp_id && m.temp_id === localMsg.temp_id));
+          if (!exists) {
+            merged.push(localMsg);
+          }
+        });
+
+        // Sort by timestamp (fallback to current time if invalid)
+        merged.sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeA - timeB;
+        });
+
+        this.messages = merged;
+      } else {
+        // If server is empty and local is empty, just set to empty
+        this.messages = serverMessages;
+      }
+
+      await this.saveMessages();
       console.log('✅ [WebRTCChat] Messages synced and saved to storage:', this.messages.length);
       return this.messages;
     } catch (error) {
