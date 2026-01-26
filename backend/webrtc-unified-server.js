@@ -32,28 +32,10 @@ const connections = new Map(); // appointmentId -> Set of WebSocket connections
 const sessionTimers = new Map(); // sessionId -> timer
 const processedOffers = new Map(); // offerKey -> timestamp
 
-// Create HTTP/HTTPS server
-let server;
-let isHTTPS = false;
-
-try {
-  // Try to create HTTPS server with SSL certificates
-  if (fs.existsSync(CONFIG.SSL_CERT_PATH) && fs.existsSync(CONFIG.SSL_KEY_PATH)) {
-    const sslOptions = {
-      cert: fs.readFileSync(CONFIG.SSL_CERT_PATH),
-      key: fs.readFileSync(CONFIG.SSL_KEY_PATH)
-    };
-    server = https.createServer(sslOptions);
-    isHTTPS = true;
-    console.log('🔒 HTTPS server created with SSL certificates');
-  } else {
-    throw new Error('SSL certificates not found');
-  }
-} catch (error) {
-  console.warn('⚠️ SSL certificates not found, falling back to HTTP:', error.message);
-  server = http.createServer();
-  isHTTPS = false;
-}
+// Create HTTP server (SSL handled by Nginx)
+const server = http.createServer();
+const isHTTPS = false;
+log('INFO', 'HTTP server created (SSL termination by Nginx)');
 
 const audioWss = new WebSocket.Server({
   server,
@@ -599,6 +581,14 @@ chatWss.on('connection', (ws, req) => {
 // - https://docavailable.org/chat-health  
 // - https://docavailable.org/webrtc-health (combined)
 server.on('request', (req, res) => {
+  const urlParts = url.parse(req.url, true);
+  log('DEBUG', 'Incoming HTTP request', {
+    url: req.url,
+    method: req.method,
+    upgrade: req.headers.upgrade,
+    connection: req.headers.connection
+  });
+
   const totalConnections = Array.from(connections.values()).reduce((sum, conns) => sum + conns.size, 0);
   const healthResponse = {
     status: 'healthy',
@@ -632,6 +622,9 @@ server.on('request', (req, res) => {
         chat: { endpoint: 'wss://docavailable.org/chat-signaling', status: 'healthy' }
       }
     }));
+  } else if (req.url.startsWith('/call-signaling') || req.url.startsWith('/audio-signaling') || req.url.startsWith('/chat-signaling')) {
+    // Let WebSocket server handle these paths
+    log('DEBUG', 'Passing WebSocket path to ws server handlers', { url: req.url });
   } else {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('Not Found');

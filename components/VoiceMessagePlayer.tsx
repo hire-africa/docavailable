@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { Audio, AVPlaybackStatusSuccess } from 'expo-av';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { environment } from '../config/environment';
@@ -19,6 +19,10 @@ export default function VoiceMessagePlayer({
   deliveryStatus = 'sent',
   profilePictureUrl
 }: VoiceMessagePlayerProps) {
+  const isLoadedStatus = (status: any): status is AVPlaybackStatusSuccess => {
+    return !!status && status.isLoaded === true;
+  };
+
   // Debug: Log the audio URI we receive
   console.log('🎵 VoiceMessagePlayer received audioUri:', audioUri);
   
@@ -54,6 +58,7 @@ export default function VoiceMessagePlayer({
   }, [audioUri]);
 
   const loadAudio = async () => {
+    let audioUrl = audioUri;
     try {
       setIsLoading(true);
       setLoadError(null);
@@ -67,17 +72,20 @@ export default function VoiceMessagePlayer({
       }
       
       // Use the audio URI directly - it should already be a complete URL from the server
-      let audioUrl = audioUri;
+      audioUrl = audioUri;
       
-      // If it's a relative path, use the WebRTC chat server for file serving
+      // If it's a relative path, construct a correct full URL (avoid double /api/...)
       if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
-        // If it already starts with /api/audio/, just prepend the server URL
-        if (audioUrl.startsWith('/api/audio/')) {
-          audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}${audioUrl}`;
+        const base = environment.LARAVEL_API_URL;
+        if (audioUrl.startsWith('/api/')) {
+          // Already an API path (e.g. /api/chat_voice_messages/...) => just prepend host
+          audioUrl = `${base}${audioUrl}`;
+        } else if (audioUrl.startsWith('api/')) {
+          audioUrl = `${base}/${audioUrl}`;
         } else {
-          // If it's a relative path without /api/audio/, add the prefix
-          const cleanPath = audioUrl.startsWith('/') ? audioUrl.substring(1) : audioUrl;
-          audioUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/audio/${cleanPath}`;
+          // If backend gave a bare relative path, assume it's an audio route under /api/audio/
+          const cleanPath = audioUrl.replace(/^\/+/, '');
+          audioUrl = `${base}/api/audio/${cleanPath}`;
         }
       }
 
@@ -136,28 +144,25 @@ export default function VoiceMessagePlayer({
       
       // Get duration and verify load status
       const status = await newSound.getStatusAsync();
-      console.log('🎵 Audio loaded - Status:', {
-        isLoaded: status.isLoaded,
-        duration: status.durationMillis,
-        error: (status as any).error,
-        uri: audioUrl
-      });
-      
-      if (status.isLoaded) {
+      if (isLoadedStatus(status)) {
+        console.log('🎵 Audio loaded - Status:', {
+          isLoaded: status.isLoaded,
+          duration: status.durationMillis,
+          uri: audioUrl
+        });
         setDuration(status.durationMillis || 0);
         console.log('🎵 Audio duration set:', status.durationMillis, 'ms');
       } else {
         console.warn('🎵 Audio loaded but status.isLoaded is false');
-        const errorStatus = status as any;
-        if (errorStatus.error) {
-          console.error('🎵 Audio load error:', errorStatus.error);
-          setLoadError(`Failed to load audio: ${errorStatus.error}`);
+        console.log('🎵 Audio load error:', (status as any).error);
+        if ((status as any).error) {
+          setLoadError(`Failed to load audio: ${(status as any).error}`);
         }
       }
       
       // Set up status update
       newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded) {
+        if (isLoadedStatus(status)) {
           setIsPlaying(status.isPlaying);
           setPosition(status.positionMillis || 0);
           
@@ -168,10 +173,9 @@ export default function VoiceMessagePlayer({
           }
         } else {
           // Log any errors during playback
-          const errorStatus = status as any;
-          if (errorStatus.error) {
-            console.error('🎵 Playback error:', errorStatus.error);
-            setLoadError(`Playback error: ${errorStatus.error}`);
+          if ((status as any).error) {
+            console.error('🎵 Playback error:', (status as any).error);
+            setLoadError(`Playback error: ${(status as any).error}`);
           }
         }
       });
@@ -252,15 +256,21 @@ export default function VoiceMessagePlayer({
     try {
       // Check sound status before playing
       const status = await sound.getStatusAsync();
-      console.log('🎵 Play/Pause - Sound status:', {
-        isLoaded: status.isLoaded,
-        isPlaying: status.isPlaying,
-        duration: status.durationMillis,
-        position: status.positionMillis,
-        error: (status as any).error
-      });
+      if (isLoadedStatus(status)) {
+        console.log('🎵 Play/Pause - Sound status:', {
+          isLoaded: status.isLoaded,
+          isPlaying: status.isPlaying,
+          duration: status.durationMillis,
+          position: status.positionMillis,
+        });
+      } else {
+        console.log('🎵 Play/Pause - Sound status:', {
+          isLoaded: status.isLoaded,
+          error: (status as any).error,
+        });
+      }
       
-      if (!status.isLoaded) {
+      if (!isLoadedStatus(status)) {
         console.error('🎵 Cannot play: sound is not loaded');
         setLoadError('Audio file not loaded properly');
         return;

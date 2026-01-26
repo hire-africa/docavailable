@@ -1,11 +1,10 @@
 import RNCallKeep from 'react-native-callkeep';
-import { Platform } from 'react-native';
 import 'react-native-get-random-values';
 
 class CallKeepService {
   private initialized = false;
   private currentCallId: string | null = null;
-  
+
   private uuidv4(): string {
     if ((global as any)?.crypto?.randomUUID) {
       return (global as any).crypto.randomUUID();
@@ -54,7 +53,7 @@ class CallKeepService {
 
       await RNCallKeep.setup(options);
       this.initialized = true;
-      
+
       console.log('CallKeep initialized successfully');
     } catch (error) {
       console.error('CallKeep setup error:', error);
@@ -81,7 +80,16 @@ class CallKeepService {
         handle,
         callerName,
         'generic',
-        hasVideo
+        hasVideo,
+        {
+          alertTitle: 'Incoming Call',
+          alertDescription: 'Call from ' + callerName,
+          android: {
+            ringtoneUri: 'content://settings/system/ringtone',
+            skipCallLog: false,
+            skipNotification: false,
+          },
+        }
       );
 
       console.log('CallKeep: Incoming call displayed', {

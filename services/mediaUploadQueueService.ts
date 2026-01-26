@@ -49,12 +49,12 @@ class MediaUploadQueueService {
     const queue = await this.getQueue();
     queue.push(queuedUpload);
     await this.saveQueue(queue);
-    
+
     console.log(`📤 [MediaQueue] Added ${upload.type} upload to queue:`, queuedUpload.id);
-    
+
     // Start processing queue
     this.processQueue();
-    
+
     return queuedUpload.id;
   }
 
@@ -91,13 +91,13 @@ class MediaUploadQueueService {
     }
 
     this.isProcessing = true;
-    
+
     try {
       const queue = await this.getQueue();
       const pendingUploads = queue.filter(upload => upload.status === 'pending');
-      
+
       console.log(`📤 [MediaQueue] Processing ${pendingUploads.length} pending uploads`);
-      
+
       for (const upload of pendingUploads) {
         await this.processUpload(upload);
       }
@@ -114,11 +114,11 @@ class MediaUploadQueueService {
   private async processUpload(upload: QueuedUpload): Promise<void> {
     try {
       console.log(`📤 [MediaQueue] Processing upload ${upload.id} (${upload.type})`);
-      
+
       // Update status to uploading
       await this.updateUploadStatus(upload.id, 'uploading');
       this.notifyProgress(upload.id, 'uploading', 0);
-      
+
       // Check and refresh auth token
       const tokenIsValid = await this.checkAndRefreshToken();
       if (!tokenIsValid) {
@@ -128,35 +128,35 @@ class MediaUploadQueueService {
       // Upload the file
       this.notifyProgress(upload.id, 'uploading', 50);
       const mediaUrl = await this.uploadFile(upload);
-      
+
       if (mediaUrl) {
         this.notifyProgress(upload.id, 'uploading', 80);
-        
+
         // Send message through WebRTC
         await this.sendMediaMessage(upload, mediaUrl);
-        
+
         // Update with media URL and mark as completed
         await this.updateUploadStatus(upload.id, 'completed', mediaUrl);
         this.notifyProgress(upload.id, 'completed', 100);
-        
+
         console.log(`✅ [MediaQueue] Upload completed: ${upload.id}`);
       } else {
         throw new Error('Upload failed - no media URL returned');
       }
     } catch (error: any) {
       console.error(`❌ [MediaQueue] Upload failed for ${upload.id}:`, error);
-      
+
       const queue = await this.getQueue();
       const uploadIndex = queue.findIndex(u => u.id === upload.id);
-      
+
       if (uploadIndex !== -1) {
         queue[uploadIndex].retryCount++;
         queue[uploadIndex].error = error.message;
-        
+
         if (queue[uploadIndex].retryCount < this.maxRetries) {
           queue[uploadIndex].status = 'pending';
           console.log(`🔄 [MediaQueue] Retrying upload ${upload.id} (attempt ${queue[uploadIndex].retryCount + 1})`);
-          
+
           // Retry after delay with exponential backoff
           const retryDelay = this.retryDelay * Math.pow(2, queue[uploadIndex].retryCount - 1);
           setTimeout(() => this.processQueue(), retryDelay);
@@ -164,7 +164,7 @@ class MediaUploadQueueService {
           queue[uploadIndex].status = 'failed';
           console.log(`❌ [MediaQueue] Upload failed permanently: ${upload.id}`);
         }
-        
+
         await this.saveQueue(queue);
         this.notifyProgress(upload.id, queue[uploadIndex].status, 0, error.message);
       }
@@ -177,7 +177,7 @@ class MediaUploadQueueService {
   private async uploadFile(upload: QueuedUpload): Promise<string | null> {
     const formData = new FormData();
     const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
-    
+
     if (upload.type === 'image') {
       const fileName = `image_${uniqueId}.jpg`;
       formData.append('file', {
@@ -186,10 +186,10 @@ class MediaUploadQueueService {
         name: fileName,
       } as any);
       formData.append('appointment_id', upload.appointmentId.toString());
-      
+
       console.log(`📤 [MediaQueue] Uploading image: ${fileName}`);
       // Use correct image upload endpoint
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/image`;
+      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/chat-image`;
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -207,7 +207,7 @@ class MediaUploadQueueService {
         name: fileName,
       } as any);
       formData.append('appointment_id', upload.appointmentId.toString());
-      
+
       console.log(`📤 [MediaQueue] Uploading voice: ${fileName}`);
       // Use docavailable.org for voice message uploads (same as calls)
       const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
@@ -221,7 +221,7 @@ class MediaUploadQueueService {
       const responseData = await response.json();
       return responseData?.data?.media_url || responseData?.data?.url || null;
     }
-    
+
     return null;
   }
 
@@ -231,7 +231,7 @@ class MediaUploadQueueService {
   private async sendMediaMessage(upload: QueuedUpload, mediaUrl: string): Promise<void> {
     try {
       console.log(`📤 [MediaQueue] Sending ${upload.type} message through WebRTC`);
-      
+
       // Create message data for backend API persistence
       const messageData = {
         message: upload.type === 'image' ? '🖼️ Image' : '🎤 Voice message',
@@ -239,14 +239,14 @@ class MediaUploadQueueService {
         media_url: mediaUrl,
         temp_id: upload.tempId,
       };
-      
+
       // Send directly to backend API since WebRTC service might not be available in queue context
       const response = await apiService.post(`/chat/${upload.appointmentId}/messages`, messageData);
-      
+
       if (!response.success) {
         throw new Error(`Failed to send ${upload.type} message: ${response.message}`);
       }
-      
+
       console.log(`✅ [MediaQueue] ${upload.type} message sent successfully via API`);
     } catch (error) {
       console.error('Error sending media message:', error);
@@ -264,7 +264,7 @@ class MediaUploadQueueService {
       return response.success;
     } catch (error) {
       console.log('🔄 [MediaQueue] Token invalid, attempting refresh...');
-      
+
       try {
         // Try to get a fresh token by checking auth status
         const authToken = await AsyncStorage.getItem('auth_token');
@@ -287,7 +287,7 @@ class MediaUploadQueueService {
   private async updateUploadStatus(id: string, status: QueuedUpload['status'], mediaUrl?: string): Promise<void> {
     const queue = await this.getQueue();
     const uploadIndex = queue.findIndex(u => u.id === id);
-    
+
     if (uploadIndex !== -1) {
       queue[uploadIndex].status = status;
       if (mediaUrl) {
@@ -302,7 +302,7 @@ class MediaUploadQueueService {
    */
   subscribeToProgress(uploadId: string, callback: (progress: UploadProgress) => void): () => void {
     this.progressCallbacks.set(uploadId, callback);
-    
+
     // Return unsubscribe function
     return () => {
       this.progressCallbacks.delete(uploadId);

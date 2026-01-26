@@ -38,8 +38,10 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     enabled = true
   } = options;
 
-  console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, hasAuthToken: !!authToken });
-  
+  useEffect(() => {
+    console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, hasAuthToken: !!authToken });
+  }, [sessionId, appointmentId, patientId, doctorId, enabled, !!authToken]);
+
   const [isConnected, setIsConnected] = useState(false);
   const [timerState, setTimerState] = useState<TimerState>({
     isActive: false,
@@ -175,20 +177,20 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       await detectorRef.current.connect();
       console.log('✅ [Hook] Connected successfully');
       setIsConnected(true);
-      
+
       // Update state from detector
       setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
       setTimerState(detectorRef.current.getTimerState());
-      
+
       // Force state sync to ensure hook state matches detector state
       console.log('🔄 [Hook] Forcing state synchronization after connect');
       detectorRef.current.forceStateSync();
 
       // Immediately rehydrate timer from backend after successful connect to avoid race conditions
       try {
-        const { default: apiService } = await import('../services/apiService');
+        const { apiService } = await import('../services/apiService');
         const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
         if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
           const remaining = Math.max(0, Math.floor(result.timeRemaining));
@@ -218,7 +220,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
         if (!detectorRef.current) return;
 
         // Import lazily to avoid cycles
-        const { default: apiService } = await import('../services/apiService');
+        const { apiService } = await import('../services/apiService');
         const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
         if (cancelled) return;
 

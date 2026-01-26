@@ -1,14 +1,22 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
+    mediaDevices,
+    MediaStream,
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
+import configService from './configService';
 import { SecureWebSocketService } from './secureWebSocketService';
+
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager');
+} catch (e) {
+  InCallManager = null;
+}
 
 export interface VideoCallState {
   isConnected: boolean;
@@ -37,6 +45,9 @@ class VideoCallService {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private signalingChannel: SecureWebSocketService | null = null;
+  private hasEverIceConnected: boolean = false;
+  private iceRestartTimer: ReturnType<typeof setTimeout> | null = null;
+  private iceEarlyFailureTimer: ReturnType<typeof setTimeout> | null = null;
   private callTimer: ReturnType<typeof setInterval> | null = null;
   private callStartTime: number = 0;
   private events: VideoCallEvents | null = null;
@@ -71,15 +82,10 @@ class VideoCallService {
     connectionState: 'disconnected',
   };
 
-  private iceServers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ];
-
   constructor() {
     this.instanceId = ++VideoCallService.instanceCounter;
     console.log(`🏗️ [VideoCallService] Instance ${this.instanceId} created`);
-    
+
     // Diagnostic check: Verify WebRTC is available
     const webrtcAvailable = {
       RTCPeerConnection: typeof RTCPeerConnection !== 'undefined',
@@ -88,9 +94,9 @@ class VideoCallService {
       RTCIceCandidate: typeof RTCIceCandidate !== 'undefined',
       RTCSessionDescription: typeof RTCSessionDescription !== 'undefined'
     };
-    
+
     console.log('🔍 [VideoCallService] WebRTC availability check:', webrtcAvailable);
-    
+
     if (!webrtcAvailable.RTCPeerConnection) {
       console.error('❌ [VideoCallService] CRITICAL: RTCPeerConnection is not available!');
       console.error('❌ [VideoCallService] This usually means react-native-webrtc is not properly installed or linked.');
@@ -99,10 +105,45 @@ class VideoCallService {
       console.error('   2. For bare React Native: npx pod-install (iOS) or rebuild (Android)');
       console.error('   3. For Expo: Ensure you are using a development build (not Expo Go)');
     }
-    
+
     // Ensure this instance becomes the active singleton so all callers (new/getInstance)
     // share the same underlying VideoCallService for a given app process
     VideoCallService.activeInstance = this;
+  }
+
+  private getIceServers() {
+    try {
+      const w = configService.getWebRTCConfig();
+      const servers: any[] = [];
+      const stun = Array.isArray(w.stunServers) && w.stunServers.length ? w.stunServers : [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+      ];
+      stun.forEach(u => servers.push({ urls: u }));
+      if (w.turnServerUrl && w.turnUsername && w.turnPassword) {
+        servers.push({ urls: w.turnServerUrl, username: w.turnUsername, credential: w.turnPassword } as any);
+        console.log('🌐 [VideoCallService] TURN server configured via configService');
+      } else {
+        const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
+        const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
+        const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
+        if (turnUrl && turnUsername && turnCredential) {
+          servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
+          console.log('🌐 [VideoCallService] TURN server configured via env fallback');
+        } else {
+          console.log('🌐 [VideoCallService] No TURN configured (using STUN only)');
+        }
+      }
+      return servers;
+    } catch (e) {
+      console.warn('⚠️ [VideoCallService] Failed to read ICE config:', e);
+      return [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ];
+    }
   }
 
   /**
@@ -358,7 +399,7 @@ class VideoCallService {
       // CRITICAL OPTIMIZATION: Start signaling connection FIRST (don't wait for camera)
       // This allows WebRTC negotiation to begin while camera is initializing
       const signalingPromise = this.connectSignaling(appointmentId, userId);
-      
+
       // Start getting user media with optimized constraints for faster initialization
       // Use lower resolution initially for faster camera startup (can upgrade later if needed)
       const mediaPromise = mediaDevices.getUserMedia({
@@ -391,7 +432,7 @@ class VideoCallService {
 
       // Wait for signaling to be ready (usually faster than camera)
       await signalingPromise;
-      
+
       // Verify RTCPeerConnection is available
       if (!RTCPeerConnection) {
         const error = new Error('RTCPeerConnection is not available - react-native-webrtc may not be properly loaded');
@@ -406,9 +447,10 @@ class VideoCallService {
 
       // Create peer connection immediately (before camera is ready)
       try {
-        console.log('🔧 [VideoCallService] Creating RTCPeerConnection with iceServers:', this.iceServers);
+        const iceServers = this.getIceServers();
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection with iceServers:', iceServers);
         this.peerConnection = new RTCPeerConnection({
-          iceServers: this.iceServers,
+          iceServers,
           iceCandidatePoolSize: 10, // Pre-gather ICE candidates for faster connection
         });
         console.log('✅ [VideoCallService] RTCPeerConnection created successfully:', {
@@ -440,12 +482,12 @@ class VideoCallService {
         // CRITICAL: Verify tracks are actually working
         const videoTracks = this.localStream.getVideoTracks();
         const audioTracks = this.localStream.getAudioTracks();
-        
+
         if (videoTracks.length === 0) {
           console.error('❌ [VideoCallService] CRITICAL: No video tracks in stream!');
           throw new Error('No video tracks available - camera may not be accessible');
         }
-        
+
         if (audioTracks.length === 0) {
           console.error('❌ [VideoCallService] CRITICAL: No audio tracks in stream!');
           throw new Error('No audio tracks available - microphone may not be accessible');
@@ -510,7 +552,7 @@ class VideoCallService {
 
       // Signaling connection already started in parallel above, ensure it's complete
       // (If it failed in Promise.all, it would have thrown, so we're good here)
-      
+
       // Create and send offer for outgoing calls
       await this.createOffer();
       console.log('📞 Video call offer sent successfully, starting call timeout...');
@@ -538,8 +580,72 @@ class VideoCallService {
       return;
     }
 
-      // Handle remote stream
-      this.peerConnection.addEventListener('track', (event) => {
+    // Prefer ICE state to drive connectivity on Android (connectionState can be noisy/transient)
+    this.peerConnection.addEventListener('iceconnectionstatechange', () => {
+      const iceState = this.peerConnection?.iceConnectionState;
+      console.log('🧊 [VideoCallService] ICE connection state:', iceState);
+
+      if (iceState === 'connected' || iceState === 'completed') {
+        this.hasEverIceConnected = true;
+        if (this.iceEarlyFailureTimer) {
+          clearTimeout(this.iceEarlyFailureTimer);
+          this.iceEarlyFailureTimer = null;
+        }
+        if (this.iceRestartTimer) {
+          clearTimeout(this.iceRestartTimer);
+          this.iceRestartTimer = null;
+        }
+
+        // Mark connected if not already
+        if (!this.state.isConnected || this.state.connectionState !== 'connected') {
+          console.log('✅ [VideoCallService] ICE connected - marking call connected');
+          this.clearReofferLoop();
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+          this.startCallTimer();
+        }
+        return;
+      }
+
+      if (iceState === 'failed') {
+        // Android can emit transient failure early; do not tear down before ever connected
+        if (!this.hasEverIceConnected) {
+          console.log('⚠️ [VideoCallService] ICE failed early (no prior ICE connected) - waiting');
+          if (!this.iceEarlyFailureTimer) {
+            this.iceEarlyFailureTimer = setTimeout(() => {
+              const s = this.peerConnection?.iceConnectionState;
+              if (s === 'failed' && !this.hasEverIceConnected) {
+                console.log('⚠️ [VideoCallService] ICE still failed after grace period - keeping call alive (awaiting network recovery)');
+              }
+              this.iceEarlyFailureTimer = null;
+            }, 8000);
+          }
+
+          // Attempt ICE restart once after a short delay if supported
+          if (!this.iceRestartTimer) {
+            this.iceRestartTimer = setTimeout(() => {
+              try {
+                if (this.peerConnection && typeof (this.peerConnection as any).restartIce === 'function') {
+                  console.log('🔁 [VideoCallService] Attempting ICE restart...');
+                  (this.peerConnection as any).restartIce();
+                }
+              } catch (e) {
+                console.warn('⚠️ [VideoCallService] restartIce failed (non-critical):', e);
+              } finally {
+                this.iceRestartTimer = null;
+              }
+            }, 6000);
+          }
+          return;
+        }
+
+        // ICE failed after we had a real connection -> treat as fatal
+        console.log('❌ [VideoCallService] ICE failed after connected - ending call');
+        this.endCallInternal(false);
+      }
+    });
+
+    // Handle remote stream
+    this.peerConnection.addEventListener('track', (event) => {
       console.log('📹 Remote stream track received:', {
         trackKind: event.track.kind,
         trackId: event.track.id,
@@ -547,11 +653,19 @@ class VideoCallService {
         streamId: event.streams[0]?.id,
         streamsCount: event.streams.length
       });
-      
-      const stream = event.streams[0];
-      if (!stream) {
-        console.warn('⚠️ [VideoCallService] Received track event but no stream available');
-        return;
+
+      const providedStream = event.streams[0];
+      const stream = providedStream || this.remoteStream || new MediaStream();
+
+      if (!providedStream) {
+        const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+        if (!alreadyHas) {
+          try {
+            stream.addTrack(event.track);
+          } catch (e) {
+            console.warn('⚠️ [VideoCallService] Failed to add remote track to synthetic stream:', e);
+          }
+        }
       }
 
       // Ensure all tracks in the stream are enabled
@@ -581,11 +695,11 @@ class VideoCallService {
       }
 
       // Update remote stream reference
-      if (this.remoteStream && this.remoteStream.id !== stream.id) {
+      if (providedStream && this.remoteStream && this.remoteStream.id !== providedStream.id) {
         console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
       }
       this.remoteStream = stream;
-      
+
       // Handle tracks that might be added later to the stream
       stream.getTracks().forEach(track => {
         track.addEventListener('ended', () => {
@@ -598,73 +712,83 @@ class VideoCallService {
           console.log(`✅ [VideoCallService] Remote ${track.kind} track unmuted:`, track.id);
         });
       });
-      
+
       // Notify UI of remote stream
-      this.events?.onRemoteStream(stream);
-      
+      const emit = () => this.events?.onRemoteStream(stream);
+      if (Constants.platform?.android) {
+        setTimeout(emit, 200);
+      } else {
+        emit();
+      }
+
       console.log('✅ [VideoCallService] Remote stream processed:', {
         streamId: stream.id,
         videoTracks: stream.getVideoTracks().length,
         audioTracks: stream.getAudioTracks().length,
         allTracksEnabled: stream.getTracks().every(t => t.enabled)
       });
-      });
+    });
 
-      // Handle ICE candidates
-      this.peerConnection.addEventListener('icecandidate', (event) => {
-        if (event.candidate) {
-          this.sendSignalingMessage({
-            type: 'ice-candidate',
-            candidate: event.candidate,
-            senderId: this.userId,
-          });
-        }
-      });
-
-      // Handle connection state changes
-      this.peerConnection.addEventListener('connectionstatechange', () => {
-        const state = this.peerConnection?.connectionState;
-        console.log('🔗 Video call connection state:', state);
-        console.log('🔗 Current video call state:', {
-          connectionState: this.state.connectionState,
-          isCallAnswered: this.isCallAnswered,
-          hasEnded: this.hasEnded
+    // Handle ICE candidates
+    this.peerConnection.addEventListener('icecandidate', (event) => {
+      if (event.candidate) {
+        this.sendSignalingMessage({
+          type: 'ice-candidate',
+          candidate: event.candidate,
+          senderId: this.userId,
         });
+      }
+    });
 
-        if (state === 'connected') {
-          console.log('🔗 Video WebRTC connected - updating call state');
-        this.clearReofferLoop();
-          this.updateState({
-            isConnected: true,
-            connectionState: 'connected'
-          });
-          this.startCallTimer();
-          // Broadcast current media state to peer on connect
-          this.sendSignalingMessage({
-            type: 'media-state',
-            audioEnabled: this.state.isAudioEnabled,
-            videoEnabled: this.state.isVideoEnabled,
-            senderId: this.userId,
-            appointmentId: this.appointmentId,
-          });
-        } else if (state === 'disconnected' || state === 'failed') {
-        // CRITICAL: Ignore disconnected/failed during initial setup
-          if (this.state.connectionState === 'connecting') {
-            console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
-            return;
-          }
-        // Only update state if call is not answered and not already ended
-          if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
-            console.log('🔗 Video WebRTC disconnected/failed - updating state');
-            this.updateState({
-              isConnected: false,
-              connectionState: 'disconnected'
-            });
-          } else {
-            console.log('🔗 Video WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
-          }
-        }
+    // Handle connection state changes
+    this.peerConnection.addEventListener('connectionstatechange', () => {
+      const state = this.peerConnection?.connectionState;
+      console.log('🔗 Video call connection state:', state);
+      console.log('🔗 Current video call state:', {
+        connectionState: this.state.connectionState,
+        isCallAnswered: this.isCallAnswered,
+        hasEnded: this.hasEnded
       });
+
+      if (state === 'connected') {
+        console.log('🔗 Video WebRTC connected - updating call state');
+        this.clearReofferLoop();
+        this.updateState({
+          isConnected: true,
+          connectionState: 'connected'
+        });
+        this.startCallTimer();
+        // Broadcast current media state to peer on connect
+        this.sendSignalingMessage({
+          type: 'media-state',
+          audioEnabled: this.state.isAudioEnabled,
+          videoEnabled: this.state.isVideoEnabled,
+          senderId: this.userId,
+          appointmentId: this.appointmentId,
+        });
+      } else if (state === 'disconnected' || state === 'failed') {
+        // CRITICAL: Ignore disconnected/failed during initial setup
+        if (this.state.connectionState === 'connecting') {
+          console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
+          return;
+        }
+        // If ICE has never connected, treat this as transient on Android and wait for ICE events
+        if (!this.hasEverIceConnected && Constants.platform?.android) {
+          console.log('⚠️ [VideoCallService] connectionState failed/disconnected before ICE connected - ignoring on Android');
+          return;
+        }
+        // Only update state if call is not answered and not already ended
+        if (!this.isCallAnswered && !this.hasEnded && !this.hasAccepted) {
+          console.log('🔗 Video WebRTC disconnected/failed - updating state');
+          this.updateState({
+            isConnected: false,
+            connectionState: 'disconnected'
+          });
+        } else {
+          console.log('🔗 Video WebRTC disconnected/failed but call is answered, already ended, or being accepted - ignoring');
+        }
+      }
+    });
   }
 
   /**
@@ -676,21 +800,22 @@ class VideoCallService {
       const signalingUrl =
         process.env.EXPO_PUBLIC_WEBRTC_SIGNALING_URL ||
         (Constants as any).expoConfig?.extra?.webrtc?.signalingUrl ||
-        environment.WEBRTC_SIGNALING_URL;
+        environment.WEBRTC_SIGNALING_URL ||
+        'wss://docavailable.org/call-signaling';
 
       const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
       console.log('🔌 [VideoCallService] Connecting to signaling server:', wsUrl);
       console.log('🔧 [VideoCallService] User ID:', userId);
 
       // Create secure WebSocket connection that handles self-signed certificates
-        this.signalingChannel = new SecureWebSocketService({
-          url: wsUrl,
-          ignoreSSLErrors: true, // Allow self-signed certificates
-          onOpen: () => {
-            console.log('✅ [VideoCallService] Connected to video signaling server');
-            console.log('🔍 [VideoCallService] Signaling WebSocket URL:', wsUrl);
-            console.log('🔍 [VideoCallService] Signaling readyState:', this.signalingChannel?.readyState);
-          },
+      this.signalingChannel = new SecureWebSocketService({
+        url: wsUrl,
+        ignoreSSLErrors: true, // Allow self-signed certificates
+        onOpen: () => {
+          console.log('✅ [VideoCallService] Connected to video signaling server');
+          console.log('🔍 [VideoCallService] Signaling WebSocket URL:', wsUrl);
+          console.log('🔍 [VideoCallService] Signaling readyState:', this.signalingChannel?.readyState);
+        },
         onMessage: async (event) => {
           try {
             const message = JSON.parse(event.data);
@@ -828,11 +953,11 @@ class VideoCallService {
       } catch (error) {
         const errorMessage = error?.message || '';
         const errorCode = (error as any)?.code || '';
-        
+
         // Check for SSL certificate specific errors
         if (errorMessage.includes('certificate') || errorMessage.includes('SSL') || errorMessage.includes('TLS') ||
-            errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
-            errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
+          errorCode === 'CERT_HAS_EXPIRED' || errorCode === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' ||
+          errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' || errorCode === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
           console.error('🔒 [VideoCallService] SSL CERTIFICATE ERROR DETECTED!');
           console.error('🔒 [VideoCallService] This indicates the SSL certificate may be:');
           console.error('   - Expired');
@@ -841,12 +966,16 @@ class VideoCallService {
           console.error('   - Invalid for the domain');
           console.error('🔒 [VideoCallService] To verify, run: node test-ssl-certificate.js');
         }
-        
+
         if (errorMessage.includes('Chain validation failed') || errorMessage.includes('failed') || errorMessage.includes('SSL') || errorMessage.includes('timeout')) {
           console.warn('⚠️ [VideoCallService] Video signaling SSL/Connection error, attempting fallback...', errorMessage);
 
           // Try fallback URL from environment
-          const fallbackSignalingUrl = environment.WEBRTC_FALLBACK_SIGNALING_URL;
+          const fallbackSignalingUrl =
+            environment.WEBRTC_FALLBACK_SIGNALING_URL ||
+            environment.WEBRTC_SIGNALING_URL ||
+            'wss://docavailable.org/call-signaling';
+
           const wsFallbackUrl = `${fallbackSignalingUrl}?appointmentId=${encodeURIComponent(appointmentId)}&userId=${encodeURIComponent(userId)}`;
 
           console.log('🔌 [VideoCallService] Retrying with fallback URL:', wsFallbackUrl);
@@ -917,8 +1046,9 @@ class VideoCallService {
 
       // Create peer connection
       try {
-        console.log('🔧 [VideoCallService] Creating RTCPeerConnection for incoming call with iceServers:', this.iceServers);
-        this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
+        const iceServers = this.getIceServers();
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection for incoming call with iceServers:', iceServers);
+        this.peerConnection = new RTCPeerConnection({ iceServers });
         console.log('✅ [VideoCallService] RTCPeerConnection created for incoming call:', {
           connectionState: this.peerConnection.connectionState,
           signalingState: this.peerConnection.signalingState
@@ -952,11 +1082,19 @@ class VideoCallService {
           streamId: event.streams[0]?.id,
           streamsCount: event.streams.length
         });
-        
-        const stream = event.streams[0];
-        if (!stream) {
-          console.warn('⚠️ [VideoCallService] Received track event but no stream available');
-          return;
+
+        const providedStream = event.streams[0];
+        const stream = providedStream || this.remoteStream || new MediaStream();
+
+        if (!providedStream) {
+          const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+          if (!alreadyHas) {
+            try {
+              stream.addTrack(event.track);
+            } catch (e) {
+              console.warn('⚠️ [VideoCallService] Failed to add remote track to synthetic stream:', e);
+            }
+          }
         }
 
         // Ensure all tracks in the stream are enabled
@@ -987,11 +1125,11 @@ class VideoCallService {
         }
 
         // Update remote stream reference (merge if stream already exists)
-        if (this.remoteStream && this.remoteStream.id !== stream.id) {
+        if (providedStream && this.remoteStream && this.remoteStream.id !== providedStream.id) {
           console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
         }
         this.remoteStream = stream;
-        
+
         // Handle tracks that might be added later to the stream
         stream.getTracks().forEach(track => {
           track.addEventListener('ended', () => {
@@ -1004,10 +1142,10 @@ class VideoCallService {
             console.log(`✅ [VideoCallService] Remote ${track.kind} track unmuted:`, track.id);
           });
         });
-        
+
         // Notify UI of remote stream
         this.events?.onRemoteStream(stream);
-        
+
         console.log('✅ [VideoCallService] Remote stream processed:', {
           streamId: stream.id,
           videoTracks: stream.getVideoTracks().length,
@@ -1098,25 +1236,25 @@ class VideoCallService {
         });
         // Don't return - continue setup so we can process the re-offer when it arrives
       } else {
-      // If an offer was buffered, handle it now
+        // If an offer was buffered, handle it now
         console.log('📞 [VideoCallService] Processing pending offer in acceptIncomingCall...');
         await this.handleOffer(pendingOffer as any);
-        
+
         // Clear both global and local pending offers
         (global as any).pendingOffer = null;
         this.pendingOffer = null;
-        
+
         // Drain queued candidates now that remoteDescription should be set
         if (this.pendingCandidates.length > 0) {
           console.log(`📞 [VideoCallService] Draining ${this.pendingCandidates.length} queued ICE candidates`);
-        for (const c of this.pendingCandidates) {
-            try { 
-              await this.peerConnection!.addIceCandidate(c as any); 
-            } catch (e) { 
-              console.warn('⚠️ [VideoCallService] ICE drain failed:', e); 
+          for (const c of this.pendingCandidates) {
+            try {
+              await this.peerConnection!.addIceCandidate(c as any);
+            } catch (e) {
+              console.warn('⚠️ [VideoCallService] ICE drain failed:', e);
             }
-        }
-        this.pendingCandidates = [];
+          }
+          this.pendingCandidates = [];
         }
       }
 
@@ -1317,6 +1455,12 @@ class VideoCallService {
         console.log('ℹ️ [VideoCallService] Ignoring unexpected answer in state', this.peerConnection.signalingState);
         return;
       }
+      // CRITICAL FIX: If already connected, assume this answer is a duplicate or re-transmission and ignore
+      if (this.peerConnection.connectionState === 'connected' || this.state.isConnected) {
+        console.log('✅ Video Call already connected, ignoring late/duplicate answer');
+        return;
+      }
+
       await this.peerConnection.setRemoteDescription(answer);
       console.log('✅ Video call answer processed successfully');
 
@@ -1336,7 +1480,8 @@ class VideoCallService {
         this.events.onCallAnswered();
       }
 
-      // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+      // FALLBACK: If connectionstatechange doesn't fire within 2 seconds, ensure connected state
+      // Reduced from 3s to 2s
       setTimeout(() => {
         if (this.peerConnection?.connectionState === 'connected' &&
           this.state.connectionState !== 'connected') {
@@ -1344,7 +1489,7 @@ class VideoCallService {
           this.updateState({ connectionState: 'connected', isConnected: true });
           this.startCallTimer();
         }
-      }, 3000);
+      }, 2000);
 
     } catch (error) {
       console.error('❌ Error handling video answer:', error);
@@ -1405,9 +1550,21 @@ class VideoCallService {
    */
   async toggleSpeaker(): Promise<void> {
     try {
+      // Prefer native call audio routing on Android
+      try {
+        if (InCallManager && typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+          InCallManager.setForceSpeakerphoneOn(!this.isSpeakerOn);
+        }
+        if (InCallManager && typeof InCallManager.setSpeakerphoneOn === 'function') {
+          InCallManager.setSpeakerphoneOn(!this.isSpeakerOn);
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager speaker toggle failed (non-critical):', e);
+      }
+
       // Toggle the audio routing between speaker and earpiece
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
@@ -1563,6 +1720,15 @@ class VideoCallService {
       return;
     }
 
+    if (this.iceEarlyFailureTimer) {
+      clearTimeout(this.iceEarlyFailureTimer);
+      this.iceEarlyFailureTimer = null;
+    }
+    if (this.iceRestartTimer) {
+      clearTimeout(this.iceRestartTimer);
+      this.iceRestartTimer = null;
+    }
+
     this.hasEnded = true;
     console.log('📞 Ending video call...');
     console.log('📞 Call state when ending:', {
@@ -1600,7 +1766,7 @@ class VideoCallService {
         }
         // Give more time for the message to be sent before closing signaling
         await new Promise(resolve => setTimeout(resolve, 200));
-    } catch (error) {
+      } catch (error) {
         console.error('❌ Failed to send call-ended message:', error);
         // Continue with cleanup even if message send fails
       }
@@ -1628,7 +1794,7 @@ class VideoCallService {
         const streamToClear = this.remoteStream;
         this.remoteStream = null;
         console.log('🛑 [VideoCallService] Remote stream cleared');
-        
+
         // Notify UI that remote stream is gone (so it can clear the RTCView)
         // This prevents frozen video
         try {
@@ -1665,7 +1831,7 @@ class VideoCallService {
     // Close peer connection immediately
     if (this.peerConnection) {
       try {
-      this.peerConnection.close();
+        this.peerConnection.close();
         console.log('🔌 [VideoCallService] Peer connection closed');
       } catch (error) {
         console.error('❌ Error closing peer connection:', error);
@@ -1724,16 +1890,16 @@ class VideoCallService {
    */
   private sendSignalingMessage(message: any): void {
     try {
-    if (this.signalingChannel && this.signalingChannel.readyState === 1) { // WebSocket.OPEN = 1
+      if (this.signalingChannel && this.signalingChannel.readyState === 1) { // WebSocket.OPEN = 1
         const messageStr = JSON.stringify({
-        ...message,
-        appointmentId: this.appointmentId,
-        userId: this.userId,
-        timestamp: new Date().toISOString()
+          ...message,
+          appointmentId: this.appointmentId,
+          userId: this.userId,
+          timestamp: new Date().toISOString()
         });
         this.signalingChannel.send(messageStr);
         console.log('📤 [VideoCallService] Signaling message sent:', message.type);
-    } else {
+      } else {
         const state = this.signalingChannel?.readyState;
         console.warn('⚠️ [VideoCallService] Signaling channel not available for sending:', {
           hasChannel: !!this.signalingChannel,
@@ -1810,8 +1976,23 @@ class VideoCallService {
    */
   private async configureAudioRouting(): Promise<void> {
     try {
+      // Prefer native call audio routing on Android
+      try {
+        if (InCallManager && typeof InCallManager.start === 'function') {
+          InCallManager.start({ media: 'audio' });
+          if (typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+            InCallManager.setForceSpeakerphoneOn(true);
+          }
+          if (typeof InCallManager.setSpeakerphoneOn === 'function') {
+            InCallManager.setSpeakerphoneOn(true);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager start failed (non-critical):', e);
+      }
+
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
@@ -1847,6 +2028,14 @@ class VideoCallService {
    */
   private async resetAudioRouting(): Promise<void> {
     try {
+      try {
+        if (InCallManager && typeof InCallManager.stop === 'function') {
+          InCallManager.stop();
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager stop failed (non-critical):', e);
+      }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,
@@ -2017,7 +2206,7 @@ class VideoCallService {
       this.clearReofferLoop();
       let attemptCount = 0;
       const maxFastAttempts = 3; // First 3 attempts are faster
-      
+
       const sendOffer = () => {
         if (
           this.peerConnection?.localDescription &&
@@ -2034,7 +2223,7 @@ class VideoCallService {
 
       // Send initial offer immediately
       sendOffer();
-      
+
       // Fast re-offers for first few attempts (every 1.5s)
       const fastInterval = setInterval(() => {
         attemptCount++;
@@ -2046,7 +2235,7 @@ class VideoCallService {
           sendOffer();
         }
       }, 1500);
-      
+
       // Store fast interval reference for cleanup
       (this as any).fastReofferTimer = fastInterval;
     } catch (e) {
