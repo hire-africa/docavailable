@@ -6,11 +6,11 @@ import './services/webPolyfill';
 // Import crypto polyfill early to ensure it's loaded before any encryption services
 import './services/cryptoPolyfill';
 // Register background messaging handler as early as possible
-import './firebase-messaging';
-import { router } from 'expo-router';
-import { Platform, AppState, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStoredCallData, clearStoredCallData } from './services/callkeepStorage';
+import { router } from 'expo-router';
+import { AppState, DeviceEventEmitter, Platform } from 'react-native';
+import './firebase-messaging';
+import { clearStoredCallData, getStoredCallData } from './services/callkeepStorage';
 
 // Set up global error handler
 if (typeof global !== 'undefined') {
@@ -48,8 +48,8 @@ if (typeof global !== 'undefined' && !global.preloadedAuthPromise) {
 
 // Import CallKeep for call management
 import RNCallKeep from 'react-native-callkeep';
-import callkeepService from './services/callkeepService';
 import callDeduplicationService from './services/callDeduplicationService';
+import callkeepService from './services/callkeepService';
 import ringtoneService from './services/ringtoneService';
 
 // Setup CallKeep on app start
@@ -246,13 +246,6 @@ const handleAnswerCall = async ({ callUUID }) => {
     }, 30000);
   }
 
-  // ✅ 1️⃣ Dismiss system UI immediately on Android to prevent loop
-  if (Platform.OS === 'android') {
-    isDismissingSystemUI = true;
-    RNCallKeep.endCall(callUUID);
-    console.log('CALLKEEP: dismissed system UI for', callUUID);
-  }
-
   try {
     await callkeepService.answerCall(callUUID);
   } catch (error) {
@@ -261,10 +254,8 @@ const handleAnswerCall = async ({ callUUID }) => {
 
   console.log('CALLKEEP: answerCall using payload', callData);
   
-  // ✅ 2️⃣ Navigate to call screen with delay
-  setTimeout(() => {
-    navigateToActiveCall(callData);
-  }, 800);
+  // ✅ Navigate to call screen immediately (no artificial delay)
+  navigateToActiveCall(callData);
 };
 
 const clearCallData = async () => {

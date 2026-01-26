@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Vibration,
-  View,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    Vibration,
+    View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -32,6 +32,7 @@ interface VideoCallModalProps {
   onCallRejected?: () => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
+  autoAcceptFromSystemUI?: boolean;
   onAcceptCall?: () => void;
   onRejectCall?: () => void;
 }
@@ -51,6 +52,7 @@ export default function VideoCallModal({
   onCallRejected,
   onCallAnswered,
   isIncomingCall = false,
+  autoAcceptFromSystemUI = false,
   onAcceptCall,
   onRejectCall,
 }: VideoCallModalProps) {
@@ -171,6 +173,18 @@ export default function VideoCallModal({
       } else {
         console.log('📞 VideoCallModal: Initializing for incoming call');
         await initializeIncomingCall();
+
+        // If the user already answered using CallKeep system UI, auto-accept immediately.
+        if (autoAcceptFromSystemUI) {
+          console.log('✅ [VideoCallModal] Auto-accepting incoming call (answered via system UI)');
+          // IMPORTANT: Use the exact same handler as the Accept button.
+          // Do not pre-set isProcessingAnswer, because handleAcceptCall() guards on it.
+          try {
+            await handleAcceptCall();
+          } catch (e) {
+            console.error('❌ [VideoCallModal] Auto-accept failed:', e);
+          }
+        }
       }
     };
 
@@ -247,7 +261,7 @@ export default function VideoCallModal({
         videoCallService.current.reset();
       }
     };
-  }, [isIncomingCall, appointmentId]);
+  }, [isIncomingCall, appointmentId, autoAcceptFromSystemUI]);
 
   useEffect(() => {
     callStateRef.current = callState;

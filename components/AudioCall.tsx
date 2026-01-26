@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Animated,
-  Dimensions,
-  Image,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  Vibration,
-  View
+    Animated,
+    Dimensions,
+    Image,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    Vibration,
+    View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -30,6 +30,7 @@ interface AudioCallProps {
   onCallRejected?: () => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
+  autoAcceptFromSystemUI?: boolean;
 }
 
 export default function AudioCall({
@@ -44,7 +45,8 @@ export default function AudioCall({
   onCallTimeout,
   onCallRejected,
   onCallAnswered,
-  isIncomingCall = false
+  isIncomingCall = false,
+  autoAcceptFromSystemUI = false
 }: AudioCallProps) {
   const [callState, setCallState] = useState<AudioCallState>({
     isConnected: false,
@@ -81,6 +83,7 @@ export default function AudioCall({
         appointmentId,
         userId,
         isDoctor,
+        autoAcceptFromSystemUI,
         hasInitialized: hasInitializedRef.current
       });
 
@@ -118,12 +121,33 @@ export default function AudioCall({
         }
         // For incoming calls, initialize the service and set up event listeners
         await initializeIncomingCall();
+
+        // If the call was already answered via CallKeep system UI, auto-accept immediately.
+        if (autoAcceptFromSystemUI) {
+          console.log('✅ [AudioCall] Auto-accepting incoming call (answered via system UI)');
+          // Mirror Accept button UX: flip UI state, stop ringing, process offer
+          setIsRinging(false);
+          setIsProcessingAnswer(true);
+          setCallAccepted(true);
+          try {
+            await ringtoneService.stop();
+          } catch (e) {
+            // ignore
+          }
+          try {
+            await AudioCallService.getInstance().processIncomingCall();
+          } catch (e) {
+            console.error('❌ [AudioCall] Auto-accept failed:', e);
+          } finally {
+            setIsProcessingAnswer(false);
+          }
+        }
       }
     };
 
     setupCall();
     startPulseAnimation();
-  }, [isIncomingCall, appointmentId, userId, isDoctor]);
+  }, [isIncomingCall, appointmentId, userId, isDoctor, autoAcceptFromSystemUI]);
 
   // Session end event listener (for safety limits)
   useEffect(() => {
@@ -441,8 +465,8 @@ export default function AudioCall({
 
   const getStatusText = () => {
     if (shouldShowIncomingUI) return 'Incoming Call';
-    if (callState.connectionState === 'reconnecting') return 'Reconnecting...';
-    if (isEffectivelyConnected && callState.connectionState !== 'reconnecting') return 'Connected';
+    if ((callState.connectionState as any) === 'reconnecting') return 'Reconnecting...';
+    if (isEffectivelyConnected && (callState.connectionState as any) !== 'reconnecting') return 'Connected';
     if (isIncomingCall && isProcessingAnswer) return 'Answering...';
 
     switch (callState.connectionState) {
@@ -462,8 +486,8 @@ export default function AudioCall({
   };
 
   const getConnectionIndicatorColor = () => {
-    if (callState.connectionState === 'reconnecting') return '#FF9800';
-    if (isEffectivelyConnected && callState.connectionState !== 'reconnecting') return '#4CAF50';
+    if ((callState.connectionState as any) === 'reconnecting') return '#FF9800';
+    if (isEffectivelyConnected && (callState.connectionState as any) !== 'reconnecting') return '#4CAF50';
     switch (callState.connectionState) {
       case 'connecting':
         return '#FF9800';

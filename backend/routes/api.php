@@ -153,6 +153,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/upload/voice-message', [FileUploadController::class, 'uploadVoiceMessage']);
 
     // Audio file serving route (no auth required for streaming)
+    Route::get('/chat_voice_messages/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
     Route::get('/audio/{path}', [FileUploadController::class, 'serveAudioFile'])->where('path', '.*')->withoutMiddleware(['auth:api']);
 
     // Image file serving route (no auth required for images)

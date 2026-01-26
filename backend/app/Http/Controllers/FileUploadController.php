@@ -793,65 +793,73 @@ class FileUploadController extends Controller
             \Log::info('Audio file path resolution:', [
                 'requested_path' => $path,
                 'full_path' => $fullPath,
-                'file_exists' => file_exists($fullPath),
-                'is_readable' => is_readable($fullPath),
-                'storage_disk' => Storage::disk('public')->getDriver()->getAdapter()->getPathPrefix()
+                'file_exists_local' => file_exists($fullPath),
+                'storage_disk' => 'public'
             ]);
 
-            if (!file_exists($fullPath)) {
-                \Log::error('Audio file not found:', [
-                    'requested_path' => $path,
-                    'full_path' => $fullPath,
-                    'storage_path' => Storage::disk('public')->path(''),
-                    'files_in_storage' => Storage::disk('public')->files('chat_voice_messages')
-                ]);
-                abort(404);
+            // Check if file exists locally
+            if (file_exists($fullPath)) {
+                $extension = pathinfo($path, PATHINFO_EXTENSION);
+                $mimeTypes = [
+                    'm4a' => 'audio/mp4',
+                    'mp3' => 'audio/mpeg',
+                    'wav' => 'audio/wav',
+                    'aac' => 'audio/aac',
+                    'ogg' => 'audio/ogg',
+                ];
+
+                $mimeType = $mimeTypes[strtolower($extension)] ?? 'audio/mpeg';
+                $fileSize = filesize($fullPath);
+
+                // Set proper headers for audio streaming
+                $headers = [
+                    'Content-Type' => $mimeType,
+                    'Content-Length' => $fileSize,
+                    'Accept-Ranges' => 'bytes',
+                    'Cache-Control' => 'public, max-age=31536000',
+                    'Access-Control-Allow-Origin' => '*',
+                    'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+                    'Access-Control-Allow-Headers' => 'Range, Accept-Ranges, Content-Range',
+                ];
+
+                // Handle range requests for local files
+                $range = request()->header('Range');
+                if ($range && preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
+                    $start = (int) $matches[1];
+                    $end = !empty($matches[2]) ? (int) $matches[2] : ($fileSize - 1);
+                    $length = $end - $start + 1;
+
+                    $headers['Content-Range'] = "bytes $start-$end/$fileSize";
+                    $headers['Content-Length'] = $length;
+
+                    $handle = fopen($fullPath, 'rb');
+                    fseek($handle, $start);
+                    $content = fread($handle, $length);
+                    fclose($handle);
+
+                    return response($content, 206, $headers);
+                }
+
+                // Return full local file
+                return response()->file($fullPath, $headers);
             }
 
-            $extension = pathinfo($path, PATHINFO_EXTENSION);
-            $mimeTypes = [
-                'm4a' => 'audio/mp4',
-                'mp3' => 'audio/mpeg',
-                'wav' => 'audio/wav',
-                'aac' => 'audio/aac',
-                'ogg' => 'audio/ogg',
-            ];
+            // If not found locally, check DigitalOcean Spaces
+            if (Storage::disk('spaces')->exists($path)) {
+                \Log::info('Audio file found in Spaces, redirecting:', ['path' => $path]);
 
-            $mimeType = $mimeTypes[strtolower($extension)] ?? 'audio/mpeg';
-            $fileSize = filesize($fullPath);
-
-            // Set proper headers for audio streaming
-            $headers = [
-                'Content-Type' => $mimeType,
-                'Content-Length' => $fileSize,
-                'Accept-Ranges' => 'bytes',
-                'Cache-Control' => 'public, max-age=31536000',
-                'Access-Control-Allow-Origin' => '*',
-                'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
-                'Access-Control-Allow-Headers' => 'Range, Accept-Ranges, Content-Range',
-            ];
-
-            // Handle range requests for audio streaming
-            $range = request()->header('Range');
-            if ($range && preg_match('/bytes=(\d+)-(\d*)/', $range, $matches)) {
-                $start = (int) $matches[1];
-                $end = !empty($matches[2]) ? (int) $matches[2] : ($fileSize - 1);
-                $length = $end - $start + 1;
-
-                $headers['Content-Range'] = "bytes $start-$end/$fileSize";
-                $headers['Content-Length'] = $length;
-
-                $handle = fopen($fullPath, 'rb');
-                fseek($handle, $start);
-                $content = fread($handle, $length);
-                fclose($handle);
-
-                return response($content, 206, $headers);
+                // Get the public URL from Spaces and redirect
+                // This is more efficient than streaming through the application
+                $url = Storage::disk('spaces')->url($path);
+                return redirect($url);
             }
 
-            // Return full file
-            return response()->file($fullPath, $headers);
-
+            // Not found in either location
+            \Log::error('Audio file not found (local or spaces):', [
+                'requested_path' => $path,
+                'local_path' => $fullPath
+            ]);
+            abort(404);
         } catch (\Exception $e) {
             \Log::error('Error serving audio file:', [
                 'path' => $path,
