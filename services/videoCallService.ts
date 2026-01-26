@@ -1,14 +1,22 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
+    mediaDevices,
+    MediaStream,
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
+import configService from './configService';
 import { SecureWebSocketService } from './secureWebSocketService';
+
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager');
+} catch (e) {
+  InCallManager = null;
+}
 
 export interface VideoCallState {
   isConnected: boolean;
@@ -37,6 +45,9 @@ class VideoCallService {
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private signalingChannel: SecureWebSocketService | null = null;
+  private hasEverIceConnected: boolean = false;
+  private iceRestartTimer: ReturnType<typeof setTimeout> | null = null;
+  private iceEarlyFailureTimer: ReturnType<typeof setTimeout> | null = null;
   private callTimer: ReturnType<typeof setInterval> | null = null;
   private callStartTime: number = 0;
   private events: VideoCallEvents | null = null;
@@ -71,11 +82,6 @@ class VideoCallService {
     connectionState: 'disconnected',
   };
 
-  private iceServers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ];
-
   constructor() {
     this.instanceId = ++VideoCallService.instanceCounter;
     console.log(`🏗️ [VideoCallService] Instance ${this.instanceId} created`);
@@ -103,6 +109,41 @@ class VideoCallService {
     // Ensure this instance becomes the active singleton so all callers (new/getInstance)
     // share the same underlying VideoCallService for a given app process
     VideoCallService.activeInstance = this;
+  }
+
+  private getIceServers() {
+    try {
+      const w = configService.getWebRTCConfig();
+      const servers: any[] = [];
+      const stun = Array.isArray(w.stunServers) && w.stunServers.length ? w.stunServers : [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+      ];
+      stun.forEach(u => servers.push({ urls: u }));
+      if (w.turnServerUrl && w.turnUsername && w.turnPassword) {
+        servers.push({ urls: w.turnServerUrl, username: w.turnUsername, credential: w.turnPassword } as any);
+        console.log('🌐 [VideoCallService] TURN server configured via configService');
+      } else {
+        const turnUrl = (process.env.EXPO_PUBLIC_TURN_URL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_URL || (Constants.expoConfig?.extra as any)?.turnUrl;
+        const turnUsername = (process.env.EXPO_PUBLIC_TURN_USERNAME as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_USERNAME || (Constants.expoConfig?.extra as any)?.turnUsername;
+        const turnCredential = (process.env.EXPO_PUBLIC_TURN_CREDENTIAL as string) || (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_TURN_CREDENTIAL || (Constants.expoConfig?.extra as any)?.turnCredential;
+        if (turnUrl && turnUsername && turnCredential) {
+          servers.push({ urls: turnUrl, username: turnUsername, credential: turnCredential } as any);
+          console.log('🌐 [VideoCallService] TURN server configured via env fallback');
+        } else {
+          console.log('🌐 [VideoCallService] No TURN configured (using STUN only)');
+        }
+      }
+      return servers;
+    } catch (e) {
+      console.warn('⚠️ [VideoCallService] Failed to read ICE config:', e);
+      return [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+      ];
+    }
   }
 
   /**
@@ -406,9 +447,10 @@ class VideoCallService {
 
       // Create peer connection immediately (before camera is ready)
       try {
-        console.log('🔧 [VideoCallService] Creating RTCPeerConnection with iceServers:', this.iceServers);
+        const iceServers = this.getIceServers();
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection with iceServers:', iceServers);
         this.peerConnection = new RTCPeerConnection({
-          iceServers: this.iceServers,
+          iceServers,
           iceCandidatePoolSize: 10, // Pre-gather ICE candidates for faster connection
         });
         console.log('✅ [VideoCallService] RTCPeerConnection created successfully:', {
@@ -538,6 +580,70 @@ class VideoCallService {
       return;
     }
 
+    // Prefer ICE state to drive connectivity on Android (connectionState can be noisy/transient)
+    this.peerConnection.addEventListener('iceconnectionstatechange', () => {
+      const iceState = this.peerConnection?.iceConnectionState;
+      console.log('🧊 [VideoCallService] ICE connection state:', iceState);
+
+      if (iceState === 'connected' || iceState === 'completed') {
+        this.hasEverIceConnected = true;
+        if (this.iceEarlyFailureTimer) {
+          clearTimeout(this.iceEarlyFailureTimer);
+          this.iceEarlyFailureTimer = null;
+        }
+        if (this.iceRestartTimer) {
+          clearTimeout(this.iceRestartTimer);
+          this.iceRestartTimer = null;
+        }
+
+        // Mark connected if not already
+        if (!this.state.isConnected || this.state.connectionState !== 'connected') {
+          console.log('✅ [VideoCallService] ICE connected - marking call connected');
+          this.clearReofferLoop();
+          this.updateState({ isConnected: true, connectionState: 'connected' });
+          this.startCallTimer();
+        }
+        return;
+      }
+
+      if (iceState === 'failed') {
+        // Android can emit transient failure early; do not tear down before ever connected
+        if (!this.hasEverIceConnected) {
+          console.log('⚠️ [VideoCallService] ICE failed early (no prior ICE connected) - waiting');
+          if (!this.iceEarlyFailureTimer) {
+            this.iceEarlyFailureTimer = setTimeout(() => {
+              const s = this.peerConnection?.iceConnectionState;
+              if (s === 'failed' && !this.hasEverIceConnected) {
+                console.log('⚠️ [VideoCallService] ICE still failed after grace period - keeping call alive (awaiting network recovery)');
+              }
+              this.iceEarlyFailureTimer = null;
+            }, 8000);
+          }
+
+          // Attempt ICE restart once after a short delay if supported
+          if (!this.iceRestartTimer) {
+            this.iceRestartTimer = setTimeout(() => {
+              try {
+                if (this.peerConnection && typeof (this.peerConnection as any).restartIce === 'function') {
+                  console.log('🔁 [VideoCallService] Attempting ICE restart...');
+                  (this.peerConnection as any).restartIce();
+                }
+              } catch (e) {
+                console.warn('⚠️ [VideoCallService] restartIce failed (non-critical):', e);
+              } finally {
+                this.iceRestartTimer = null;
+              }
+            }, 6000);
+          }
+          return;
+        }
+
+        // ICE failed after we had a real connection -> treat as fatal
+        console.log('❌ [VideoCallService] ICE failed after connected - ending call');
+        this.endCallInternal(false);
+      }
+    });
+
     // Handle remote stream
     this.peerConnection.addEventListener('track', (event) => {
       console.log('📹 Remote stream track received:', {
@@ -548,10 +654,18 @@ class VideoCallService {
         streamsCount: event.streams.length
       });
 
-      const stream = event.streams[0];
-      if (!stream) {
-        console.warn('⚠️ [VideoCallService] Received track event but no stream available');
-        return;
+      const providedStream = event.streams[0];
+      const stream = providedStream || this.remoteStream || new MediaStream();
+
+      if (!providedStream) {
+        const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+        if (!alreadyHas) {
+          try {
+            stream.addTrack(event.track);
+          } catch (e) {
+            console.warn('⚠️ [VideoCallService] Failed to add remote track to synthetic stream:', e);
+          }
+        }
       }
 
       // Ensure all tracks in the stream are enabled
@@ -581,7 +695,7 @@ class VideoCallService {
       }
 
       // Update remote stream reference
-      if (this.remoteStream && this.remoteStream.id !== stream.id) {
+      if (providedStream && this.remoteStream && this.remoteStream.id !== providedStream.id) {
         console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
       }
       this.remoteStream = stream;
@@ -600,7 +714,12 @@ class VideoCallService {
       });
 
       // Notify UI of remote stream
-      this.events?.onRemoteStream(stream);
+      const emit = () => this.events?.onRemoteStream(stream);
+      if (Constants.platform?.android) {
+        setTimeout(emit, 200);
+      } else {
+        emit();
+      }
 
       console.log('✅ [VideoCallService] Remote stream processed:', {
         streamId: stream.id,
@@ -651,6 +770,11 @@ class VideoCallService {
         // CRITICAL: Ignore disconnected/failed during initial setup
         if (this.state.connectionState === 'connecting') {
           console.log('⚠️ Video WebRTC reported disconnected/failed during initialization - ignoring (this is normal during setup)');
+          return;
+        }
+        // If ICE has never connected, treat this as transient on Android and wait for ICE events
+        if (!this.hasEverIceConnected && Constants.platform?.android) {
+          console.log('⚠️ [VideoCallService] connectionState failed/disconnected before ICE connected - ignoring on Android');
           return;
         }
         // Only update state if call is not answered and not already ended
@@ -922,8 +1046,9 @@ class VideoCallService {
 
       // Create peer connection
       try {
-        console.log('🔧 [VideoCallService] Creating RTCPeerConnection for incoming call with iceServers:', this.iceServers);
-        this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
+        const iceServers = this.getIceServers();
+        console.log('🔧 [VideoCallService] Creating RTCPeerConnection for incoming call with iceServers:', iceServers);
+        this.peerConnection = new RTCPeerConnection({ iceServers });
         console.log('✅ [VideoCallService] RTCPeerConnection created for incoming call:', {
           connectionState: this.peerConnection.connectionState,
           signalingState: this.peerConnection.signalingState
@@ -958,10 +1083,18 @@ class VideoCallService {
           streamsCount: event.streams.length
         });
 
-        const stream = event.streams[0];
-        if (!stream) {
-          console.warn('⚠️ [VideoCallService] Received track event but no stream available');
-          return;
+        const providedStream = event.streams[0];
+        const stream = providedStream || this.remoteStream || new MediaStream();
+
+        if (!providedStream) {
+          const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+          if (!alreadyHas) {
+            try {
+              stream.addTrack(event.track);
+            } catch (e) {
+              console.warn('⚠️ [VideoCallService] Failed to add remote track to synthetic stream:', e);
+            }
+          }
         }
 
         // Ensure all tracks in the stream are enabled
@@ -992,7 +1125,7 @@ class VideoCallService {
         }
 
         // Update remote stream reference (merge if stream already exists)
-        if (this.remoteStream && this.remoteStream.id !== stream.id) {
+        if (providedStream && this.remoteStream && this.remoteStream.id !== providedStream.id) {
           console.log('🔄 [VideoCallService] New remote stream received, replacing previous stream');
         }
         this.remoteStream = stream;
@@ -1322,6 +1455,12 @@ class VideoCallService {
         console.log('ℹ️ [VideoCallService] Ignoring unexpected answer in state', this.peerConnection.signalingState);
         return;
       }
+      // CRITICAL FIX: If already connected, assume this answer is a duplicate or re-transmission and ignore
+      if (this.peerConnection.connectionState === 'connected' || this.state.isConnected) {
+        console.log('✅ Video Call already connected, ignoring late/duplicate answer');
+        return;
+      }
+
       await this.peerConnection.setRemoteDescription(answer);
       console.log('✅ Video call answer processed successfully');
 
@@ -1341,7 +1480,8 @@ class VideoCallService {
         this.events.onCallAnswered();
       }
 
-      // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+      // FALLBACK: If connectionstatechange doesn't fire within 2 seconds, ensure connected state
+      // Reduced from 3s to 2s
       setTimeout(() => {
         if (this.peerConnection?.connectionState === 'connected' &&
           this.state.connectionState !== 'connected') {
@@ -1349,7 +1489,7 @@ class VideoCallService {
           this.updateState({ connectionState: 'connected', isConnected: true });
           this.startCallTimer();
         }
-      }, 3000);
+      }, 2000);
 
     } catch (error) {
       console.error('❌ Error handling video answer:', error);
@@ -1410,9 +1550,21 @@ class VideoCallService {
    */
   async toggleSpeaker(): Promise<void> {
     try {
+      // Prefer native call audio routing on Android
+      try {
+        if (InCallManager && typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+          InCallManager.setForceSpeakerphoneOn(!this.isSpeakerOn);
+        }
+        if (InCallManager && typeof InCallManager.setSpeakerphoneOn === 'function') {
+          InCallManager.setSpeakerphoneOn(!this.isSpeakerOn);
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager speaker toggle failed (non-critical):', e);
+      }
+
       // Toggle the audio routing between speaker and earpiece
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
@@ -1566,6 +1718,15 @@ class VideoCallService {
     if (this.hasEnded) {
       console.log('ℹ️ [VideoCallService] endCall already processed');
       return;
+    }
+
+    if (this.iceEarlyFailureTimer) {
+      clearTimeout(this.iceEarlyFailureTimer);
+      this.iceEarlyFailureTimer = null;
+    }
+    if (this.iceRestartTimer) {
+      clearTimeout(this.iceRestartTimer);
+      this.iceRestartTimer = null;
     }
 
     this.hasEnded = true;
@@ -1815,8 +1976,23 @@ class VideoCallService {
    */
   private async configureAudioRouting(): Promise<void> {
     try {
+      // Prefer native call audio routing on Android
+      try {
+        if (InCallManager && typeof InCallManager.start === 'function') {
+          InCallManager.start({ media: 'audio' });
+          if (typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+            InCallManager.setForceSpeakerphoneOn(true);
+          }
+          if (typeof InCallManager.setSpeakerphoneOn === 'function') {
+            InCallManager.setSpeakerphoneOn(true);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager start failed (non-critical):', e);
+      }
+
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,
@@ -1852,6 +2028,14 @@ class VideoCallService {
    */
   private async resetAudioRouting(): Promise<void> {
     try {
+      try {
+        if (InCallManager && typeof InCallManager.stop === 'function') {
+          InCallManager.stop();
+        }
+      } catch (e) {
+        console.warn('⚠️ [VideoCallService] InCallManager stop failed (non-critical):', e);
+      }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: false,

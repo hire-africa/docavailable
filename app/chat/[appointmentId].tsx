@@ -5,18 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Animated,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../components/AppTour';
@@ -53,8 +53,8 @@ import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import {
-  getUserTimezone,
-  isAppointmentTimeReached
+    getUserTimezone,
+    isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { Alert } from '../../utils/customAlert';
 import { withDoctorPrefix } from '../../utils/name';
@@ -309,95 +309,6 @@ export default function ChatPage() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [sendingVoiceMessage, setSendingVoiceMessage] = useState(false);
-
-  // TEMPORARY: WebRTC diagnostic logs viewer
-  const [webrtcLogs, setWebrtcLogs] = useState<Array<{ timestamp: string; message: string; level: string }>>([]);
-  const [showLogs, setShowLogs] = useState(false);
-  const logsScrollViewRef = useRef<ScrollView>(null);
-
-  // TEMPORARY: Intercept console logs for WebRTC diagnostics
-  useEffect(() => {
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    const addLog = (level: string, ...args: any[]) => {
-      try {
-        const message = args.map(arg => {
-          if (typeof arg === 'object' && arg !== null) {
-            try {
-              return JSON.stringify(arg, null, 2);
-            } catch {
-              return String(arg);
-            }
-          }
-          return String(arg);
-        }).join(' ');
-
-        // Capture ALL logs when showLogs is true, or WebRTC-related logs always
-        const isWebRTCRelated = message.includes('WebRTC') ||
-          message.includes('WebRTCChat') ||
-          message.includes('SecureWebSocket') ||
-          message.includes('ConfigService') ||
-          message.includes('SendVoice') ||
-          message.includes('VideoCallService') ||
-          message.includes('AudioCallService') ||
-          message.includes('webrtc') ||
-          message.includes('WebSocket') ||
-          message.includes('signaling') ||
-          message.includes('🔌') ||
-          message.includes('📤') ||
-          message.includes('❌') ||
-          message.includes('✅') ||
-          message.includes('🔍');
-
-        if (showLogs && (isWebRTCRelated || showLogs)) {
-          setWebrtcLogs(prev => {
-            const newLogs = [...prev, {
-              timestamp: new Date().toLocaleTimeString(),
-              message: message.substring(0, 500), // Limit message length
-              level
-            }];
-            // Keep only last 200 logs
-            return newLogs.slice(-200);
-          });
-
-          // Auto-scroll to bottom
-          setTimeout(() => {
-            logsScrollViewRef.current?.scrollToEnd({ animated: true });
-          }, 100);
-        }
-      } catch (err) {
-        // Silently fail if log capture has issues
-      }
-    };
-
-    console.log = (...args: any[]) => {
-      originalLog(...args);
-      addLog('log', ...args);
-    };
-
-    console.error = (...args: any[]) => {
-      originalError(...args);
-      addLog('error', ...args);
-    };
-
-    console.warn = (...args: any[]) => {
-      originalWarn(...args);
-      addLog('warn', ...args);
-    };
-
-    // Add a test log to verify it's working
-    setTimeout(() => {
-      console.log('🧪 [LogViewer] Log capture system initialized - this should appear in logs');
-    }, 1000);
-
-    return () => {
-      console.log = originalLog;
-      console.error = originalError;
-      console.warn = originalWarn;
-    };
-  }, [showLogs]);
 
   // Image handling state
   const [sendingCameraImage, setSendingCameraImage] = useState(false);
@@ -3877,9 +3788,6 @@ export default function ChatPage() {
 
     try {
       setSendingVoiceMessage(true);
-      // TEMPORARY: Show logs and clear old ones when starting
-      setShowLogs(true);
-      setWebrtcLogs([]);
       console.log('📤 [SendVoice] Starting voice message send...');
       console.log('📤 [SendVoice] Recording URI:', recordingUri);
       console.log('📤 [SendVoice] Appointment ID:', appointmentId);
@@ -5406,29 +5314,6 @@ export default function ChatPage() {
               </Text>
             </View>
             <TouchableOpacity
-              onPress={() => {
-                const newShowLogs = !showLogs;
-                setShowLogs(newShowLogs);
-                if (newShowLogs) {
-                  // Add a test log when opening
-                  console.log('🧪 [LogViewer] Log viewer opened - capturing all logs now');
-                  setWebrtcLogs(prev => [...prev, {
-                    timestamp: new Date().toLocaleTimeString(),
-                    message: '🧪 Log viewer opened - all WebRTC logs will be captured',
-                    level: 'log'
-                  }]);
-                }
-              }}
-              style={{
-                padding: 8,
-                backgroundColor: showLogs ? '#2196F3' : '#999',
-                borderRadius: 20,
-                marginRight: 8
-              }}
-            >
-              <Ionicons name="bug" size={20} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity
               onPress={sendVoiceMessage}
               disabled={sendingVoiceMessage}
               style={{
@@ -5457,100 +5342,6 @@ export default function ChatPage() {
             >
               <Ionicons name="close" size={20} color="white" />
             </TouchableOpacity>
-          </View>
-        )}
-
-        {/* TEMPORARY: WebRTC Diagnostic Logs Viewer */}
-        {showLogs && (
-          <View style={{
-            position: 'absolute',
-            bottom: recordingUri ? 180 : 100,
-            left: 0,
-            right: 0,
-            height: 300,
-            backgroundColor: 'rgba(0, 0, 0, 0.95)',
-            zIndex: 10000,
-            borderTopWidth: 2,
-            borderTopColor: '#4CAF50',
-            padding: 8,
-            elevation: 10,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.5,
-            shadowRadius: 4
-          }}>
-            <View style={{
-              flexDirection: 'row',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 8,
-              paddingBottom: 8,
-              borderBottomWidth: 1,
-              borderBottomColor: '#333'
-            }}>
-              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 14 }}>
-                WebRTC Diagnostics ({webrtcLogs.length} logs)
-              </Text>
-              <TouchableOpacity
-                onPress={() => setWebrtcLogs([])}
-                style={{ padding: 4 }}
-              >
-                <Text style={{ color: '#ff4444', fontSize: 12 }}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowLogs(false)}
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="close" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView
-              ref={logsScrollViewRef}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 8 }}
-            >
-              {webrtcLogs.map((log, index) => (
-                <View key={index} style={{
-                  marginBottom: 4,
-                  padding: 4,
-                  backgroundColor: log.level === 'error' ? 'rgba(255, 68, 68, 0.2)' :
-                    log.level === 'warn' ? 'rgba(255, 193, 7, 0.2)' :
-                      'rgba(255, 255, 255, 0.1)',
-                  borderRadius: 4
-                }}>
-                  <Text style={{ color: '#999', fontSize: 10 }}>
-                    {log.timestamp} [{log.level.toUpperCase()}]
-                  </Text>
-                  <Text style={{ color: '#fff', fontSize: 11, fontFamily: 'monospace' }}>
-                    {log.message}
-                  </Text>
-                </View>
-              ))}
-              {webrtcLogs.length === 0 && (
-                <View style={{ marginTop: 20 }}>
-                  <Text style={{ color: '#999', textAlign: 'center', marginBottom: 10 }}>
-                    No WebRTC logs yet. Try sending a voice note.
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      console.log('🧪 [LogViewer] Test log button pressed');
-                      console.log('🔍 [WebRTCChat] Test diagnostic log');
-                      console.log('✅ [ConfigService] Test config log');
-                    }}
-                    style={{
-                      backgroundColor: '#4CAF50',
-                      padding: 10,
-                      borderRadius: 5,
-                      marginTop: 10
-                    }}
-                  >
-                    <Text style={{ color: '#fff', textAlign: 'center', fontWeight: 'bold' }}>
-                      Test Log Capture
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
           </View>
         )}
       </KeyboardAvoidingView>

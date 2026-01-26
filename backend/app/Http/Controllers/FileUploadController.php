@@ -720,17 +720,15 @@ class FileUploadController extends Controller
             // Store in regular folder structure for now
             // TODO: Add timestamped folders when deployment is ready
             $folder = 'chat_voice_messages/text_session_' . $sessionId;
-            $path = $file->storeAs($folder, $filename, 'public');
+            // Store in DigitalOcean Spaces (persistent storage, usable by web + mobile)
+            $path = $file->storeAs($folder, $filename, 'spaces');
 
-            // Get the public URL - use a custom route for better audio streaming
-            // CRITICAL: Always return FULL URL with domain for frontend to use
-            $baseUrl = config('app.url', request()->getSchemeAndHttpHost());
-            $url = $baseUrl . "/api/audio/{$path}";
+            // Public URL from Spaces
+            $url = Storage::disk('spaces')->url($path);
 
             \Log::info('Voice message uploaded successfully:', [
                 'path' => $path,
                 'url' => $url,
-                'base_url' => $baseUrl,
                 'is_full_url' => str_starts_with($url, 'http'),
                 'folder' => $folder,
                 'appointment_id' => $identifier,
@@ -740,7 +738,7 @@ class FileUploadController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'url' => $url,
+                    'media_url' => $url,
                     'name' => $originalName,
                     'size' => $fileSize,
                     'type' => 'voice',

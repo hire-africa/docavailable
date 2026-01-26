@@ -11,6 +11,13 @@ import { environment } from '../config/environment';
 import configService from './configService';
 import { SecureWebSocketService } from './secureWebSocketService';
 
+let InCallManager: any = null;
+try {
+  InCallManager = require('react-native-incall-manager');
+} catch (e) {
+  InCallManager = null;
+}
+
 export interface AudioCallState {
   isConnected: boolean;
   isAudioEnabled: boolean;
@@ -551,14 +558,29 @@ class AudioCallService {
 
       // Handle remote stream
       this.peerConnection.addEventListener('track', (event) => {
+        const providedStream = event.streams[0];
+        const stream = providedStream || this.remoteStream || new MediaStream();
+        if (!providedStream) {
+          const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+          if (!alreadyHas) {
+            try {
+              stream.addTrack(event.track);
+            } catch (e) {
+              console.warn('⚠️ [AudioCallService] Failed to add remote track to synthetic stream:', e);
+            }
+          }
+        }
+
         console.log('🎵 [AudioCallService] Remote audio stream received:', {
-          streamId: event.streams[0].id,
-          audioTracks: event.streams[0].getAudioTracks().length,
-          audioTrackLabel: event.streams[0].getAudioTracks()[0]?.label,
-          audioTrackSettings: event.streams[0].getAudioTracks()[0]?.getSettings()
+          streamId: stream.id,
+          streamsCount: event.streams.length,
+          audioTracks: stream.getAudioTracks().length,
+          audioTrackLabel: stream.getAudioTracks()[0]?.label,
+          audioTrackSettings: stream.getAudioTracks()[0]?.getSettings()
         });
-        this.remoteStream = event.streams[0];
-        this.events?.onRemoteStream(event.streams[0]);
+
+        this.remoteStream = stream;
+        this.events?.onRemoteStream(stream);
       });
 
       // Handle ICE candidates
@@ -959,8 +981,20 @@ class AudioCallService {
     // Handle remote stream
     this.peerConnection.addEventListener('track', (event) => {
       console.log('🎵 Remote audio stream received');
-      this.remoteStream = event.streams[0];
-      this.events?.onRemoteStream(event.streams[0]);
+      const providedStream = event.streams[0];
+      const stream = providedStream || this.remoteStream || new MediaStream();
+      if (!providedStream) {
+        const alreadyHas = stream.getTracks().some(t => t.id === event.track.id);
+        if (!alreadyHas) {
+          try {
+            stream.addTrack(event.track);
+          } catch (e) {
+            console.warn('⚠️ [AudioCallService] Failed to add remote track to synthetic stream:', e);
+          }
+        }
+      }
+      this.remoteStream = stream;
+      this.events?.onRemoteStream(stream);
       // Fallback: mark connected on receiving remote track (RN WebRTC may delay connectionstatechange)
       this.markConnectedOnce();
     });
@@ -1150,16 +1184,37 @@ class AudioCallService {
     try {
       console.log('📞 Configuring audio routing for earpiece (default)...');
 
+      // Prefer native call audio routing on Android (prevents silent calls when CallKeep answers)
+      try {
+        if (InCallManager && typeof InCallManager.start === 'function') {
+          InCallManager.start({ media: 'audio' });
+          // Force earpiece by default for privacy in audio calls
+          if (typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+            InCallManager.setForceSpeakerphoneOn(false);
+          }
+          if (typeof InCallManager.setSpeakerphoneOn === 'function') {
+            InCallManager.setSpeakerphoneOn(false);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ InCallManager audio routing failed (non-critical):', e);
+      }
+
       // Set audio mode for phone calls (earpiece by default like normal phone calls)
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: true, // Start with earpiece mode
-        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-      });
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          staysActiveInBackground: true,
+          playsInSilentModeIOS: true,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: true, // Start with earpiece mode
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        });
+        console.log('✅ Audio.setAudioModeAsync success');
+      } catch (audioModeError) {
+        console.error('❌ Audio.setAudioModeAsync failed:', audioModeError);
+      }
 
       console.log('✅ Audio routing configured for earpiece (default)');
     } catch (error) {
@@ -1173,6 +1228,14 @@ class AudioCallService {
   private async resetAudioRouting(): Promise<void> {
     try {
       console.log('📞 Resetting audio routing to default...');
+
+      try {
+        if (InCallManager && typeof InCallManager.stop === 'function') {
+          InCallManager.stop();
+        }
+      } catch (e) {
+        console.warn('⚠️ InCallManager stop failed (non-critical):', e);
+      }
 
       // Reset audio mode to default
       await Audio.setAudioModeAsync({
@@ -1241,8 +1304,8 @@ class AudioCallService {
         const mungedAnswer = {
           type: answer.type,
           sdp: this.mungeSdpForAudio(answer.sdp || '')
-        } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        } as any;
+        await this.peerConnection.setLocalDescription(mungedAnswer as any);
 
         console.log('📞 Sending answer message...');
         this.sendSignalingMessage({
@@ -1288,8 +1351,8 @@ class AudioCallService {
         const mungedAnswer = {
           type: answer.type,
           sdp: this.mungeSdpForAudio(answer.sdp || '')
-        } as RTCSessionDescriptionInit;
-        await this.peerConnection.setLocalDescription(mungedAnswer);
+        } as any;
+        await this.peerConnection.setLocalDescription(mungedAnswer as any);
 
         this.sendSignalingMessage({
           type: 'answer',
@@ -1345,7 +1408,8 @@ class AudioCallService {
         this.clearReofferLoop();
         this.markConnectedOnce();
 
-        // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+        // FALLBACK: If connectionstatechange doesn't fire within 2 seconds, ensure connected state
+        // Reduced from 3s to 2s for faster connection detection
         setTimeout(() => {
           if (this.peerConnection?.connectionState === 'connected' &&
             this.state.connectionState !== 'connected') {
@@ -1380,11 +1444,35 @@ class AudioCallService {
         }, 3000);
       } else {
         console.log('⚠️ Cannot set remote description - wrong signaling state:', this.peerConnection.signalingState);
-        // Try to set remote description anyway for other states
+        // CRITICAL FIX: If already connected, assume this answer is a duplicate or re-transmission and ignore
+        if (this.peerConnection.connectionState === 'connected' || this.state.isConnected) {
+          console.log('✅ Call already connected, ignoring late/duplicate answer');
+          return;
+        }
+
+        // Try to set remote description anyway for other states, but wrap carefully
         try {
           console.log('📞 Attempting to set remote description despite state...');
-          await this.peerConnection.setRemoteDescription(answer);
-          console.log('✅ Answer set successfully despite state');
+          // Check state one more time before setting
+          if (this.peerConnection.signalingState === 'have-local-offer') {
+            await this.peerConnection.setRemoteDescription(answer);
+            console.log('✅ Answer set successfully (state was have-local-offer)');
+          } else if (this.peerConnection.signalingState === 'stable') {
+            console.log('✅ State is stable, likely race condition resolved - proceeding');
+          } else {
+            if (this.peerConnection.signalingState !== 'closed') {
+              // Determine if we should really force it. Usually 'stable' means we are already done.
+              // If we are 'stable' and have remote description, we are good.
+              if (this.peerConnection.remoteDescription) {
+                console.log('✅ Remote description already exists (stable), ignoring setRemoteDescription');
+              } else {
+                // This is the weird case: stable but no remote desc? (Should not happen for answer)
+                console.warn('⚠️ Stable state but no remote desc? Attempting setRemoteDescription anyway');
+                await this.peerConnection.setRemoteDescription(answer);
+              }
+            }
+          }
+
           // Drain queued ICE if any
           if (this.pendingCandidates.length > 0 && this.peerConnection) {
             for (const c of this.pendingCandidates) {
@@ -1401,7 +1489,7 @@ class AudioCallService {
           }
           this.markConnectedOnce();
 
-          // FALLBACK: If connectionstatechange doesn't fire within 3 seconds, ensure connected state
+          // FALLBACK: If connectionstatechange doesn't fire within 2 seconds, ensure connected state
           setTimeout(() => {
             if (this.peerConnection?.connectionState === 'connected' &&
               this.state.connectionState !== 'connected') {
@@ -1409,13 +1497,17 @@ class AudioCallService {
               this.updateState({ connectionState: 'connected', isConnected: true });
               this.startCallTimer();
             }
-          }, 3000);
+          }, 2000);
         } catch (stateError) {
-          console.log('⚠️ Failed to set remote description due to state, but marking as answered');
-          this.isCallAnswered = true;
-          this.clearCallTimeout();
-          this.updateState({ connectionState: 'connected', isConnected: true });
-          this.events?.onCallAnswered();
+          console.warn('⚠️ Failed to set remote description due to state:', stateError);
+          // If we failed to set remote description, we probably can't proceed with connection unless we were already connected
+          if (this.state.isConnected) {
+            console.log('✅ Already connected, ignoring error');
+          } else {
+            // Don't just mark as connected if we failed deep in the WebRTC stack, unless we have a reason to believe it worked
+            console.error('❌ Could not establish WebRTC connection due to answer handling failure');
+            // We could report error, or wait and see if 'connected' event fires anyway (e.g. from a previous successful attempt)
+          }
         }
       }
     } catch (error) {
@@ -1680,8 +1772,8 @@ class AudioCallService {
       const mungedOffer = {
         type: offer.type,
         sdp: this.mungeSdpForAudio(offer.sdp || '')
-      } as RTCSessionDescriptionInit;
-      await this.peerConnection.setLocalDescription(mungedOffer);
+      } as any;
+      await this.peerConnection.setLocalDescription(mungedOffer as any);
 
       console.log('📞 [AudioCallService] Sending offer via signaling...');
       this.sendSignalingMessage({
@@ -1954,12 +2046,24 @@ class AudioCallService {
     try {
       console.log('🔊 Toggling speaker:', speakerOn ? 'ON' : 'OFF');
 
+      // Prefer native call audio routing on Android
+      try {
+        if (InCallManager && typeof InCallManager.setForceSpeakerphoneOn === 'function') {
+          InCallManager.setForceSpeakerphoneOn(!!speakerOn);
+        }
+        if (InCallManager && typeof InCallManager.setSpeakerphoneOn === 'function') {
+          InCallManager.setSpeakerphoneOn(!!speakerOn);
+        }
+      } catch (e) {
+        console.warn('⚠️ InCallManager speaker toggle failed (non-critical):', e);
+      }
+
       // Import Audio from expo-av for proper audio routing
       const { Audio, InterruptionModeAndroid, InterruptionModeIOS } = await import('expo-av');
 
       // Set audio mode to control speaker/earpiece routing
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         staysActiveInBackground: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: false,

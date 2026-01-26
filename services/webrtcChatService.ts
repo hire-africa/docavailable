@@ -156,15 +156,20 @@ export class WebRTCChatService {
               if (data.type === 'chat-message') {
                 const raw = data.message || data;
                 const normalized: ChatMessage = {
-                  id: String(raw.id || raw.temp_id || `ws_${Date.now()}`),
-                  sender_id: Number(raw.sender_id || 0),
-                  sender_name: raw.sender_name || '',
+                  id: String(raw.id || raw.temp_id || raw.tempId || `ws_${Date.now()}`),
+                  sender_id: Number(raw.sender_id || raw.senderId || 0),
+                  sender_name: raw.sender_name || raw.senderName || '',
                   message: raw.message || raw.content || '',
-                  message_type: raw.message_type || 'text',
-                  media_url: raw.media_url,
-                  created_at: raw.created_at || new Date().toISOString(),
-                  delivery_status: 'delivered'
+                  message_type: (raw.message_type || raw.messageType || 'text'),
+                  media_url: raw.media_url || raw.mediaUrl,
+                  created_at: raw.created_at || raw.createdAt || new Date().toISOString(),
+                  delivery_status: (raw.delivery_status || raw.deliveryStatus || 'delivered')
                 };
+
+                // Ensure message_type is constrained to the supported union
+                if (normalized.message_type !== 'text' && normalized.message_type !== 'image' && normalized.message_type !== 'voice') {
+                  normalized.message_type = 'text';
+                }
 
                 // Deduplicate and add
                 const messageHash = this.createMessageHash(normalized);
