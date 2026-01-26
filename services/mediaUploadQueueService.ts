@@ -188,8 +188,8 @@ class MediaUploadQueueService {
       formData.append('appointment_id', upload.appointmentId.toString());
 
       console.log(`📤 [MediaQueue] Uploading image: ${fileName}`);
-      // Use correct image upload endpoint
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/chat-image`;
+      // Use correct image upload endpoint (Laravel API for Spaces storage)
+      const uploadUrl = `${environment.LARAVEL_API_URL}/api/upload/chat-image`;
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -209,8 +209,8 @@ class MediaUploadQueueService {
       formData.append('appointment_id', upload.appointmentId.toString());
 
       console.log(`📤 [MediaQueue] Uploading voice: ${fileName}`);
-      // Use docavailable.org for voice message uploads (same as calls)
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+      // Use Laravel API for voice message uploads (same as calls) to ensure storage in DigitalOcean Spaces
+      const uploadUrl = `${environment.LARAVEL_API_URL}/api/upload/voice-message`;
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {

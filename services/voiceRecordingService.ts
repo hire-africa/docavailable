@@ -137,15 +137,15 @@ class VoiceRecordingService {
   async uploadVoiceMessage(appointmentId: number, uri: string, retryCount: number = 0): Promise<string | null> {
     const maxRetries = 3;
     const retryDelay = 1000 * Math.pow(2, retryCount); // Exponential backoff
-    
+
     try {
       console.log(`📤 [VoiceService] Upload attempt ${retryCount + 1}/${maxRetries + 1} for appointment ${appointmentId}`);
-      
+
       // Validate inputs
       if (!uri || uri.trim() === '') {
         throw new Error('Invalid audio URI provided');
       }
-      
+
       if (!appointmentId || appointmentId <= 0) {
         throw new Error('Invalid appointment ID provided');
       }
@@ -158,34 +158,34 @@ class VoiceRecordingService {
 
       // Create form data
       const formData = new FormData();
-      
+
       // Get file info from URI with unique identifier
       const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
       const fileName = `voice_${uniqueId}.m4a`;
-      
+
       // Create the file object for FormData - React Native format
       const fileObject = {
         uri: uri,
         type: 'audio/mp4',
         name: fileName,
       };
-      
+
       console.log('📤 [VoiceService] File object for FormData:', {
         fileName,
         type: fileObject.type,
         hasUri: !!fileObject.uri,
         uriLength: fileObject.uri?.length || 0
       });
-      
+
       // For React Native, we need to append the file object directly
       formData.append('file', fileObject as any);
       formData.append('appointment_id', appointmentId.toString());
 
-      // Use docavailable.org for voice message uploads (same as calls)
-      const uploadUrl = `${environment.WEBRTC_CHAT_SERVER_URL}/api/upload/voice-message`;
+      // Use Laravel API for voice message uploads to ensure storage in DigitalOcean Spaces
+      const uploadUrl = `${environment.LARAVEL_API_URL}/api/upload/voice-message`;
       console.log('📤 [VoiceService] Upload URL:', uploadUrl);
       console.log('📤 [VoiceService] Token present:', !!token);
-      
+
       const response = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -194,7 +194,7 @@ class VoiceRecordingService {
         },
         body: formData,
       });
-      
+
       // Log response details
       const contentType = response.headers.get('content-type');
       console.log('📤 [VoiceService] Upload response:', {
@@ -203,7 +203,7 @@ class VoiceRecordingService {
         contentType: contentType,
         contentLength: response.headers.get('content-length')
       });
-      
+
       let responseData;
       if (contentType && contentType.includes('application/json')) {
         responseData = await response.json();
@@ -214,7 +214,7 @@ class VoiceRecordingService {
         console.error('❌ [VoiceService] Server returned HTML instead of JSON:', htmlResponse.substring(0, 500));
         throw new Error(`Server returned HTML error page: ${response.status} ${response.statusText}`);
       }
-      
+
       if (!response.ok) {
         const errorMessage = responseData?.message || `Upload failed: ${response.status} ${response.statusText}`;
         throw new Error(errorMessage);
@@ -228,10 +228,10 @@ class VoiceRecordingService {
       }
 
       throw new Error('Upload response missing required data');
-      
+
     } catch (error: any) {
       console.error(`❌ [VoiceService] Upload attempt ${retryCount + 1} failed:`, error);
-      
+
       // Handle specific error types
       if (error.message?.includes('Authentication') || error.message?.includes('token')) {
         console.error('❌ [VoiceService] Authentication error');
@@ -243,7 +243,7 @@ class VoiceRecordingService {
         console.error('❌ [VoiceService] Invalid file format');
         throw new Error('Invalid voice message format. Please try recording again');
       }
-      
+
       // Retry logic for network errors
       if (retryCount < maxRetries && (
         error.message?.includes('network') ||
@@ -255,7 +255,7 @@ class VoiceRecordingService {
         await new Promise(resolve => setTimeout(resolve, retryDelay));
         return this.uploadVoiceMessage(appointmentId, uri, retryCount + 1);
       }
-      
+
       // Final error - no more retries
       console.error('❌ [VoiceService] All upload attempts failed');
       throw error;
@@ -270,10 +270,10 @@ class VoiceRecordingService {
   ): Promise<boolean> {
     try {
       console.log('📤 [VoiceService] Sending voice message via backend API');
-      
+
       // Upload the voice file first
       const mediaUrl = await this.uploadVoiceMessage(appointmentId, audioUri);
-      
+
       if (!mediaUrl) {
         console.error('❌ [VoiceService] Failed to upload voice message');
         return false;
@@ -294,7 +294,7 @@ class VoiceRecordingService {
       });
 
       const result = await response.json();
-      
+
       if (result.success) {
         console.log('✅ [VoiceService] Voice message sent successfully');
         return true;
