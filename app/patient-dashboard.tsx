@@ -6,24 +6,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Easing,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -40,7 +40,7 @@ import DoctorCard from '../components/DoctorCard';
 import DoctorProfilePicture from '../components/DoctorProfilePicture';
 import EmergencyModal from '../components/EmergencyModal';
 import { DoctorCardSkeleton } from '../components/skeleton';
-import { stripDoctorPrefix, withDoctorPrefix } from '../utils/name';
+import { withDoctorPrefix } from '../utils/name';
 
 import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
 import { appointmentService } from '../services/appointmentService';
@@ -2523,19 +2523,12 @@ export default function PatientDashboard() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ position: 'relative' }}>
-                      <View style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: '#4CAF50',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 16
-                      }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
-                          {item.doctor?.first_name?.charAt(0) || 'D'}
-                        </Text>
-                      </View>
+                      <DoctorProfilePicture
+                        size={48}
+                        style={{ marginRight: 16 }}
+                        profilePictureUrl={item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                        name={`Dr. ${item.doctor?.first_name} ${item.doctor?.last_name}`}
+                      />
                       {/* Active indicator */}
                       {item.isActive && (
                         <View style={{
@@ -2616,19 +2609,12 @@ export default function PatientDashboard() {
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: '#4CAF50',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 16
-                    }}>
-                      <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
-                        {String(item.doctorName || item.doctor_name || 'Doctor').charAt(0) || 'D'}
-                      </Text>
-                    </View>
+                    <DoctorProfilePicture
+                      size={48}
+                      style={{ marginRight: 16 }}
+                      profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                      name={String(item.doctorName || item.doctor_name || 'Doctor')}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
                         {String(item.doctorName || item.doctor_name || 'Doctor')}
@@ -2699,19 +2685,12 @@ export default function PatientDashboard() {
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <View style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: '#E0E0E0',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 16
-                      }}>
-                        <Text style={{ color: '#666', fontSize: 18, fontWeight: 'bold' }}>
-                          {stripDoctorPrefix(item.doctor_name || 'Doctor').charAt(0) || 'D'}
-                        </Text>
-                      </View>
+                      <DoctorProfilePicture
+                        size={48}
+                        style={{ marginRight: 16 }}
+                        profilePictureUrl={item.doctor_profile_picture_url || item.doctor_profile_picture || item.doctor?.profile_picture_url || item.doctor?.profile_picture}
+                        name={withDoctorPrefix(item.doctor_name || 'Unknown')}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#222', marginBottom: 4 }} numberOfLines={1}>
                           {withDoctorPrefix(item.doctor_name || 'Unknown')}

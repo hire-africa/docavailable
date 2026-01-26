@@ -7,8 +7,8 @@ import VideoCallModal from '../components/VideoCallModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useSecureScreen } from '../hooks/useSecureScreen';
 import { AudioCallService } from '../services/audioCallService';
-import { VideoCallService } from '../services/videoCallService';
 import ringtoneService from '../services/ringtoneService';
+import { VideoCallService } from '../services/videoCallService';
 
 export default function CallScreen() {
   // Enable screenshot prevention for all calls (audio/video)
@@ -360,6 +360,7 @@ export default function CallScreen() {
             onCallTimeout={handleCallTimeout}
             onCallRejected={handleCallRejected}
             isIncomingCall={isIncomingCall}
+            autoAcceptFromSystemUI={isFromCallKeep && isIncomingCall}
           />
         )}
 
@@ -388,6 +389,7 @@ export default function CallScreen() {
             console.log('📹 Video call answered');
           }}
           isIncomingCall={isIncomingCall}
+          autoAcceptFromSystemUI={isFromCallKeep && isIncomingCall}
           onAcceptCall={() => {
             console.log('📹 Video call accepted');
           }}

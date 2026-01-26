@@ -5,18 +5,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Modal,
-    ScrollView,
-    StatusBar,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../components/AppTour';
@@ -53,8 +53,8 @@ import { webrtcService } from '../../services/webrtcService';
 import webrtcSessionService, { SessionStatus } from '../../services/webrtcSessionService';
 import { ChatMessage } from '../../types/chat';
 import {
-    getUserTimezone,
-    isAppointmentTimeReached
+  getUserTimezone,
+  isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { Alert } from '../../utils/customAlert';
 import { withDoctorPrefix } from '../../utils/name';
@@ -1691,7 +1691,10 @@ export default function ChatPage() {
 
             // Show rating modal immediately - don't try to refresh chat data
             // The session is ended, so no need to fetch more data
-            setShowRatingModal(true);
+            // Only show rating modal for patients
+            if (user?.user_type === 'patient') {
+              setShowRatingModal(true);
+            }
           },
 
           onSessionEndSuccess: (sessionId: string, reason: string, sessionType: 'instant' | 'appointment') => {
@@ -1704,7 +1707,10 @@ export default function ChatPage() {
             setEndingSession(false);
             setShowEndSessionModal(false);
             setSessionEnded(true);
-            setShowRatingModal(true);
+            // Only show rating modal for patients
+            if (user?.user_type === 'patient') {
+              setShowRatingModal(true);
+            }
           },
 
           onSessionEndError: (error: string) => {
@@ -3166,10 +3172,12 @@ export default function ChatPage() {
         processTextAppointmentDeduction(1, 'manual_end');
         endTextAppointmentSession(1); // Deduct 1 session for manual end
 
-        // IMMEDIATELY show rating modal
+        // IMMEDIATELY show rating modal (only for patients)
         setShowEndSessionModal(false);
         setSessionEnded(true);
-        setShowRatingModal(true);
+        if (user?.user_type === 'patient') {
+          setShowRatingModal(true);
+        }
         setEndingSession(false);
 
         // FIX: Trigger refresh for both participants (non-blocking)
@@ -3213,7 +3221,10 @@ export default function ChatPage() {
       setShowEndSessionModal(false);
       setEndingSession(false);
       setSessionEnded(true);
-      setShowRatingModal(true); // Show immediately, no setTimeout needed
+      // Only show rating modal for patients
+      if (user?.user_type === 'patient') {
+        setShowRatingModal(true); // Show immediately, no setTimeout needed
+      }
 
       console.log('✅ [End Session] UI updated immediately - rating modal shown');
 
@@ -3423,7 +3434,10 @@ export default function ChatPage() {
       setShowEndSessionModal(false);
       setEndingSession(false);
       setSessionEnded(true);
-      setShowRatingModal(true); // Show immediately, no setTimeout needed
+      // Only show rating modal for patients
+      if (user?.user_type === 'patient') {
+        setShowRatingModal(true); // Show immediately, no setTimeout needed
+      }
 
       console.log('✅ [End Session] UI updated despite error - rating modal shown');
 
@@ -3576,7 +3590,10 @@ export default function ChatPage() {
         await webrtcChatService.clearMessages();
       }
       setShowEndSessionModal(false);
-      setShowRatingModal(true);
+      // Only show rating modal for patients
+      if (user?.user_type === 'patient') {
+        setShowRatingModal(true);
+      }
     } catch (e) {
       console.error('Failed to store session locally:', e);
       setShowEndSessionModal(false);
