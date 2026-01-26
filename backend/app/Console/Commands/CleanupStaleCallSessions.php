@@ -30,29 +30,34 @@ class CleanupStaleCallSessions extends Command
     public function handle()
     {
         $this->info('🔄 Cleaning up stale call connections...');
-        
+
         $debug = $this->option('debug');
-        
-        // Find call sessions that have been connecting for more than 90 seconds
-        $staleConnections = CallSession::where('status', CallSession::STATUS_CONNECTING)
+
+        // Find call sessions that have been in non-terminal states for more than 90 seconds
+        // This catches 'connecting', 'pending', 'waiting_for_doctor' states
+        $staleConnections = CallSession::whereIn('status', [
+            CallSession::STATUS_CONNECTING,
+            CallSession::STATUS_PENDING,
+            CallSession::STATUS_WAITING_FOR_DOCTOR,
+        ])
             ->where('started_at', '<=', now()->subSeconds(90))
             ->get();
-            
+
         if ($debug) {
             $this->info("Found {$staleConnections->count()} stale connections");
         }
-        
+
         $cleanedCount = 0;
         $errorCount = 0;
 
         foreach ($staleConnections as $session) {
             try {
                 $elapsedSeconds = $session->started_at->diffInSeconds(now());
-                
+
                 if ($debug) {
                     $this->line("Session {$session->id}: connecting for {$elapsedSeconds} seconds");
                 }
-                
+
                 // No provider joined within timeout window: treat as MISSED (retry should create a new call_session)
                 $session->update([
                     'status' => CallSession::STATUS_MISSED,
@@ -62,7 +67,7 @@ class CleanupStaleCallSessions extends Command
                     'call_duration' => 0,
                     'sessions_used' => 0, // No deduction for failed connections
                 ]);
-                
+
                 // Notify patient that call was missed
                 $patient = User::find($session->patient_id);
                 if ($patient) {
@@ -76,10 +81,10 @@ class CleanupStaleCallSessions extends Command
                         ]);
                     }
                 }
-                
+
                 $cleanedCount++;
                 $this->info("✅ Cleaned up stale connection for session {$session->id}");
-                
+
                 Log::info("Stale call connection cleaned up", [
                     'session_id' => $session->id,
                     'patient_id' => $session->patient_id,
@@ -87,7 +92,7 @@ class CleanupStaleCallSessions extends Command
                     'call_type' => $session->call_type,
                     'elapsed_seconds' => $elapsedSeconds,
                 ]);
-                
+
             } catch (\Exception $e) {
                 $errorCount++;
                 $this->error("❌ Error cleaning up session {$session->id}: " . $e->getMessage());
@@ -99,14 +104,14 @@ class CleanupStaleCallSessions extends Command
         }
 
         $this->info("📊 Summary: {$cleanedCount} cleaned up, {$errorCount} errors");
-        
+
         if ($cleanedCount > 0) {
             Log::info("Stale call connections cleanup completed", [
                 'cleaned' => $cleanedCount,
                 'errors' => $errorCount
             ]);
         }
-        
+
         return 0;
     }
 }

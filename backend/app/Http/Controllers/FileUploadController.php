@@ -788,16 +788,29 @@ class FileUploadController extends Controller
                 abort(404);
             }
 
+            // IMPORTANT: Check DigitalOcean Spaces FIRST since voice messages are uploaded there
+            // This fixes the "file not found" issue where files were being looked up in local storage
+            // but they actually exist in Spaces
+            if (Storage::disk('spaces')->exists($path)) {
+                \Log::info('Audio file found in Spaces, redirecting:', ['path' => $path]);
+
+                // Get the public URL from Spaces and redirect
+                // This is more efficient than streaming through the application
+                $url = Storage::disk('spaces')->url($path);
+                return redirect($url);
+            }
+
+            // Fallback: Check if file exists locally (for legacy files or local development)
             $fullPath = Storage::disk('public')->path($path);
 
             \Log::info('Audio file path resolution:', [
                 'requested_path' => $path,
                 'full_path' => $fullPath,
                 'file_exists_local' => file_exists($fullPath),
-                'storage_disk' => 'public'
+                'storage_disk' => 'public',
+                'checked_spaces_first' => true
             ]);
 
-            // Check if file exists locally
             if (file_exists($fullPath)) {
                 $extension = pathinfo($path, PATHINFO_EXTENSION);
                 $mimeTypes = [
@@ -844,20 +857,12 @@ class FileUploadController extends Controller
                 return response()->file($fullPath, $headers);
             }
 
-            // If not found locally, check DigitalOcean Spaces
-            if (Storage::disk('spaces')->exists($path)) {
-                \Log::info('Audio file found in Spaces, redirecting:', ['path' => $path]);
-
-                // Get the public URL from Spaces and redirect
-                // This is more efficient than streaming through the application
-                $url = Storage::disk('spaces')->url($path);
-                return redirect($url);
-            }
-
             // Not found in either location
-            \Log::error('Audio file not found (local or spaces):', [
+            \Log::error('Audio file not found (spaces or local):', [
                 'requested_path' => $path,
-                'local_path' => $fullPath
+                'local_path' => $fullPath,
+                'checked_spaces' => true,
+                'checked_local' => true
             ]);
             abort(404);
         } catch (\Exception $e) {

@@ -1494,13 +1494,34 @@ class CallSessionController extends Controller
                 ]);
             }
 
-            // Update call session status
+            // Update call session status - MUST set ended_at to properly close the session
             $callSession->update([
-                'status' => 'declined',
+                'status' => CallSession::STATUS_DECLINED,
                 'declined_at' => now(),
                 'declined_by' => $user->id,
-                'decline_reason' => $reason
+                'decline_reason' => $reason,
+                'ended_at' => now(), // Critical: close the session to prevent ghost entries
+                'is_connected' => false,
+                'call_duration' => 0,
             ]);
+
+            // Notify the patient that their call was declined
+            try {
+                $patient = User::find($callSession->patient_id);
+                if ($patient && $patient->push_notifications_enabled && !empty($patient->push_token)) {
+                    $patient->notify(new \App\Notifications\CallDeclinedNotification($callSession, $user));
+                    Log::info("Patient notified of call decline", [
+                        'call_session_id' => $callSession->id,
+                        'patient_id' => $patient->id
+                    ]);
+                }
+            } catch (\Exception $notifyError) {
+                Log::warning("Failed to notify patient of decline", [
+                    'call_session_id' => $callSession->id,
+                    'error' => $notifyError->getMessage()
+                ]);
+                // Don't fail the decline if notification fails
+            }
 
             Log::info("Call declined", [
                 'user_id' => $user->id,
@@ -1516,8 +1537,9 @@ class CallSessionController extends Controller
                 'message' => 'Call declined successfully',
                 'data' => [
                     'call_session_id' => $callSession->id,
-                    'status' => 'declined',
+                    'status' => CallSession::STATUS_DECLINED,
                     'declined_at' => $callSession->declined_at,
+                    'ended_at' => $callSession->ended_at,
                     'reason' => $reason
                 ]
             ]);
