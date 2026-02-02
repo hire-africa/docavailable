@@ -23,13 +23,14 @@ return [
         env('FRONTEND_URL', 'http://localhost:3000'),
         'http://localhost:8081',
         'http://localhost:8000',
-        'https://docavailable-c8dsmk0fs-docavailable-2776s-projects.vercel.app/',
+        'https://docavailable-c8dsmk0fs-docavailable-2776s-projects.vercel.app',
     ],
 
     'allowed_origins_patterns' => [
         '/^http:\/\/192\.168\.\d+\.\d+:\d+$/', // Allow local network IPs
         '/^http:\/\/172\.20\.\d+\.\d+:\d+$/', // Allow hotspot/private IPs
         '/^exp:\/\/.*$/', // Allow Expo development URLs
+        '/^https:\/\/.*\.vercel\.app$/',
     ],
 
     'allowed_headers' => ['*'],
