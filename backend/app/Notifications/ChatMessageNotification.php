@@ -33,7 +33,7 @@ class ChatMessageNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        $channels = ['database'];
+        $channels = [];
 
         // Only send push notifications for chat messages
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {

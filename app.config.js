@@ -4,15 +4,15 @@ module.exports = {
   expo: {
     name: "DocAvailable",
     slug: "Doc_available",
-    owner: "questmw",
     version: "1.1.3",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     userInterfaceStyle: "light",
     runtimeVersion: "1.1.3",
     updates: {
-      url: "https://u.expo.dev/8ea330ee-1ee0-4778-ac7c-459de9eb9dfc"
+      url: "https://u.expo.dev/972b5d32-2589-4960-a52d-2dcc6fe53eeb"
     },
+
     splash: {
       image: "./assets/images/icon.png",
       resizeMode: "contain",
@@ -74,7 +74,7 @@ module.exports = {
     ],
     extra: {
       eas: {
-        projectId: "8ea330ee-1ee0-4778-ac7c-459de9eb9dfc"
+        projectId: "2166156d-3cb3-4f6e-9cd1-f40471339866"
       },
       googleClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
       googleClientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET,

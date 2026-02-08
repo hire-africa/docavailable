@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Colors } from '../constants/Colors';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useInstantSessionDetector } from '../hooks/useInstantSessionDetector';
+import { validateMessage } from '../utils/messageSanitization';
 import InstantSessionTimer from './InstantSessionTimer';
+
+// Use a simple color palette for stability if Colors object is nested
+const THEME_COLORS = {
+  primary: '#007AFF',
+  error: '#FF3B30',
+  success: '#4CD964',
+  lightGray: '#E5E5EA',
+  gray: '#8E8E93',
+  text: '#000000',
+};
 
 interface InstantSessionChatIntegrationProps {
   appointmentId: string;
@@ -62,13 +72,19 @@ export default function InstantSessionChatIntegration({
     }
   }, [isTimerActive, timeRemaining, onSessionExpired]);
 
+  const validationResult = validateMessage(inputValue);
+  const isMessageValid = validationResult.isValid || inputValue.trim() === '';
+
   const canSendMessage = () => {
     // Allow doctors to always send messages, patients only if session is active or if patient hasn't sent first message yet
     // Note: This component doesn't have access to user type, so we'll use a more permissive approach
-    return isSessionActivated || (!hasPatientSentMessage) || hasDoctorResponded;
+    return (isSessionActivated || (!hasPatientSentMessage) || hasDoctorResponded) && isMessageValid;
   };
 
   const getInputPlaceholder = () => {
+    if (!isMessageValid) {
+      return `Blocked: ${validationResult.reasons[0]}`;
+    }
     if (hasPatientSentMessage && !hasDoctorResponded && isTimerActive) {
       return 'Waiting for doctor to respond...';
     } else if (hasPatientSentMessage && !hasDoctorResponded && !isTimerActive) {
@@ -81,14 +97,19 @@ export default function InstantSessionChatIntegration({
   };
 
   const handleSendMessage = () => {
+    if (!isMessageValid) {
+      Alert.alert('Invalid Message', validationResult.reasons.join('\n'));
+      return;
+    }
+
     if (inputValue.trim() && canSendMessage()) {
       console.log('📤 [InstantSession] Sending message:', inputValue);
-      
+
       // Call the parent's message handler
       if (onMessageSent) {
         onMessageSent(inputValue);
       }
-      
+
       setInputValue('');
     }
   };
@@ -157,13 +178,15 @@ export default function InstantSessionChatIntegration({
         <TextInput
           style={[
             styles.textInput,
+            !isMessageValid && styles.textInputError,
             !canSendMessage() && styles.textInputDisabled
           ]}
           value={inputValue}
           onChangeText={setInputValue}
           placeholder={getInputPlaceholder()}
+          placeholderTextColor={!isMessageValid ? THEME_COLORS.error : undefined}
           multiline
-          editable={canSendMessage()}
+          editable={canSendMessage() || !isMessageValid}
         />
         <TouchableOpacity
           style={[
@@ -191,11 +214,11 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 16,
-    color: Colors.text,
+    color: THEME_COLORS.text,
     marginBottom: 16,
   },
   button: {
-    backgroundColor: Colors.primary,
+    backgroundColor: THEME_COLORS.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -205,46 +228,46 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   infoContainer: {
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: THEME_COLORS.primary + '10',
     padding: 16,
     margin: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.primary + '30',
+    borderColor: THEME_COLORS.primary + '30',
     alignItems: 'center',
   },
   infoText: {
-    color: Colors.primary,
+    color: THEME_COLORS.primary,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   expiredContainer: {
-    backgroundColor: Colors.error + '10',
+    backgroundColor: THEME_COLORS.error + '10',
     padding: 16,
     margin: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.error + '30',
+    borderColor: THEME_COLORS.error + '30',
     alignItems: 'center',
   },
   expiredText: {
-    color: Colors.error,
+    color: THEME_COLORS.error,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
   },
   activatedContainer: {
-    backgroundColor: Colors.success + '10',
+    backgroundColor: THEME_COLORS.success + '10',
     padding: 16,
     margin: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
+    borderColor: THEME_COLORS.success + '30',
     alignItems: 'center',
   },
   activatedText: {
-    color: Colors.success,
+    color: THEME_COLORS.success,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -254,12 +277,12 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: 'white',
     borderTopWidth: 1,
-    borderTopColor: Colors.lightGray,
+    borderTopColor: THEME_COLORS.lightGray,
   },
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: Colors.lightGray,
+    borderColor: THEME_COLORS.lightGray,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -268,19 +291,23 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   textInputDisabled: {
-    backgroundColor: Colors.lightGray + '30',
-    borderColor: Colors.gray,
-    color: Colors.gray,
+    backgroundColor: THEME_COLORS.lightGray + '30',
+    borderColor: THEME_COLORS.gray,
+    color: THEME_COLORS.gray,
+  },
+  textInputError: {
+    borderColor: THEME_COLORS.error,
+    backgroundColor: THEME_COLORS.error + '05',
   },
   sendButton: {
-    backgroundColor: Colors.primary,
+    backgroundColor: THEME_COLORS.primary,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: Colors.gray,
+    backgroundColor: THEME_COLORS.gray,
   },
   sendButtonText: {
     color: 'white',

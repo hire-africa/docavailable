@@ -113,9 +113,16 @@ class MessageStorageService
             // Add new message with unique ID (use provided ID if available)
             $messageId = $messageData['id'] ?? Str::uuid()->toString();
 
+            // DEFENSE-IN-DEPTH: Sanitize message content before storage
+            // This catches any bypass of ChatController validation
+            $plaintextMessage = $messageData['message'];
+            if (($messageData['message_type'] ?? 'text') === 'text') {
+                $sanitizationService = app(\App\Services\MessageSanitizationService::class);
+                $plaintextMessage = $sanitizationService->sanitize($plaintextMessage);
+            }
+
             // Encrypt message content before storage
             $encryptedData = null;
-            $plaintextMessage = $messageData['message'];
 
             try {
                 $encryptedData = EncryptionUtil::encryptMessage($plaintextMessage);

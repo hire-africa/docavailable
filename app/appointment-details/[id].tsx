@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -8,7 +9,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { apiService } from '../services/apiService';
 
@@ -139,11 +139,11 @@ const AppointmentDetails = () => {
       } else {
         date = new Date(dateStr);
       }
-      
+
       if (isNaN(date.getTime())) {
         return dateStr; // Return original if parsing fails
       }
-      
+
       // Format as "Jan 20"
       return date.toLocaleDateString('en-US', {
         month: 'short',
@@ -216,10 +216,10 @@ const AppointmentDetails = () => {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <View style={[styles.iconContainer, { backgroundColor: '#FFF9E6' }]}>
-                  <Ionicons 
-                    name={getAppointmentTypeIcon(appointment.appointment_type || appointment.type)} 
-                    size={24} 
-                    color={getAppointmentTypeColor(appointment.appointment_type || appointment.type)} 
+                  <Ionicons
+                    name={getAppointmentTypeIcon(appointment.appointment_type || appointment.type)}
+                    size={24}
+                    color={getAppointmentTypeColor(appointment.appointment_type || appointment.type)}
                   />
                 </View>
                 <Text style={styles.sectionTitle}>Type</Text>
@@ -259,19 +259,33 @@ const AppointmentDetails = () => {
             </View>
 
             {/* Reason Section */}
-            {appointment.reason && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <View style={[styles.iconContainer, { backgroundColor: '#F3E5F5' }]}>
-                    <Ionicons name="document-text" size={24} color="#9C27B0" />
-                  </View>
-                  <Text style={styles.sectionTitle}>Reason</Text>
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <View style={[styles.iconContainer, { backgroundColor: '#F3E5F5' }]}>
+                  <Ionicons name="document-text" size={24} color="#9C27B0" />
                 </View>
-                <View style={styles.reasonCard}>
-                  <Text style={styles.reasonText}>{appointment.reason}</Text>
-                </View>
+                <Text style={styles.sectionTitle}>
+                  {(() => {
+                    const statusStr = String(appointment.status).toLowerCase();
+                    if (statusStr === 'confirmed' || statusStr === '1' || statusStr === 'pending' || statusStr === '0') {
+                      return 'Instructions';
+                    }
+                    return 'Reason';
+                  })()}
+                </Text>
               </View>
-            )}
+              <View style={styles.reasonCard}>
+                <Text style={styles.reasonText}>
+                  {(() => {
+                    const statusStr = String(appointment.status).toLowerCase();
+                    if (statusStr === 'confirmed' || statusStr === '1' || statusStr === 'pending' || statusStr === '0') {
+                      return 'at appointment time go to doctor profile -> talk now then start your session';
+                    }
+                    return appointment.reason || 'No reason provided';
+                  })()}
+                </Text>
+              </View>
+            </View>
 
             {/* Additional Info */}
             {appointment.notes && (

@@ -13,6 +13,7 @@ use App\Services\MessageStorageService;
 use App\Services\AnonymizationService;
 use App\Services\FeatureFlags;
 use App\Services\SessionContextGuard;
+use App\Services\MessageSanitizationService;
 use App\Notifications\ChatMessageNotification;
 use Illuminate\Support\Facades\Log;
 use App\Events\ChatMessageSent;
@@ -23,11 +24,16 @@ class ChatController extends Controller
 {
     protected $messageStorageService;
     protected $anonymizationService;
+    protected $messageSanitizationService;
 
-    public function __construct(MessageStorageService $messageStorageService, AnonymizationService $anonymizationService)
-    {
+    public function __construct(
+        MessageStorageService $messageStorageService,
+        AnonymizationService $anonymizationService,
+        MessageSanitizationService $messageSanitizationService
+    ) {
         $this->messageStorageService = $messageStorageService;
         $this->anonymizationService = $anonymizationService;
+        $this->messageSanitizationService = $messageSanitizationService;
     }
 
     /**
@@ -375,6 +381,29 @@ class ChatController extends Controller
         ]);
 
         $user = Auth::user();
+
+        // SECURITY: Validate message content before processing (for text messages only)
+        // Skip sanitization for media messages (voice/image) which have their own validation
+        $messageType = $request->message_type ?? 'text';
+        if ($messageType === 'text') {
+            $sanitizationResult = $this->messageSanitizationService->validateAndSanitize(
+                $request->message,
+                $user->id,
+                is_numeric($appointmentId) ? (int) $appointmentId : 0
+            );
+
+            if (!$sanitizationResult['valid']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Message contains content that is not allowed. Please remove any links, HTML, or scripts and try again.',
+                    'error_code' => 'CONTENT_BLOCKED',
+                    'reasons' => $sanitizationResult['reasons']
+                ], 400);
+            }
+
+            // Replace message with sanitized version
+            $request->merge(['message' => $sanitizationResult['message']]);
+        }
 
         // Rate limiting: Check if user has sent a message recently
         $messageType = $request->message_type ?? 'text';

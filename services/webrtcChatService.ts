@@ -231,6 +231,16 @@ export class WebRTCChatService {
       isWebSocketOpen: this.websocket?.readyState === WebSocket.OPEN
     });
 
+    // SECURITY: Validate message content before sending (client-side validation)
+    // This prevents bypassing backend validation when using WebRTC
+    const validationResult = validateMessage(message);
+    if (!validationResult.isValid) {
+      const errorMessage = `Message contains content that is not allowed: ${validationResult.reasons.join(', ')}`;
+      console.error('❌ [WebRTCChat] Message validation failed:', errorMessage);
+      console.error('❌ [WebRTCChat] Blocked reasons:', validationResult.reasons);
+      throw new Error(errorMessage);
+    }
+
     if (!this.isConnected || !this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
       console.error('❌ [WebRTCChat] WebRTC chat not connected - cannot send message', {
         isConnected: this.isConnected,

@@ -405,7 +405,7 @@ class TextAppointmentController extends Controller
             // ⚠️ GUARDRAIL: Block billing if appointment has session_id
             // Billing must come from session auto-deduction flows, not appointment endpoints
             $enforce = \App\Services\FeatureFlags::enforceSessionGatedBilling();
-            
+
             if ($appointment->session_id !== null) {
                 if ($enforce) {
                     \Log::warning('SessionContextGuard: Billing blocked - appointment has session_id', [
@@ -413,7 +413,7 @@ class TextAppointmentController extends Controller
                         'session_id' => $appointment->session_id,
                         'endpoint' => 'TextAppointmentController::processDeduction',
                     ]);
-                    
+
                     return response()->json([
                         'success' => false,
                         'message' => 'Billing must be processed through session auto-deduction, not appointment endpoint',

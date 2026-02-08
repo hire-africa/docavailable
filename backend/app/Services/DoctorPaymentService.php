@@ -130,11 +130,11 @@ class DoctorPaymentService
                 $appointment,
                 'DoctorPaymentService::processAppointmentPayment'
             );
-            
+
             if ($guardrail['warning']) {
                 // Warning logged, but proceed for backward compatibility (phased approach)
             }
-            
+
             // IDEMPOTENCY CHECK: Prevent double payment
             if ($appointment->earnings_awarded > 0) {
                 \Log::warning('Attempted double payment for appointment', [
@@ -323,11 +323,11 @@ class DoctorPaymentService
                 $appointment,
                 'DoctorPaymentService::processAppointmentEnd'
             );
-            
+
             if ($guardrail['warning']) {
                 // Warning logged, but proceed for backward compatibility (phased approach)
             }
-            
+
             // Process doctor payment
             $doctorPaymentSuccess = $this->processAppointmentPayment($appointment);
             $result['doctor_payment_success'] = $doctorPaymentSuccess;

@@ -31,8 +31,9 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        $channels = ['database'];
-        
+        $channels = [];
+
+        // Removed 'database' channel to prevent session updates from cluttering the notification history
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
             $channels[] = 'fcm';
         }

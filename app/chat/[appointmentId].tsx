@@ -57,6 +57,7 @@ import {
   isAppointmentTimeReached
 } from '../../utils/appointmentTimeUtils';
 import { Alert } from '../../utils/customAlert';
+import { validateMessage } from '../../utils/messageSanitization';
 import { withDoctorPrefix } from '../../utils/name';
 import { apiService } from '../services/apiService';
 
@@ -447,6 +448,24 @@ export default function ChatPage() {
   const [webrtcChatService, setWebrtcChatService] = useState<WebRTCChatService | null>(null);
   const [isWebRTCServiceActive, setIsWebRTCServiceActive] = useState(false);
   const webrtcServiceRef = useRef<WebRTCChatService | null>(null);
+
+  // Validation state
+  const [validationResult, setValidationResult] = useState<{ isValid: boolean; reasons: string[] }>({ isValid: true, reasons: [] });
+
+  const handleSendMessage = async () => {
+    const messageText = newMessage.trim();
+    if (!messageText) return;
+
+    // Client-side validation
+    const result = validateMessage(messageText);
+    if (!result.isValid) {
+      setValidationResult(result);
+      return;
+    }
+
+    setValidationResult({ isValid: true, reasons: [] });
+    sendMessage();
+  };
 
   // Appointment time checking state
   // Initialize to true to prevent buttons from being disabled on initial render
@@ -2335,9 +2354,9 @@ export default function ChatPage() {
             if (sessionResponse.success && sessionResponse.data) {
               const sessionData = sessionResponse.data as TextSessionInfo;
 
-              // Extract doctor and patient IDs from the nested objects
-              const actualDoctorId = sessionData.doctor?.id || 0;
-              const actualPatientId = sessionData.patient?.id || 0;
+              // Extract doctor and patient IDs, prioritizing top-level fields
+              const actualDoctorId = sessionData.doctor_id || sessionData.doctor?.id || 0;
+              const actualPatientId = sessionData.patient_id || sessionData.patient?.id || 0;
 
               console.log('📊 [InstantSession] Text session data loaded:', {
                 doctorId: actualDoctorId,
@@ -2388,9 +2407,9 @@ export default function ChatPage() {
             if (sessionResponse.success && sessionResponse.data) {
               const sessionData = sessionResponse.data as TextSessionInfo;
 
-              // Extract the correct IDs
-              const actualDoctorId = sessionData.doctor?.id || 0;
-              const actualPatientId = sessionData.patient?.id || 0;
+              // Extract the correct IDs, prioritizing top-level fields
+              const actualDoctorId = sessionData.doctor_id || sessionData.doctor?.id || 0;
+              const actualPatientId = sessionData.patient_id || sessionData.patient?.id || 0;
 
               // Extract names with better fallbacks
               const rawDoctorName = sessionData.doctor?.display_name ||
@@ -3364,6 +3383,12 @@ export default function ChatPage() {
                 : (user?.profile_picture || user?.profile_picture_url),
               patient_id: patientId,
               patient_name: patientName,
+              patient_profile_picture_url: !isPatientUser
+                ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.patient?.profile_picture_url)
+                : (user?.profile_picture_url || user?.profile_picture),
+              patient_profile_picture: !isPatientUser
+                ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.patient?.profile_picture)
+                : (user?.profile_picture || user?.profile_picture_url),
               appointment_date: chatInfo?.appointment_date,
               appointment_time: chatInfo?.appointment_time,
               ended_at: new Date().toISOString(),
@@ -3503,6 +3528,12 @@ export default function ChatPage() {
               : (user?.profile_picture || user?.profile_picture_url),
             patient_id: patientId,
             patient_name: patientName,
+            patient_profile_picture_url: !isPatient
+              ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.patient?.profile_picture_url)
+              : (user?.profile_picture_url || user?.profile_picture),
+            patient_profile_picture: !isPatient
+              ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.patient?.profile_picture)
+              : (user?.profile_picture || user?.profile_picture_url),
             appointment_date: chatInfo?.appointment_date,
             appointment_time: chatInfo?.appointment_time,
             ended_at: new Date().toISOString(),
@@ -3574,6 +3605,12 @@ export default function ChatPage() {
           : (user?.profile_picture || user?.profile_picture_url),
         patient_id: patientId,
         patient_name: patientName,
+        patient_profile_picture_url: !isPatient
+          ? (chatInfo?.other_participant_profile_picture_url || textSessionInfo?.patient?.profile_picture_url)
+          : (user?.profile_picture_url || user?.profile_picture),
+        patient_profile_picture: !isPatient
+          ? (chatInfo?.other_participant_profile_picture || textSessionInfo?.patient?.profile_picture)
+          : (user?.profile_picture || user?.profile_picture_url),
         appointment_date: chatInfo?.appointment_date,
         appointment_time: chatInfo?.appointment_time,
         ended_at: new Date().toISOString(),
@@ -5127,6 +5164,9 @@ export default function ChatPage() {
             value={newMessage}
             onChangeText={(text) => {
               setNewMessage(text);
+              const result = validateMessage(text);
+              setValidationResult(result);
+
               // Send typing indicator via WebRTC (try session service first, then chat service)
               if (isWebRTCConnected) {
                 if (webrtcSessionService) {
@@ -5137,12 +5177,12 @@ export default function ChatPage() {
               }
             }}
             editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
-            placeholder="Message..."
-            placeholderTextColor="#999"
+            placeholder={!validationResult.isValid ? validationResult.reasons[0] : "Message..."}
+            placeholderTextColor={!validationResult.isValid ? '#FF3B30' : "#999"}
             style={{
               flex: 1,
               borderWidth: 1,
-              borderColor: newMessage.trim() ? '#4CAF50' : '#E5E5E5',
+              borderColor: !validationResult.isValid ? '#FF3B30' : (newMessage.trim() ? '#4CAF50' : '#E5E5E5'),
               borderRadius: 24,
               paddingHorizontal: 18,
               paddingVertical: 14,
@@ -5163,11 +5203,22 @@ export default function ChatPage() {
             onPress={async () => {
               if (selectedImage) {
                 const caption = newMessage.trim();
+
+                // Validate caption if present
+                if (caption) {
+                  const result = validateMessage(caption);
+                  if (!result.isValid) {
+                    setValidationResult(result);
+                    return;
+                  }
+                }
+
                 const imageToSend = selectedImage; // Store reference before clearing
 
                 // Clear image and caption IMMEDIATELY to dismiss preview and prevent duplicate sends
                 setSelectedImage(null);
                 setNewMessage('');
+                setValidationResult({ isValid: true, reasons: [] });
 
                 try {
                   if (webrtcChatService) {
@@ -5224,12 +5275,13 @@ export default function ChatPage() {
                 }
               } else {
                 // Send text message
-                sendMessage();
+                handleSendMessage();
               }
             }}
             disabled={
               sending ||
               (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
+              !validationResult.isValid || // Disable if invalid
               sessionEnded ||
               !sessionValid ||
               (isInstantSession && isSessionExpired) ||
@@ -5237,15 +5289,15 @@ export default function ChatPage() {
               (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
             }
             style={{
-              backgroundColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : '#E5E5E5',
+              backgroundColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : '#E5E5E5',
               borderRadius: 24,
               padding: 14,
               minWidth: 48,
               height: 48,
               alignItems: 'center',
               justifyContent: 'center',
-              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) ? 0.5 : 1,
-              shadowColor: (newMessage.trim() || selectedImage) && !sending ? '#4CAF50' : 'transparent',
+              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) || !validationResult.isValid ? 0.5 : 1,
+              shadowColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : 'transparent',
               shadowOffset: { width: 0, height: 2 },
               shadowOpacity: 0.2,
               shadowRadius: 4,
@@ -5259,6 +5311,15 @@ export default function ChatPage() {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Validation Error Hint */}
+        {!validationResult.isValid && (
+          <View style={{ paddingHorizontal: 60, paddingBottom: 8, marginTop: -4 }}>
+            <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '500' }}>
+              {validationResult.reasons[0]}
+            </Text>
+          </View>
+        )}
 
         {/* Voice Recording Interface */}
         {isRecording && (

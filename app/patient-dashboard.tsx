@@ -3473,12 +3473,26 @@ export default function PatientDashboard() {
                   </View>
                 ) : null}
               </View>
-              {appt.reason && appt.reason.trim() !== '' ? (
-                <View style={{ marginTop: 8 }}>
-                  <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>Reason</Text>
-                  <Text style={{ color: '#666' }}>{String(appt.reason)}</Text>
-                </View>
-              ) : null}
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ color: '#222', fontWeight: '600', marginBottom: 4 }}>
+                  {(() => {
+                    const statusStr = String(appt.status).toLowerCase();
+                    if (statusStr === 'confirmed' || statusStr === '1' || statusStr === 'pending' || statusStr === '0') {
+                      return 'Instructions';
+                    }
+                    return 'Reason';
+                  })()}
+                </Text>
+                <Text style={{ color: '#666' }}>
+                  {(() => {
+                    const statusStr = String(appt.status).toLowerCase();
+                    if (statusStr === 'confirmed' || statusStr === '1' || statusStr === 'pending' || statusStr === '0') {
+                      return 'at appointment time go to doctor profile -> talk now then start your session';
+                    }
+                    return appt.reason || 'No reason provided';
+                  })()}
+                </Text>
+              </View>
             </View>
           </View>
         </View>

@@ -2291,19 +2291,12 @@ export default function DoctorDashboard() {
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <View style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: '#E0E0E0',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 16
-                      }}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>
-                          {item.patient_name?.charAt(0) || 'P'}
-                        </Text>
-                      </View>
+                      <DoctorProfilePicture
+                        size={48}
+                        style={{ marginRight: 16 }}
+                        profilePictureUrl={item.patient_profile_picture_url || item.patient_profile_picture}
+                        name={item.patient_name}
+                      />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
                           {item.patient_name || 'Patient'}
@@ -2399,19 +2392,12 @@ export default function DoctorDashboard() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <View style={{ position: 'relative' }}>
-                      <View style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: 24,
-                        backgroundColor: '#4CAF50',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 16
-                      }}>
-                        <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' }}>
-                          {item.patient?.first_name?.charAt(0) || 'P'}
-                        </Text>
-                      </View>
+                      <DoctorProfilePicture
+                        size={48}
+                        style={{ marginRight: 16 }}
+                        profilePictureUrl={item.patient?.profile_picture_url || item.patient?.profile_picture}
+                        name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
+                      />
                       {/* Active indicator */}
                       {item.isActive && (
                         <View style={{
@@ -2465,19 +2451,12 @@ export default function DoctorDashboard() {
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: '#D1E7DD',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 16
-                    }}>
-                      <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>
-                        {(item.patient_name || 'Unknown Patient').charAt(0) || 'P'}
-                      </Text>
-                    </View>
+                    <DoctorProfilePicture
+                      size={48}
+                      style={{ marginRight: 16 }}
+                      profilePictureUrl={item.patientProfilePictureUrl || item.patientProfilePicture || item.patient_profile_picture_url || item.patient_profile_picture}
+                      name={item.patient_name || item.patientName || 'Patient'}
+                    />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
                         {item.patient_name || 'Unknown Patient'}

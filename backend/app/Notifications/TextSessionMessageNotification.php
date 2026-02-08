@@ -29,9 +29,8 @@ class TextSessionMessageNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
-        // Optional: still send email if you want
-        // $channels[] = 'mail';
+        $channels = [];
+        // Removed 'database' channel to prevent chat messages from being stored in notifications table
         if (isset($notifiable->push_notifications_enabled) && isset($notifiable->push_token) && $notifiable->push_notifications_enabled && !empty($notifiable->push_token)) {
             $channels[] = 'fcm';
         }

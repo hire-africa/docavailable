@@ -313,10 +313,10 @@ const MyAppointments = () => {
           {appointmentType && (
             <View style={styles.typeRow}>
               <View style={[styles.typeIconContainer, { backgroundColor: getAppointmentTypeColor(appointmentType) + '20' }]}>
-                <Ionicons 
-                  name={getAppointmentTypeIcon(appointmentType)} 
-                  size={14} 
-                  color={getAppointmentTypeColor(appointmentType)} 
+                <Ionicons
+                  name={getAppointmentTypeIcon(appointmentType)}
+                  size={14}
+                  color={getAppointmentTypeColor(appointmentType)}
                 />
               </View>
               <Text style={[styles.typeText, { color: getAppointmentTypeColor(appointmentType) }]}>
@@ -388,8 +388,8 @@ const MyAppointments = () => {
       <Modal visible={!!selectedAppointment} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <TouchableOpacity 
-              onPress={() => setSelectedAppointment(null)} 
+            <TouchableOpacity
+              onPress={() => setSelectedAppointment(null)}
               style={styles.modalCloseButton}
               activeOpacity={0.7}
             >
@@ -431,10 +431,10 @@ const MyAppointments = () => {
                   {selectedAppointment.appointment_type && (
                     <View style={styles.modalSection}>
                       <View style={styles.modalSectionHeader}>
-                        <Ionicons 
-                          name={getAppointmentTypeIcon(selectedAppointment.appointment_type)} 
-                          size={20} 
-                          color={getAppointmentTypeColor(selectedAppointment.appointment_type)} 
+                        <Ionicons
+                          name={getAppointmentTypeIcon(selectedAppointment.appointment_type)}
+                          size={20}
+                          color={getAppointmentTypeColor(selectedAppointment.appointment_type)}
                         />
                         <Text style={styles.modalSectionTitle}>Type</Text>
                       </View>
@@ -449,13 +449,27 @@ const MyAppointments = () => {
                   <View style={styles.modalSection}>
                     <View style={styles.modalSectionHeader}>
                       <Ionicons name="document-text" size={20} color="#9C27B0" />
-                      <Text style={styles.modalSectionTitle}>Reason</Text>
+                      <Text style={styles.modalSectionTitle}>
+                        {(() => {
+                          const statusStr = getStatusString(selectedAppointment.status);
+                          if (statusStr === 'pending' || statusStr === 'confirmed') {
+                            return 'Instructions';
+                          }
+                          return 'Reason';
+                        })()}
+                      </Text>
                     </View>
                     <View style={styles.modalReasonCard}>
                       <Text style={styles.modalReasonText}>
-                        {selectedAppointment.reason && selectedAppointment.reason.trim() !== ''
-                          ? selectedAppointment.reason
-                          : 'No reason provided'}
+                        {(() => {
+                          const statusStr = getStatusString(selectedAppointment.status);
+                          if (statusStr === 'pending' || statusStr === 'confirmed') {
+                            return 'at appointment time go to doctor profile -> talk now then start your session';
+                          }
+                          return selectedAppointment.reason && selectedAppointment.reason.trim() !== ''
+                            ? selectedAppointment.reason
+                            : 'No reason provided';
+                        })()}
                       </Text>
                     </View>
                   </View>
@@ -501,15 +515,15 @@ const MyAppointments = () => {
               Are you sure you want to cancel this appointment?
             </Text>
             <View style={styles.confirmModalButtons}>
-              <TouchableOpacity 
-                onPress={() => setShowCancelConfirmModal(false)} 
+              <TouchableOpacity
+                onPress={() => setShowCancelConfirmModal(false)}
                 style={[styles.modalButton, styles.modalButtonSecondary]}
                 activeOpacity={0.8}
               >
                 <Text style={styles.modalButtonSecondaryText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={handleCancelConfirm} 
+              <TouchableOpacity
+                onPress={handleCancelConfirm}
                 style={[styles.modalButton, styles.modalButtonDanger]}
                 activeOpacity={0.8}
               >
@@ -541,15 +555,15 @@ const MyAppointments = () => {
               numberOfLines={4}
             />
             <View style={styles.confirmModalButtons}>
-              <TouchableOpacity 
-                onPress={() => setShowCancelModal(false)} 
+              <TouchableOpacity
+                onPress={() => setShowCancelModal(false)}
                 style={[styles.modalButton, styles.modalButtonSecondary]}
                 activeOpacity={0.8}
               >
                 <Text style={styles.modalButtonSecondaryText}>Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={confirmCancelAppointment} 
+              <TouchableOpacity
+                onPress={confirmCancelAppointment}
                 style={[styles.modalButton, styles.modalButtonDanger]}
                 activeOpacity={0.8}
               >

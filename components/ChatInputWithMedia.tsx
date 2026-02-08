@@ -1,16 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useMediaUpload } from '../hooks/useMediaUpload';
+import { validateMessage } from '../utils/messageSanitization';
 import { MediaUploadHandler } from './MediaUploadHandler';
 
 interface ChatInputWithMediaProps {
@@ -33,7 +34,10 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
   const [message, setMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const inputRef = useRef<TextInput>(null);
-  
+
+  const validationResult = validateMessage(message);
+  const isMessageValid = validationResult.isValid || message.trim() === '';
+
   const {
     voiceRecordingState,
     imageUploadState,
@@ -41,6 +45,11 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
   } = useMediaUpload();
 
   const handleSendMessage = () => {
+    if (!isMessageValid) {
+      Alert.alert('Invalid Message', validationResult.reasons.join('\n'));
+      return;
+    }
+
     if (message.trim() && !disabled) {
       onSendMessage(message.trim());
       setMessage('');
@@ -85,7 +94,7 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
               </Text>
             </View>
           )}
-          
+
           {voiceUploadState.isUploading && (
             <View style={styles.statusItem}>
               <Ionicons name="mic" size={16} color="#FF3B30" />
@@ -94,7 +103,7 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
               </Text>
             </View>
           )}
-          
+
           {hasError && (
             <View style={styles.errorItem}>
               <Ionicons name="warning" size={16} color="#FF3B30" />
@@ -116,6 +125,16 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
         </View>
       )}
 
+      {/* Validation Error Bar */}
+      {!isMessageValid && (
+        <View style={styles.errorBar}>
+          <Ionicons name="alert-circle" size={16} color="#FF3B30" />
+          <Text style={styles.errorText}>
+            {validationResult.reasons[0]}
+          </Text>
+        </View>
+      )}
+
       {/* Main Input Area */}
       <View style={styles.inputContainer}>
         {/* Media Upload Handler */}
@@ -132,32 +151,32 @@ export const ChatInputWithMedia: React.FC<ChatInputWithMediaProps> = ({
             ref={inputRef}
             style={[
               styles.textInput,
-              disabled && styles.disabledInput,
+              (disabled || voiceRecordingState.isRecording) && styles.disabledInput,
             ]}
             value={message}
             onChangeText={setMessage}
-            placeholder={placeholder}
+            placeholder={voiceRecordingState.isRecording ? "Recording..." : placeholder}
             placeholderTextColor="#999"
             multiline
             maxLength={1000}
-            editable={!disabled}
+            editable={!disabled && !voiceRecordingState.isRecording}
             returnKeyType="send"
             onSubmitEditing={handleSendMessage}
           />
-          
+
           {/* Send Button */}
           <TouchableOpacity
             style={[
               styles.sendButton,
-              (!message.trim() || disabled) && styles.disabledSendButton,
+              (!message.trim() || disabled || !isMessageValid) && styles.disabledSendButton,
             ]}
             onPress={handleSendMessage}
-            disabled={!message.trim() || disabled}
+            disabled={!message.trim() || disabled || !isMessageValid}
           >
             <Ionicons
               name="send"
               size={20}
-              color={message.trim() && !disabled ? '#007AFF' : '#999'}
+              color={message.trim() && !disabled && isMessageValid ? '#007AFF' : '#999'}
             />
           </TouchableOpacity>
         </View>
@@ -199,6 +218,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FF3B30',
     marginLeft: 4,
+  },
+  errorBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    backgroundColor: '#FFF5F5',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFE5E5',
   },
   recordingBar: {
     flexDirection: 'row',
@@ -245,19 +273,14 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     maxHeight: 80,
   },
-  disabledInput: {
-    color: '#999',
-  },
   sendButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
+    paddingLeft: 12,
+    paddingBottom: 4,
   },
   disabledSendButton: {
-    backgroundColor: '#F0F0F0',
+    opacity: 0.5,
+  },
+  disabledInput: {
+    color: '#999',
   },
 });

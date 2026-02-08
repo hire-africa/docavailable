@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../components/AudioCall';
 import VideoCallModal from '../components/VideoCallModal';
@@ -13,11 +13,11 @@ import { VideoCallService } from '../services/videoCallService';
 export default function CallScreen() {
   // Enable screenshot prevention for all calls (audio/video)
   useSecureScreen('Call');
-  
+
   const params = useLocalSearchParams();
   const router = useRouter();
   const { user } = useAuth();
-  
+
   const {
     sessionId,
     doctorId,
@@ -44,26 +44,26 @@ export default function CallScreen() {
   // Call services
   const audioCallService = useRef<AudioCallService | null>(null);
   const videoCallService = useRef<VideoCallService | null>(null);
-  
+
   // CRITICAL: Track initialized session to prevent duplicate initialization
   const initializedSessionRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Derive incoming flag from params on mount
     setIsIncomingCall(incomingParam);
-    
+
     // Log CallKeep auto-answer
     if (isFromCallKeep) {
       console.log('✅ [CallScreen] Call answered from CallKeep system UI - auto-starting');
     }
-    
+
     // Prevent duplicate initialization for the same session
     const currentSession = String(sessionId);
     if (initializedSessionRef.current === currentSession) {
       console.log('⚠️ [CallScreen] Call already initialized for session:', currentSession);
       return;
     }
-    
+
     initializedSessionRef.current = currentSession;
     console.log('✅ [CallScreen] Initializing call for new session:', currentSession, {
       isIncoming: incomingParam,
@@ -73,9 +73,21 @@ export default function CallScreen() {
     initializeCall();
   }, []);
 
+  // SECURITY: Block system back navigation during active call
+  // Users can only exit the call screen by explicitly ending the call
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Block the back button - return true to prevent default behavior
+      console.log('🚫 [CallScreen] Back button blocked during active call');
+      return true;
+    });
+
+    return () => backHandler.remove();
+  }, []);
+
   const initializeCall = async () => {
     let initTimeout: ReturnType<typeof setTimeout> | null = null;
-    
+
     try {
       setIsLoading(true);
       setError(null);
@@ -96,7 +108,7 @@ export default function CallScreen() {
         if (initTimeout) clearTimeout(initTimeout);
         return;
       }
-      
+
       // Enhanced doctorId validation for outgoing calls
       if (!incomingParam) {
         if (!doctorId) {
@@ -105,7 +117,7 @@ export default function CallScreen() {
           if (initTimeout) clearTimeout(initTimeout);
           return;
         }
-        
+
         // Validate doctorId is a valid number
         const doctorIdNum = Number(doctorId);
         if (Number.isNaN(doctorIdNum) || doctorIdNum <= 0) {
@@ -114,7 +126,7 @@ export default function CallScreen() {
           if (initTimeout) clearTimeout(initTimeout);
           return;
         }
-        
+
         console.log('🔍 [CallScreen] Validated call parameters:', {
           sessionId,
           callType,
@@ -175,33 +187,33 @@ export default function CallScreen() {
                 console.log('📞 Audio call answered');
                 // UI already shown, just log
               },
-            onCallEnded: () => {
-              console.log('📞 Audio call ended');
-              handleCallEnd();
-            },
-            onCallTimeout: () => {
-              console.log('📞 Audio call timeout');
-              handleCallTimeout();
-            },
-            onCallRejected: () => {
-              console.log('📞 Audio call rejected');
-              handleCallRejected();
-            },
-            onRemoteStream: () => {
-              console.log('📞 Remote audio stream received');
-            },
-            onStateChange: (state) => {
-              console.log('📞 Audio call state changed:', state);
-            },
-            onError: (error) => {
-              console.error('📞 Audio call error:', error);
-              setError(error);
+              onCallEnded: () => {
+                console.log('📞 Audio call ended');
+                handleCallEnd();
+              },
+              onCallTimeout: () => {
+                console.log('📞 Audio call timeout');
+                handleCallTimeout();
+              },
+              onCallRejected: () => {
+                console.log('📞 Audio call rejected');
+                handleCallRejected();
+              },
+              onRemoteStream: () => {
+                console.log('📞 Remote audio stream received');
+              },
+              onStateChange: (state) => {
+                console.log('📞 Audio call state changed:', state);
+              },
+              onError: (error) => {
+                console.error('📞 Audio call error:', error);
+                setError(error);
+              }
             }
-          }
-        );
+          );
 
-        // The call starts automatically after initialization
-        setShowAudioCall(true);
+          // The call starts automatically after initialization
+          setShowAudioCall(true);
         }
       } else if (normalizedCallType === 'video') {
         // Explicitly ensure audio modal is hidden for video flows
@@ -224,34 +236,34 @@ export default function CallScreen() {
             userId,
             String(doctorId || ''),
             {
-            onCallEnded: () => {
-              console.log('📹 Video call ended');
-              handleCallEnd();
-            },
-            onCallTimeout: () => {
-              console.log('📹 Video call timeout');
-              handleCallTimeout();
-            },
-            onCallRejected: () => {
-              console.log('📹 Video call rejected');
-              handleCallRejected();
-            },
-            onRemoteStream: () => {
-              console.log('📹 Remote video stream received');
-            },
-            onStateChange: (state) => {
-              console.log('📹 Video call state changed:', state);
+              onCallEnded: () => {
+                console.log('📹 Video call ended');
+                handleCallEnd();
+              },
+              onCallTimeout: () => {
+                console.log('📹 Video call timeout');
+                handleCallTimeout();
+              },
+              onCallRejected: () => {
+                console.log('📹 Video call rejected');
+                handleCallRejected();
+              },
+              onRemoteStream: () => {
+                console.log('📹 Remote video stream received');
+              },
+              onStateChange: (state) => {
+                console.log('📹 Video call state changed:', state);
+              }
             }
-          }
-        );
+          );
 
-        // The call starts automatically after initialization
-        setShowVideoCall(true);
+          // The call starts automatically after initialization
+          setShowVideoCall(true);
         }
       }
 
       setIsInitialized(true);
-      
+
       // Clear timeout on successful initialization
       if (initTimeout) clearTimeout(initTimeout);
     } catch (error) {
@@ -271,7 +283,7 @@ export default function CallScreen() {
     } catch (error) {
       console.error('❌ Failed to stop ringtone:', error);
     }
-    
+
     // Clean up call services
     if (audioCallService.current) {
       audioCallService.current.endCall();
@@ -346,35 +358,15 @@ export default function CallScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          headerBackVisible: false,
+          gestureEnabled: false, // Disable iOS swipe-back gesture
+        }}
+      />
       {normalizedCallType === 'audio' && showAudioCall && (
-          <AudioCall
-            appointmentId={String(sessionId)}
-            userId={user?.id.toString() || ''}
-            isDoctor={user?.user_type === 'doctor'}
-            doctorId={String(doctorId || '')}
-            doctorName={doctorName as string || 'Doctor'}
-            patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
-            otherParticipantProfilePictureUrl={doctorProfilePicture as string}
-            onEndCall={handleCallEnd}
-            onCallTimeout={handleCallTimeout}
-            onCallRejected={handleCallRejected}
-            isIncomingCall={isIncomingCall}
-            autoAcceptFromSystemUI={isFromCallKeep && isIncomingCall}
-          />
-        )}
-
-        {normalizedCallType === 'video' && showVideoCall && (
-          <>
-            {console.log('🔍 [CallScreen] Rendering VideoCallModal with props:', {
-            appointmentId: String(sessionId),
-            userId: user?.id.toString() || '',
-            doctorId: String(doctorId || ''),
-            doctorName: doctorName as string || 'Doctor',
-            isDoctor: user?.user_type === 'doctor',
-            isIncomingCall
-          })}
-          <VideoCallModal
+        <AudioCall
           appointmentId={String(sessionId)}
           userId={user?.id.toString() || ''}
           isDoctor={user?.user_type === 'doctor'}
@@ -385,19 +377,45 @@ export default function CallScreen() {
           onEndCall={handleCallEnd}
           onCallTimeout={handleCallTimeout}
           onCallRejected={handleCallRejected}
-          onCallAnswered={() => {
-            console.log('📹 Video call answered');
-          }}
           isIncomingCall={isIncomingCall}
           autoAcceptFromSystemUI={isFromCallKeep && isIncomingCall}
-          onAcceptCall={() => {
-            console.log('📹 Video call accepted');
-          }}
-          onRejectCall={() => {
-            console.log('📹 Video call rejected');
-            handleCallRejected();
-          }}
         />
+      )}
+
+      {normalizedCallType === 'video' && showVideoCall && (
+        <>
+          {console.log('🔍 [CallScreen] Rendering VideoCallModal with props:', {
+            appointmentId: String(sessionId),
+            userId: user?.id.toString() || '',
+            doctorId: String(doctorId || ''),
+            doctorName: doctorName as string || 'Doctor',
+            isDoctor: user?.user_type === 'doctor',
+            isIncomingCall
+          })}
+          <VideoCallModal
+            appointmentId={String(sessionId)}
+            userId={user?.id.toString() || ''}
+            isDoctor={user?.user_type === 'doctor'}
+            doctorId={String(doctorId || '')}
+            doctorName={doctorName as string || 'Doctor'}
+            patientName={user?.user_type === 'doctor' ? 'Patient' : (user?.display_name || `${user?.first_name} ${user?.last_name}`)}
+            otherParticipantProfilePictureUrl={doctorProfilePicture as string}
+            onEndCall={handleCallEnd}
+            onCallTimeout={handleCallTimeout}
+            onCallRejected={handleCallRejected}
+            onCallAnswered={() => {
+              console.log('📹 Video call answered');
+            }}
+            isIncomingCall={isIncomingCall}
+            autoAcceptFromSystemUI={isFromCallKeep && isIncomingCall}
+            onAcceptCall={() => {
+              console.log('📹 Video call accepted');
+            }}
+            onRejectCall={() => {
+              console.log('📹 Video call rejected');
+              handleCallRejected();
+            }}
+          />
         </>
       )}
     </SafeAreaView>

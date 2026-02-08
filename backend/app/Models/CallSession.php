@@ -16,9 +16,9 @@ class CallSession extends Model
         'doctor_id',
         'call_type',
         'appointment_id', // ⚠️ SEMANTIC NOTE: This is a session routing key, not necessarily a DB appointment row.
-                          // For instant calls, this is 'direct_session_{timestamp}'. For scheduled calls,
-                          // this may reference an appointments.id, but billing is still session-event-driven
-                          // (connected_at, duration, call end), not appointment-time-driven.
+        // For instant calls, this is 'direct_session_{timestamp}'. For scheduled calls,
+        // this may reference an appointments.id, but billing is still session-event-driven
+        // (connected_at, duration, call end), not appointment-time-driven.
         'status',
         'started_at',
         'ended_at',
@@ -61,6 +61,7 @@ class CallSession extends Model
     const STATUS_DECLINED = 'declined';
     const STATUS_FAILED = 'failed';
     const STATUS_MISSED = 'missed';
+    const STATUS_CANCELLED = 'cancelled'; // Patient ended call before doctor answered
 
     // Call type constants
     const CALL_TYPE_VOICE = 'voice';
@@ -146,11 +147,11 @@ class CallSession extends Model
         if ($this->connected_at) {
             return;
         }
-        
+
         // Use answered_at as connected_at (not now()) for billing correctness
         // This ensures billing duration is calculated from when call was answered, not when promotion job ran
         $connectedAt = $this->answered_at ?? now();
-        
+
         $this->update([
             'status' => self::STATUS_ACTIVE,
             'is_connected' => true,

@@ -31,123 +31,116 @@ class AppointmentController extends Controller
         $status = $request->get('status');
         $date = $request->get('date');
 
-        // Use caching for better performance with shorter cache duration
-        $cacheKey = "user_appointments_{$user->id}_{$user->user_type}_{$perPage}_{$status}_{$date}";
+        $query = $user->user_type === 'doctor'
+            ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture,privacy_preferences'])
+            : $user->appointments()->with(['doctor:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture']);
 
-        $appointments = \Illuminate\Support\Facades\Cache::remember($cacheKey, 60, function () use ($user, $perPage, $status, $date) {
-            $query = $user->user_type === 'doctor'
-                ? $user->doctorAppointments()->with(['patient:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture,privacy_preferences'])
-                : $user->appointments()->with(['doctor:id,first_name,last_name,gender,country,city,date_of_birth,profile_picture']);
-
-            // Apply filters
-            if ($status !== null) {
-                // Convert string status to numeric status
-                $numericStatus = null;
-                switch (strtolower($status)) {
-                    case 'pending':
-                        $numericStatus = \App\Models\Appointment::STATUS_PENDING;
-                        break;
-                    case 'confirmed':
-                        $numericStatus = \App\Models\Appointment::STATUS_CONFIRMED;
-                        break;
-                    case 'cancelled':
-                        $numericStatus = \App\Models\Appointment::STATUS_CANCELLED;
-                        break;
-                    case 'completed':
-                        $numericStatus = \App\Models\Appointment::STATUS_COMPLETED;
-                        break;
-                    case 'reschedule_proposed':
-                        $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_PROPOSED;
-                        break;
-                    case 'reschedule_accepted':
-                        $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_ACCEPTED;
-                        break;
-                    case 'reschedule_rejected':
-                        $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_REJECTED;
-                        break;
-                    default:
-                        // If it's already a number, use it as is
-                        if (is_numeric($status)) {
-                            $numericStatus = (int) $status;
-                        }
-                        break;
-                }
-
-                if ($numericStatus !== null) {
-                    $query->where('status', $numericStatus);
-                }
+        // Apply filters
+        if ($status !== null) {
+            // Convert string status to numeric status
+            $numericStatus = null;
+            switch (strtolower($status)) {
+                case 'pending':
+                    $numericStatus = \App\Models\Appointment::STATUS_PENDING;
+                    break;
+                case 'confirmed':
+                    $numericStatus = \App\Models\Appointment::STATUS_CONFIRMED;
+                    break;
+                case 'cancelled':
+                    $numericStatus = \App\Models\Appointment::STATUS_CANCELLED;
+                    break;
+                case 'completed':
+                    $numericStatus = \App\Models\Appointment::STATUS_COMPLETED;
+                    break;
+                case 'reschedule_proposed':
+                    $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_PROPOSED;
+                    break;
+                case 'reschedule_accepted':
+                    $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_ACCEPTED;
+                    break;
+                case 'reschedule_rejected':
+                    $numericStatus = \App\Models\Appointment::STATUS_RESCHEDULE_REJECTED;
+                    break;
+                default:
+                    // If it's already a number, use it as is
+                    if (is_numeric($status)) {
+                        $numericStatus = (int) $status;
+                    }
+                    break;
             }
 
-            if ($date) {
-                $query->whereDate('appointment_date', $date);
+            if ($numericStatus !== null) {
+                $query->where('status', $numericStatus);
+            }
+        }
+
+        if ($date) {
+            $query->whereDate('appointment_date', $date);
+        }
+
+        $appointments = $query->orderBy('appointment_date', 'desc')
+            ->orderBy('appointment_time', 'asc')
+            ->paginate($perPage);
+
+        // Add profile picture URLs and name fields to doctors/patients
+        $appointments->getCollection()->transform(function ($appointment) use ($user) {
+            $appointmentData = $appointment->toArray();
+
+            // Log the raw appointment data for debugging
+            \Log::info('📅 [AppointmentController] Raw appointment data', [
+                'id' => $appointment->id,
+                'appointment_date' => $appointment->appointment_date,
+                'appointment_time' => $appointment->appointment_time,
+                'status' => $appointment->status
+            ]);
+
+            // Add doctor profile picture URL and name
+            if ($appointment->doctor) {
+                if ($appointment->doctor->profile_picture) {
+                    $appointmentData['doctor']['profile_picture_url'] = $appointment->doctor->profile_picture_url;
+                }
+                $appointmentData['doctorName'] = $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name;
             }
 
-            $appointments = $query->orderBy('appointment_date', 'desc')
-                ->orderBy('appointment_time', 'asc')
-                ->paginate($perPage);
-
-            // Add profile picture URLs and name fields to doctors/patients
-            $appointments->getCollection()->transform(function ($appointment) use ($user) {
-                $appointmentData = $appointment->toArray();
-
-                // Log the raw appointment data for debugging
-                \Log::info('📅 [AppointmentController] Raw appointment data', [
-                    'id' => $appointment->id,
-                    'appointment_date' => $appointment->appointment_date,
-                    'appointment_time' => $appointment->appointment_time,
-                    'status' => $appointment->status
+            // Add patient profile picture URL and name with anonymization
+            if ($appointment->patient) {
+                \Log::info('🔍 [AppointmentController] Processing patient', [
+                    'patient_id' => $appointment->patient->id,
+                    'patient_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
+                    'privacy_preferences' => $appointment->patient->privacy_preferences
                 ]);
 
-                // Add doctor profile picture URL and name
-                if ($appointment->doctor) {
-                    if ($appointment->doctor->profile_picture) {
-                        $appointmentData['doctor']['profile_picture_url'] = $appointment->doctor->profile_picture_url;
-                    }
-                    $appointmentData['doctorName'] = $appointment->doctor->first_name . ' ' . $appointment->doctor->last_name;
-                }
+                // Check if patient has anonymous mode enabled
+                $isAnonymous = $this->anonymizationService->isAnonymousModeEnabled($appointment->patient);
+                \Log::info('🔍 [AppointmentController] Anonymization check', [
+                    'patient_id' => $appointment->patient->id,
+                    'is_anonymous' => $isAnonymous
+                ]);
 
-                // Add patient profile picture URL and name with anonymization
-                if ($appointment->patient) {
-                    \Log::info('🔍 [AppointmentController] Processing patient', [
+                if ($isAnonymous) {
+                    $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
+                    $appointmentData['patientName'] = $anonymizedData['display_name'];
+                    $appointmentData['patient']['profile_picture_url'] = $anonymizedData['profile_picture_url'];
+                    $appointmentData['patient']['profile_picture'] = $anonymizedData['profile_picture'];
+                    \Log::info('🔍 [AppointmentController] Applied anonymization', [
                         'patient_id' => $appointment->patient->id,
-                        'patient_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
-                        'privacy_preferences' => $appointment->patient->privacy_preferences
+                        'original_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
+                        'anonymized_name' => $anonymizedData['display_name'],
+                        'anonymized_picture' => $anonymizedData['profile_picture_url']
                     ]);
-
-                    // Check if patient has anonymous mode enabled
-                    $isAnonymous = $this->anonymizationService->isAnonymousModeEnabled($appointment->patient);
-                    \Log::info('🔍 [AppointmentController] Anonymization check', [
-                        'patient_id' => $appointment->patient->id,
-                        'is_anonymous' => $isAnonymous
-                    ]);
-
-                    if ($isAnonymous) {
-                        $anonymizedData = $this->anonymizationService->getAnonymizedUserData($appointment->patient);
-                        $appointmentData['patientName'] = $anonymizedData['display_name'];
-                        $appointmentData['patient']['profile_picture_url'] = $anonymizedData['profile_picture_url'];
-                        $appointmentData['patient']['profile_picture'] = $anonymizedData['profile_picture'];
-                        \Log::info('🔍 [AppointmentController] Applied anonymization', [
-                            'patient_id' => $appointment->patient->id,
-                            'original_name' => $appointment->patient->first_name . ' ' . $appointment->patient->last_name,
-                            'anonymized_name' => $anonymizedData['display_name'],
-                            'anonymized_picture' => $anonymizedData['profile_picture_url']
-                        ]);
-                    } else {
-                        $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
-                        if ($appointment->patient->profile_picture) {
-                            $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
-                        }
-                        \Log::info('🔍 [AppointmentController] No anonymization applied', [
-                            'patient_id' => $appointment->patient->id,
-                            'name' => $appointmentData['patientName']
-                        ]);
+                } else {
+                    $appointmentData['patientName'] = $appointment->patient->first_name . ' ' . $appointment->patient->last_name;
+                    if ($appointment->patient->profile_picture) {
+                        $appointmentData['patient']['profile_picture_url'] = $appointment->patient->profile_picture_url;
                     }
+                    \Log::info('🔍 [AppointmentController] No anonymization applied', [
+                        'patient_id' => $appointment->patient->id,
+                        'name' => $appointmentData['patientName']
+                    ]);
                 }
+            }
 
-                return $appointmentData;
-            });
-
-            return $appointments;
+            return $appointmentData;
         });
 
         return $this->success($appointments, 'Appointments fetched successfully');
@@ -586,7 +579,7 @@ class AppointmentController extends Controller
                 // Normalize time to HH:MM format (remove seconds if present)
                 if (strpos($time, ':') !== false) {
                     $parts = explode(':', $time);
-                    return sprintf('%02d:%02d', (int)$parts[0], isset($parts[1]) ? (int)$parts[1] : 0);
+                    return sprintf('%02d:%02d', (int) $parts[0], isset($parts[1]) ? (int) $parts[1] : 0);
                 }
                 return $time;
             })

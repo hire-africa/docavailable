@@ -28,10 +28,10 @@ class AppointmentService
         if ($rescheduleDate) {
             $today = now()->format('Y-m-d');
             $rescheduleDateOnly = date('Y-m-d', strtotime($rescheduleDate));
-            
+
             if ($rescheduleDateOnly < $today) {
                 throw new \Illuminate\Validation\ValidationException(
-                    validator([], []), 
+                    validator([], []),
                     'Reschedule date cannot be in the past.'
                 );
             }
@@ -90,7 +90,7 @@ class AppointmentService
         try {
             $doctor = $request->user();
             $appointment = $doctor->doctorAppointments()->findOrFail($id);
-            
+
             \Log::info('✅ [AppointmentService] Found appointment', [
                 'appointment_id' => $appointment->id,
                 'current_status' => $appointment->status,
@@ -102,7 +102,7 @@ class AppointmentService
             $appointmentDateTime = \Carbon\Carbon::parse($appointment->appointment_date . ' ' . $appointment->appointment_time);
             $now = \Carbon\Carbon::now();
             $twentyFourHoursAfter = $appointmentDateTime->copy()->addHours(24);
-            
+
             if ($now->isAfter($twentyFourHoursAfter)) {
                 \Log::warning('⚠️ [AppointmentService] Attempting to update appointment more than 24 hours after scheduled time', [
                     'appointment_id' => $appointment->id,
@@ -111,9 +111,9 @@ class AppointmentService
                     'twenty_four_hours_after' => $twentyFourHoursAfter->toDateTimeString(),
                     'requested_status' => $request->status
                 ]);
-                
+
                 throw new \Illuminate\Validation\ValidationException(
-                    validator([], []), 
+                    validator([], []),
                     'Cannot update appointment status - appointment time has passed more than 24 hours ago.'
                 );
             }
@@ -121,7 +121,7 @@ class AppointmentService
             $request->validate([
                 'status' => 'required|in:pending,confirmed,cancelled,completed'
             ]);
-            
+
             // Convert string status to numeric status
             $numericStatus = null;
             switch (strtolower($request->status)) {
@@ -143,50 +143,53 @@ class AppointmentService
                         'appointment_id' => $id
                     ]);
                     throw new \Illuminate\Validation\ValidationException(
-                        validator([], []), 
+                        validator([], []),
                         'Invalid status provided.'
                     );
             }
-            
+
             \Log::info('🔄 [AppointmentService] Updating appointment status', [
                 'appointment_id' => $appointment->id,
                 'old_status' => $appointment->status,
                 'new_status' => $numericStatus,
                 'status_string' => $request->status
             ]);
-            
+
             $appointment->status = $numericStatus;
             $appointment->save();
-            
+
+            // Clear related caches
+            \App\Services\CacheService::clearAppointmentRelatedCaches($appointment);
+
             \Log::info('✅ [AppointmentService] Appointment status updated successfully', [
                 'appointment_id' => $appointment->id,
                 'new_status' => $appointment->status
             ]);
-            
+
             // Send notifications to patient about status change
             try {
                 $notificationService = new \App\Services\NotificationService();
                 $notificationType = strtolower($request->status);
-                
+
                 \Log::info('📧 [AppointmentService] Sending notification to patient', [
                     'appointment_id' => $appointment->id,
                     'notification_type' => $notificationType,
                     'patient_id' => $appointment->patient_id
                 ]);
-                
+
                 $notificationService->sendAppointmentNotification($appointment, $notificationType);
-                
+
                 // Also send push notification
                 $pushNotificationService = new \App\Services\PushNotificationService();
                 $pushNotificationService->sendAppointmentNotification($appointment, $notificationType);
-                
+
                 // Send in-app notifications for accepted/rejected appointments
                 if ($numericStatus === Appointment::STATUS_CONFIRMED) {
                     // Appointment accepted
                     try {
                         $patient = $appointment->patient;
                         $doctor = $appointment->doctor;
-                        
+
                         if ($patient && $doctor) {
                             $doctorName = 'Dr. ' . $doctor->first_name . ' ' . $doctor->last_name;
                             $notificationService->createNotification(
@@ -211,7 +214,7 @@ class AppointmentService
                     try {
                         $patient = $appointment->patient;
                         $doctor = $appointment->doctor;
-                        
+
                         if ($patient && $doctor) {
                             $doctorName = 'Dr. ' . $doctor->first_name . ' ' . $doctor->last_name;
                             $notificationService->createNotification(
@@ -232,7 +235,7 @@ class AppointmentService
                         ]);
                     }
                 }
-                
+
                 \Log::info('✅ [AppointmentService] Notifications sent successfully', [
                     'appointment_id' => $appointment->id,
                     'notification_type' => $notificationType
@@ -244,9 +247,9 @@ class AppointmentService
                 ]);
                 // Don't fail the status update if notifications fail
             }
-            
+
             return $appointment;
-            
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             \Log::error('❌ [AppointmentService] Appointment not found', [
                 'appointment_id' => $id,
@@ -284,17 +287,17 @@ class AppointmentService
         try {
             $doctor = $request->user();
             $appointment = $doctor->doctorAppointments()->find($id);
-            
+
             if (!$appointment) {
                 \Log::warning('⚠️ [AppointmentService] Appointment not found for deletion', [
                     'appointment_id' => $id,
                     'doctor_id' => $doctor->id
                 ]);
-                
+
                 // Return success since the appointment is already gone
                 return true;
             }
-            
+
             \Log::info('✅ [AppointmentService] Found appointment for deletion', [
                 'appointment_id' => $appointment->id,
                 'current_status' => $appointment->status,
@@ -305,16 +308,16 @@ class AppointmentService
             // Check if appointment has expired
             $appointmentDateTime = \Carbon\Carbon::parse($appointment->appointment_date . ' ' . $appointment->appointment_time);
             $now = \Carbon\Carbon::now();
-            
+
             if (!$appointmentDateTime->isPast()) {
                 \Log::warning('⚠️ [AppointmentService] Attempting to delete non-expired appointment', [
                     'appointment_id' => $appointment->id,
                     'appointment_datetime' => $appointmentDateTime->toDateTimeString(),
                     'current_time' => $now->toDateTimeString()
                 ]);
-                
+
                 throw new \Illuminate\Validation\ValidationException(
-                    validator([], []), 
+                    validator([], []),
                     'Cannot delete appointment - appointment time has not passed yet.'
                 );
             }
@@ -327,9 +330,9 @@ class AppointmentService
                     'status_type' => gettype($appointment->status),
                     'normalized_status' => $appointment->normalized_status
                 ]);
-                
+
                 throw new \Illuminate\Validation\ValidationException(
-                    validator([], []), 
+                    validator([], []),
                     'Cannot delete appointment - only pending or cancelled appointments can be deleted.'
                 );
             }
@@ -338,15 +341,15 @@ class AppointmentService
                 'appointment_id' => $appointment->id,
                 'status' => $appointment->status
             ]);
-            
+
             $appointment->delete();
-            
+
             \Log::info('✅ [AppointmentService] Appointment deleted successfully', [
                 'appointment_id' => $id
             ]);
-            
+
             return true;
-            
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             \Log::error('❌ [AppointmentService] Appointment not found for deletion', [
                 'appointment_id' => $id,
@@ -369,4 +372,4 @@ class AppointmentService
             throw $e;
         }
     }
-} 
+}

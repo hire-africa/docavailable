@@ -518,7 +518,7 @@ class CallSessionController extends Controller
              * This avoids 500s from the more complex billing flow for simple non-connected hangs.
              */
             if (!$wasConnected) {
-                return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId) {
+                $fastPathResult = DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId) {
                     // Find the call session to end with lock (same targeting rules as main flow)
                     $query = CallSession::query();
                     if ($sessionId) {
@@ -553,18 +553,21 @@ class CallSessionController extends Controller
                         ]);
                     }
 
-                    // If the call never connected, mark as MISSED with zero duration and NO billing
+                    // If the call never connected, mark as CANCELLED (user ended) with zero duration and NO billing
+                    // Note: STATUS_MISSED is used for timeout cases; CANCELLED is for explicit user hang-up
                     if (!$callSession->connected_at) {
-                        Log::info("Non-connected call ended by user - marking as MISSED (fast-path)", [
+                        Log::info("[CallState] Non-connected call ended by user - marking as CANCELLED (fast-path)", [
                             'call_session_id' => $callSession->id,
                             'appointment_id' => $appointmentId,
                             'patient_id' => $callSession->patient_id,
                             'doctor_id' => $callSession->doctor_id,
                             'status_before' => $callSession->status,
+                            'status_after' => CallSession::STATUS_CANCELLED,
+                            'ended_by' => $user->id,
                         ]);
 
                         $callSession->update([
-                            'status' => CallSession::STATUS_MISSED,
+                            'status' => CallSession::STATUS_CANCELLED,
                             'ended_at' => now(),
                             'last_activity_at' => now(),
                             'is_connected' => false,
@@ -573,7 +576,7 @@ class CallSessionController extends Controller
 
                         return response()->json([
                             'success' => true,
-                            'message' => 'Call ended before connection - no billing applied',
+                            'message' => 'Call cancelled before connection - no billing applied',
                             'session_duration' => 0,
                             'was_connected' => false,
                         ]);
@@ -588,10 +591,16 @@ class CallSessionController extends Controller
                         'status' => $callSession->status,
                     ]);
 
-                    // Let the main flow handle this case (re-use logic below)
-                    // Note: We don't re-run the query here; the main transaction below
-                    // will perform its own lookup and billing.
+                    // Let the main flow handle this case by falling through
+                    // Return null to signal the outer code to continue to main billing flow
+                    return null;
                 });
+
+                // If fast-path returned a response, return it; otherwise continue to main flow
+                if ($fastPathResult instanceof JsonResponse) {
+                    return $fastPathResult;
+                }
+                // If null (inconsistent state), fall through to main billing flow
             }
 
             return DB::transaction(function () use ($user, $callType, $appointmentId, $sessionId, $sessionDuration, $wasConnected) {
@@ -680,6 +689,17 @@ class CallSessionController extends Controller
 
                 // Refresh call session to get updated connected_at
                 $callSession->refresh();
+
+                // Log call state transition
+                Log::info("[CallState] Connected call ending - marking as ENDED", [
+                    'call_session_id' => $callSession->id,
+                    'appointment_id' => $appointmentId,
+                    'status_before' => $callSession->status,
+                    'status_after' => CallSession::STATUS_ENDED,
+                    'ended_by' => $user->id,
+                    'connected_at' => $callSession->connected_at?->toISOString(),
+                    'was_connected' => true,
+                ]);
 
                 // Set ended_at first
                 $callSession->update([

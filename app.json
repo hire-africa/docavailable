@@ -2,7 +2,6 @@
   "expo": {
     "name": "DocAvailable",
     "slug": "Doc_available",
-    "owner": "questmw",
     "platforms": [
       "ios",
       "android"

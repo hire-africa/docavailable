@@ -10,6 +10,8 @@ export interface EndedSession {
   doctor_profile_picture?: string;
   patient_id: number;
   patient_name?: string;
+  patient_profile_picture_url?: string;
+  patient_profile_picture?: string;
   appointment_date?: string;
   appointment_time?: string;
   ended_at: string;
@@ -25,6 +27,8 @@ export interface EndedSessionMetadata {
   appointmentId: number;
   patient_id: number;
   patient_name?: string; // Added for doctors to see patient names
+  patient_profile_picture_url?: string;
+  patient_profile_picture?: string;
   doctor_id?: number; // Added for patients to identify doctors
   doctor_name?: string;
   doctor_profile_picture_url?: string;
@@ -71,6 +75,8 @@ export const endedSessionStorageService = {
         appointmentId: session.appointment_id,
         patient_id: session.patient_id,
         patient_name: session.patient_name, // Include patient name for doctors
+        patient_profile_picture_url: session.patient_profile_picture_url,
+        patient_profile_picture: session.patient_profile_picture,
         doctor_id: session.doctor_id, // Include doctor ID for patients
         doctor_name: session.doctor_name,
         doctor_profile_picture_url: session.doctor_profile_picture_url,
@@ -101,6 +107,8 @@ export const endedSessionStorageService = {
         appointmentId: session.appointment_id,
         patient_id: session.patient_id,
         patient_name: session.patient_name, // Include patient name for doctors
+        patient_profile_picture_url: session.patient_profile_picture_url,
+        patient_profile_picture: session.patient_profile_picture,
         doctor_id: session.doctor_id, // Include doctor ID for patients
         doctor_name: session.doctor_name,
         doctor_profile_picture_url: session.doctor_profile_picture_url,
@@ -113,7 +121,7 @@ export const endedSessionStorageService = {
 
       await AsyncStorage.setItem(SESSION_KEY(session.appointment_id), JSON.stringify(session));
       await AsyncStorage.setItem(META_KEY(session.appointment_id), JSON.stringify(meta));
-      
+
       // Add to both patient and doctor indexes
       await addToUserIndex(session.patient_id, 'patient', session.appointment_id);
       if (session.doctor_id) {
@@ -137,6 +145,8 @@ export const endedSessionStorageService = {
       doctor_profile_picture: sessionData?.doctor_profile_picture,
       patient_id: sessionData?.patient_id,
       patient_name: sessionData?.patient_name,
+      patient_profile_picture_url: sessionData?.patient_profile_picture_url,
+      patient_profile_picture: sessionData?.patient_profile_picture,
       appointment_date: sessionData?.appointment_date,
       appointment_time: sessionData?.appointment_time,
       ended_at: sessionData?.ended_at || endedAt,
@@ -160,7 +170,7 @@ export const endedSessionStorageService = {
         if (metaRaw) {
           try {
             metas.push(JSON.parse(metaRaw));
-          } catch {}
+          } catch { }
         }
       }
       // Sort by ended_at desc if available
@@ -172,7 +182,7 @@ export const endedSessionStorageService = {
       return metas;
     } catch (error) {
       console.error(`Error loading ended sessions for ${userType}:`, error);
-    return [];
+      return [];
     }
   },
 
@@ -191,7 +201,7 @@ export const endedSessionStorageService = {
     // This would require scanning all META_KEY entries; avoid for now
     return [];
   },
-  
+
   async getEndedSession(appointmentId: number): Promise<EndedSession | null> {
     try {
       const raw = await AsyncStorage.getItem(SESSION_KEY(appointmentId));
@@ -219,7 +229,7 @@ export const endedSessionStorageService = {
             if (session.doctor_id) {
               await removeFromUserIndex(session.doctor_id, 'doctor', appointmentId);
             }
-          } catch {}
+          } catch { }
         }
       }
     } catch (error) {
@@ -234,7 +244,7 @@ export const endedSessionStorageService = {
       return JSON.stringify(session || {}, null, 2);
     } catch (error) {
       console.error('Error exporting ended session:', error);
-    return '';
-  }
+      return '';
+    }
   },
 }; 
