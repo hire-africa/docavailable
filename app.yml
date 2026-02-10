@@ -1,0 +1,17 @@
+name: docavailable
+services:
+  - name: signaling-server
+    github:
+      repo: hire-africa/docavailable
+      branch: main
+      deploy_on_push: true
+    source_dir: signaling
+    environment_slug: node-js
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    build_command: npm ci
+    run_command: npm start
+    http_port: 8080
+    envs:
+      - key: NODE_ENV
+        value: production
