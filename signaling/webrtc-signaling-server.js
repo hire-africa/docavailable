@@ -585,9 +585,9 @@ server.listen(CONFIG.PORT, () => {
   log('INFO', 'WebRTC Signaling Server started', {
     port: CONFIG.PORT,
     protocol: PROTOCOL.toUpperCase(),
-    callEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/call-signaling`,
-    chatEndpoint: `${WS_PROTOCOL}://docavailable.org:${CONFIG.PORT}/chat-signaling`,
-    healthCheck: `${PROTOCOL}://docavailable.org:${CONFIG.PORT}/health`
+    callEndpoint: `${WS_PROTOCOL}://docavailable1-izk3m.ondigitalocean.app:${CONFIG.PORT}/call-signaling`,
+    chatEndpoint: `${WS_PROTOCOL}://docavailable1-izk3m.ondigitalocean.app:${CONFIG.PORT}/chat-signaling`,
+    healthCheck: `${PROTOCOL}://docavailable1-izk3m.ondigitalocean.app:${CONFIG.PORT}/health`
   });
 });
 

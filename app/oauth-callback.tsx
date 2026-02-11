@@ -34,7 +34,7 @@ export default function OAuthCallback() {
                         clientId: GOOGLE_OAUTH_CONFIG.clientId,
                         clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,
                         code: code,
-                        redirectUri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html',
+                        redirectUri: 'https://docavailable1-izk3m.ondigitalocean.app/oauth-redirect.html',
                         extraParams: {
                             access_type: 'offline',
                         },
@@ -52,26 +52,26 @@ export default function OAuthCallback() {
                 const peopleApiResponse = await fetch(
                     `https://people.googleapis.com/v1/people/me?personFields=names,emailAddresses,birthdays,genders,photos&access_token=${tokenResponse.accessToken}`
                 );
-                
+
                 console.log('🔐 OAuth Callback: People API response status:', peopleApiResponse.status);
-                
+
                 if (!peopleApiResponse.ok) {
                     const errorText = await peopleApiResponse.text();
                     console.error('🔐 OAuth Callback: People API error:', errorText);
                     console.log('🔐 OAuth Callback: Falling back to basic userinfo API');
-                    
+
                     // Fallback to basic userinfo API
                     const userInfoResponse = await fetch(
                         `https://www.googleapis.com/oauth2/v2/userinfo?access_token=${tokenResponse.accessToken}`
                     );
-                    
+
                     if (!userInfoResponse.ok) {
                         throw new Error('Failed to fetch user info from both People API and userinfo API');
                     }
-                    
+
                     const userInfo = await userInfoResponse.json();
                     console.log('🔐 OAuth Callback: Fallback userinfo data:', userInfo);
-                    
+
                     // Create a JWT-like token for your backend with basic info only
                     const googleToken = {
                         sub: userInfo.id,
@@ -83,15 +83,15 @@ export default function OAuthCallback() {
                         gender: null,  // Not available from basic API
                         picture: userInfo.picture || null,
                     };
-                    
+
                     console.log('🔐 OAuth Callback: Fallback Google token:', googleToken);
-                    
+
                     // Send to your backend
                     const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
-                    
+
                     if (authState.success && authState.data.user) {
                         const user = authState.data.user;
-                        
+
                         if (user.user_type === 'admin') {
                             router.replace('/admin-dashboard');
                         } else if (user.user_type === 'doctor') {
@@ -104,10 +104,10 @@ export default function OAuthCallback() {
                     }
                     return;
                 }
-                
+
                 const peopleData = await peopleApiResponse.json();
                 console.log('🔐 OAuth Callback: People API data:', peopleData);
-                
+
                 // Extract data from People API response
                 const names = peopleData.names?.[0] || {};
                 const emailAddresses = peopleData.emailAddresses?.[0] || {};
@@ -139,10 +139,10 @@ export default function OAuthCallback() {
 
                 // Send to your backend
                 const authState = await authService.signInWithGoogle(JSON.stringify(googleToken));
-                
+
                 if (authState.success && authState.data.user) {
                     const user = authState.data.user;
-                    
+
                     if (user.user_type === 'admin') {
                         router.replace('/admin-dashboard');
                     } else if (user.user_type === 'doctor') {

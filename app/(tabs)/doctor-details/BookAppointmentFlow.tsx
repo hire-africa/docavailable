@@ -2,14 +2,14 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -125,7 +125,7 @@ export default function BookAppointmentFlow() {
     if (clean.startsWith('/storage/')) clean = clean.substring('/storage/'.length);
     if (clean.startsWith('storage/')) clean = clean.substring('storage/'.length);
     clean = clean.replace(/^\/+/, '');
-    return `https://docavailable-3vbdv.ondigitalocean.app/api/images/${clean}`;
+    return `https://docavailable1-izk3m.ondigitalocean.app/api/images/${clean}`;
   };
 
   // Load subscription: prefer param; fallback to API
@@ -635,8 +635,8 @@ export default function BookAppointmentFlow() {
             onShouldStartLoadWithRequest={(req) => {
               try {
                 const url = req.url;
-                const callback = 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/callback';
-                const ret = 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/return';
+                const callback = 'https://docavailable1-izk3m.ondigitalocean.app/api/payments/paychangu/callback';
+                const ret = 'https://docavailable1-izk3m.ondigitalocean.app/api/payments/paychangu/return';
                 if (url.startsWith(callback) || url.startsWith(ret)) {
                   setCheckoutUrl(null);
                   return false;
@@ -944,7 +944,7 @@ export default function BookAppointmentFlow() {
       let errorMessage = 'Failed to book appointment. Please try again.';
       const statusCode = error?.status;
       const errorMsg = error?.message || '';
-      
+
       // Use the error message from backend if available (apiService now parses it)
       if (errorMsg && !errorMsg.includes('HTTP error!')) {
         errorMessage = errorMsg;
