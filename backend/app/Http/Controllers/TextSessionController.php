@@ -424,7 +424,7 @@ class TextSessionController extends Controller
 
                     // Broadcast session-expired event via WebSocket
                     try {
-                        $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable1-izk3m.ondigitalocean.app:8089');
+                        $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org:8089');
                         $broadcastUrl = "{$webrtcUrl}/broadcast-session-expired";
 
                         $ch = curl_init($broadcastUrl);
