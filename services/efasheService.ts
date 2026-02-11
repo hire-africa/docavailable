@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend API URL - Laravel backend on DigitalOcean
-const API_URL = 'https://docavailable-3vbdv.ondigitalocean.app/api';
+const API_URL = 'https://docavailable1-izk3m.ondigitalocean.app/api';
 
 export const efasheService = {
     /**

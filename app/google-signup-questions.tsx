@@ -5,16 +5,16 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -54,7 +54,7 @@ export default function GoogleSignupQuestions() {
 
   const parsedGoogleUser: GoogleUserData = googleUser ? JSON.parse(googleUser) : {};
   const parsedMissingFields: MissingField[] = missingFields ? JSON.parse(missingFields) : [];
-  
+
   console.log('Google user data:', parsedGoogleUser);
   console.log('Missing fields:', parsedMissingFields);
   console.log('Missing fields details:', parsedMissingFields.map(field => ({ field: field.field, type: field.type, label: field.label })));
@@ -79,7 +79,7 @@ export default function GoogleSignupQuestions() {
   const handleNext = () => {
     // Validate current answer before proceeding
     const currentValue = answers[currentField?.field] || '';
-    
+
     // Special validation for different field types
     if (currentField?.type === 'multiselect') {
       if (!currentValue || currentValue.length === 0) {
@@ -94,7 +94,7 @@ export default function GoogleSignupQuestions() {
       const missingRequired = Object.entries(requiredFields)
         .filter(([key, fieldInfo]: [string, any]) => fieldInfo.required && !answers[fieldInfo.field])
         .map(([key, fieldInfo]: [string, any]) => fieldInfo.label);
-      
+
       if (missingRequired.length > 0) {
         Alert.alert('Required Documents', `Please upload the following required documents: ${missingRequired.join(', ')}`);
         return;
@@ -103,7 +103,7 @@ export default function GoogleSignupQuestions() {
       Alert.alert('Required Field', `Please provide your ${currentField?.label.toLowerCase()}`);
       return;
     }
-    
+
     if (currentQuestionIndex < parsedMissingFields.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     } else {
@@ -189,14 +189,14 @@ export default function GoogleSignupQuestions() {
       // Handle profile picture - upload manually selected via separate endpoint, send Google URL directly
       let profilePictureUrl = null;
       const profilePictureToUpload = answers.profile_picture || parsedGoogleUser.profile_picture;
-      
+
       if (profilePictureToUpload) {
-      if (answers.profile_picture) {
+        if (answers.profile_picture) {
           // Manually selected image - upload via separate endpoint like edit profile
           try {
             console.log('🔐 Google Signup: Uploading manually selected profile picture via separate endpoint...');
             console.log('🔐 Google Signup: Profile picture URI:', profilePictureToUpload);
-            
+
             // Convert to base64 like edit profile does
             const response = await fetch(profilePictureToUpload);
             const blob = await response.blob();
@@ -208,27 +208,27 @@ export default function GoogleSignupQuestions() {
               };
               reader.readAsDataURL(blob);
             });
-            
+
             // Upload via separate endpoint like edit profile
             const formData = new FormData();
             formData.append('profile_picture', base64);
-            
-          const uploadResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/upload/profile-picture-public', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({
+
+            const uploadResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/upload/profile-picture-public', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({
                 profile_picture: base64
-            })
-          });
-          
-          const uploadData = await uploadResponse.json();
-          if (uploadData.success && uploadData.data?.profile_picture_url) {
-            profilePictureUrl = uploadData.data.profile_picture_url;
-            console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
-          } else {
+              })
+            });
+
+            const uploadData = await uploadResponse.json();
+            if (uploadData.success && uploadData.data?.profile_picture_url) {
+              profilePictureUrl = uploadData.data.profile_picture_url;
+              console.log('🔐 Google Signup: Profile picture uploaded successfully:', profilePictureUrl);
+            } else {
               console.warn('🔐 Google Signup: Profile picture upload failed:', uploadData.message);
             }
           } catch (uploadError) {
@@ -261,7 +261,7 @@ export default function GoogleSignupQuestions() {
               };
               reader.readAsDataURL(blob);
             }),
-            new Promise<string>((_, reject) => 
+            new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('National ID conversion timeout')), 10000)
             )
           ]);
@@ -285,7 +285,7 @@ export default function GoogleSignupQuestions() {
               };
               reader.readAsDataURL(blob);
             }),
-            new Promise<string>((_, reject) => 
+            new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('Medical Degree conversion timeout')), 10000)
             )
           ]);
@@ -309,7 +309,7 @@ export default function GoogleSignupQuestions() {
               };
               reader.readAsDataURL(blob);
             }),
-            new Promise<string>((_, reject) => 
+            new Promise<string>((_, reject) =>
               setTimeout(() => reject(new Error('Medical Licence conversion timeout')), 10000)
             )
           ]);
@@ -318,7 +318,7 @@ export default function GoogleSignupQuestions() {
           console.warn('🔐 Google Signup: Medical Licence conversion failed:', conversionError);
         }
       }
-      
+
       // Create the complete user data with base64 images like normal signup
       const completeUserData = {
         ...parsedGoogleUser,
@@ -348,7 +348,7 @@ export default function GoogleSignupQuestions() {
       });
 
       // Call the backend to create the user
-      const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/register', {
+      const response = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -363,13 +363,13 @@ export default function GoogleSignupQuestions() {
       if (data.success) {
         console.log('Registration successful, navigating to dashboard for user type:', parsedGoogleUser.user_type);
         console.log('Registration response data:', data);
-        
+
         // Registration already returns a token, so we can store it directly
         if (data.data && data.data.token) {
           console.log('Token received from registration, storing authentication data');
           await AsyncStorage.setItem('auth_token', data.data.token);
           await AsyncStorage.setItem('user_data', JSON.stringify(data.data.user));
-          
+
           console.log('Authentication data stored, navigating to dashboard');
           // Navigate to appropriate dashboard
           if (parsedGoogleUser.user_type === 'patient') {
@@ -399,7 +399,7 @@ export default function GoogleSignupQuestions() {
     if (!currentField) return null;
 
     const currentValue = answers[currentField.field] || '';
-    
+
     console.log('Rendering question for field:', currentField.field, 'type:', currentField.type, 'value:', currentValue);
 
     switch (currentField.type) {
@@ -477,7 +477,7 @@ export default function GoogleSignupQuestions() {
             'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City',
             'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe', 'Other'
           ];
-          
+
           return (
             <View style={styles.questionContainer}>
               <Text style={styles.questionLabel}>{currentField.label}</Text>
@@ -536,7 +536,7 @@ export default function GoogleSignupQuestions() {
             'Orthopedics', 'Neurology', 'Psychiatry', 'Ophthalmology', 'ENT',
             'Urology', 'Gastroenterology', 'Endocrinology', 'Rheumatology', 'Oncology'
           ];
-          
+
           return (
             <View style={styles.questionContainer}>
               <Text style={styles.questionLabel}>{currentField.label}</Text>
@@ -552,7 +552,7 @@ export default function GoogleSignupQuestions() {
                         isSelected && styles.multiselectOptionSelected
                       ]}
                       onPress={() => {
-                        const newValue = isSelected 
+                        const newValue = isSelected
                           ? currentValue.filter((item: string) => item !== spec)
                           : [...currentValue, spec];
                         handleAnswer(newValue);
@@ -635,7 +635,7 @@ export default function GoogleSignupQuestions() {
               {currentField.required_fields && Object.entries(currentField.required_fields).map(([key, fieldInfo]: [string, any]) => {
                 const fieldValue = answers[fieldInfo.field] || '';
                 const isRequired = fieldInfo.required;
-                
+
                 return (
                   <View key={key} style={styles.documentFieldContainer}>
                     <View style={styles.documentFieldHeader}>
@@ -654,8 +654,8 @@ export default function GoogleSignupQuestions() {
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <TouchableOpacity 
-                          style={styles.documentPickerButton} 
+                        <TouchableOpacity
+                          style={styles.documentPickerButton}
                           onPress={() => pickDocumentForField(fieldInfo.field)}
                         >
                           <Text style={styles.documentPickerButtonText}>
@@ -699,7 +699,7 @@ export default function GoogleSignupQuestions() {
             'United Arab Emirates', 'United Kingdom', 'United States', 'Uruguay', 'Uzbekistan', 'Vanuatu', 'Vatican City',
             'Venezuela', 'Vietnam', 'Yemen', 'Zambia', 'Zimbabwe', 'Other'
           ];
-          
+
           return (
             <View style={styles.questionContainer}>
               <Text style={styles.questionLabel}>{currentField.label}</Text>
@@ -718,7 +718,7 @@ export default function GoogleSignupQuestions() {
             </View>
           );
         }
-        
+
         return (
           <View style={styles.questionContainer}>
             <Text style={styles.questionLabel}>{currentField.label}</Text>
@@ -744,12 +744,12 @@ export default function GoogleSignupQuestions() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#fff" barStyle="dark-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Image 
-            source={require('../assets/images/DA logo green.png')} 
+          <Image
+            source={require('../assets/images/DA logo green.png')}
             style={styles.headerLogo}
             resizeMode="contain"
           />
@@ -766,7 +766,7 @@ export default function GoogleSignupQuestions() {
             </Text>
           </View>
         </View>
-        
+
         {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <View style={styles.progressBar}>
@@ -794,15 +794,15 @@ export default function GoogleSignupQuestions() {
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
         )}
-        
-         <TouchableOpacity
-           style={[
-             styles.nextButton,
-             (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents') && styles.nextButtonDisabled
-           ]}
-           onPress={handleNext}
-           disabled={loading || (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents')}
-         >
+
+        <TouchableOpacity
+          style={[
+            styles.nextButton,
+            (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents') && styles.nextButtonDisabled
+          ]}
+          onPress={handleNext}
+          disabled={loading || (!answers[currentField?.field] && currentField?.type !== 'textarea' && currentField?.type !== 'multiselect' && currentField?.type !== 'documents')}
+        >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (

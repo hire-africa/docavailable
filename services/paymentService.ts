@@ -21,7 +21,7 @@ export const paymentService = {
   async processPayment(request: PaymentRequest): Promise<PaymentResult> {
     try {
       console.log('PaymentService: Processing payment with Paychangu:', request);
-      
+
       // Validate required fields for Paychangu
       if (!request.phoneNumber) {
         throw new Error('Phone number is required for Paychangu payments');
@@ -30,7 +30,7 @@ export const paymentService = {
       // Get user data from auth service
       const authService = (await import('./authService')).default;
       const user = await authService.getCurrentUser();
-      
+
       if (!user) {
         throw new Error('User not authenticated. Please log in to continue.');
       }
@@ -44,8 +44,8 @@ export const paymentService = {
         lastName: user.lastName || user.display_name?.split(' ').slice(1).join(' ') || 'Name',
         description: request.description,
         reference: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        callbackUrl: 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/callback',
-        returnUrl: 'https://docavailable-3vbdv.ondigitalocean.app/api/payments/paychangu/return',
+        callbackUrl: 'https://docavailable1-izk3m.ondigitalocean.app/api/payments/paychangu/callback',
+        returnUrl: 'https://docavailable1-izk3m.ondigitalocean.app/api/payments/paychangu/return',
         meta: {
           phoneNumber: request.phoneNumber,
           plan_id: 1, // You might want to pass this from the calling component
@@ -63,7 +63,7 @@ export const paymentService = {
         console.log('PaymentService: Transaction ID:', result.transactionId);
         console.log('PaymentService: Payment URL:', result.paymentUrl);
         console.log('PaymentService: Status:', result.status);
-        
+
         // Validate that we have the required data
         if (!result.paymentUrl) {
           throw new Error('Payment URL is missing from PayChangu response');
@@ -71,7 +71,7 @@ export const paymentService = {
         if (!result.transactionId) {
           throw new Error('Transaction ID is missing from PayChangu response');
         }
-        
+
         return {
           success: true,
           transactionId: result.transactionId,
@@ -94,9 +94,9 @@ export const paymentService = {
   async checkPaymentStatus(transactionId: string): Promise<PaymentResult> {
     try {
       console.log('PaymentService: Checking payment status for:', transactionId);
-      
+
       const result = await paychanguService.checkPaymentStatus(transactionId);
-      
+
       return {
         success: result.success,
         transactionId: result.transactionId,
@@ -115,9 +115,9 @@ export const paymentService = {
   async refundPayment(transactionId: string): Promise<PaymentResult> {
     try {
       console.log('PaymentService: Processing refund for transaction:', transactionId);
-      
+
       const result = await paychanguService.refundPayment(transactionId);
-      
+
       if (result.success) {
         return {
           success: true,

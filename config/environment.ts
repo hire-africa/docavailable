@@ -20,8 +20,8 @@ const getEnvVar = (key: string, fallback: string): string => {
 
 export const environment = {
   // API Configuration
-  BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
-  LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
+  BASE_URL: getEnvVar('EXPO_PUBLIC_API_BASE_URL', 'https://docavailable1-izk3m.ondigitalocean.app'),
+  LARAVEL_API_URL: getEnvVar('EXPO_PUBLIC_LARAVEL_API_URL', 'https://docavailable1-izk3m.ondigitalocean.app'),
 
   // WebRTC Configuration (Production URLs with dedicated servers)
   WEBRTC_SIGNALING_URL: getEnvVar('EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 'wss://docavailable.org/call-signaling'),

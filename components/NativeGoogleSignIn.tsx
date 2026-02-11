@@ -2,13 +2,13 @@ import { FontAwesome } from '@expo/vector-icons';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -37,12 +37,12 @@ export default function NativeGoogleSignIn({
     const configureGoogleSignIn = async () => {
       try {
         console.log('🔐 NativeGoogleSignIn: Configuring Google Sign-In...');
-        
+
         // Check if GoogleSignin is available
         if (!GoogleSignin || typeof GoogleSignin.configure !== 'function') {
           throw new Error('GoogleSignin is not available. Make sure you have a development build.');
         }
-        
+
         // Configure Google Sign-In
         await GoogleSignin.configure({
           webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com',
@@ -89,7 +89,7 @@ export default function NativeGoogleSignIn({
     if (visible) {
       // Set loading state immediately when modal opens
       setIsLoading(true);
-      
+
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -133,10 +133,10 @@ export default function NativeGoogleSignIn({
     }
 
     setIsLoading(true);
-    
+
     try {
       console.log('🔐 NativeGoogleSignIn: Starting Google Sign-In...');
-      
+
       // Check if device supports Google Play Services
       if (GoogleSignin.hasPlayServices && typeof GoogleSignin.hasPlayServices === 'function') {
         await GoogleSignin.hasPlayServices({
@@ -146,13 +146,13 @@ export default function NativeGoogleSignIn({
 
       // Sign in with Google - THIS SHOWS THE NATIVE MODAL WITH SAVED ACCOUNTS!
       const userInfo = await GoogleSignin.signIn();
-      
+
       console.log('🔐 NativeGoogleSignIn: Sign-in successful:', userInfo);
-      
+
       // Check if user data exists in the response
       const userData = userInfo.data?.user || userInfo.user;
       const idToken = userInfo.data?.idToken || userInfo.idToken;
-      
+
       if (userData && idToken) {
         // Transform user data to match your app's format
         const googleUserData = {
@@ -168,17 +168,17 @@ export default function NativeGoogleSignIn({
         };
 
         console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
-        
+
         // Check if user exists in database
         await checkUserExistsAndHandle(googleUserData, idToken);
       } else {
         console.log('🔐 NativeGoogleSignIn: Available data structure:', JSON.stringify(userInfo, null, 2));
         throw new Error('No user data received from Google');
       }
-      
+
     } catch (error: any) {
       console.error('🔐 NativeGoogleSignIn: Sign-in error:', error);
-      
+
       if (error.code === statusCodes.SIGN_IN_CANCELLED) {
         console.log('🔐 NativeGoogleSignIn: User cancelled sign-in');
         onClose();
@@ -207,11 +207,11 @@ export default function NativeGoogleSignIn({
       console.log('🔐 NativeGoogleSignIn: Attempting to authenticate with Google OAuth...');
       console.log('🔐 NativeGoogleSignIn: Google user data:', googleUserData);
       console.log('🔐 NativeGoogleSignIn: Google ID token:', idToken);
-      
+
       // Test if API is working first
       console.log('🔐 NativeGoogleSignIn: Testing API connectivity...');
       try {
-        const testResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/login', {
+        const testResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/login', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -229,7 +229,7 @@ export default function NativeGoogleSignIn({
       }
 
       // Use the backend's Google OAuth endpoint
-      const googleLoginResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+      const googleLoginResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -244,16 +244,16 @@ export default function NativeGoogleSignIn({
 
       console.log('🔐 NativeGoogleSignIn: Google login response status:', googleLoginResponse.status);
       console.log('🔐 NativeGoogleSignIn: Google login response headers:', googleLoginResponse.headers);
-      
+
       // Check if response is JSON
       const contentType = googleLoginResponse.headers.get('content-type');
       console.log('🔐 NativeGoogleSignIn: Response content type:', contentType);
-      
+
       let googleLoginData;
       try {
         const responseText = await googleLoginResponse.text();
         console.log('🔐 NativeGoogleSignIn: Raw response text:', responseText);
-        
+
         if (contentType && contentType.includes('application/json')) {
           googleLoginData = JSON.parse(responseText);
         } else {
@@ -264,7 +264,7 @@ export default function NativeGoogleSignIn({
         onError('Server returned invalid response. Please try again.');
         return;
       }
-      
+
       console.log('🔐 NativeGoogleSignIn: Google login response data:', googleLoginData);
 
       if (googleLoginResponse.ok && googleLoginData.success && googleLoginData.data) {
@@ -272,7 +272,7 @@ export default function NativeGoogleSignIn({
         if (googleLoginData.data.needs_additional_info) {
           // Redirect to question pages with Google user data and missing fields
           const { google_user, missing_fields, user_type } = googleLoginData.data;
-          
+
           // Navigate to the Google signup questions page
           const router = require('expo-router').router;
           router.replace({
@@ -290,7 +290,7 @@ export default function NativeGoogleSignIn({
             ...googleLoginData.data.user,
             token: googleLoginData.data.token
           };
-          
+
           console.log('🔐 NativeGoogleSignIn: Successfully authenticated with Google OAuth and received JWT token:', userWithToken);
           onSuccess(userWithToken, googleLoginData.data.token);
           return;
@@ -319,7 +319,7 @@ export default function NativeGoogleSignIn({
           return;
         }
       }
-      
+
     } catch (error) {
       console.error('🔐 NativeGoogleSignIn: Error during Google authentication:', error);
       onError('Authentication failed. Please check your internet connection and try again.');
@@ -347,7 +347,7 @@ export default function NativeGoogleSignIn({
       transparent={true}
     >
       <View style={styles.overlay}>
-        <Animated.View 
+        <Animated.View
           style={[
             styles.modalContainer,
             {
@@ -393,7 +393,7 @@ export default function NativeGoogleSignIn({
               {!isLoading && isConfigured && (
                 <>
                   {/* Google Logo Animation */}
-                  <Animated.View 
+                  <Animated.View
                     style={[
                       styles.logoContainer,
                       {

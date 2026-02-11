@@ -28,8 +28,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://docavailable-3vbdv.ondigitalocean.app",
-        "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable-3vbdv.ondigitalocean.app",
+        "EXPO_PUBLIC_API_BASE_URL": "https://docavailable1-izk3m.ondigitalocean.app",
+        "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable1-izk3m.ondigitalocean.app",
         "EXPO_PUBLIC_APP_NAME": "DocAvailable",
         "EXPO_PUBLIC_APP_VERSION": "1.1.3",
         "EXPO_PUBLIC_USE_BACKEND_CHAT": "true",
@@ -37,8 +37,8 @@
         "EXPO_PUBLIC_USE_BACKEND_NOTIFICATIONS": "true",
         "EXPO_PUBLIC_USE_BACKEND_APPOINTMENTS": "true",
         "EXPO_PUBLIC_BACKEND_ENABLED": "true",
-        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable.org/call-signaling",
-        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling"
+        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable1-izk3m.ondigitalocean.app/call-signaling",
+        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable1-izk3m.ondigitalocean.app/chat-signaling"
       }
     },
     "production": {
@@ -50,8 +50,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://docavailable-3vbdv.ondigitalocean.app",
-        "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable-3vbdv.ondigitalocean.app",
+        "EXPO_PUBLIC_API_BASE_URL": "https://docavailable1-izk3m.ondigitalocean.app",
+        "EXPO_PUBLIC_LARAVEL_API_URL": "https://docavailable1-izk3m.ondigitalocean.app",
         "EXPO_PUBLIC_APP_NAME": "DocAvailable",
         "EXPO_PUBLIC_APP_VERSION": "1.1.3",
         "EXPO_PUBLIC_USE_BACKEND_CHAT": "true",
@@ -59,8 +59,8 @@
         "EXPO_PUBLIC_USE_BACKEND_NOTIFICATIONS": "true",
         "EXPO_PUBLIC_USE_BACKEND_APPOINTMENTS": "true",
         "EXPO_PUBLIC_BACKEND_ENABLED": "true",
-        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable.org/call-signaling",
-        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable.org/chat-signaling"
+        "EXPO_PUBLIC_WEBRTC_SIGNALING_URL": "wss://docavailable1-izk3m.ondigitalocean.app/call-signaling",
+        "EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL": "wss://docavailable1-izk3m.ondigitalocean.app/chat-signaling"
       }
     }
   }

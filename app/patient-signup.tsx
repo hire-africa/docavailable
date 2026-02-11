@@ -685,7 +685,7 @@ export default function PatientSignUp() {
             console.log('🔐 Patient Signup: Checking if user exists for email:', email);
 
             // Use dedicated endpoint to check email existence
-            const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/check-email', {
+            const response = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/check-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

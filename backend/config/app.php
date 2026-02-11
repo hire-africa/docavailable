@@ -77,7 +77,7 @@ return [
     |
     */
 
-    'url' => env('APP_URL', 'https://docavailable-3vbdv.ondigitalocean.app'),
+    'url' => env('APP_URL', 'https://docavailable1-izk3m.ondigitalocean.app'),
 
     /*
     |--------------------------------------------------------------------------

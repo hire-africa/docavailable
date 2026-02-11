@@ -16,7 +16,7 @@ const axios = require('axios');
 // Configuration
 const CONFIG = {
   PORT: process.env.WEBRTC_SIGNALING_PORT || 8080,
-  API_BASE_URL: process.env.API_BASE_URL || 'https://docavailable-3vbdv.ondigitalocean.app',
+  API_BASE_URL: process.env.API_BASE_URL || 'https://docavailable1-izk3m.ondigitalocean.app',
   API_AUTH_TOKEN: process.env.API_AUTH_TOKEN || 'your-api-token',
   SSL_CERT_PATH: '/etc/letsencrypt/live/docavailable.org/fullchain.pem',
   SSL_KEY_PATH: '/etc/letsencrypt/live/docavailable.org/privkey.pem',

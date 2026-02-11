@@ -31,7 +31,7 @@ export class OAuthUtils {
       console.log('🔐 OAuth: Processing authorization code...');
 
       // Let backend handle all Google API calls and user creation/login
-      const response = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-callback', {
+      const response = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/google-callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,7 +66,7 @@ export class OAuthUtils {
 
     } catch (error: any) {
       console.error('🔐 OAuth: Error processing callback:', error);
-      
+
       return {
         success: false,
         error: AuthErrorHandler.getErrorMessage(error)
@@ -81,7 +81,7 @@ export class OAuthUtils {
     console.error('🔐 OAuth: Error from provider:', { error, errorDescription });
 
     let message = 'Authentication failed';
-    
+
     switch (error) {
       case 'access_denied':
         message = 'Access was denied. Please try again.';
@@ -160,7 +160,7 @@ export class OAuthUtils {
       'No user data received from Google'
     ];
 
-    return !silentErrors.some(silentError => 
+    return !silentErrors.some(silentError =>
       error.toLowerCase().includes(silentError.toLowerCase())
     );
   }
@@ -172,7 +172,7 @@ export class OAuthUtils {
     if (result.user && result.token) {
       // Store authentication data
       await authService.initialize();
-      
+
       console.log('🔐 OAuth: Authentication successful for user:', result.user.email);
     }
   }
@@ -194,7 +194,7 @@ export class OAuthUtils {
         googleUser: JSON.stringify(result.user),
         missingFields: JSON.stringify(result.missingFields)
       });
-      
+
       router.replace(`/google-signup-questions?${params.toString()}`);
       return;
     }
@@ -202,7 +202,7 @@ export class OAuthUtils {
     if (result.user) {
       // Navigate to appropriate dashboard
       const user = result.user;
-      
+
       if (user.user_type === 'admin') {
         router.replace('/admin-dashboard');
       } else if (user.user_type === 'doctor') {

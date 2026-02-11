@@ -1,12 +1,12 @@
 import { FontAwesome } from '@expo/vector-icons';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -30,10 +30,10 @@ export default function GoogleAuthWebView({
   // Google OAuth configuration
   const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
   const scope = 'openid profile email https://www.googleapis.com/auth/user.birthday.read https://www.googleapis.com/auth/user.gender.read';
-  
+
   // Use a simple redirect URI that's more likely to work
-  const redirectUri = 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
-  
+  const redirectUri = 'https://docavailable1-izk3m.ondigitalocean.app/api/oauth/callback';
+
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
     `redirect_uri=${encodeURIComponent(redirectUri)}&` +
@@ -55,18 +55,18 @@ export default function GoogleAuthWebView({
     // Check for OAuth callback
     if (url.includes('oauth/callback') || url.includes('code=')) {
       console.log('🔐 GoogleAuthWebView: OAuth callback detected');
-      
+
       try {
         const urlObj = new URL(url);
         const code = urlObj.searchParams.get('code');
         const error = urlObj.searchParams.get('error');
-        
+
         if (error) {
           console.error('🔐 GoogleAuthWebView: OAuth error:', error);
           onError(`OAuth error: ${error}`);
           return;
         }
-        
+
         if (code) {
           console.log('🔐 GoogleAuthWebView: Authorization code received:', code);
           handleAuthorizationCode(code);
@@ -83,7 +83,7 @@ export default function GoogleAuthWebView({
     try {
       const data = JSON.parse(event.nativeEvent.data);
       console.log('🔐 GoogleAuthWebView: Received message:', data);
-      
+
       if (data.type === 'oauth_callback' && data.code) {
         console.log('🔐 GoogleAuthWebView: OAuth callback via postMessage:', data.code);
         handleAuthorizationCode(data.code);
@@ -96,14 +96,14 @@ export default function GoogleAuthWebView({
   // Handle authorization code exchange
   const handleAuthorizationCode = async (code: string) => {
     setIsLoading(true);
-    
+
     try {
       console.log('🔐 GoogleAuthWebView: Exchanging code for token...');
-      
+
       // Exchange authorization code for ID token using backend
       console.log('🔐 GoogleAuthWebView: Exchanging code for ID token...');
-      
-      const exchangeResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/oauth/exchange-code', {
+
+      const exchangeResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/oauth/exchange-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -111,23 +111,23 @@ export default function GoogleAuthWebView({
         },
         body: JSON.stringify({
           code: code,
-          redirect_uri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html'
+          redirect_uri: 'https://docavailable1-izk3m.ondigitalocean.app/oauth-redirect.html'
         })
       });
-      
+
       if (!exchangeResponse.ok) {
         throw new Error(`Code exchange failed: ${exchangeResponse.status}`);
       }
-      
+
       const exchangeData = await exchangeResponse.json();
       console.log('🔐 GoogleAuthWebView: Code exchange response:', exchangeData);
-      
+
       if (!exchangeData.success || !exchangeData.id_token) {
         throw new Error('Failed to exchange code for ID token');
       }
-      
+
       // Now use the ID token to authenticate with backend
-      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+      const authResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,20 +138,20 @@ export default function GoogleAuthWebView({
           user_type: 'patient'
         })
       });
-      
+
       if (!authResponse.ok) {
         throw new Error(`Authentication failed: ${authResponse.status}`);
       }
-      
+
       const authData = await authResponse.json();
       console.log('🔐 GoogleAuthWebView: Authentication response:', authData);
-      
+
       if (authData.success && authData.data) {
         // Check if additional information is needed
         if (authData.data.needs_additional_info) {
           // Redirect to question pages with Google user data and missing fields
           const { google_user, missing_fields, user_type } = authData.data;
-          
+
           // Navigate to the Google signup questions page
           const router = require('expo-router').router;
           router.replace({
@@ -171,7 +171,7 @@ export default function GoogleAuthWebView({
       } else {
         throw new Error('Authentication failed');
       }
-      
+
     } catch (error) {
       console.error('🔐 GoogleAuthWebView: Code exchange error:', error);
       onError('Failed to process Google authentication. Please try again.');
@@ -256,17 +256,17 @@ export default function GoogleAuthWebView({
           mixedContentMode="compatibility"
           thirdPartyCookiesEnabled={true}
           allowsBackForwardNavigationGestures={true}
-           userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+          userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
           onShouldStartLoadWithRequest={(request) => {
             console.log('🔐 GoogleAuthWebView: Should start load with request:', request.url);
-            
+
             // Allow Google domains
-            if (request.url.includes('accounts.google.com') || 
-                request.url.includes('google.com') ||
-                request.url.includes('oauth/callback')) {
+            if (request.url.includes('accounts.google.com') ||
+              request.url.includes('google.com') ||
+              request.url.includes('oauth/callback')) {
               return true;
             }
-            
+
             // Block other domains for security
             console.log('🔐 GoogleAuthWebView: Blocking non-Google domain:', request.url);
             return false;

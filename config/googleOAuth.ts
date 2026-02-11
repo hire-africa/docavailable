@@ -8,16 +8,16 @@ import { Platform } from 'react-native';
 export const GOOGLE_OAUTH_CONFIG = {
   // Google OAuth Client ID (Web application)
   clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || Constants.expoConfig?.extra?.googleClientId || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com',
-  
+
   // Google OAuth Client Secret (for server-side token exchange)
   clientSecret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET || Constants.expoConfig?.extra?.googleClientSecret || '',
-  
+
   // Dynamic redirect URI for OAuth flow (production-ready)
   get redirectUri() {
     // Use custom URL scheme for mobile apps to stay within the app
     if (Platform.OS === 'web') {
       // For web platform, use the web domain
-      return 'https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback';
+      return 'https://docavailable1-izk3m.ondigitalocean.app/api/oauth/callback';
     } else {
       // For mobile platforms, use custom scheme to stay in app
       return AuthSession.makeRedirectUri({
@@ -26,7 +26,7 @@ export const GOOGLE_OAUTH_CONFIG = {
       });
     }
   },
-  
+
   // Scopes for Google OAuth
   scopes: [
     'openid',
@@ -35,10 +35,10 @@ export const GOOGLE_OAUTH_CONFIG = {
     'https://www.googleapis.com/auth/user.birthday.read',
     'https://www.googleapis.com/auth/user.gender.read'
   ],
-  
+
   // Additional parameters
   additionalParameters: {},
-  
+
   // Custom URL schemes for both platforms
   customUrlScheme: Platform.OS === 'ios' ? 'com.docavailable.minimal' : 'com.docavailable.app'
 };
@@ -48,7 +48,7 @@ export const GOOGLE_API_ENDPOINTS = {
   auth: 'https://accounts.google.com/o/oauth2/v2/auth',
   token: 'https://oauth2.googleapis.com/token',
   userInfo: 'https://www.googleapis.com/oauth2/v2/userinfo',
-  
+
   // Revoke token endpoint
   revoke: 'https://oauth2.googleapis.com/revoke'
 };
@@ -62,7 +62,7 @@ export const GOOGLE_AUTH_ERRORS = {
   UNAUTHORIZED_CLIENT: 'unauthorized_client',
   UNSUPPORTED_GRANT_TYPE: 'unsupported_grant_type',
   INVALID_SCOPE: 'invalid_scope',
-  
+
   // Custom error messages
   USER_CANCELLED: 'User cancelled the authentication flow',
   NETWORK_ERROR: 'Network error occurred during authentication',
@@ -82,7 +82,7 @@ export const getGoogleOAuthConfig = () => {
   if (!isGoogleOAuthConfigured()) {
     throw new Error(GOOGLE_AUTH_ERRORS.CONFIGURATION_ERROR);
   }
-  
+
   return {
     clientId: GOOGLE_OAUTH_CONFIG.clientId,
     clientSecret: GOOGLE_OAUTH_CONFIG.clientSecret,

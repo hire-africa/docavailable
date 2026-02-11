@@ -12,9 +12,9 @@ interface VoiceMessagePlayerProps {
   profilePictureUrl?: string;
 }
 
-export default function VoiceMessagePlayer({ 
-  audioUri, 
-  isOwnMessage = false, 
+export default function VoiceMessagePlayer({
+  audioUri,
+  isOwnMessage = false,
   timestamp,
   deliveryStatus = 'sent',
   profilePictureUrl
@@ -25,20 +25,20 @@ export default function VoiceMessagePlayer({
 
   // Debug: Log the audio URI we receive
   console.log('🎵 VoiceMessagePlayer received audioUri:', audioUri);
-  
+
   // Debug profile picture URL
-      // console.log('VoiceMessagePlayer Debug:', {
-    //   profilePictureUrl,
-    //   isOwnMessage,
-    //   hasUrl: !!profilePictureUrl
-    // });
+  // console.log('VoiceMessagePlayer Debug:', {
+  //   profilePictureUrl,
+  //   isOwnMessage,
+  //   hasUrl: !!profilePictureUrl
+  // });
 
   const getImageUrl = (uri: string) => {
     if (uri.startsWith('http')) {
       return uri;
     }
     // Use the new image serving route instead of direct storage access
-    return `https://docavailable-3vbdv.ondigitalocean.app/api/images/${uri}`;
+    return `https://docavailable1-izk3m.ondigitalocean.app/api/images/${uri}`;
   };
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -62,7 +62,7 @@ export default function VoiceMessagePlayer({
     try {
       setIsLoading(true);
       setLoadError(null);
-      
+
       // Check if audioUri is valid
       if (!audioUri || audioUri.trim() === '') {
         console.error('🎵 VoiceMessagePlayer: No audio URI provided');
@@ -70,10 +70,10 @@ export default function VoiceMessagePlayer({
         setIsLoading(false);
         return;
       }
-      
+
       // Use the audio URI directly - it should already be a complete URL from the server
       audioUrl = audioUri;
-      
+
       // If it's a relative path, construct a correct full URL (avoid double /api/...)
       if (!audioUrl.startsWith('http') && !audioUrl.startsWith('file://')) {
         const base = environment.LARAVEL_API_URL;
@@ -93,10 +93,10 @@ export default function VoiceMessagePlayer({
       if (audioUrl.startsWith('/')) {
         audioUrl = `file://${audioUrl}`;
       }
-      
+
       console.log('🎵 Loading audio URL:', audioUrl);
       console.log('🎵 Original audioUri:', audioUri);
-      
+
       // Try to check if the file exists, but don't fail if HEAD request fails
       // Some servers don't support HEAD requests properly, so we'll try loading anyway
       if (audioUrl.startsWith('http')) {
@@ -105,7 +105,7 @@ export default function VoiceMessagePlayer({
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error('HEAD request timeout')), 3000);
           });
-          
+
           const headResponse = await Promise.race([
             fetch(audioUrl, { method: 'HEAD' }),
             timeoutPromise
@@ -134,14 +134,14 @@ export default function VoiceMessagePlayer({
           // Continue with loading attempt - don't fail based on HEAD check
         }
       }
-      
+
       const { sound: newSound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: false }
       );
-      
+
       setSound(newSound);
-      
+
       // Get duration and verify load status
       const status = await newSound.getStatusAsync();
       if (isLoadedStatus(status)) {
@@ -159,13 +159,13 @@ export default function VoiceMessagePlayer({
           setLoadError(`Failed to load audio: ${(status as any).error}`);
         }
       }
-      
+
       // Set up status update
       newSound.setOnPlaybackStatusUpdate((status) => {
         if (isLoadedStatus(status)) {
           setIsPlaying(status.isPlaying);
           setPosition(status.positionMillis || 0);
-          
+
           // Log playback completion
           if (status.didJustFinish) {
             console.log('🎵 Audio playback completed');
@@ -179,17 +179,17 @@ export default function VoiceMessagePlayer({
           }
         }
       });
-      
+
     } catch (error: any) {
       // Provide more specific error messages
       const errorMessage = error?.message || error?.toString() || 'Unknown error';
-      
+
       // Check if it's a 404 error (file not found)
-      const is404Error = errorMessage.includes('404') || 
-                        errorMessage.includes('not found') || 
-                        errorMessage.includes('InvalidResponseCodeException') ||
-                        error?.code === 404;
-      
+      const is404Error = errorMessage.includes('404') ||
+        errorMessage.includes('not found') ||
+        errorMessage.includes('InvalidResponseCodeException') ||
+        error?.code === 404;
+
       if (is404Error) {
         // File not found - this is expected for old sessions where files may have been deleted
         // Don't log as error, just set the error state for UI
@@ -201,7 +201,7 @@ export default function VoiceMessagePlayer({
         console.error('🎵 Error loading audio:', error);
         console.error('🎵 Audio URL that failed:', audioUrl);
         console.error('🎵 Original audioUri:', audioUri);
-        
+
         if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('Network')) {
           setLoadError('Network error loading voice message');
         } else if (errorMessage.includes('format') || errorMessage.includes('invalid')) {
@@ -210,27 +210,27 @@ export default function VoiceMessagePlayer({
           setLoadError(`Failed to load audio: ${errorMessage}`);
         }
       }
-      
+
       // For iOS, try alternative URL format if first attempt fails
       if (Platform.OS === 'ios' && !audioUri.startsWith('file://')) {
         try {
           console.log('🔄 Retrying audio with alternative URL format...');
           // Try with different encoding
           const alternativeUrl = encodeURI(audioUri);
-          
+
           const { sound: newSound } = await Audio.Sound.createAsync(
             { uri: alternativeUrl },
             { shouldPlay: false }
           );
-          
+
           setSound(newSound);
           setLoadError(null); // Clear error on successful retry
-          
+
           const status = await newSound.getStatusAsync();
           if (status.isLoaded) {
             setDuration(status.durationMillis || 0);
           }
-          
+
           newSound.setOnPlaybackStatusUpdate((status) => {
             if (status.isLoaded) {
               setIsPlaying(status.isPlaying);
@@ -252,7 +252,7 @@ export default function VoiceMessagePlayer({
       console.warn('🎵 Cannot play: sound object is null');
       return;
     }
-    
+
     try {
       // Check sound status before playing
       const status = await sound.getStatusAsync();
@@ -269,13 +269,13 @@ export default function VoiceMessagePlayer({
           error: (status as any).error,
         });
       }
-      
+
       if (!isLoadedStatus(status)) {
         console.error('🎵 Cannot play: sound is not loaded');
         setLoadError('Audio file not loaded properly');
         return;
       }
-      
+
       if (isPlaying) {
         console.log('🎵 Pausing audio...');
         await sound.pauseAsync();
@@ -347,7 +347,7 @@ export default function VoiceMessagePlayer({
             <Image
               source={{ uri: profilePictureUrl }}
               style={styles.profilePicture}
-              onError={() => {}}
+              onError={() => { }}
             />
           ) : (
             <View style={styles.profilePictureFallback}>
@@ -389,18 +389,18 @@ export default function VoiceMessagePlayer({
     <View style={[styles.container, isOwnMessage ? styles.ownMessage : styles.otherMessage]}>
       {/* Profile Picture */}
       <View style={styles.profilePictureContainer}>
-                 {profilePictureUrl ? (
-           <Image
-             source={{ uri: profilePictureUrl }}
-             style={styles.profilePicture}
-             onError={() => {
-               // console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
-             }}
-             onLoad={() => {
-               // console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
-             }}
-           />
-         ) : (
+        {profilePictureUrl ? (
+          <Image
+            source={{ uri: profilePictureUrl }}
+            style={styles.profilePicture}
+            onError={() => {
+              // console.log('VoiceMessagePlayer: Profile picture failed to load, showing fallback');
+            }}
+            onLoad={() => {
+              // console.log('VoiceMessagePlayer: Profile picture loaded successfully:', profilePictureUrl);
+            }}
+          />
+        ) : (
           <View style={styles.profilePictureFallback}>
             <Ionicons name="person" size={16} color={isOwnMessage ? "#fff" : "#666"} />
           </View>
@@ -432,24 +432,24 @@ export default function VoiceMessagePlayer({
               color={isOwnMessage ? "#fff" : "#4CAF50"}
             />
           </TouchableOpacity>
-          
-                                                                 {/* Static Waveform */}
-             <View style={styles.waveformContainer}>
-               <View style={styles.waveform}>
-                 {[0.4, 0.6, 0.8, 0.5, 0.9, 0.3, 0.7, 0.6, 0.8, 0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.4, 0.7, 0.5, 0.8, 0.6].map((height, i) => (
-                   <View
-                     key={i}
-                     style={[
-                       styles.waveformBar,
-                       {
-                         height: `${height * 100}%`,
-                         backgroundColor: isOwnMessage ? "#fff" : "#666"
-                       }
-                     ]}
-                   />
-                 ))}
-               </View>
-             </View>
+
+          {/* Static Waveform */}
+          <View style={styles.waveformContainer}>
+            <View style={styles.waveform}>
+              {[0.4, 0.6, 0.8, 0.5, 0.9, 0.3, 0.7, 0.6, 0.8, 0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.4, 0.7, 0.5, 0.8, 0.6].map((height, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.waveformBar,
+                    {
+                      height: `${height * 100}%`,
+                      backgroundColor: isOwnMessage ? "#fff" : "#666"
+                    }
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
         </View>
 
         {/* Bottom Row: Duration and Timestamp */}

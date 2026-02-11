@@ -24,8 +24,8 @@ class TextSessionController extends Controller
     protected $voiceArchiveService;
 
     public function __construct(
-        MessageStorageService $messageStorageService, 
-        NotificationService $notificationService, 
+        MessageStorageService $messageStorageService,
+        NotificationService $notificationService,
         AnonymizationService $anonymizationService,
         VoiceMessageArchiveService $voiceArchiveService
     ) {
@@ -218,7 +218,7 @@ class TextSessionController extends Controller
                 if ($existingSession) {
                     // Apply lazy expiration at read-time
                     $existingSession->applyLazyExpiration();
-                    
+
                     // Re-check status after lazy expiration
                     if (in_array($existingSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
                         throw new \Exception('You already have an active session with this doctor');
@@ -292,7 +292,7 @@ class TextSessionController extends Controller
 
             // Get the created session to calculate remaining time
             $session = TextSession::find($textSessionId);
-            
+
             // Apply lazy expiration at read-time (unlikely to be expired immediately after creation, but safe)
             if ($session) {
                 $session->applyLazyExpiration();
@@ -424,7 +424,7 @@ class TextSessionController extends Controller
 
                     // Broadcast session-expired event via WebSocket
                     try {
-                        $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable-3vbdv.ondigitalocean.app:8089');
+                        $webrtcUrl = env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable1-izk3m.ondigitalocean.app:8089');
                         $broadcastUrl = "{$webrtcUrl}/broadcast-session-expired";
 
                         $ch = curl_init($broadcastUrl);
@@ -671,7 +671,7 @@ class TextSessionController extends Controller
             }
 
             $sessions = $query->orderBy('started_at', 'desc')->get();
-            
+
             // Apply lazy expiration to all sessions at read-time
             foreach ($sessions as $session) {
                 $session->applyLazyExpiration();
@@ -713,7 +713,7 @@ class TextSessionController extends Controller
             }
 
             $sessions = $query->orderBy('last_activity_at', 'desc')->get();
-            
+
             // Apply lazy expiration to all sessions at read-time
             foreach ($sessions as $session) {
                 $session->applyLazyExpiration();
@@ -722,9 +722,9 @@ class TextSessionController extends Controller
             // Add remaining time information to each session
             $sessionsWithTime = $sessions->map(function ($session) use ($userType) {
                 // Determine if session is active (for UI display)
-                $isActive = $session->status === TextSession::STATUS_ACTIVE || 
-                           ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR && $session->doctor_response_deadline);
-                
+                $isActive = $session->status === TextSession::STATUS_ACTIVE ||
+                    ($session->status === TextSession::STATUS_WAITING_FOR_DOCTOR && $session->doctor_response_deadline);
+
                 $sessionData = [
                     'id' => $session->id,
                     'status' => $session->status,
@@ -984,7 +984,7 @@ class TextSessionController extends Controller
             $messages = $this->messageStorageService->getMessages($session->id, 'text_session');
             $hasDoctorResponse = false;
             $hasPatientMessages = false;
-            
+
             foreach ($messages as $message) {
                 if (isset($message['sender_id'])) {
                     if ($message['sender_id'] == $session->doctor_id) {
@@ -999,19 +999,19 @@ class TextSessionController extends Controller
             // Get display names properly - handle both array and object formats
             $patientDisplayName = 'Patient';
             if (is_array($patientData)) {
-                $patientDisplayName = $patientData['display_name'] ?? 
+                $patientDisplayName = $patientData['display_name'] ??
                     (($patientData['first_name'] ?? '') . ' ' . ($patientData['last_name'] ?? '')) ?: 'Patient';
             } else {
-                $patientDisplayName = $patientData->display_name ?? 
+                $patientDisplayName = $patientData->display_name ??
                     ($patientData->first_name . ' ' . $patientData->last_name) ?: 'Patient';
             }
-            
+
             $doctorDisplayName = 'Doctor';
             if (is_array($doctorData)) {
-                $doctorDisplayName = $doctorData['display_name'] ?? 
+                $doctorDisplayName = $doctorData['display_name'] ??
                     ('Dr. ' . (($doctorData['first_name'] ?? '') . ' ' . ($doctorData['last_name'] ?? ''))) ?: 'Doctor';
             } else {
-                $doctorDisplayName = $doctorData->display_name ?? 
+                $doctorDisplayName = $doctorData->display_name ??
                     ('Dr. ' . ($doctorData->first_name . ' ' . $doctorData->last_name)) ?: 'Doctor';
             }
 
@@ -1023,7 +1023,7 @@ class TextSessionController extends Controller
                 'display_name' => $patientDisplayName,
                 'profile_picture_url' => $patientData->profile_picture_url ?? null,
             ];
-            
+
             $doctorResponse = is_array($doctorData) ? $doctorData : [
                 'id' => $doctorData->id,
                 'first_name' => $doctorData->first_name ?? '',
@@ -1034,8 +1034,8 @@ class TextSessionController extends Controller
 
             // Determine other participant name based on current user
             $otherParticipantName = $user->id === $session->doctor_id ? $patientDisplayName : $doctorDisplayName;
-            $otherParticipantProfilePicture = $user->id === $session->doctor_id ? 
-                ($patientResponse['profile_picture_url'] ?? null) : 
+            $otherParticipantProfilePicture = $user->id === $session->doctor_id ?
+                ($patientResponse['profile_picture_url'] ?? null) :
                 ($doctorResponse['profile_picture_url'] ?? null);
 
             return response()->json([

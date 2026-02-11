@@ -27,19 +27,19 @@ class ConfigService {
 
   private loadConfig(): AppConfig {
     const extra = Constants.expoConfig?.extra || {};
-    
+
     // Detect if running in production build
-    const isProduction = Constants.appOwnership === 'standalone' || 
-                        process.env.NODE_ENV === 'production' ||
-                        Constants.executionEnvironment === 'standalone';
-    
+    const isProduction = Constants.appOwnership === 'standalone' ||
+      process.env.NODE_ENV === 'production' ||
+      Constants.executionEnvironment === 'standalone';
+
     console.log('🔧 [ConfigService] Environment detection:', {
       isProduction,
       appOwnership: Constants.appOwnership,
       executionEnvironment: Constants.executionEnvironment,
       nodeEnv: process.env.NODE_ENV
     });
-    
+
     // For EAS builds, environment variables are available directly
     // For development, they come from .env file and are in extra
     const getEnvVar = (key: string, fallback?: string, productionFallback?: string) => {
@@ -62,22 +62,22 @@ class ConfigService {
         console.log(`🔧 [ConfigService] Found ${key} in extra.features`);
         return extra.features[key];
       }
-      
+
       // Use production fallback if in production, otherwise use regular fallback
       const finalFallback = isProduction && productionFallback ? productionFallback : fallback;
       console.log(`🔧 [ConfigService] Using fallback for ${key}:`, finalFallback);
       return finalFallback;
     };
-    
+
     const config = {
-      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable-3vbdv.ondigitalocean.app',
+      apiUrl: getEnvVar('EXPO_PUBLIC_API_BASE_URL') || extra.apiUrl || 'https://docavailable1-izk3m.ondigitalocean.app',
       webrtc: {
         signalingUrl: getEnvVar(
-          'EXPO_PUBLIC_WEBRTC_SIGNALING_URL', 
+          'EXPO_PUBLIC_WEBRTC_SIGNALING_URL',
           'wss://docavailable.org/call-signaling'
         ) || extra.webrtc?.signalingUrl,
         chatSignalingUrl: getEnvVar(
-          'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL', 
+          'EXPO_PUBLIC_WEBRTC_CHAT_SIGNALING_URL',
           'wss://docavailable.org/chat-signaling'
         ) || extra.webrtc?.chatSignalingUrl,
         turnServerUrl: extra.webrtc?.turnServerUrl || '',
@@ -97,7 +97,7 @@ class ConfigService {
         enableChat: extra.features?.enableChat !== false,
       }
     };
-    
+
     console.log('🔧 [ConfigService] Final configuration:', {
       apiUrl: config.apiUrl,
       signalingUrl: config.webrtc.signalingUrl,
@@ -107,7 +107,7 @@ class ConfigService {
       enableVideoCalls: config.webrtc.enableVideoCalls,
       isProduction
     });
-    
+
     return config;
   }
 

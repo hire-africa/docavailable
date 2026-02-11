@@ -183,7 +183,7 @@ export default function PatientDashboard() {
     try {
       console.log(`📡 Polling status for tx_ref: ${checkoutTxRef}`);
       const timestamp = new Date().getTime();
-      const response = await fetch(`https://docavailable-3vbdv.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}&t=${timestamp}`);
+      const response = await fetch(`https://docavailable1-izk3m.ondigitalocean.app/api/payments/status?tx_ref=${checkoutTxRef}&t=${timestamp}`);
       const data = await response.json();
       console.log('📡 Poll result:', data);
 

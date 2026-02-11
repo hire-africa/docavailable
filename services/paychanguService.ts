@@ -62,8 +62,8 @@ class PaychanguService {
       console.log('PaychanguService: Initiating payment through backend:', request);
 
       // Get the backend URL from environment
-      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable-3vbdv.ondigitalocean.app';
-      
+      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable1-izk3m.ondigitalocean.app';
+
       // Call backend API to initiate PayChangu payment
       const response = await axios.post(`${backendUrl}/api/payments/paychangu/initiate`, {
         plan_id: request.meta?.plan_id || 1, // Default to plan 1 if not specified
@@ -129,8 +129,8 @@ class PaychanguService {
     try {
       console.log('PaychanguService: Checking payment status for:', transactionId);
 
-      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable-3vbdv.ondigitalocean.app';
-      
+      const backendUrl = Constants.expoConfig?.extra?.apiBaseUrl || 'https://docavailable1-izk3m.ondigitalocean.app';
+
       const response = await axios.get(`${backendUrl}/api/payments/status?transaction_id=${encodeURIComponent(transactionId)}`, {
         headers: {
           'Accept': 'application/json',
@@ -167,7 +167,7 @@ class PaychanguService {
     try {
       const crypto = require('crypto');
       const webhookSecret = Constants.expoConfig?.extra?.paychanguWebhookSecret || '';
-      
+
       const expectedSignature = crypto
         .createHmac('sha256', webhookSecret)
         .update(payload)

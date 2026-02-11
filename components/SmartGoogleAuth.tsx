@@ -2,12 +2,12 @@ import { FontAwesome } from '@expo/vector-icons';
 import * as AuthSession from 'expo-auth-session';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -32,13 +32,13 @@ export default function SmartGoogleAuth({
   // Google OAuth configuration
   const clientId = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '449082896435-ge0pijdnl6j3e0c9jjclnl7tglmh45ml.apps.googleusercontent.com';
   const scope = 'openid profile email https://www.googleapis.com/auth/user.birthday.read https://www.googleapis.com/auth/user.gender.read';
-  
+
   // Generate redirect URI for deep linking
   const redirectUri = AuthSession.makeRedirectUri({
     scheme: 'com.docavailable.app',
     path: 'oauth2redirect'
   });
-  
+
   // Create OAuth request for browser auth
   const [request, response, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -59,7 +59,7 @@ export default function SmartGoogleAuth({
   // WebView auth URL
   const webViewAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${clientId}&` +
-    `redirect_uri=${encodeURIComponent('https://docavailable-3vbdv.ondigitalocean.app/api/oauth/callback')}&` +
+    `redirect_uri=${encodeURIComponent('https://docavailable1-izk3m.ondigitalocean.app/api/oauth/callback')}&` +
     `response_type=code&` +
     `scope=${encodeURIComponent(scope)}&` +
     `access_type=offline&` +
@@ -77,12 +77,12 @@ export default function SmartGoogleAuth({
   const detectAuthMode = async () => {
     setIsLoading(true);
     setAuthMode('detecting');
-    
+
     try {
       // Try to detect if we can access browser accounts
       // This is a heuristic approach
       const canUseBrowser = await checkBrowserAccountAccess();
-      
+
       if (canUseBrowser) {
         console.log('🔐 SmartGoogleAuth: Using browser authentication for saved accounts');
         setAuthMode('browser');
@@ -109,7 +109,7 @@ export default function SmartGoogleAuth({
         `scope=openid&` +
         `prompt=select_account&` +
         `state=test`;
-      
+
       // We'll use a timeout to detect if accounts are available
       return new Promise((resolve) => {
         const timeout = setTimeout(() => {
@@ -134,7 +134,7 @@ export default function SmartGoogleAuth({
     }
 
     setIsLoading(true);
-    
+
     try {
       console.log('🔐 SmartGoogleAuth: Starting browser authentication...');
       await promptAsync();
@@ -154,18 +154,18 @@ export default function SmartGoogleAuth({
     // Check for OAuth callback
     if (url.includes('oauth/callback') || url.includes('code=')) {
       console.log('🔐 SmartGoogleAuth: OAuth callback detected');
-      
+
       try {
         const urlObj = new URL(url);
         const code = urlObj.searchParams.get('code');
         const error = urlObj.searchParams.get('error');
-        
+
         if (error) {
           console.error('🔐 SmartGoogleAuth: OAuth error:', error);
           onError(`OAuth error: ${error}`);
           return;
         }
-        
+
         if (code) {
           console.log('🔐 SmartGoogleAuth: Authorization code received:', code);
           handleAuthorizationCode(code);
@@ -180,14 +180,14 @@ export default function SmartGoogleAuth({
   // Handle authorization code exchange
   const handleAuthorizationCode = async (code: string) => {
     setIsLoading(true);
-    
+
     try {
       console.log('🔐 SmartGoogleAuth: Exchanging code for token...');
-      
+
       // Exchange authorization code for ID token using backend
       console.log('🔐 SmartGoogleAuth: Exchanging code for ID token...');
-      
-      const exchangeResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/oauth/exchange-code', {
+
+      const exchangeResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/oauth/exchange-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,23 +195,23 @@ export default function SmartGoogleAuth({
         },
         body: JSON.stringify({
           code: code,
-          redirect_uri: 'https://docavailable-3vbdv.ondigitalocean.app/oauth-redirect.html'
+          redirect_uri: 'https://docavailable1-izk3m.ondigitalocean.app/oauth-redirect.html'
         })
       });
-      
+
       if (!exchangeResponse.ok) {
         throw new Error(`Code exchange failed: ${exchangeResponse.status}`);
       }
-      
+
       const exchangeData = await exchangeResponse.json();
       console.log('🔐 SmartGoogleAuth: Code exchange response:', exchangeData);
-      
+
       if (!exchangeData.success || !exchangeData.id_token) {
         throw new Error('Failed to exchange code for ID token');
       }
-      
+
       // Now use the ID token to authenticate with backend
-      const authResponse = await fetch('https://docavailable-3vbdv.ondigitalocean.app/api/auth/google-login', {
+      const authResponse = await fetch('https://docavailable1-izk3m.ondigitalocean.app/api/auth/google-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -222,20 +222,20 @@ export default function SmartGoogleAuth({
           user_type: 'patient'
         })
       });
-      
+
       if (!authResponse.ok) {
         throw new Error(`Authentication failed: ${authResponse.status}`);
       }
-      
+
       const authData = await authResponse.json();
       console.log('🔐 SmartGoogleAuth: Authentication response:', authData);
-      
+
       if (authData.success && authData.data) {
         // Check if additional information is needed
         if (authData.data.needs_additional_info) {
           // Redirect to question pages with Google user data and missing fields
           const { google_user, missing_fields, user_type } = authData.data;
-          
+
           // Navigate to the Google signup questions page
           const router = require('expo-router').router;
           router.replace({
@@ -255,7 +255,7 @@ export default function SmartGoogleAuth({
       } else {
         throw new Error('Authentication failed');
       }
-      
+
     } catch (error) {
       console.error('🔐 SmartGoogleAuth: Code exchange error:', error);
       onError('Failed to process Google authentication. Please try again.');
@@ -344,7 +344,7 @@ export default function SmartGoogleAuth({
             <Text style={styles.subtitle}>
               We'll open your browser to show your saved Google accounts for quick sign-in
             </Text>
-            
+
             {isLoading && (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#4285F4" />
@@ -405,14 +405,14 @@ export default function SmartGoogleAuth({
               userAgent="Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               onShouldStartLoadWithRequest={(request) => {
                 console.log('🔐 SmartGoogleAuth: Should start load with request:', request.url);
-                
+
                 // Allow Google domains
-                if (request.url.includes('accounts.google.com') || 
-                    request.url.includes('google.com') ||
-                    request.url.includes('oauth/callback')) {
+                if (request.url.includes('accounts.google.com') ||
+                  request.url.includes('google.com') ||
+                  request.url.includes('oauth/callback')) {
                   return true;
                 }
-                
+
                 // Block other domains for security
                 console.log('🔐 SmartGoogleAuth: Blocking non-Google domain:', request.url);
                 return false;
