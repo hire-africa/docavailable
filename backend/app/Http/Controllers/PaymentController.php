@@ -528,8 +528,11 @@ class PaymentController extends Controller
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
-        // Prefer explicit frontend URL if configured, otherwise fall back to app URL
-        $frontendUrl = rtrim(env('FRONTEND_URL', config('app.url')), '/');
+        // Frontend URL for browser redirect after payment (must be a valid absolute URL)
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable.com'), '/');
+        if (!preg_match('#^https?://#i', $frontendUrl)) {
+            $frontendUrl = 'https://docavailable.com';
+        }
         $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
         // Return a invisible, instant redirect page
@@ -558,7 +561,7 @@ class PaymentController extends Controller
                 // 2. Browser/tab fallback: redirect back to main app URL
                 // This handles flows where checkout was opened in a new tab or external browser.
                 setTimeout(function() {
-                    window.location.href = "' . $redirectUrl . '";
+                    window.location.href = ' . json_encode($redirectUrl) . ';
                 }, 1500);
             }
         }
