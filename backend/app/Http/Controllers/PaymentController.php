@@ -528,8 +528,9 @@ class PaymentController extends Controller
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
-        $appUrl = rtrim(config('app.url'), '/');
-        $redirectUrl = $appUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
+        // Prefer explicit frontend URL if configured, otherwise fall back to app URL
+        $frontendUrl = rtrim(env('FRONTEND_URL', config('app.url')), '/');
+        $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
         // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
