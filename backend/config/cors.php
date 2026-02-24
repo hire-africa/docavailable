@@ -23,7 +23,7 @@ return [
         env('FRONTEND_URL', 'http://localhost:3000'),
         'http://localhost:8081',
         'http://localhost:8000',
-        'https://docavailable-c8dsmk0fs-docavailable-2776s-projects.vercel.app',
+        'https://docavailable.com',
     ],
 
     'allowed_origins_patterns' => [
