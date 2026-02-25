@@ -238,24 +238,23 @@ class SessionCreationService
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
             $sessionsRemainingBeforeStart = $subscription ? $subscription->$callTypeField : 0;
 
-            // Check if there's already an active call session
-            $existingSession = CallSession::where('patient_id', $patientId)
-                ->where('doctor_id', $doctorId)
-                ->whereIn('status', [
-                    CallSession::STATUS_ACTIVE,
-                    CallSession::STATUS_CONNECTING,
-                    CallSession::STATUS_WAITING_FOR_DOCTOR,
-                    CallSession::STATUS_ANSWERED,
-                ])
-                ->first();
-
-            if ($existingSession) {
-                return [
-                    'success' => false,
-                    'session' => null,
-                    'message' => 'You already have an active call session with this doctor'
-                ];
-            }
+            // TEMPORARILY DISABLED: allow new call session even if one exists (e.g. stale sessions)
+            // $existingSession = CallSession::where('patient_id', $patientId)
+            //     ->where('doctor_id', $doctorId)
+            //     ->whereIn('status', [
+            //         CallSession::STATUS_ACTIVE,
+            //         CallSession::STATUS_CONNECTING,
+            //         CallSession::STATUS_WAITING_FOR_DOCTOR,
+            //         CallSession::STATUS_ANSWERED,
+            //     ])
+            //     ->first();
+            // if ($existingSession) {
+            //     return [
+            //         'success' => false,
+            //         'session' => null,
+            //         'message' => 'You already have an active call session with this doctor'
+            //     ];
+            // }
 
             // Create call session record
             $callSession = CallSession::create([
