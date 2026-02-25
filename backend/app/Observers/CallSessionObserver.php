@@ -6,6 +6,7 @@ use App\Models\CallSession;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 class CallSessionObserver
 {
@@ -78,6 +79,43 @@ class CallSessionObserver
             // Dispatch notification (FCM + database channels as configured)
             $notification = new \App\Notifications\IncomingCallNotification($callSession, $caller);
             $doctor->notify($notification);
+
+            // Best-effort: also notify web clients via WebSocket notification channel
+            try {
+                $baseUrl = rtrim(env('WEBRTC_NOTIFICATION_BROADCAST_URL', env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org')), '/');
+                $endpoint = $baseUrl . '/broadcast-incoming-call';
+
+                $callerName = trim(($caller->first_name ?? '') . ' ' . ($caller->last_name ?? ''));
+                if ($callerName === '') {
+                    $callerName = $caller->email ?? 'Patient';
+                }
+
+                $callerAvatar = $caller->profile_picture_url ?? $caller->profile_picture ?? '';
+
+                $payload = [
+                    'receiverUserId' => (string) $doctor->id,
+                    'appointmentId' => (string) $callSession->appointment_id,
+                    'callType' => $callSession->call_type === CallSession::CALL_TYPE_VIDEO ? 'video' : 'audio',
+                    'callerName' => $callerName,
+                    'callerProfilePicture' => $callerAvatar,
+                    'callerId' => (string) $caller->id,
+                ];
+
+                $response = Http::timeout(2)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->post($endpoint, $payload);
+
+                Log::info('CallSessionObserver: WebSocket incoming-call broadcast attempted', [
+                    'endpoint' => $endpoint,
+                    'status' => $response->status(),
+                    'receiver_user_id' => $doctor->id,
+                ]);
+            } catch (\Throwable $t) {
+                Log::warning('CallSessionObserver: Failed to broadcast incoming-call to WebSocket server (non-fatal)', [
+                    'call_session_id' => $callSession->id,
+                    'error' => $t->getMessage(),
+                ]);
+            }
         } catch (\Throwable $e) {
             Log::error('CallSessionObserver: Failed to auto-send IncomingCallNotification', [
                 'call_session_id' => $callSession->id ?? null,
