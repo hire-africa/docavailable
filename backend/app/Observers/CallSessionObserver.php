@@ -82,7 +82,8 @@ class CallSessionObserver
 
             // Best-effort: also notify web clients via WebSocket notification channel
             try {
-                $baseUrl = rtrim(env('WEBRTC_NOTIFICATION_BROADCAST_URL', env('WEBRTC_CHAT_SERVER_URL', 'https://docavailable.org')), '/');
+                // POST to the Node call server (e.g. call-server.js). Default: same host, port 8080.
+$baseUrl = rtrim(env('WEBRTC_NOTIFICATION_BROADCAST_URL', 'http://127.0.0.1:8080'), '/');
                 $endpoint = $baseUrl . '/broadcast-incoming-call';
 
                 $callerName = trim(($caller->first_name ?? '') . ' ' . ($caller->last_name ?? ''));
