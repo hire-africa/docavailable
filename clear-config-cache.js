@@ -1,4 +1,4 @@
-// Script to clear configuration cache and force reload
+
 const configService = require('./services/configService.ts').default;
 
 console.log('🔄 Clearing configuration cache...');
