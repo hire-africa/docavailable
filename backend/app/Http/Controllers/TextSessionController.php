@@ -795,7 +795,7 @@ class TextSessionController extends Controller
             $userType = $user->user_type;
 
             $query = TextSession::with(['patient', 'doctor'])
-                ->whereIn('status', ['ended', 'expired']);
+                ->where('status', 'ended');
 
             if ($userType === 'doctor') {
                 $query->where('doctor_id', $userId);
