@@ -774,6 +774,58 @@ class TextSessionController extends Controller
     }
 
     /**
+     * Get paginated history of ended/expired text sessions for the authenticated user.
+     * Used by both mobile and web so history stays in sync across devices.
+     */
+    public function history(Request $request): JsonResponse
+    {
+        try {
+            // Clear any cached query plans to handle schema changes
+            DB::statement('DISCARD PLANS');
+
+            $user = auth()->user();
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+
+            $userId = $user->id;
+            $userType = $user->user_type;
+
+            $query = TextSession::with(['patient', 'doctor'])
+                ->whereIn('status', ['ended', 'expired']);
+
+            if ($userType === 'doctor') {
+                $query->where('doctor_id', $userId);
+            } else {
+                $query->where('patient_id', $userId);
+            }
+
+            $perPage = (int) $request->input('per_page', 20);
+            if ($perPage <= 0 || $perPage > 100) {
+                $perPage = 20;
+            }
+
+            $sessions = $query
+                ->orderByDesc('ended_at')
+                ->orderByDesc('created_at')
+                ->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'data' => $sessions
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch text session history: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * End a text session.
      */
     public function endSession(Request $request, $sessionId): JsonResponse
