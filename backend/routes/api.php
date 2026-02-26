@@ -38,6 +38,14 @@ use Illuminate\Support\Facades\DB;
 
 // Debug routes removed for security
 
+// Health check - used by app for connectivity checks (no auth required)
+Route::get('/health', function () {
+    return response()->json([
+        'status' => 'ok',
+        'message' => 'API is running',
+        'timestamp' => now()->toIso8601String(),
+    ]);
+});
 
 // Authentication routes (rate limited)
 Route::prefix('auth')->middleware('throttle:5,1')->group(function () {
@@ -247,6 +255,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-sessions/pending-sessions', [TextSessionController::class, 'pendingSessions']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
     Route::get('/text-sessions/available-doctors', [TextSessionController::class, 'availableDoctors']);
+    Route::get('/text-sessions/history', [TextSessionController::class, 'history']);
     Route::post('/text-sessions/{textSessionId}/start-call', [TextSessionController::class, 'startCall'])->where('textSessionId', '[0-9]+');
     Route::get('/text-sessions/{manualSessionId}/check-response', [TextSessionController::class, 'checkResponse'])->where('manualSessionId', '[0-9]+');
     Route::post('/text-sessions/{manualSessionId}/end', [TextSessionController::class, 'endSession'])->where('manualSessionId', '[0-9]+');
