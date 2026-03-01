@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    Vibration,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Vibration,
+  View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -618,7 +618,7 @@ export default function VideoCallModal({
         },
       };
 
-      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
+      await VideoCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
       videoCallService.current = VideoCallService.getInstance();
 
       // Get local stream for display
@@ -672,7 +672,7 @@ export default function VideoCallModal({
       }
 
       console.log('✅ Video call processed - resetting processing state');
-      
+
       // Stop ringtone when call is answered
       try {
         const ringtoneService = (await import('../services/ringtoneService')).default;
@@ -681,7 +681,7 @@ export default function VideoCallModal({
       } catch (error) {
         console.error('❌ Failed to stop ringtone:', error);
       }
-      
+
       // Reset processing state after successful processing
       setIsProcessingAnswer(false);
 
@@ -816,6 +816,8 @@ export default function VideoCallModal({
         return 'Connected';
       case 'disconnected':
         return 'Call Ended';
+      case 'reconnecting':
+        return 'Reconnecting...';
       case 'failed':
         return 'Connection Failed';
       default:
@@ -833,6 +835,8 @@ export default function VideoCallModal({
         return '#9E9E9E';
       case 'failed':
         return '#F44336';
+      case 'reconnecting':
+        return '#FFC107'; // Amber for reconnecting
       default:
         return '#2196F3';
     }
@@ -848,6 +852,8 @@ export default function VideoCallModal({
         return '#9E9E9E'; // Gray for disconnected
       case 'failed':
         return '#F44336'; // Red for failed
+      case 'reconnecting':
+        return '#FFC107'; // Amber for reconnecting
       default:
         return '#2196F3'; // Blue for default
     }

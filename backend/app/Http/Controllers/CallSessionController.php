@@ -221,6 +221,41 @@ class CallSessionController extends Controller
                 }
             }
 
+            // ── FIX 1: Global patient-level active session guard ────────────────────────
+            // Prevents a user from opening multiple tabs/devices and creating parallel
+            // call sessions on different appointments, all being billed simultaneously.
+            $anyExistingCall = \App\Models\CallSession::where('patient_id', $user->id)
+                ->whereIn('status', [
+                    CallSession::STATUS_ACTIVE,
+                    CallSession::STATUS_CONNECTING,
+                    CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    CallSession::STATUS_ANSWERED,
+                ])
+                ->lockForUpdate()
+                ->first();
+
+            if ($anyExistingCall && $anyExistingCall->appointment_id !== (string) $appointmentId) {
+                // User already has an active call on a DIFFERENT session — block this one
+                Log::warning("Blocked parallel call session attempt", [
+                    'user_id' => $user->id,
+                    'existing_session_id' => $anyExistingCall->id,
+                    'existing_appointment_id' => $anyExistingCall->appointment_id,
+                    'attempted_appointment_id' => $appointmentId,
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You already have an active call session. Please end it before starting a new one.',
+                    'error_code' => 'PARALLEL_SESSION_BLOCKED',
+                    'existing_session' => [
+                        'session_id' => $anyExistingCall->id,
+                        'appointment_id' => $anyExistingCall->appointment_id,
+                        'status' => $anyExistingCall->status,
+                    ],
+                ], 409);
+            }
+            // ────────────────────────────────────────────────────────────────────────────
+
             // Check availability first
             $availabilityResponse = $this->checkAvailability($request);
             $availabilityData = $availabilityResponse->getData(true);
@@ -711,9 +746,14 @@ class CallSessionController extends Controller
                 $callSession->refresh();
 
                 // Manual hangup deduction (ONCE, idempotent)
-                // Deduct +1 session immediately if call was connected, regardless of duration
+                // FIX 3: Skip deduction if call was connected for < 60 seconds (dropped/accidental).
                 $manualDeductionApplied = false;
-                if ($callSession->connected_at && !$callSession->manual_deduction_applied) {
+                $connectedSeconds = $callSession->connected_at
+                    ? $callSession->connected_at->diffInSeconds($callSession->ended_at ?? now())
+                    : 0;
+                $minimumBillableSeconds = 60; // 60-second minimum before billing kicks in
+
+                if ($callSession->connected_at && !$callSession->manual_deduction_applied && $connectedSeconds >= $minimumBillableSeconds) {
                     $patient = $user;
                     $subscription = $patient->subscription()->lockForUpdate()->first();
 
@@ -783,9 +823,19 @@ class CallSessionController extends Controller
                                 'call_session_id' => $callSession->id,
                                 'appointment_id' => $appointmentId,
                                 'sessions_deducted' => 1,
+                                'connected_seconds' => $connectedSeconds,
                             ]);
                         }
                     }
+                } elseif ($callSession->connected_at && !$callSession->manual_deduction_applied && $connectedSeconds < $minimumBillableSeconds) {
+                    // FIX 3: Call was too short — mark deduction as "applied" (skipped) so it's idempotent
+                    $callSession->update(['manual_deduction_applied' => true]);
+                    Log::info("Manual hangup deduction SKIPPED — call too short (< {$minimumBillableSeconds}s)", [
+                        'call_session_id' => $callSession->id,
+                        'appointment_id' => $appointmentId,
+                        'connected_seconds' => $connectedSeconds,
+                        'minimum_required' => $minimumBillableSeconds,
+                    ]);
                 }
 
                 // Calculate duration from timestamps only
@@ -1577,6 +1627,115 @@ class CallSessionController extends Controller
                 'success' => false,
                 'message' => 'Failed to decline call'
             ], 500);
+        }
+    }
+
+    /**
+     * FIX 2 — Server-initiated session end.
+     * Called by the WebRTC signaling server (call-server-fixed.js) via X-Server-Secret
+     * when ALL WebSocket participants disconnect. Prevents ghost sessions from sitting
+     * in the DB with status = answered/active indefinitely after network drops.
+     *
+     * This endpoint is NOT authenticated with a user JWT — it's authenticated by a
+     * shared server secret. It must remain outside the auth:api middleware group.
+     */
+    public function serverEnd(Request $request): JsonResponse
+    {
+        // Validate shared server secret (set CALL_SERVER_SECRET in .env)
+        $secret = config('services.call_server.secret', env('CALL_SERVER_SECRET', ''));
+        $provided = $request->header('X-Server-Secret', '');
+
+        if (empty($secret) || !hash_equals($secret, $provided)) {
+            Log::warning('serverEnd: unauthorized request (bad X-Server-Secret)', [
+                'ip' => $request->ip(),
+                'appointment_id' => $request->input('appointment_id'),
+            ]);
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+        }
+
+        $appointmentId = $request->input('appointment_id');
+        $wasConnected = (bool) $request->input('was_connected', false);
+        $reason = $request->input('reason', 'all_participants_disconnected');
+
+        if (!$appointmentId) {
+            return response()->json(['success' => false, 'message' => 'appointment_id required'], 400);
+        }
+
+        try {
+            $updated = DB::transaction(function () use ($appointmentId, $wasConnected, $reason) {
+                // Only end sessions that are still "live" — never overwrite manually ended sessions
+                $callSession = CallSession::where('appointment_id', (string) $appointmentId)
+                    ->whereIn('status', [
+                        CallSession::STATUS_ACTIVE,
+                        CallSession::STATUS_CONNECTING,
+                        CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        CallSession::STATUS_ANSWERED,
+                    ])
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$callSession) {
+                    return null; // Already ended normally, nothing to do
+                }
+
+                $now = now();
+
+                // If never connected: mark as MISSED/CANCELLED (no billing)
+                if (!$wasConnected && !$callSession->connected_at) {
+                    $callSession->update([
+                        'status' => CallSession::STATUS_MISSED,
+                        'ended_at' => $now,
+                        'last_activity_at' => $now,
+                        'reason' => 'server_cleanup_' . $reason,
+                    ]);
+                    Log::info('[serverEnd] Marked unconnected call as MISSED', [
+                        'appointment_id' => $appointmentId,
+                        'session_id' => $callSession->id,
+                    ]);
+                    return $callSession;
+                }
+
+                // Was connected: end it and let the normal billing path handle deductions
+                // We DON'T apply billing here — we use the existing connected_at so that
+                // any auto-deductions already processed are preserved and the manual
+                // deduction is applied on the next /end call or audit cleanup.
+                $callSession->update([
+                    'status' => CallSession::STATUS_ENDED,
+                    'ended_at' => $now,
+                    'last_activity_at' => $now,
+                    'reason' => 'server_cleanup_' . $reason,
+                ]);
+
+                Log::info('[serverEnd] Marked connected call as ENDED (server cleanup)', [
+                    'appointment_id' => $appointmentId,
+                    'session_id' => $callSession->id,
+                    'connected_at' => $callSession->connected_at?->toISOString(),
+                ]);
+
+                return $callSession;
+            });
+
+            if ($updated) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Session ended by server cleanup',
+                    'session_id' => $updated->id,
+                    'status' => $updated->status,
+                    'was_connected' => $wasConnected,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Session already ended — no action taken',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('[serverEnd] Error during server-initiated session end', [
+                'appointment_id' => $appointmentId,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json(['success' => false, 'message' => 'Internal error'], 500);
         }
     }
 }

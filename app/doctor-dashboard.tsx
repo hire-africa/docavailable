@@ -1,7 +1,9 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
+import { endedSessionStorageService } from '@/services/endedSessionStorageService';
 import { NotificationService } from '@/services/notificationService';
+import { RealTimeEventService } from '@/services/realTimeEventService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -119,6 +121,8 @@ export default function DoctorDashboard() {
   const [loadingEndedSessions, setLoadingEndedSessions] = useState(false);
   const [showEndedSessionMenu, setShowEndedSessionMenu] = useState<string | null>(null);
   const [ratings, setRatings] = useState<any[]>([]);
+  const [rating, setRating] = useState(0);
+  const [totalRatings, setTotalRatings] = useState(0);
   const [walletInfo, setWalletInfo] = useState<any>(null);
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -455,11 +459,38 @@ export default function DoctorDashboard() {
     }, [user, activeTab])
   );
 
-  // Update refs whenever appointments change
   useEffect(() => {
     appointmentsRef.current = appointments;
     previousAppointmentsRef.current = appointments;
   }, [appointments]);
+
+  // Handle Real-Time Events
+  useEffect(() => {
+    const unsubscribe = RealTimeEventService.subscribe((event) => {
+      console.log('📡 [DoctorDashboard] Received real-time event:', event);
+
+      // Trigger data refreshes based on event type
+      if (event.type === 'appointment' || event.type === 'session' || event.type === 'system') {
+        console.log(`🔄 [DoctorDashboard] Triggering refreshes for ${event.type} event`);
+        refreshHomeTab();
+        refreshAppointmentsTab();
+
+        if (event.type === 'session') {
+          fetchConfirmedAppointments();
+          fetchActiveTextSessions();
+          loadEndedSessions();
+        }
+      } else if ((event.type as string) === 'wallet' || event.type === 'payment') {
+        console.log(`🔄 [DoctorDashboard] Triggering wallet refresh for ${event.type} event`);
+        fetchWalletInfo();
+      } else if (event.type === 'message') {
+        fetchConfirmedAppointments();
+        fetchActiveTextSessions();
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Real-time polling for appointments that are at or past their appointment time
   // This detects when a session is created and updates the chat list immediately
@@ -512,56 +543,9 @@ export default function DoctorDashboard() {
       return;
     }
 
-    console.log('🔄 [DoctorDashboard] Starting real-time polling for appointment sessions...');
-
-    const pollInterval = setInterval(async () => {
-      try {
-        // Re-check if we should still be polling using ref
-        if (!shouldPoll()) {
-          console.log('🛑 [DoctorDashboard] No more appointments near time, stopping polling');
-          clearInterval(pollInterval);
-          return;
-        }
-
-        const response = await apiService.get('/appointments');
-        if (response.success && response.data) {
-          const responseData = response.data as any;
-          const appointmentsData = (responseData.data || responseData) as any[];
-
-          // Check if any appointment gained a session_id
-          const previousAppointments = previousAppointmentsRef.current;
-          const hasNewSession = appointmentsData.some((newAppt: any) => {
-            const oldAppt = previousAppointments.find((a: any) => a.id === newAppt.id);
-            const oldHasSession = oldAppt?.session_id || oldAppt?.sessionId;
-            const newHasSession = newAppt.session_id || newAppt.sessionId;
-
-            // If appointment didn't have a session before but now does, refresh
-            return !oldHasSession && newHasSession;
-          });
-
-          if (hasNewSession) {
-            console.log('✅ [DoctorDashboard] Session created for appointment, refreshing chat list...');
-            setAppointments(appointmentsData);
-            appointmentsRef.current = appointmentsData;
-            previousAppointmentsRef.current = appointmentsData;
-            // Refresh confirmed appointments as well
-            fetchBookingRequests();
-          } else {
-            // Update appointments even if no new session (to keep data fresh)
-            setAppointments(appointmentsData);
-            appointmentsRef.current = appointmentsData;
-            previousAppointmentsRef.current = appointmentsData;
-          }
-        }
-      } catch (error) {
-        console.error('Error polling appointments for session updates:', error);
-      }
-    }, 8000); // Poll every 8 seconds (within 5-10s range as per documentation)
-
-    return () => {
-      console.log('🛑 [DoctorDashboard] Stopping real-time polling for appointment sessions');
-      clearInterval(pollInterval);
-    };
+    // Real-time polling replaced by global WebSocket events
+    console.log('📡 [DoctorDashboard] High-frequency polling disabled, relying on real-time events');
+    return;
   }, [user]);
 
   // Sidebar functions
@@ -1157,10 +1141,8 @@ export default function DoctorDashboard() {
       }
     } else if (appointmentType === 'audio' || appointmentType === 'voice' || appointmentType === 'video') {
       // Call appointments (audio/video): Navigate to chat if:
-      // 1. call_unlocked_at is set (appointment activated by cron)
-      // 2. OR appointment time has passed
       // 3. OR it has a linked session
-      const callUnlocked = !!(patient.call_unlocked_at || (patient as any).call_unlocked_at);
+      const callUnlocked = !!((patient as any).call_unlocked_at);
       const isUpcoming = isAppointmentUpcoming(patient);
       if (callUnlocked || !isUpcoming || hasLinkedSession) {
         router.push({ pathname: '/chat/[appointmentId]', params: { appointmentId: patient.id } });
@@ -2266,235 +2248,288 @@ export default function DoctorDashboard() {
             );
           }
 
-          return allItems.map((item, index) => {
-            const isLastItem = index === allItems.length - 1;
+          // Group items by date
+          const groupItemsByDate = (items: any[]) => {
+            const groups: { [key: string]: any[] } = {
+              'Today': [],
+              'Yesterday': [],
+              'This Week': [],
+              'Older': []
+            };
 
-            if (item.type === 'ended') {
-              // Render ended session as card
-              return (
-                <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: colors.background,
-                      borderRadius: 12,
-                      marginHorizontal: 20,
-                      marginBottom: 12,
-                      padding: 16,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.1,
-                      shadowRadius: 4,
-                      elevation: 3
-                    }}
-                    onPress={() => {
-                      router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.patient_profile_picture_url || item.patient_profile_picture}
-                        name={item.patient_name}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                          {item.patient_name || 'Patient'}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                          {item.reason || 'General Checkup'}
-                        </Text>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                          Session ended • {formatDuration(item.session_duration || 0)}
-                        </Text>
-                      </View>
-                      <View style={{ alignItems: 'flex-end' }}>
-                        <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
-                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
-                        </Text>
-                        <TouchableOpacity
-                          style={{
-                            padding: 4,
-                          }}
-                          onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
-                        >
-                          <Icon name="more" size={16} color="#999" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-                  {/* Menu dropdown */}
-                  {showEndedSessionMenu === item.appointmentId && (
-                    <View style={{
-                      position: 'absolute',
-                      right: 20,
-                      top: 60,
-                      backgroundColor: colors.card,
-                      borderRadius: 8,
-                      paddingVertical: 4,
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 4,
-                      elevation: 5,
-                      zIndex: 2,
-                      minWidth: 120,
-                    }}>
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+
+            const lastWeek = new Date(today);
+            lastWeek.setDate(lastWeek.getDate() - 7);
+
+            items.forEach(item => {
+              const itemDate = new Date(item.sortDate);
+              itemDate.setHours(0, 0, 0, 0);
+
+              if (itemDate.getTime() === today.getTime()) {
+                groups['Today'].push(item);
+              } else if (itemDate.getTime() === yesterday.getTime()) {
+                groups['Yesterday'].push(item);
+              } else if (itemDate.getTime() >= lastWeek.getTime()) {
+                groups['This Week'].push(item);
+              } else {
+                groups['Older'].push(item);
+              }
+            });
+
+            return groups;
+          };
+
+          const groupedItems = groupItemsByDate(allItems);
+          const sections = Object.entries(groupedItems).filter(([_, items]) => items.length > 0);
+
+          return sections.map(([title, items], sectionIndex) => (
+            <View key={`section_${title}`}>
+              <View style={{
+                paddingHorizontal: 20,
+                paddingVertical: 10,
+                backgroundColor: colors.background,
+                marginBottom: 8,
+                marginTop: sectionIndex === 0 ? 0 : 8
+              }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {title}
+                </Text>
+              </View>
+              {items.map((item) => {
+                if (item.type === 'ended') {
+                  // Render ended session as card
+                  return (
+                    <View key={`ended_${item.appointmentId}`} style={{ position: 'relative' }}>
                       <TouchableOpacity
                         style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
+                          backgroundColor: colors.background,
+                          borderRadius: 12,
+                          marginHorizontal: 20,
+                          marginBottom: 12,
+                          padding: 16,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 4,
+                          elevation: 3
                         }}
-                        onPress={() => handleExportEndedSession(item.appointmentId)}
-                      >
-                        <Icon name="export" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: colors.text }}>Export</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
+                        onPress={() => {
+                          router.push({ pathname: '/ended-session/[appointmentId]', params: { appointmentId: item.appointmentId.toString() } });
                         }}
-                        onPress={() => handleDeleteEndedSession(item.appointmentId)}
                       >
-                        <Icon name="delete" size={20} color="#666" />
-                        <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              );
-            } else if (item.type === 'active_text') {
-              // Render active text session as card
-              return (
-                <TouchableOpacity
-                  key={`active_text_${item.id}`}
-                  style={{
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3,
-                    borderWidth: item.isActive ? 2 : 0,
-                    borderColor: item.isActive ? '#4CAF50' : 'transparent'
-                  }}
-                  onPress={() => handleSelectTextSession(item)}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{ position: 'relative' }}>
-                      <DoctorProfilePicture
-                        size={48}
-                        style={{ marginRight: 16 }}
-                        profilePictureUrl={item.patient?.profile_picture_url || item.patient?.profile_picture}
-                        name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
-                      />
-                      {/* Active indicator */}
-                      {item.isActive && (
-                        <View style={{
-                          position: 'absolute',
-                          bottom: 2,
-                          right: 2,
-                          width: 12,
-                          height: 12,
-                          borderRadius: 6,
-                          backgroundColor: '#4CAF50',
-                          borderWidth: 2,
-                          borderColor: '#FFFFFF'
-                        }} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                        {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        Text Session
-                      </Text>
-                      <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                        {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
-                      </Text>
-                    </View>
-                    <Text style={{ fontSize: 12, color: '#999' }}>
-                      Now
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            } else {
-              // Render confirmed appointment as card
-              return (
-                <TouchableOpacity
-                  key={`confirmed_${item.id || item.patientId || 'unknown'}`}
-                  style={{
-                    backgroundColor: colors.background,
-                    borderRadius: 12,
-                    marginHorizontal: 20,
-                    marginBottom: 12,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 4,
-                    elevation: 3
-                  }}
-                  onPress={() => handleSelectPatient(item)}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <DoctorProfilePicture
-                      size={48}
-                      style={{ marginRight: 16 }}
-                      profilePictureUrl={item.patientProfilePictureUrl || item.patientProfilePicture || item.patient_profile_picture_url || item.patient_profile_picture}
-                      name={item.patient_name || item.patientName || 'Patient'}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
-                        {item.patient_name || 'Unknown Patient'}
-                      </Text>
-                      <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
-                        {item.reason || 'Chat'}
-                      </Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
-                          {item.appointment_type === 'text' ? 'Text Chat' :
-                            item.appointment_type === 'voice' ? 'Voice Call' :
-                              item.appointment_type === 'video' ? 'Video Call' : 'Chat'}
-                        </Text>
-                        {isAppointmentUpcoming(item) && (
-                          <View style={{
-                            backgroundColor: '#FFF3E0',
-                            borderRadius: 8,
-                            paddingHorizontal: 8,
-                            paddingVertical: 2,
-                            marginLeft: 8,
-                            borderWidth: 1,
-                            borderColor: '#FFB74D',
-                          }}>
-                            <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
-                              UPCOMING
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.patient_profile_picture_url || item.patient_profile_picture}
+                            name={item.patient_name}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                              {item.patient_name || 'Patient'}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                              {item.reason || 'General Checkup'}
+                            </Text>
+                            <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                              Session ended • {formatDuration(item.session_duration || 0)}
                             </Text>
                           </View>
-                        )}
-                      </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
+                              {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Unknown date'}
+                            </Text>
+                            <TouchableOpacity
+                              style={{
+                                padding: 4,
+                              }}
+                              onPress={() => setShowEndedSessionMenu(showEndedSessionMenu === item.appointmentId ? null : item.appointmentId)}
+                            >
+                              <Icon name="more" size={16} color="#999" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Menu dropdown */}
+                      {showEndedSessionMenu === item.appointmentId && (
+                        <View style={{
+                          position: 'absolute',
+                          right: 20,
+                          top: 60,
+                          backgroundColor: colors.card,
+                          borderRadius: 8,
+                          paddingVertical: 4,
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.25,
+                          shadowRadius: 4,
+                          elevation: 5,
+                          zIndex: 2,
+                          minWidth: 120,
+                        }}>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleExportEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="export" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: colors.text }}>Export</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingHorizontal: 16,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => handleDeleteEndedSession(item.appointmentId)}
+                          >
+                            <Icon name="delete" size={20} color="#666" />
+                            <Text style={{ fontSize: 14, color: '#FF3B30' }}>Delete</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                    <Text style={{ fontSize: 12, color: '#999' }}>
-                      {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            }
-          });
+                  );
+                } else if (item.type === 'active_text') {
+                  // Render active text session as card
+                  return (
+                    <TouchableOpacity
+                      key={`active_text_${item.id}`}
+                      style={{
+                        backgroundColor: colors.background,
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3,
+                        borderWidth: item.isActive ? 2 : 0,
+                        borderColor: item.isActive ? '#4CAF50' : 'transparent'
+                      }}
+                      onPress={() => handleSelectTextSession(item)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <View style={{ position: 'relative' }}>
+                          <DoctorProfilePicture
+                            size={48}
+                            style={{ marginRight: 16 }}
+                            profilePictureUrl={item.patient?.profile_picture_url || item.patient?.profile_picture}
+                            name={item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Patient'}
+                          />
+                          {/* Active indicator */}
+                          {item.isActive && (
+                            <View style={{
+                              position: 'absolute',
+                              bottom: 2,
+                              right: 2,
+                              width: 12,
+                              height: 12,
+                              borderRadius: 6,
+                              backgroundColor: '#4CAF50',
+                              borderWidth: 2,
+                              borderColor: '#FFFFFF'
+                            }} />
+                          )}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                            {item.patient_name || `${item.patient?.first_name || ''} ${item.patient?.last_name || ''}`.trim() || 'Unknown Patient'}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            Text Session
+                          </Text>
+                          <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                            {item.status === 'waiting_for_doctor' ? 'Waiting for response' : 'Active'}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#999' }}>
+                          Now
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                } else {
+                  // Render confirmed appointment as card
+                  return (
+                    <TouchableOpacity
+                      key={`confirmed_${item.id || item.patientId || 'unknown'}`}
+                      style={{
+                        backgroundColor: colors.background,
+                        borderRadius: 12,
+                        marginHorizontal: 20,
+                        marginBottom: 12,
+                        padding: 16,
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.1,
+                        shadowRadius: 4,
+                        elevation: 3
+                      }}
+                      onPress={() => handleSelectPatient(item)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <DoctorProfilePicture
+                          size={48}
+                          style={{ marginRight: 16 }}
+                          profilePictureUrl={item.patientProfilePictureUrl || item.patientProfilePicture || item.patient_profile_picture_url || item.patient_profile_picture}
+                          name={item.patient_name || item.patientName || 'Patient'}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text, marginBottom: 4 }} numberOfLines={1}>
+                            {item.patient_name || 'Unknown Patient'}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: '#4CAF50', marginBottom: 2 }} numberOfLines={1}>
+                            {item.reason || 'Chat'}
+                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 14, color: colors.textSecondary }} numberOfLines={1}>
+                              {item.appointment_type === 'text' ? 'Text Chat' :
+                                item.appointment_type === 'voice' ? 'Voice Call' :
+                                  item.appointment_type === 'video' ? 'Video Call' : 'Chat'}
+                            </Text>
+                            {isAppointmentUpcoming(item) && (
+                              <View style={{
+                                backgroundColor: '#FFF3E0',
+                                borderRadius: 8,
+                                paddingHorizontal: 8,
+                                paddingVertical: 2,
+                                marginLeft: 8,
+                                borderWidth: 1,
+                                borderColor: '#FFB74D',
+                              }}>
+                                <Text style={{ fontSize: 10, color: '#FF9800', fontWeight: '600' }}>
+                                  UPCOMING
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 12, color: '#999' }}>
+                          {item.appointment_date ? new Date(item.appointment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'Today'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+                return null;
+              })}
+            </View>
+          ));
         })()}
       </ScrollView>
     </View>

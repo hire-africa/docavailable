@@ -1,5 +1,6 @@
 import { apiService } from '../app/services/apiService';
 import configService from './configService';
+import { SecureWebSocketService } from './secureWebSocketService';
 
 export interface SessionStatus {
   sessionId: string;
@@ -31,14 +32,14 @@ export interface WebRTCSessionEvents {
 }
 
 class WebRTCSessionService {
-  private signalingChannel: WebSocket | null = null;
+  private signalingChannel: SecureWebSocketService | null = null;
   private events: WebRTCSessionEvents | null = null;
   private appointmentId: string | null = null;
   private isConnected = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 3; // Reduced from 5 to prevent excessive reconnection attempts
-  private reconnectDelay = 2000; // Increased base delay from 1000ms to 2000ms
-  private connectionTimeout = 30000; // 30 seconds connection timeout
+  private maxReconnectAttempts = 3;
+  private reconnectDelay = 2000;
+  private connectionTimeout = 20000; // 20 seconds
   private reconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private onTypingIndicator?: (isTyping: boolean, senderId?: number) => void;
 
@@ -68,8 +69,16 @@ class WebRTCSessionService {
         const isChatSession = this.appointmentId?.startsWith('text_session_');
         const signalingUrl = isChatSession ? config.chatSignalingUrl : config.signalingUrl;
 
-        // Use query parameters with both appointmentId and userId as required by server
+        // Use query parameters with both appointmentId
         const wsUrl = `${signalingUrl}?appointmentId=${encodeURIComponent(this.appointmentId!)}&userId=${encodeURIComponent(String(userId))}&userType=doctor`;
+
+        // Final validation before connection
+        if (!this.appointmentId || !userId) {
+          console.warn('⚠️ [WebRTCSessionService] Aborting connection: Missing appointmentId or userId');
+          this.events?.onError('Invalid session credentials');
+          reject(new Error('Missing credentials'));
+          return;
+        }
 
         console.log('🔧 [WebRTC] Configuration check:', {
           signalingUrl,
@@ -80,92 +89,58 @@ class WebRTCSessionService {
         });
 
         console.log('🔌 [WebRTC] Attempting to connect to:', wsUrl);
-        this.signalingChannel = new WebSocket(wsUrl);
 
-        // Set connection timeout
-        const connectionTimeout = setTimeout(() => {
-          if (!this.isConnected) {
-            console.error('❌ [WebRTC] Connection timeout after', this.connectionTimeout, 'ms');
-            this.signalingChannel?.close();
-            reject(new Error('WebSocket connection timeout'));
-          }
-        }, this.connectionTimeout);
-
-        this.signalingChannel.onopen = () => {
-          console.log('✅ [WebRTC] Connected to session signaling server successfully');
-          clearTimeout(connectionTimeout);
-          this.isConnected = true;
-          this.reconnectAttempts = 0;
-          resolve();
-        };
-
-        this.signalingChannel.onmessage = async (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            console.log('📨 [WebRTCSession] Message received:', message.type);
-
-            // Handle typing indicators
-            if (message.type === 'typing-indicator') {
-              console.log('⌨️ [WebRTCSession] Typing indicator received:', message.isTyping, 'from sender:', message.senderId);
-              this.onTypingIndicator?.(message.isTyping, message.senderId);
-            } else {
-              await this.handleSignalingMessage(message);
-            }
-          } catch (error) {
-            console.error('❌ Error handling signaling message:', error);
-          }
-        };
-
-        this.signalingChannel.onerror = (error) => {
-          console.error('❌ Session signaling WebSocket error:', error);
-
-          // Clear connection timeout on error
-          clearTimeout(connectionTimeout);
-
-          // Handle SSL/TLS connection errors with retry logic
-          const errorMessage = (error as any).message;
-          if (errorMessage && (
-            errorMessage.includes('Connection reset by peer') ||
-            errorMessage.includes('ssl') ||
-            errorMessage.includes('TLS') ||
-            errorMessage.includes('SSL') ||
-            errorMessage.includes('Connection closed by peer')
-          )) {
-            console.warn('🔄 [WebRTC Session] SSL/TLS connection error detected, will retry...');
-            this.events?.onError('Connection error, retrying...');
-
-            // Don't reject immediately for SSL errors, let reconnection handle it
-            setTimeout(() => {
-              if (this.reconnectAttempts < this.maxReconnectAttempts) {
-                this.attemptReconnect();
+        this.signalingChannel = new SecureWebSocketService({
+          url: wsUrl,
+          connectionTimeout: this.connectionTimeout,
+          onOpen: () => {
+            console.log('✅ [WebRTC] Connected to session signaling server successfully');
+            this.isConnected = true;
+            this.reconnectAttempts = 0;
+            resolve();
+          },
+          onMessage: async (message) => {
+            try {
+              if (message.type === 'typing-indicator') {
+                console.log('⌨️ [WebRTCSession] Typing indicator received:', message.isTyping, 'from sender:', message.senderId);
+                this.onTypingIndicator?.(message.isTyping, message.senderId);
               } else {
-                reject(new Error('SSL connection failed after multiple attempts'));
+                await this.handleSignalingMessage(message);
               }
-            }, 3000);
-            return;
+            } catch (error) {
+              console.error('❌ Error handling signaling message:', error);
+            }
+          },
+          onError: (error) => {
+            console.error('❌ Session signaling error:', error);
+
+            // Check for isTrusted: false or other handshake issues
+            if (error.isTrusted === false) {
+              console.error('⚠️ [WebRTC] Handshake failed (isTrusted: false). This is usually an SSL chain issue.');
+            }
+
+            if (!this.isConnected) {
+              this.events?.onError('Connection error');
+              reject(error);
+            } else {
+              console.log('⚠️ [WebRTC Session] Connection error but already connected, continuing...');
+            }
+          },
+          onClose: () => {
+            console.log('🔌 Session signaling connection closed');
+            this.isConnected = false;
+
+            // If we were in the middle of ending a session, check if it actually ended
+            if ((window as any).endSessionTimeoutId) {
+              console.log('🔍 [WebRTC Session] Connection closed during session end - checking if session actually ended');
+              this.checkSessionEndStatus();
+            }
+
+            this.attemptReconnect();
           }
+        });
 
-          // Don't reject on error if we're already connected - just log it
-          if (!this.isConnected) {
-            this.events?.onError('Connection error');
-            reject(error);
-          } else {
-            console.log('⚠️ [WebRTC Session] Connection error but already connected, continuing...');
-          }
-        };
-
-        this.signalingChannel.onclose = () => {
-          console.log('🔌 Session signaling connection closed');
-          this.isConnected = false;
-
-          // If we were in the middle of ending a session, check if it actually ended
-          if ((window as any).endSessionTimeoutId) {
-            console.log('🔍 [WebRTC Session] Connection closed during session end - checking if session actually ended');
-            this.checkSessionEndStatus();
-          }
-
-          this.attemptReconnect();
-        };
+        await this.signalingChannel.connect();
 
       } catch (error) {
         console.error('❌ Failed to create session signaling connection:', error);
@@ -268,9 +243,8 @@ class WebRTCSessionService {
       throw new Error('WebRTC session service not connected');
     }
 
-    // Check if the connection is still open
-    if (this.signalingChannel.readyState !== WebSocket.OPEN) {
-      console.log('❌ [WebRTC Session] Cannot end session - connection not open, state:', this.signalingChannel.readyState);
+    if (this.signalingChannel?.readyState !== 1) { // 1 is OPEN for both raw WebSocket and our wrapper
+      console.log('❌ [WebRTC Session] Cannot end session - connection not open, state:', this.signalingChannel?.readyState);
       throw new Error('WebRTC connection not open');
     }
 
@@ -319,9 +293,9 @@ class WebRTCSessionService {
       // Import apiService dynamically to avoid circular imports
       const { apiService } = await import('../app/services/apiService');
 
-      const response = await apiService.get(`/text-sessions/${sessionId}/status`);
+      const response: any = await apiService.get(`/text-sessions/${sessionId}/status`);
 
-      if (response.data?.success && response.data?.data?.status === 'ended') {
+      if (response?.success && response?.data?.status === 'ended') {
         console.log('✅ [WebRTC Session] Session was ended - triggering UI update');
         this.events?.onSessionEndSuccess?.(sessionId, 'manual_end', 'instant');
       } else {
@@ -359,8 +333,8 @@ class WebRTCSessionService {
   }
 
   private sendSignalingMessage(message: any): void {
-    if (this.signalingChannel?.readyState === WebSocket.OPEN) {
-      this.signalingChannel.send(JSON.stringify(message));
+    if (this.signalingChannel?.readyState === 1) { // 1 is OPEN
+      this.signalingChannel.send(message);
     } else {
       console.warn('⚠️ Session signaling channel not open, cannot send message');
     }
@@ -374,7 +348,7 @@ class WebRTCSessionService {
     }
 
     // Don't reconnect if already connected
-    if (this.isConnected && this.signalingChannel && this.signalingChannel.readyState === WebSocket.OPEN) {
+    if (this.isConnected && this.signalingChannel && this.signalingChannel.readyState === 1) {
       console.log('✅ [WebRTC Session] Already connected, skipping reconnection');
       return;
     }
@@ -420,7 +394,7 @@ class WebRTCSessionService {
   }
 
   isSessionConnected(): boolean {
-    return this.isConnected && this.signalingChannel?.readyState === WebSocket.OPEN;
+    return this.isConnected && this.signalingChannel?.readyState === 1;
   }
 
   // Helper method to determine session type from appointment ID

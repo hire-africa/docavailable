@@ -71,6 +71,8 @@ export class InstantSessionMessageDetector {
   private awaitingServerStatus: boolean = false;
   // Bootstrap loop to fetch remaining time after patient message if server event is missing
   private timerBootstrapActive: boolean = false;
+  // Passive mode: don't connect our own WebSocket, just listen to external updates
+  private isPassive: boolean = false;
 
   constructor(config: InstantSessionConfig, events: MessageDetectionEvents) {
     this.config = config;
@@ -83,10 +85,26 @@ export class InstantSessionMessageDetector {
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        if (this.isPassive) {
+          console.log('🔌 [InstantSessionDetector] Passive mode: skipping WebSocket connection');
+          this.isConnected = true; // Mark as connected so logic proceeds
+          this.loadSessionState();
+          resolve();
+          return;
+        }
+
         const base = this.getWebRTCSignalingUrl();
         const wsUrl = `${base}?appointmentId=${encodeURIComponent(this.config.appointmentId)}&authToken=${encodeURIComponent(this.config.authToken || '')}&userId=${encodeURIComponent(String(this.config.patientId))}`;
+
+        // Final validation before connection
+        if (!this.config.authToken || !this.config.patientId) {
+          console.warn('⚠️ [InstantSessionDetector] Aborting connection: Missing authToken or patientId');
+          this.events.onError('Invalid session credentials');
+          reject(new Error('Missing credentials'));
+          return;
+        }
+
         console.log('🔌 [InstantSessionDetector] Connecting to WebRTC for message detection:', wsUrl);
-        console.log('🔌 [InstantSessionDetector] Auth token:', this.config.authToken ? 'Present' : 'Missing');
 
         this.websocket = new WebSocket(wsUrl);
 
@@ -125,89 +143,105 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Handle incoming WebSocket messages
+   * Set passive mode (don't connect own WebSocket, use external updates)
    */
+  public setPassiveMode(passive: boolean): void {
+    console.log(`🔌 [InstantSessionDetector] Passive mode set to: ${passive}`);
+    this.isPassive = passive;
+  }
+
+  /**
+   * Handle messages from an external source (e.g. shared WebRTCChatService)
+   */
+  public handleExternalMessage(data: any): void {
+    if (!this.isPassive) {
+      console.warn('⚠️ [InstantSessionDetector] Received external message but not in passive mode');
+    }
+    this.processDetectedData(data);
+  }
+
+  /**
+   * Process raw data into internal handlers
+   */
+  private processDetectedData(data: any): void {
+    // Check if it's a ping or other system message
+    if (data.type === 'ping' || data.type === 'pong' || data.type === 'connection-established') {
+      if (data.type === 'connection-established') {
+        this.handleConnectionEstablished();
+      }
+      return;
+    }
+
+    // Only log non-ping/pong messages
+    console.log('📨 [InstantSessionDetector] Processing data:', data.type);
+
+    switch (data.type) {
+      case 'chat-message':
+        this.handleChatMessage(data);
+        break;
+      case 'doctor-response-timer-started':
+        this.handleTimerStarted(data);
+        break;
+      case 'doctor-response-timer-stopped':
+        console.log('⏹️ [InstantSessionDetector] Server timer stopped');
+        this.serverTimerActive = false;
+        this.stopTimer();
+        break;
+      case 'session-activated':
+        this.handleSessionActivated(data);
+        break;
+      case 'session-expired':
+        this.handleSessionExpired(data);
+        break;
+      case 'session-status-response':
+        this.handleSessionStatusResponse(data);
+        break;
+      default:
+        console.log('📨 [InstantSessionDetector] Unhandled type in processDetectedData:', data.type);
+    }
+  }
+
   private handleWebSocketMessage(event: MessageEvent): void {
     try {
-      // Check if the data is valid JSON
       if (typeof event.data !== 'string') {
         console.error('❌ [InstantSessionDetector] Received non-string data:', event.data);
         return;
       }
 
-      // Check if it looks like HTML or plain text instead of JSON
-      if (event.data.trim().startsWith('<') || event.data.trim().startsWith('DocAvailable')) {
-        console.error('❌ [InstantSessionDetector] Received non-JSON response:', event.data.substring(0, 100));
-        return;
-      }
-
       const data = JSON.parse(event.data);
-
-      // Only log non-ping/pong messages to reduce spam
-      if (data.type !== 'ping' && data.type !== 'pong') {
-        console.log('📨 [InstantSessionDetector] Message received:', data.type);
-        console.log('📨 [InstantSessionDetector] Full message data:', data);
-      }
-
-      switch (data.type) {
-        case 'chat-message':
-          this.handleChatMessage(data);
-          break;
-
-        case 'doctor-response-timer-started':
-          this.handleTimerStarted(data);
-          break;
-        case 'doctor-response-timer-stopped':
-          console.log('⏹️ [InstantSessionDetector] Server timer stopped');
-          this.serverTimerActive = false;
-          this.stopTimer();
-          break;
-
-        case 'session-activated':
-          this.handleSessionActivated(data);
-          break;
-
-        case 'session-expired':
-          this.handleSessionExpired(data);
-          break;
-
-        case 'connection-established':
-          this.handleConnectionEstablished();
-          break;
-
-        case 'session-status-response':
-          this.handleSessionStatusResponse(data);
-          break;
-
-        case 'session-status-request':
-          // Ignore our own session status requests
-          console.log('📨 [InstantSessionDetector] Ignoring own session status request');
-          break;
-
-        case 'session-end-request':
-        case 'session-end-success':
-        case 'session-end-error':
-        case 'session-ended':
-          // Ignore session end messages - these should be handled by WebRTC session service
-          console.log('📨 [InstantSessionDetector] Ignoring session end message:', data.type);
-          break;
-
-        case 'test-message':
-          console.log('🧪 [InstantSessionDetector] Test message received!');
-          break;
-
-        case 'ping':
-        case 'pong':
-          // Silently handle ping/pong messages - no logging needed
-          break;
-
-        default:
-          console.log('📨 [InstantSessionDetector] Unhandled message type:', data.type);
-          console.log('📨 [InstantSessionDetector] Full message data:', data);
-      }
+      this.processDetectedData(data);
     } catch (error) {
       console.error('❌ [InstantSessionDetector] Error parsing message:', error);
     }
+  }
+
+  /**
+   * Fully destroy this detector: stop timers/intervals and close connections
+   */
+  public async destroy(): Promise<void> {
+    console.log('🧹 [InstantSessionDetector] Destroying detector for session:', this.config.sessionId);
+    try {
+      this.stopTimer();
+    } catch { }
+
+    if (this.websocket) {
+      try {
+        this.websocket.close(1000, 'Detector destroyed');
+      } catch (e) {
+        console.warn('⚠️ [InstantSessionDetector] Error closing websocket during destroy:', e);
+      }
+      this.websocket = null;
+    }
+
+    // Reset flags
+    this.isConnected = false;
+    this.serverTimerActive = false;
+    this.awaitingServerStatus = false;
+    this.timerBootstrapActive = false;
+    // Reset timer state
+    this.timerState.isActive = false;
+    this.timerState.timeRemaining = 0;
+    this.timerState.doctor_response_deadline = null;
   }
 
   /**
@@ -692,7 +726,13 @@ export class InstantSessionMessageDetector {
     try {
       // Enter awaiting status mode to avoid starting a fresh 90s from historical messages
       this.awaitingServerStatus = true;
-      this.websocket?.send(JSON.stringify({ type: 'session-status-request' }));
+      setTimeout(() => {
+        try {
+          this.websocket?.send(JSON.stringify({ type: 'session-status-request' }));
+        } catch (error) {
+          console.error('❌ [InstantSessionDetector] Error sending session-status-request:', error);
+        }
+      }, 50);
     } catch { }
     // Failsafe: clear awaiting flag after 6s even if server doesn't respond
     setTimeout(() => {
@@ -846,29 +886,8 @@ export class InstantSessionMessageDetector {
   }
 
   /**
-   * Fully destroy this detector: stop timers/intervals and close connections
+   * Get current timer state
    */
-  public async destroy(): Promise<void> {
-    try {
-      // Stop any active timers/intervals
-      this.stopTimer();
-    } catch { }
-    try {
-      // Close websocket connection
-      if (this.websocket) {
-        this.websocket.close(1000, 'Destroyed');
-        this.websocket = null;
-      }
-    } catch { }
-    // Reset flags
-    this.isConnected = false;
-    this.serverTimerActive = false;
-    this.awaitingServerStatus = false;
-    this.timerBootstrapActive = false;
-    // Reset timer state
-    this.timerState.isActive = false;
-    this.timerState.timeRemaining = 0;
-  }
 
   /**
    * Get current timer state
@@ -1067,6 +1086,11 @@ export class InstantSessionMessageDetector {
       console.log('🔍 [InstantSessionDetector] Appointment ID:', this.config.appointmentId);
 
       // Request session status from the server
+      if (this.isPassive) {
+        console.log('📡 [InstantSessionDetector] Passive mode: skipping session-status-request (assume external service handles sync)');
+        return;
+      }
+
       if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
         const requestData = {
           type: 'session-status-request',

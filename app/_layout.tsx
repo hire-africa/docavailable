@@ -9,12 +9,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CustomAlertProvider from '../components/CustomAlertProvider';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
+import authService from '../services/authService';
 import callDeduplicationService from '../services/callDeduplicationService';
 import pushNotificationService from '../services/pushNotificationService';
 import { SessionNotificationHandler } from '../services/sessionNotificationHandler';
 import { routeIncomingCall } from '../utils/callRouter';
 import { routePushEvent } from '../utils/notificationRouter';
-import authService from '../services/authService';
 
 import apiService from './services/apiService';
 
@@ -38,6 +38,66 @@ if (!__DEV__) {
     }
   });
 }
+
+// ⚠️ CRITICAL: Register notification channels as early as possible
+const setupNotificationChannels = async () => {
+  try {
+    const channels = [
+      {
+        id: 'incoming_calls_v3',
+        name: 'Incoming Calls (High Priority)',
+        importance: NotifeeAndroidImportance.HIGH,
+        sound: 'ringtone',
+        vibration: true,
+        vibrationPattern: [0, 1000, 500, 1000],
+        bypassDnd: true,
+        visibility: AndroidVisibility.PUBLIC,
+      },
+      {
+        id: 'messages',
+        name: 'Messages',
+        importance: NotifeeAndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+      },
+      {
+        id: 'appointments',
+        name: 'Appointments',
+        importance: NotifeeAndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+      },
+      {
+        id: 'sessions',
+        name: 'Sessions',
+        importance: NotifeeAndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+        description: 'Session start and end notifications',
+      }
+    ];
+
+    for (const channel of channels) {
+      await notifee.createChannel(channel);
+      if (channel.id === 'incoming_calls_v3' && Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync(channel.id, {
+          name: channel.name,
+          importance: Notifications.AndroidImportance.MAX,
+          sound: channel.sound,
+          vibrationPattern: channel.vibrationPattern,
+          bypassDnd: true,
+          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        });
+      }
+    }
+    console.log('✅ Notification channels registered at boot');
+  } catch (error) {
+    console.warn('⚠️ Early notification channel registration failed:', error);
+  }
+};
+
+// Call immediately at module level
+setupNotificationChannels();
 
 export default function RootLayout() {
   console.log('🏁 [RootLayout] Rendering RootLayout component');
@@ -138,7 +198,7 @@ export default function RootLayout() {
       };
 
       console.log('📞 [IncomingCallBridge] Routing incoming call from native event', normalizedPayload);
-      
+
       // Check if user is authenticated before routing
       const currentUser = authService.getCurrentUserSync();
       if (!currentUser) {
@@ -148,7 +208,7 @@ export default function RootLayout() {
         }
         return;
       }
-      
+
       routeIncomingCall(router, normalizedPayload as any);
       if (isMounted) {
         setIsCallBooting(false);
@@ -269,50 +329,8 @@ export default function RootLayout() {
             console.log('🔔 Notification setup - skipping permission requests to prevent modals');
             console.log('🔔 Notifications will be requested when user initiates calls or needs them');
 
-            // Create notification channels with error handling
-            const channels = [
-              {
-                id: 'calls',
-                name: 'Incoming Calls',
-                importance: NotifeeAndroidImportance.HIGH,
-                sound: 'default',
-                vibration: true,
-                vibrationPattern: [250, 250, 250, 250],
-                bypassDnd: true,
-                visibility: AndroidVisibility.PUBLIC,
-              },
-              {
-                id: 'messages',
-                name: 'Messages',
-                importance: NotifeeAndroidImportance.HIGH,
-                sound: 'default',
-                vibration: true,
-              },
-              {
-                id: 'appointments',
-                name: 'Appointments',
-                importance: NotifeeAndroidImportance.HIGH,
-                sound: 'default',
-                vibration: true,
-              },
-              {
-                id: 'sessions',
-                name: 'Sessions',
-                importance: NotifeeAndroidImportance.HIGH,
-                sound: 'default',
-                vibration: true,
-                description: 'Session start and end notifications',
-              }
-            ];
-
-            // Create channels one by one with error handling
-            for (const channel of channels) {
-              try {
-                await notifee.createChannel(channel);
-              } catch (channelError) {
-                console.warn(`⚠️ Failed to create channel ${channel.id}:`, channelError);
-              }
-            }
+            // Channels are now registered at the top level of this file
+            console.log('🔔 Notification setup - channels already initialized at boot');
 
             console.log('✅ Notification setup completed');
           } catch (notificationError) {
@@ -362,6 +380,7 @@ export default function RootLayout() {
               priority: type === 'incoming_call'
                 ? Notifications.AndroidNotificationPriority.MAX
                 : Notifications.AndroidNotificationPriority.HIGH,
+              channelId: type === 'incoming_call' ? 'incoming_calls_v3' : undefined,
             };
           }
         });

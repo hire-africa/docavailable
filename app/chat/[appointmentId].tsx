@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio as ExpoAudio } from 'expo-av';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -44,6 +45,7 @@ import backgroundSessionTimer, { SessionTimerEvents } from '../../services/backg
 import callDeduplicationService from '../../services/callDeduplicationService';
 import configService from '../../services/configService';
 import { EndedSession, endedSessionStorageService } from '../../services/endedSessionStorageService';
+import { RealTimeEventService } from '../../services/realTimeEventService';
 import { SecureWebSocketService } from '../../services/secureWebSocketService';
 import { sessionService } from '../../services/sessionService';
 import sessionTimerNotifier from '../../services/sessionTimerNotifier';
@@ -61,13 +63,19 @@ import { validateMessage } from '../../utils/messageSanitization';
 import { withDoctorPrefix } from '../../utils/name';
 import { apiService } from '../services/apiService';
 
+// Professional, soft notification sounds
+const SOUNDS = {
+  RECEIVED: require('../../assets/sounds/message-recieved.wav'),
+  SENT: require('../../assets/sounds/message-sent.wav'),
+};
+
 // Extended ChatMessage type with upload tracking, reactions, and replies
 interface ExtendedChatMessage extends ChatMessage {
   _isUploaded?: boolean;
   server_media_url?: string; // Store server URL separately from display URL
   reactions?: { emoji: string; userId: number; userName: string }[];
   replyTo?: {
-    messageId: string;
+    messageId: string | number;
     message: string;
     senderName: string;
   };
@@ -112,145 +120,76 @@ interface TextSessionInfo {
 // Safe merge helper to always return a new, deduped, sorted array
 function safeMergeMessages(prev: ExtendedChatMessage[], incoming: ExtendedChatMessage[]): ExtendedChatMessage[] {
   try {
-    const map = new Map<string, ExtendedChatMessage>();
+    // Identity map to track messages by both real ID and temp ID
+    const identityMap = new Map<string, ExtendedChatMessage>();
 
-    // Add all existing messages to map using unique key
+    const getExisting = (msg: ExtendedChatMessage) => {
+      if (msg.temp_id && identityMap.has(String(msg.temp_id))) return identityMap.get(String(msg.temp_id));
+      if (msg.id && identityMap.has(String(msg.id))) return identityMap.get(String(msg.id));
+      return null;
+    };
+
+    const register = (msg: ExtendedChatMessage) => {
+      if (msg.temp_id) identityMap.set(String(msg.temp_id), msg);
+      if (msg.id) identityMap.set(String(msg.id), msg);
+    };
+
+    // 1. Register existing messages
     for (const msg of prev) {
-      // For images, always use temp_id if available to keep them separate
-      // For text, use temp_id or id
-      const key = msg.message_type === 'image' && msg.temp_id
-        ? msg.temp_id
-        : (msg.temp_id || String(msg.id));
-      map.set(key, msg);
-      console.log(`📥 [safeMerge] Added existing: ${key} (type: ${msg.message_type}, id: ${msg.id})`);
+      register(msg);
     }
 
-    // Add incoming messages, avoiding duplicates and handling immediate messages
+    // 2. Process incoming messages
     for (const msg of incoming) {
-      // For images, always use temp_id if available to keep them separate
-      const key = msg.message_type === 'image' && msg.temp_id
-        ? msg.temp_id
-        : (msg.temp_id || String(msg.id));
+      // Priority 1: ID Match (temp_id or real id)
+      let target = getExisting(msg);
 
-      console.log(`📨 [safeMerge] Processing incoming: ${key} (type: ${msg.message_type}, id: ${msg.id}, has temp_id: ${!!msg.temp_id})`);
-
-      // Check if this is a server response for a temp TEXT message
-      // Only apply this check to text messages, not images
-      const isTempMessageUpdate = msg.message_type !== 'image' && prev.some(existingMsg => {
-        // Skip if existing message doesn't have temp_id
-        if (!existingMsg.temp_id) return false;
-
-        // Skip if it's an image message (images have their own dedup logic below)
-        if (existingMsg.message_type === 'image') return false;
-
-        // Check if this is the same TEXT message by comparing:
-        // 1. Message content (for text)
-        // 2. Timestamp proximity (within 5 seconds)
-        // 3. Sender ID
-        const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
-        const sameContent = existingMsg.message === msg.message;
-        const sameSender = existingMsg.sender_id === msg.sender_id;
-        const closeTime = timeDiff < 5000;
-
-        return sameContent && sameSender && closeTime;
-      });
-
-      if (isTempMessageUpdate) {
-        console.log('🔄 Skipping duplicate - server response for temp TEXT message:', msg.message?.substring(0, 30));
-        continue;
+      // Priority 2: Image-specific matching (by media_url or timing)
+      if (!target && msg.message_type === 'image' && msg.media_url) {
+        target = prev.find(em =>
+          em.message_type === 'image' &&
+          ((em.media_url === msg.media_url) || (em.temp_id && em.is_own_message && msg.is_own_message &&
+            Math.abs(new Date(em.created_at).getTime() - new Date(msg.created_at).getTime()) < 10000))
+        ) || null;
       }
 
-      // Check if this is a duplicate/update of an existing image message
-      if (msg.message_type === 'image' && msg.media_url) {
-        // Look for existing message to update instead of blocking
-        let shouldSkip = false;
-        let shouldUpdate = false;
-
-        for (let i = 0; i < prev.length; i++) {
-          const existingMsg = prev[i];
-          if (existingMsg.message_type !== 'image') continue;
-
-          // CRITICAL: Check if message IDs match (WebRTC echo has same server ID)
-          if (existingMsg.id && msg.id && String(existingMsg.id) === String(msg.id)) {
-            console.log(`🔄 [safeMerge] Found matching message ID: ${msg.id} - updating delivery status`);
-            // Update the existing message with new delivery status from echo
-            map.set(String(existingMsg.id), {
-              ...existingMsg,
-              delivery_status: msg.delivery_status || 'sent',
-              server_media_url: msg.media_url,
-              _isUploaded: true
-            });
-            shouldSkip = true;
-            break;
-          }
-
-          // Check if there's a temp message that matches this URL
-          if (existingMsg.temp_id && existingMsg.media_url === msg.media_url) {
-            console.log(`🔄 [safeMerge] Found matching media_url - updating message`);
-            const existingKey = existingMsg.temp_id;
-            map.set(existingKey, {
-              ...existingMsg,
-              id: msg.id || existingMsg.id,
-              delivery_status: msg.delivery_status || 'sent',
-              server_media_url: msg.media_url,
-              _isUploaded: true
-            });
-            shouldSkip = true;
-            break;
-          }
-
-          // Check if this is a WebRTC echo by sender and timing
-          if (existingMsg.temp_id && existingMsg.is_own_message && msg.is_own_message) {
-            const timeDiff = Math.abs(new Date(existingMsg.created_at).getTime() - new Date(msg.created_at).getTime());
-            const sameSender = existingMsg.sender_id === msg.sender_id;
-            const closeTime = timeDiff < 10000;
-
-            if (sameSender && closeTime) {
-              console.log(`🔄 [safeMerge] WebRTC echo detected - updating existing message`);
-              const existingKey = existingMsg.temp_id;
-              map.set(existingKey, {
-                ...existingMsg,
-                id: msg.id || existingMsg.id,
-                delivery_status: msg.delivery_status || 'sent',
-                media_url: msg.media_url,
-                server_media_url: msg.media_url,
-                _isUploaded: true
-              });
-              shouldSkip = true;
-              break;
-            }
-          }
-        }
-
-        if (shouldSkip) {
-          continue;
-        }
+      // Priority 3: Content-based fallback for text messages
+      if (!target && msg.message_type === 'text') {
+        target = prev.find(em =>
+          em.message_type === 'text' &&
+          em.sender_id === msg.sender_id &&
+          em.message === msg.message &&
+          Math.abs(new Date(em.created_at).getTime() - new Date(msg.created_at).getTime()) < 5000
+        ) || null;
       }
 
-      if (!map.has(key)) {
-        map.set(key, msg);
-        console.log(`✅ [safeMerge] Added new: ${key} (type: ${msg.message_type})`);
+      if (target) {
+        // Merge state: favor incoming server data but preserve local UI markers
+        const merged: ExtendedChatMessage = {
+          ...target,
+          ...msg,
+          // Correctly handle image upload states
+          server_media_url: msg.media_url || target.server_media_url,
+          _isUploaded: msg.media_url ? true : target._isUploaded,
+          // Preserve local-only flags
+          is_own_message: target.is_own_message || msg.is_own_message
+        };
+        register(merged);
       } else {
-        console.log(`⚠️ [safeMerge] Already exists, skipping: ${key} (type: ${msg.message_type})`);
+        register(msg);
       }
     }
 
-    // Convert to sorted array
-    const arr = Array.from(map.values()).sort((a, b) => {
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
-      return ta - tb;
-    });
-
-    console.log(`📊 [safeMerge] Result: prev=${prev.length}, incoming=${incoming.length}, final=${arr.length}`);
-    console.log(`📊 [safeMerge] Final messages:`, arr.map(m => `${m.temp_id || m.id} (${m.message_type})`).join(', '));
-
-    return arr;
-  } catch (e) {
-    console.log('⚠️ safeMergeMessages failed, appending fallback', e);
-    return [...prev, ...incoming];
+    // 3. Collect unique message objects and sort
+    const result = Array.from(new Set(identityMap.values()));
+    return result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  } catch (error) {
+    console.error('❌ [safeMerge] Fatal error:', error);
+    return prev;
   }
 }
+
+
 
 export default function ChatPage() {
   const params = useLocalSearchParams();
@@ -467,11 +406,82 @@ export default function ChatPage() {
     sendMessage();
   };
 
+  // Sound state
+  const [soundObject, setSoundObject] = useState<ExpoAudio.Sound | null>(null);
+
+  const playSound = async (soundSource: any) => {
+    try {
+      const { sound } = await ExpoAudio.Sound.createAsync(soundSource);
+      setSoundObject(sound);
+      await sound.playAsync();
+    } catch (error) {
+      console.log('🔇 [Chat] Sound playback failed:', error);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (soundObject) {
+        soundObject.unloadAsync();
+      }
+    };
+  }, [soundObject]);
+
   // Appointment time checking state
   // Initialize to true to prevent buttons from being disabled on initial render
   // checkAppointmentTime will update this correctly once chatInfo loads
   const [isAppointmentTime, setIsAppointmentTime] = useState(true);
   const [timeUntilAppointment, setTimeUntilAppointment] = useState<string>('');
+
+  // Unread divider state
+  const [lastSeenMessageId, setLastSeenMessageId] = useState<string | null>(null);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const isAtBottomRef = useRef(true);
+
+  // Load last seen message ID on mount
+  useEffect(() => {
+    const loadLastSeen = async () => {
+      try {
+        const storedId = await AsyncStorage.getItem(`lastSeen_${appointmentId}`);
+        if (storedId) {
+          console.log('📖 [Chat] Loaded last seen message ID:', storedId);
+          setLastSeenMessageId(storedId);
+        }
+      } catch (e) {
+        console.error('❌ [Chat] Failed to load last seen message ID:', e);
+      }
+    };
+    loadLastSeen();
+  }, [appointmentId]);
+
+  // Handle scroll to track if user is at bottom
+  const handleScroll = async (event: any) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const paddingToBottom = 20;
+    const isAtBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    isAtBottomRef.current = isAtBottom;
+
+    if (isAtBottom && newMessagesCount > 0) {
+      setNewMessagesCount(0);
+      if (messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        const newLastSeenId = String(lastMsg.id);
+        setLastSeenMessageId(newLastSeenId);
+
+        // Persist last seen ID
+        try {
+          await AsyncStorage.setItem(`lastSeen_${appointmentId}`, newLastSeenId);
+        } catch (e) {
+          console.error('❌ [Chat] Failed to persist last seen message ID:', e);
+        }
+
+        // Broadcast read receipt for the last message
+        if (webrtcChatService && isWebRTCConnected && lastMsg.sender_id !== currentUserId) {
+          webrtcChatService.sendReadReceipt(lastMsg.id);
+        }
+      }
+    }
+  };
 
   // Subscription data for call availability
   const [subscriptionData, setSubscriptionData] = useState<{
@@ -484,10 +494,28 @@ export default function ChatPage() {
   // Typing indicator state
   const [isOtherUserTyping, setIsOtherUserTyping] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
-  const [typingDotAnimation] = useState(() => {
-    const { Animated } = require('react-native');
-    return new Animated.Value(0);
-  });
+  const [typingOpacity] = useState(new Animated.Value(0.4));
+
+  useEffect(() => {
+    if (isOtherUserTyping) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(typingOpacity, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(typingOpacity, {
+            toValue: 0.4,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      typingOpacity.setValue(0.4);
+    }
+  }, [isOtherUserTyping]);
 
   // Instant session detection state
   const [showInstantSessionUI, setShowInstantSessionUI] = useState(false);
@@ -543,14 +571,17 @@ export default function ChatPage() {
     triggerPatientMessageDetection,
     triggerDoctorMessageDetection,
     forceStateSync,
-    updateAuthToken
+    updateAuthToken,
+    setPassiveMode,
+    handleExternalMessage
   } = useInstantSessionDetector({
     sessionId,
     appointmentId,
     patientId: patientId,
     doctorId: doctorId,
     authToken: token || '',
-    enabled: isDetectorEnabled
+    enabled: isDetectorEnabled,
+    passive: true
   });
 
   // Debug auth token
@@ -599,6 +630,14 @@ export default function ChatPage() {
       setShowInstantSessionUI(false);
     } // When the timer is not active, the component will be hidden.
   }, [isInstantSession, hasPatientSentMessage, hasDoctorResponded, isSessionActivated, isTimerActive]);
+
+  // Set detector to passive mode if we are using WebRTC chat
+  useEffect(() => {
+    if (isDetectorEnabled && setPassiveMode) {
+      console.log('🔌 [Chat] Setting instant session detector to passive mode');
+      setPassiveMode(true);
+    }
+  }, [isDetectorEnabled, setPassiveMode]);
 
   // Log when doctor ID becomes available
   useEffect(() => {
@@ -1320,6 +1359,60 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, authLoading]);
 
+  // Handle real-time session termination
+  useEffect(() => {
+    if (!appointmentId || !isAuthenticated) return;
+
+    console.log('📡 [Chat] Subscribing to real-time session events for:', appointmentId);
+
+    const unsubscribe = RealTimeEventService.subscribe((event) => {
+      // Check if this event relates to our current session
+      if (event.type !== 'session') return;
+
+      const data = event.data || {};
+      const eventSessionId = String(data.sessionId || data.appointmentId || event.id || '');
+      const currentId = String(appointmentId).replace('text_session_', '');
+
+      if (eventSessionId === currentId && (event.action === 'ended' || event.action === 'completed')) {
+        console.log('🏁 [Chat] Session ended via real-time signal:', event);
+
+        // Update UI state
+        setSessionEnded(true);
+
+        // Show rating modal for patients
+        if (user?.user_type === 'patient') {
+          setShowRatingModal(true);
+        }
+
+        // Add system message if not already present
+        const systemMessageId = `session_ended_realtime_${Date.now()}`;
+        const systemMessage: ExtendedChatMessage = {
+          id: systemMessageId,
+          message: event.description || 'Session has been ended.',
+          sender_id: 0,
+          sender_name: 'System',
+          created_at: new Date().toISOString(),
+          message_type: 'text',
+          is_own_message: false,
+          delivery_status: 'sent'
+        };
+
+        setMessages(prev => {
+          // Prevent duplicate system messages
+          if (prev.some(m => m.id && String(m.id).includes('session_ended'))) return prev;
+          return [...prev, systemMessage];
+        });
+
+        scrollToBottom();
+      }
+    });
+
+    return () => {
+      console.log('📡 [Chat] Unsubscribing from real-time session events');
+      unsubscribe();
+    };
+  }, [appointmentId, isAuthenticated, user?.user_type]);
+
   // Debug chatInfo changes
   useEffect(() => {
     if (chatInfo) {
@@ -1408,6 +1501,14 @@ export default function ChatPage() {
           sessionType: sessionType,
           webrtcConfig: config.webrtc
         }, {
+          onDetectorMessage: (data) => {
+            if (__DEV__) {
+              console.log('⏱️ [Chat] Forwarding detector message to detector hook:', data.type);
+            }
+            if (handleExternalMessage) {
+              handleExternalMessage(data);
+            }
+          },
           onMessage: (message) => {
             if (__DEV__) {
               console.log('📨 [ChatComponent] Message received via WebRTC:', message.id);
@@ -1439,6 +1540,20 @@ export default function ChatPage() {
                 console.log('📨 [ChatComponent] Previous messages:', prev.map(m => ({ id: m.id, message: m.message })));
               }
 
+              // Sound for received messages
+              if (String(message.sender_id) !== String(currentUserId)) {
+                playSound(SOUNDS.RECEIVED);
+                // Broadcast delivery status
+                if (webrtcChatService && isWebRTCConnected) {
+                  webrtcChatService.sendDeliveryStatus(message.id, 'delivered');
+                }
+              }
+
+              // Unread tracking
+              if (!isAtBottomRef.current && String(message.sender_id) !== String(currentUserId)) {
+                setNewMessagesCount(prevCount => prevCount + 1);
+              }
+
               const mergedMessages = safeMergeMessages(prev, [message]);
               if (__DEV__) {
                 console.log('📨 [ChatComponent] Messages after merge:', mergedMessages.length);
@@ -1446,7 +1561,10 @@ export default function ChatPage() {
               }
               return mergedMessages;
             });
-            scrollToBottom();
+
+            if (isAtBottomRef.current) {
+              scrollToBottom();
+            }
           },
           onError: (error) => {
             console.error('❌ [WebRTCChat] Error:', error);
@@ -2679,9 +2797,10 @@ export default function ChatPage() {
             senderName: replyingTo.sender_id === currentUserId ? 'You' : (chatInfo?.other_participant_name || 'User')
           } : undefined;
 
-          const message = await webrtcChatService.sendMessage(messageText, replyData);
+          const message = await webrtcChatService.sendMessage(messageText, replyData, tempId);
           if (message) {
             updateTextMessage(tempId, message.id);
+            playSound(SOUNDS.SENT);
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
 
             // Debug instant session state after message sent
@@ -2755,23 +2874,34 @@ export default function ChatPage() {
         reason: 'WebRTC not available or not connected'
       });
 
+      // Prepare reply_to data if replying
+      const replyData = replyingTo ? {
+        messageId: replyingTo.id || replyingTo.temp_id || '',
+        message: replyingTo.message || '',
+        senderName: replyingTo.sender_id === currentUserId ? 'You' : (chatInfo?.other_participant_name || 'User')
+      } : undefined;
+
       const response = await apiService.post(`/chat/${appointmentId}/messages`, {
         message: messageText,
-        message_type: 'text'
+        message_type: 'text',
+        temp_id: tempId,
+        reply_to: replyData
       });
 
       if (response.success) {
-        console.log('✅ [ChatComponent] Message sent successfully via backend API:', response.data.id);
+        const responseData = response.data as any;
+        const realId = responseData.id;
+        console.log('✅ [ChatComponent] Message sent successfully via backend API:', realId);
 
         // Update the temp message with real ID
-        updateTextMessage(tempId, response.data.id);
+        updateTextMessage(tempId, realId);
 
         // For instant sessions, check if this is the first patient message
         if (isInstantSession && !hasPatientSentMessage && isPatient) {
           console.log('👤 [InstantSession] First patient message sent via backend API - timer should start');
           // The backend should have started the timer, but we'll trigger detection here too
           const message = {
-            id: response.data.id,
+            id: realId,
             sender_id: currentUserId,
             message: messageText,
             created_at: new Date().toISOString()
@@ -2781,7 +2911,7 @@ export default function ChatPage() {
 
         console.log('✅ [ChatComponent] Message status updated:', {
           tempId,
-          realId: response.data.id,
+          realId,
           message: messageText
         });
       } else {
@@ -2806,28 +2936,6 @@ export default function ChatPage() {
     if (isTyping) {
       setIsOtherUserTyping(true);
 
-      // Start dot animation
-      const animateDots = () => {
-        const { Animated } = require('react-native');
-        Animated.sequence([
-          Animated.timing(typingDotAnimation, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(typingDotAnimation, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          if (isOtherUserTyping) {
-            animateDots();
-          }
-        });
-      };
-      animateDots();
-
       // Clear existing timeout
       if (typingTimeout) {
         clearTimeout(typingTimeout);
@@ -2836,13 +2944,11 @@ export default function ChatPage() {
       // Set timeout to hide typing indicator after 3 seconds
       const timeout = setTimeout(() => {
         setIsOtherUserTyping(false);
-        typingDotAnimation.stopAnimation();
       }, 3000) as ReturnType<typeof setTimeout>;
 
       setTypingTimeout(timeout);
     } else {
       setIsOtherUserTyping(false);
-      typingDotAnimation.stopAnimation();
       if (typingTimeout) {
         clearTimeout(typingTimeout);
         setTypingTimeout(null);
@@ -2989,7 +3095,7 @@ export default function ChatPage() {
     // CRITICAL: For direct calls, we only need userId - appointmentId is NOT required
     // The signaling server routes calls by userId, not appointmentId
     // CRITICAL: Use SecureWebSocketService to handle SSL errors in preview builds
-    const wsUrl = `wss://docavailable.org/audio-signaling?userId=${currentUserId}`;
+    const wsUrl = `wss://docavailable.org/incoming-call-notifications?userId=${currentUserId}`;
     const signalingChannel = new SecureWebSocketService({
       url: wsUrl,
       ignoreSSLErrors: true, // Allow SSL errors for preview builds
@@ -3911,7 +4017,7 @@ export default function ChatPage() {
     };
 
     console.log('📤 [Chat] Adding immediate text message:', tempId, replyingTo ? 'with reply' : '');
-    setMessages(prev => [...prev, immediateMessage]);
+    setMessages(prev => safeMergeMessages(prev, [immediateMessage]));
     scrollToBottom();
 
     // Clear reply context after sending
@@ -3942,7 +4048,7 @@ export default function ChatPage() {
     };
 
     console.log('📤 [Chat] Adding immediate image message:', tempId);
-    setMessages(prev => [...prev, immediateMessage]);
+    setMessages(prev => safeMergeMessages(prev, [immediateMessage]));
     scrollToBottom();
 
     return tempId;
@@ -4308,14 +4414,15 @@ export default function ChatPage() {
                 {chatInfo?.other_participant_name || 'User'}
               </Text>
               {isOtherUserTyping && (
-                <Text style={{
+                <Animated.Text style={{
                   fontSize: 11,
                   color: '#4CAF50',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   marginTop: 1,
+                  opacity: typingOpacity,
                 }}>
-                  Typing...
-                </Text>
+                  {isPatient ? 'Doctor is typing...' : 'Other participant is typing...'}
+                </Animated.Text>
               )}
             </View>
           </View>
@@ -4763,8 +4870,39 @@ export default function ChatPage() {
             />
           )}
 
+          {/* Unread Message Divider Overlay */}
+          {newMessagesCount > 0 && !isAtBottomRef.current && (
+            <TouchableOpacity
+              onPress={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+              style={{
+                position: 'absolute',
+                bottom: 100,
+                alignSelf: 'center',
+                backgroundColor: '#4CAF50',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+                zIndex: 1000,
+                flexDirection: 'row',
+                alignItems: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 5,
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 13 }}>
+                {newMessagesCount} New Message{newMessagesCount > 1 ? 's' : ''}
+              </Text>
+              <Ionicons name="arrow-down" size={14} color="#fff" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+          )}
+
           {/* Only show messages if it's appointment time or text session */}
           {(isTextSession || isAppointmentTime) && messages.map((message, index) => {
+            const isReadDivider = lastSeenMessageId && String(messages[index - 1]?.id) === lastSeenMessageId;
+
             // Create a stable unique key using message ID and timestamp
             if (__DEV__ && index === 0) {
               console.log('🔍 [ChatComponent] Rendering messages:', {
@@ -4781,164 +4919,189 @@ export default function ChatPage() {
             const uniqueKey = message.temp_id ? `temp_${message.temp_id}` : (message.id ? `msg_${message.id}` : `fallback_${index}_${message.created_at}`);
 
             return (
-              <SwipeableMessage
-                key={uniqueKey}
-                onSwipeLeft={() => handleSwipeReply(message)}
-                onLongPress={() => setShowReactionPicker(message.id || message.temp_id || '')}
-                isSentByCurrentUser={message.sender_id === currentUserId}
-              >
-                <View
-                  style={{
-                    alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
-                    marginBottom: 12,
-                    maxWidth: '80%',
-                  }}
-                >
-                  {/* Reply reference - WhatsApp style */}
-                  {message.replyTo && (
-                    <View style={{
-                      backgroundColor: message.sender_id === currentUserId ? '#3D9B5C' : '#E5E5E5',
-                      paddingHorizontal: 12,
-                      paddingTop: 8,
-                      paddingBottom: 4,
-                      borderTopLeftRadius: 8,
-                      borderTopRightRadius: 8,
-                      borderLeftWidth: 4,
-                      borderLeftColor: message.sender_id === currentUserId ? '#2E7D47' : '#4CAF50',
+              <React.Fragment key={uniqueKey}>
+                {isReadDivider && (
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginVertical: 20,
+                    paddingHorizontal: 20
+                  }}>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(76, 175, 80, 0.2)' }} />
+                    <Text style={{
+                      marginHorizontal: 12,
+                      fontSize: 11,
+                      color: '#4CAF50',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.5
                     }}>
-                      <Text style={{
-                        fontSize: 12,
-                        fontWeight: '600',
-                        color: message.sender_id === currentUserId ? '#FFFFFF' : '#4CAF50',
-                        marginBottom: 2,
+                      New Messages
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(76, 175, 80, 0.2)' }} />
+                  </View>
+                )}
+                <SwipeableMessage
+                  onSwipeLeft={() => handleSwipeReply(message)}
+                  onLongPress={() => setShowReactionPicker(String(message.id || message.temp_id || ''))}
+                  isSentByCurrentUser={message.sender_id === currentUserId}
+                >
+                  <View
+                    style={{
+                      alignSelf: message.sender_id === currentUserId ? 'flex-end' : 'flex-start',
+                      marginBottom: 12,
+                      maxWidth: '80%',
+                    }}
+                  >
+                    {/* Reply reference - WhatsApp style */}
+                    {message.replyTo && (
+                      <View style={{
+                        backgroundColor: message.sender_id === currentUserId ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.03)',
+                        paddingHorizontal: 12,
+                        paddingTop: 8,
+                        paddingBottom: 4,
+                        borderTopLeftRadius: 8,
+                        borderTopRightRadius: 8,
+                        borderLeftWidth: 4,
+                        borderLeftColor: message.sender_id === currentUserId ? 'rgba(255,255,255,0.7)' : '#4CAF50',
+                        marginHorizontal: 1,
+                        marginTop: 1,
                       }}>
-                        {message.replyTo.senderName}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.9)' : '#666',
-                        }}
-                        numberOfLines={2}
-                      >
-                        {message.replyTo.message}
-                      </Text>
-                    </View>
-                  )}
+                        <Text style={{
+                          fontSize: 12,
+                          fontWeight: '700',
+                          color: message.sender_id === currentUserId ? '#FFFFFF' : '#4CAF50',
+                          marginBottom: 2,
+                        }}>
+                          {message.replyTo.senderName}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 13,
+                            color: message.sender_id === currentUserId ? 'rgba(255,255,255,0.85)' : '#666',
+                          }}
+                          numberOfLines={2}
+                        >
+                          {message.replyTo.message}
+                        </Text>
+                      </View>
+                    )}
 
-                  {message.message_type === 'voice' && message.media_url ? (
-                    <VoiceMessagePlayer
-                      audioUri={message.media_url}
-                      isOwnMessage={message.sender_id === currentUserId}
-                      timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      profilePictureUrl={
-                        message.sender_id === currentUserId
-                          ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                          : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                      }
-                    />
-                  ) : message.message_type === 'image' && message.media_url ? (
-                    <ImageMessage
-                      imageUrl={message.media_url}
-                      isOwnMessage={message.sender_id === currentUserId}
-                      timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      deliveryStatus={message.delivery_status}
-                      appointmentId={appointmentId}
-                      profilePictureUrl={
-                        message.sender_id === currentUserId
-                          ? (user?.profile_picture_url || user?.profile_picture || undefined)
-                          : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
-                      }
-                    />
-                  ) : (
-                    // Text message bubble
-                    <View
-                      style={{
-                        backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
-                        paddingHorizontal: 16,
-                        paddingVertical: 12,
-                        borderRadius: message.replyTo ? 0 : 20,
-                        borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
-                        borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
-                        borderTopLeftRadius: message.replyTo ? 0 : 20,
-                        borderTopRightRadius: message.replyTo ? 0 : 20,
-                      }}
-                    >
-                      <Text
+                    {message.message_type === 'voice' && message.media_url ? (
+                      <VoiceMessagePlayer
+                        audioUri={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                      />
+                    ) : message.message_type === 'image' && message.media_url ? (
+                      <ImageMessage
+                        imageUrl={message.media_url}
+                        isOwnMessage={message.sender_id === currentUserId}
+                        timestamp={new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        deliveryStatus={message.delivery_status}
+                        appointmentId={appointmentId}
+                        profilePictureUrl={
+                          message.sender_id === currentUserId
+                            ? (user?.profile_picture_url || user?.profile_picture || undefined)
+                            : (chatInfo?.other_participant_profile_picture_url || chatInfo?.other_participant_profile_picture || undefined)
+                        }
+                      />
+                    ) : (
+                      // Text message bubble
+                      <View
                         style={{
-                          color: message.sender_id === currentUserId ? '#fff' : '#333',
-                          fontSize: 16,
+                          backgroundColor: message.sender_id === currentUserId ? '#4CAF50' : '#F0F0F0',
+                          paddingHorizontal: 16,
+                          paddingVertical: 12,
+                          borderRadius: message.replyTo ? 0 : 20,
+                          borderBottomLeftRadius: message.sender_id === currentUserId ? 20 : 4,
+                          borderBottomRightRadius: message.sender_id === currentUserId ? 4 : 20,
+                          borderTopLeftRadius: message.replyTo ? 0 : 20,
+                          borderTopRightRadius: message.replyTo ? 0 : 20,
                         }}
                       >
-                        {message.message}
-                      </Text>
-                      {/* Add delivery status for text messages */}
-                      {message.sender_id === currentUserId && (
-                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
-                          <ReadReceipt
-                            isOwnMessage={true}
-                            deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
-                            readBy={message.read_by}
-                            otherParticipantId={doctorId || patientId}
-                            messageTime={message.created_at}
-                          />
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Message Reactions */}
-                  <MessageReaction
-                    messageId={message.id || message.temp_id || ''}
-                    existingReactions={message.reactions}
-                    currentUserId={currentUserId}
-                    onReact={handleReaction}
-                    onRemoveReaction={handleRemoveReaction}
-                  />
-                </View>
-              </SwipeableMessage>
+                        <Text
+                          style={{
+                            color: message.sender_id === currentUserId ? '#fff' : '#333',
+                            fontSize: 16,
+                          }}
+                        >
+                          {message.message}
+                        </Text>
+                        {/* Add delivery status for text messages */}
+                        {message.sender_id === currentUserId && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
+                            <ReadReceipt
+                              isOwnMessage={true}
+                              deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
+                              readBy={message.read_by}
+                              otherParticipantId={doctorId || patientId}
+                              messageTime={message.created_at}
+                            />
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    {/* Message Reactions */}
+                    <MessageReaction
+                      messageId={String(message.id || message.temp_id || '')}
+                      existingReactions={message.reactions}
+                      currentUserId={currentUserId}
+                      onReact={handleReaction}
+                      onRemoveReaction={handleRemoveReaction}
+                    />
+                  </View>
+                </SwipeableMessage>
+              </React.Fragment>
             );
           })}
         </ScrollView>
 
         {/* Reply Context - Above input */}
-        {replyingTo && (
-          <View style={{
-            backgroundColor: '#F5F5F5',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderLeftWidth: 3,
-            borderLeftColor: '#4CAF50',
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            borderTopWidth: 1,
-            borderTopColor: '#E5E5E5',
-          }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{
-                fontSize: 12,
-                fontWeight: '600',
-                color: '#4CAF50',
-                marginBottom: 4,
-              }}>
-                Replying to {replyingTo.sender_id === currentUserId ? 'yourself' : chatInfo?.other_participant_name || 'User'}
-              </Text>
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: '#666',
-                }}
-                numberOfLines={1}
-              >
-                {replyingTo.message || 'Media message'}
-              </Text>
+        {
+          replyingTo && (
+            <View style={{
+              backgroundColor: '#F5F5F5',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              borderLeftWidth: 3,
+              borderLeftColor: '#4CAF50',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderTopWidth: 1,
+              borderTopColor: '#E5E5E5',
+            }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: '#4CAF50',
+                  marginBottom: 4,
+                }}>
+                  Replying to {replyingTo.sender_id === currentUserId ? 'yourself' : chatInfo?.other_participant_name || 'User'}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    color: '#666',
+                  }}
+                  numberOfLines={1}
+                >
+                  {replyingTo.message || 'Media message'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={cancelReply} style={{ padding: 8 }}>
+                <Ionicons name="close" size={20} color="#666" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={cancelReply} style={{ padding: 8 }}>
-              <Ionicons name="close" size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
-        )}
+          )
+        }
 
         {/* Input - Fixed at bottom with proper keyboard handling and safe area */}
         <View style={{
@@ -5171,8 +5334,8 @@ export default function ChatPage() {
               if (isWebRTCConnected) {
                 if (webrtcSessionService) {
                   webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
-                } else if (chatService) {
-                  chatService.sendTypingIndicator(text.length > 0, currentUserId);
+                } else if (webrtcChatService) {
+                  webrtcChatService.sendTypingIndicator(text.length > 0, currentUserId);
                 }
               }
             }}
@@ -5313,115 +5476,121 @@ export default function ChatPage() {
         </View>
 
         {/* Validation Error Hint */}
-        {!validationResult.isValid && (
-          <View style={{ paddingHorizontal: 60, paddingBottom: 8, marginTop: -4 }}>
-            <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '500' }}>
-              {validationResult.reasons[0]}
-            </Text>
-          </View>
-        )}
+        {
+          !validationResult.isValid && (
+            <View style={{ paddingHorizontal: 60, paddingBottom: 8, marginTop: -4 }}>
+              <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '500' }}>
+                {validationResult.reasons[0]}
+              </Text>
+            </View>
+          )
+        }
 
         {/* Voice Recording Interface */}
-        {isRecording && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 16,
-            backgroundColor: '#f0f0f0',
-            borderTopWidth: 1,
-            borderTopColor: '#e0e0e0',
-            zIndex: 1001, // Ensure it appears above the white overlay
-            position: 'relative'
-          }}>
+        {
+          isRecording && (
             <View style={{
-              flex: 1,
               flexDirection: 'row',
-              alignItems: 'center'
+              alignItems: 'center',
+              padding: 16,
+              backgroundColor: '#f0f0f0',
+              borderTopWidth: 1,
+              borderTopColor: '#e0e0e0',
+              zIndex: 1001, // Ensure it appears above the white overlay
+              position: 'relative'
             }}>
               <View style={{
-                width: 12,
-                height: 12,
-                borderRadius: 6,
-                backgroundColor: '#ff4444',
-                marginRight: 12
-              }} />
-              <Text style={{
-                fontSize: 16,
-                color: '#333',
-                fontWeight: '500'
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center'
               }}>
-                Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-              </Text>
+                <View style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 6,
+                  backgroundColor: '#ff4444',
+                  marginRight: 12
+                }} />
+                <Text style={{
+                  fontSize: 16,
+                  color: '#333',
+                  fontWeight: '500'
+                }}>
+                  Recording... {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={stopRecording}
+                style={{
+                  padding: 8,
+                  backgroundColor: '#ff4444',
+                  borderRadius: 20
+                }}
+              >
+                <Ionicons name="stop" size={20} color="white" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={stopRecording}
-              style={{
-                padding: 8,
-                backgroundColor: '#ff4444',
-                borderRadius: 20
-              }}
-            >
-              <Ionicons name="stop" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        )}
+          )
+        }
 
-        {recordingUri && !isRecording && (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 16,
-            backgroundColor: '#f0f0f0',
-            borderTopWidth: 1,
-            borderTopColor: '#e0e0e0',
-            zIndex: 1001, // Ensure it appears above the white overlay
-            position: 'relative'
-          }}>
+        {
+          recordingUri && !isRecording && (
             <View style={{
-              flex: 1,
               flexDirection: 'row',
-              alignItems: 'center'
+              alignItems: 'center',
+              padding: 16,
+              backgroundColor: '#f0f0f0',
+              borderTopWidth: 1,
+              borderTopColor: '#e0e0e0',
+              zIndex: 1001, // Ensure it appears above the white overlay
+              position: 'relative'
             }}>
-              <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 12 }} />
-              <Text style={{
-                fontSize: 16,
-                color: '#333',
-                fontWeight: '500'
+              <View style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center'
               }}>
-                Voice message ready
-              </Text>
+                <Ionicons name="mic" size={20} color="#4CAF50" style={{ marginRight: 12 }} />
+                <Text style={{
+                  fontSize: 16,
+                  color: '#333',
+                  fontWeight: '500'
+                }}>
+                  Voice message ready
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={sendVoiceMessage}
+                disabled={sendingVoiceMessage}
+                style={{
+                  padding: 8,
+                  backgroundColor: sendingVoiceMessage ? '#ccc' : '#4CAF50',
+                  borderRadius: 20,
+                  marginRight: 8
+                }}
+              >
+                {sendingVoiceMessage ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Ionicons name="send" size={20} color="white" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setRecordingUri(null);
+                  setRecordingDuration(0);
+                }}
+                style={{
+                  padding: 8,
+                  backgroundColor: '#ff4444',
+                  borderRadius: 20
+                }}
+              >
+                <Ionicons name="close" size={20} color="white" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={sendVoiceMessage}
-              disabled={sendingVoiceMessage}
-              style={{
-                padding: 8,
-                backgroundColor: sendingVoiceMessage ? '#ccc' : '#4CAF50',
-                borderRadius: 20,
-                marginRight: 8
-              }}
-            >
-              {sendingVoiceMessage ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Ionicons name="send" size={20} color="white" />
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setRecordingUri(null);
-                setRecordingDuration(0);
-              }}
-              style={{
-                padding: 8,
-                backgroundColor: '#ff4444',
-                borderRadius: 20
-              }}
-            >
-              <Ionicons name="close" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        )}
+          )
+        }
       </KeyboardAvoidingView>
 
       {/* End Session Modal */}

@@ -242,7 +242,7 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/text-sessions/schedule', [TextSessionController::class, 'createScheduled']);
     Route::get('/text-sessions/scheduled', [TextSessionController::class, 'getScheduledSessions']);
 
-    Route::post('/text-sessions/start', [TextSessionController::class, 'start']);
+    Route::post('/text-sessions/start', [TextSessionController::class, 'start'])->middleware('throttle:3,1');
     Route::post('/text-sessions/create-from-appointment', [TextSessionController::class, 'createFromAppointment']);
     Route::get('/text-sessions/pending-sessions', [TextSessionController::class, 'pendingSessions']);
     Route::get('/text-sessions/active-sessions', [TextSessionController::class, 'activeSessions']);
@@ -260,8 +260,9 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-appointments/{appointmentId}/session-status', [TextAppointmentController::class, 'getSessionStatus']);
 
     // Call session routes
+    // FIX 4: Rate-limit session creation — max 3 starts per minute per user
     Route::post('/call-sessions/check-availability', [App\Http\Controllers\CallSessionController::class, 'checkAvailability']);
-    Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start']);
+    Route::post('/call-sessions/start', [App\Http\Controllers\CallSessionController::class, 'start'])->middleware('throttle:3,1');
     Route::get('/call-sessions/{appointmentId}/status', [App\Http\Controllers\CallSessionController::class, 'getStatus']);
     Route::post('/call-sessions/mark-connected', [App\Http\Controllers\CallSessionController::class, 'markConnected']);
     Route::post('/call-sessions/end', [App\Http\Controllers\CallSessionController::class, 'end']);
@@ -727,8 +728,13 @@ Route::post('/test-notification-by-email', function (Illuminate\Http\Request $re
 */
 
 // Payment routes (no auth required for webhooks)
-Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum']);
+// FIX 4/5: Rate-limit webhook to 20/min, reject replays in controller
+Route::post('/payments/webhook', [PaymentController::class, 'webhook'])->withoutMiddleware(['auth:sanctum'])->middleware('throttle:20,1');
 Route::get('/payments/status', [PaymentController::class, 'checkStatus'])->withoutMiddleware(['auth:sanctum']);
+
+// FIX 2: Call server (WebRTC signaling) session end notification
+// Secured by X-Server-Secret header — no user JWT required
+Route::post('/call-sessions/server-end', [App\Http\Controllers\CallSessionController::class, 'serverEnd'])->withoutMiddleware(['auth:sanctum', 'auth:api']);
 
 // PayChangu Standard Checkout
 Route::middleware(['auth:api'])->group(function () {

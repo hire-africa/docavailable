@@ -8,6 +8,7 @@ export interface UseInstantSessionDetectorOptions {
   doctorId: number;
   authToken: string;
   enabled?: boolean;
+  passive?: boolean;
 }
 
 export interface UseInstantSessionDetectorReturn {
@@ -26,6 +27,8 @@ export interface UseInstantSessionDetectorReturn {
   triggerDoctorMessageDetection: (message: any) => void;
   forceStateSync: () => void;
   updateAuthToken: (newAuthToken: string) => void;
+  setPassiveMode: (passive: boolean) => void;
+  handleExternalMessage: (data: any) => void;
 }
 
 export function useInstantSessionDetector(options: UseInstantSessionDetectorOptions): UseInstantSessionDetectorReturn {
@@ -35,12 +38,13 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     patientId,
     doctorId,
     authToken,
-    enabled = true
+    enabled = true,
+    passive = false
   } = options;
 
   useEffect(() => {
-    console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, hasAuthToken: !!authToken });
-  }, [sessionId, appointmentId, patientId, doctorId, enabled, !!authToken]);
+    console.log('🔧 [Hook] useInstantSessionDetector called with:', { sessionId, appointmentId, patientId, doctorId, enabled, passive, hasAuthToken: !!authToken });
+  }, [sessionId, appointmentId, patientId, doctorId, enabled, passive, !!authToken]);
 
   const [isConnected, setIsConnected] = useState(false);
   const [timerState, setTimerState] = useState<TimerState>({
@@ -140,6 +144,11 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       console.log('🆕 [Hook] Creating new InstantSessionMessageDetector for session:', sessionId);
       detectorRef.current = new InstantSessionMessageDetector(config, events);
       map.set(sessionId, detectorRef.current);
+    }
+
+    // Apply passive mode immediately
+    if (detectorRef.current) {
+      detectorRef.current.setPassiveMode(passive);
     }
 
     // Seed local state from detector if available
@@ -303,6 +312,18 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     }
   };
 
+  const setPassiveMode = (passive: boolean): void => {
+    if (detectorRef.current) {
+      detectorRef.current.setPassiveMode(passive);
+    }
+  };
+
+  const handleExternalMessage = (data: any): void => {
+    if (detectorRef.current) {
+      detectorRef.current.handleExternalMessage(data);
+    }
+  };
+
   return {
     isConnected,
     timerState,
@@ -318,6 +339,8 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
     triggerPatientMessageDetection,
     triggerDoctorMessageDetection,
     forceStateSync,
-    updateAuthToken
+    updateAuthToken,
+    setPassiveMode,
+    handleExternalMessage
   };
 }

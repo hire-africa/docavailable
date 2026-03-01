@@ -1,4 +1,4 @@
-import { Notifications } from 'expo-notifications';
+import * as Notifications from 'expo-notifications';
 import apiService from '../app/services/apiService';
 import ringtoneService from './ringtoneService';
 
@@ -39,11 +39,12 @@ export class CallNotificationService {
             categoryId: 'incoming_call',
             priority: 'high',
             fullScreenAction: true,
-            channelId: 'calls',
+            channelId: 'incoming_calls_v3',
           },
           sound: null, // Disable default sound, use custom ringtone instead
           priority: Notifications.AndroidNotificationPriority.HIGH,
           vibrate: [0, 250, 250, 250],
+          // @ts-ignore - categoryId is supported
           categoryId: 'incoming_call',
           ...(callData.callerProfilePicture && {
             attachments: [{
@@ -70,7 +71,7 @@ export class CallNotificationService {
     try {
       // Stop custom ringtone
       await ringtoneService.stop();
-      
+
       const id = notificationId || this.activeCallNotificationId;
       if (id) {
         await Notifications.dismissNotificationAsync(id);

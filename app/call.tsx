@@ -146,6 +146,12 @@ export default function CallScreen() {
       const userId = user.id.toString();
       const isDoctor = user.user_type === 'doctor';
 
+      // Set global flags for signaling services (fallback)
+      if (typeof global !== 'undefined') {
+        (global as any).userType = user.user_type;
+        (global as any).isDoctor = isDoctor;
+      }
+
       console.log('📞 Initializing call:', {
         appointmentId,
         userId,

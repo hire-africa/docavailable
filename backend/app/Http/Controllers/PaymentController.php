@@ -156,12 +156,32 @@ class PaymentController extends Controller
             $currency = $data['currency'];
 
             // Use correct Paychangu transaction ID fields
-            $transactionId = $data['charge_id'] ?? $data['reference'] ?? null;
+            $transactionId = $data['tx_ref'] ?? $data['charge_id'] ?? $data['reference'] ?? null;
 
             if (!$transactionId) {
                 Log::error('Missing transaction ID in Paychangu webhook', ['data' => $data]);
                 throw new \Exception('Missing transaction ID');
             }
+
+            // ── FIX 5: Webhook deduplication ────────────────────────────────────────────
+            // If this tx_ref was already processed + marked completed, return 200 early.
+            // This prevents duplicate subscription grants when PayChangu retries the webhook.
+            $existingTransaction = \App\Models\PaymentTransaction::where('transaction_id', $transactionId)
+                ->where('status', 'completed')
+                ->first();
+
+            if ($existingTransaction) {
+                Log::info('Duplicate webhook received — tx_ref already processed, skipping.', [
+                    'transaction_id' => $transactionId,
+                    'original_processed_at' => $existingTransaction->updated_at,
+                    'user_id' => $userId,
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Already processed (idempotent)',
+                ], 200);
+            }
+            // ────────────────────────────────────────────────────────────────────────────
 
             // Find plan either by ID or by amount/currency
             $plan = null;

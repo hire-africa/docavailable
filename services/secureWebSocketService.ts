@@ -6,10 +6,11 @@ export interface SecureWebSocketOptions {
   url: string;
   protocols?: string | string[];
   onOpen?: () => void;
-  onMessage?: (event: MessageEvent) => void;
-  onClose?: (event: CloseEvent) => void;
-  onError?: (event: Event) => void;
-  ignoreSSLErrors?: boolean;
+  onMessage?: (data: any) => void;
+  onClose?: (event: { code: number; reason: string }) => void;
+  onError?: (error: any) => void;
+  connectionTimeout?: number;
+  disableCompression?: boolean;
   // WebSocket options to disable compression
   perMessageDeflate?: boolean;
   compression?: boolean;
@@ -18,112 +19,124 @@ export interface SecureWebSocketOptions {
 export class SecureWebSocketService {
   private ws: WebSocket | null = null;
   private options: SecureWebSocketOptions;
+  private connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private isConnected: boolean = false;
 
   constructor(options: SecureWebSocketOptions) {
     this.options = {
-      ignoreSSLErrors: true, // Default to ignoring SSL errors for self-signed certs
-      perMessageDeflate: false, // Disable compression to avoid frame issues
-      compression: false, // Explicitly disable compression
+      connectionTimeout: 10000, // Default to 10 seconds
+      disableCompression: true, // Default to disabling compression
       ...options
     };
+
+    // Apply compression settings based on disableCompression
+    if (this.options.disableCompression) {
+      this.options.perMessageDeflate = false;
+      this.options.compression = false;
+    }
   }
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      let connectionTimeoutId: ReturnType<typeof setTimeout> | null = null;
-      let isResolved = false;
-      
+      this.connectionTimeoutId = null;
+      this.isConnected = false;
+
       try {
         console.log('🔌 [SecureWebSocket] Connecting to:', this.options.url);
-        
-        // Create WebSocket connection - React Native WebSocket doesn't support compression options
-        // The server must be configured to not use compression
-        this.ws = new WebSocket(this.options.url, this.options.protocols);
-        
+
+        // Create WebSocket connection - Disable compression using protocols to avoid frame issues
+        // We use a custom protocol string that signals to some servers to disable compression,
+        // but since React Native WebSocket doesn't support a dedicated options object for headers/compression,
+        // the server-side configuration is the most effective way to solve this.
+        const protocols = this.options.disableCompression ? ['no-compression'] : this.options.protocols;
+        this.ws = new WebSocket(this.options.url, protocols);
+
         this.ws.onopen = () => {
           // Clear timeout since we connected successfully
-          if (connectionTimeoutId) {
-            clearTimeout(connectionTimeoutId);
-            connectionTimeoutId = null;
+          if (this.connectionTimeoutId) {
+            clearTimeout(this.connectionTimeoutId);
+            this.connectionTimeoutId = null;
           }
-          
-          if (isResolved) {
+
+          if (this.isConnected) {
             console.warn('⚠️ [SecureWebSocket] onopen fired after timeout - connection succeeded but timeout already rejected');
             return;
           }
-          
+
           console.log('✅ [SecureWebSocket] Connected successfully');
-          
-          // CRITICAL: Verify WebSocket is actually working by sending a test message
-          try {
-            const testMessage = JSON.stringify({ type: 'ping', timestamp: Date.now() });
-            this.ws?.send(testMessage);
-            console.log('✅ [SecureWebSocket] Test ping sent to verify connection is working');
-          } catch (testError) {
-            console.error('❌ [SecureWebSocket] CRITICAL: WebSocket reports OPEN but send() failed:', testError);
-            isResolved = true;
-            reject(new Error('WebSocket reports connected but cannot send messages'));
-            return;
-          }
-          
-          isResolved = true;
+
+          this.isConnected = true;
           this.options.onOpen?.();
           resolve();
         };
 
         this.ws.onmessage = (event) => {
-          // CRITICAL: Log message reception to verify bidirectional communication
           try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'pong') {
-              console.log('🏓 [SecureWebSocket] Pong received - bidirectional communication confirmed');
-            } else if (data.type !== 'ping') {
-              console.log('📨 [SecureWebSocket] Message received:', data.type);
+            let data = JSON.parse(event.data);
+
+            // Handle potential double-encoded JSON (sometimes happens with some gateways/services)
+            if (typeof data === 'string' && (data.startsWith('{') || data.startsWith('['))) {
+              try {
+                data = JSON.parse(data);
+              } catch (e) {
+                // Not double-encoded, just happens to start with {
+              }
             }
+
+            // Automatic heartbeat response
+            if (data && data.type === 'ping') {
+              console.log('🏓 [SecureWebSocket] Ping received, sending pong');
+              this.send({ type: 'pong' });
+              return; // Don't pass pings to the application
+            }
+
+            this.options.onMessage?.(data);
           } catch (e) {
-            // Not JSON, that's okay
+            // If not JSON, pass raw data
+            this.options.onMessage?.(event.data);
           }
-          this.options.onMessage?.(event);
         };
 
         this.ws.onclose = (event) => {
           // Clear timeout on close
-          if (connectionTimeoutId) {
-            clearTimeout(connectionTimeoutId);
-            connectionTimeoutId = null;
+          if (this.connectionTimeoutId) {
+            clearTimeout(this.connectionTimeoutId);
+            this.connectionTimeoutId = null;
           }
-          
+
           console.log('🔌 [SecureWebSocket] Connection closed:', event.code, event.reason);
-          this.options.onClose?.(event);
+          this.isConnected = false;
+          this.options.onClose?.({ code: event.code, reason: event.reason });
         };
 
-        this.ws.onerror = (event) => {
-          console.error('❌ [SecureWebSocket] Connection error:', event);
-          
-          // If we're ignoring SSL errors and this is an SSL-related error, try to continue
-          if (this.options.ignoreSSLErrors && this.isSSLError(event)) {
-            console.log('🔧 [SecureWebSocket] SSL error detected but ignoring due to ignoreSSLErrors=true');
-            // Don't reject, let the connection attempt to continue
-            return;
+        this.ws.onerror = (event: any) => {
+          // Clear connection timeout
+          if (this.connectionTimeoutId) {
+            clearTimeout(this.connectionTimeoutId);
+            this.connectionTimeoutId = null;
           }
-          
-          // Clear timeout on error
-          if (connectionTimeoutId) {
-            clearTimeout(connectionTimeoutId);
-            connectionTimeoutId = null;
+
+          console.error('❌ [SecureWebSocket] WebSocket error:', {
+            message: event.message || 'No message property',
+            type: event.type,
+            isTrusted: event.isTrusted,
+            url: this.options.url
+          });
+
+          // Inform the caller
+          if (this.options.onError) {
+            this.options.onError(event);
           }
-          
-          if (!isResolved) {
-            isResolved = true;
-            this.options.onError?.(event);
-            reject(new Error('WebSocket connection failed'));
+
+          if (!this.isConnected) {
+            reject(new Error(event.message || 'WebSocket connection failed'));
           }
         };
 
         // Set a timeout for connection
-        connectionTimeoutId = setTimeout(() => {
-          if (this.ws?.readyState !== WebSocket.OPEN && !isResolved) {
-            console.error('❌ [SecureWebSocket] Connection timeout after 10 seconds');
+        this.connectionTimeoutId = setTimeout(() => {
+          if (this.ws?.readyState !== WebSocket.OPEN && !this.isConnected) {
+            console.error('❌ [SecureWebSocket] Connection timeout after', this.options.connectionTimeout, 'ms');
             console.error('🔍 [SecureWebSocket] WebSocket state:', {
               readyState: this.ws?.readyState,
               readyStateName: {
@@ -134,60 +147,68 @@ export class SecureWebSocketService {
               }[this.ws?.readyState || 3],
               url: this.options.url
             });
-            
+
             // Close the WebSocket before rejecting
             try {
               this.ws?.close();
             } catch (closeError) {
               console.warn('⚠️ [SecureWebSocket] Error closing WebSocket on timeout:', closeError);
             }
-            
-            isResolved = true;
+
+            this.isConnected = true; // Mark as resolved to prevent further resolution attempts
             reject(new Error(`WebSocket connection timeout - URL: ${this.options.url}, State: ${this.ws?.readyState}`));
           }
-        }, 10000); // 10 second timeout
+        }, this.options.connectionTimeout);
 
       } catch (error) {
         // Clear timeout on exception
-        if (connectionTimeoutId) {
-          clearTimeout(connectionTimeoutId);
-          connectionTimeoutId = null;
+        if (this.connectionTimeoutId) {
+          clearTimeout(this.connectionTimeoutId);
+          this.connectionTimeoutId = null;
         }
-        
+
         console.error('❌ [SecureWebSocket] Failed to create connection:', error);
-        if (!isResolved) {
-          isResolved = true;
+        if (!this.isConnected) {
+          this.isConnected = true;
           reject(error);
         }
       }
     });
   }
 
-  send(data: string | ArrayBuffer | Blob): void {
+  /**
+   * Send a JSON message through the WebSocket
+   */
+  public send(message: any): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(data);
+      try {
+        const data = typeof message === 'string' ? message : JSON.stringify(message);
+        console.log(`📤 [SecureWebSocket] Sending:`, data.substring(0, 50) + (data.length > 50 ? '...' : ''));
+        this.ws.send(data);
+      } catch (error) {
+        console.error('❌ [SecureWebSocket] Failed to send message:', error);
+      }
     } else {
-      console.warn('⚠️ [SecureWebSocket] Cannot send data - WebSocket not connected');
+      console.warn('⚠️ [SecureWebSocket] Cannot send message: WebSocket not open', {
+        readyState: this.ws?.readyState,
+        url: this.options.url
+      });
     }
   }
 
-  close(code?: number, reason?: string): void {
+  /**
+   * Close the WebSocket connection
+   */
+  public close(): void {
     if (this.ws) {
-      this.ws.close(code, reason);
+      this.ws.close();
       this.ws = null;
     }
+    this.isConnected = false;
   }
 
   get readyState(): number {
     return this.ws?.readyState || WebSocket.CLOSED;
-  }
-
-  private isSSLError(event: Event): boolean {
-    // Check if the error is SSL-related
-    const errorMessage = (event as any)?.message || (event as any)?.error?.message || '';
-    return errorMessage.toLowerCase().includes('ssl') || 
-           errorMessage.toLowerCase().includes('certificate') ||
-           errorMessage.toLowerCase().includes('handshake');
   }
 }
 
