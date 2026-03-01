@@ -27,6 +27,11 @@ class PaymentController extends Controller
                 ?? $request->header('Paychangu-Signature')
                 ?? $request->header('paychangu-signature');
             $webhookSecret = config('services.paychangu.webhook_secret');
+            // Do not use webhook secret if it was mistakenly set to the webhook URL (e.g. https://...)
+            if ($webhookSecret && (str_starts_with($webhookSecret, 'http://') || str_starts_with($webhookSecret, 'https://'))) {
+                Log::warning('PAYCHANGU_WEBHOOK_SECRET appears to be a URL; use the actual secret key from PayChangu dashboard (e.g. whsec_...)');
+                $webhookSecret = null;
+            }
             $apiSecret = config('services.paychangu.secret_key');
 
             Log::info('Webhook verification details', [
@@ -543,6 +548,12 @@ class PaymentController extends Controller
     private function renderRedirectPage($transaction, $txRef, $status)
     {
         $final_status = $transaction ? $transaction->status : $status;
+        // Frontend URL for browser redirect after payment (must be a valid absolute URL)
+        $frontendUrl = rtrim((string) config('app.frontend_url', 'https://docavailable.com'), '/');
+        if (!preg_match('#^https?://#i', $frontendUrl)) {
+            $frontendUrl = 'https://docavailable.com';
+        }
+        $redirectUrl = $frontendUrl . '/?payment_status=' . urlencode($final_status) . '&tx_ref=' . urlencode($txRef);
 
         // Return a invisible, instant redirect page
         $html = '<!DOCTYPE html>
@@ -566,11 +577,13 @@ class PaymentController extends Controller
                     status: "' . $final_status . '",
                     tx_ref: "' . $txRef . '"
                 }));
+            } else {
+                // 2. Browser/tab fallback: redirect back to main app URL
+                // This handles flows where checkout was opened in a new tab or external browser.
+                setTimeout(function() {
+                    window.location.href = ' . json_encode($redirectUrl) . ';
+                }, 1500);
             }
-            
-            // Note: We no longer auto-redirect to window.location.href = deepLink 
-            // because it causes "Page not found" flicker in WebViews.
-            // The postMessage above handles closure for the mobile app.
         }
 
         // Execute closure signal immediately

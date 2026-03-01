@@ -81,6 +81,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL (for payment return redirect in browser)
+    |--------------------------------------------------------------------------
+    | Used when redirecting the user back to the web app after PayChangu payment.
+    | Must be a full URL (e.g. https://docavailable.com). Set FRONTEND_URL in .env.
+    */
+    'frontend_url' => env('FRONTEND_URL', 'https://docavailable.com'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
