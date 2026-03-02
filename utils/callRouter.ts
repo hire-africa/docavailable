@@ -12,6 +12,8 @@ export type IncomingCallData = {
   doctorProfilePicture?: string;
   caller_name?: string;
   callerName?: string;
+  answeredFromNative?: boolean;
+  answeredFromCallKeep?: boolean;
 };
 
 // Track processed calls to prevent duplicate navigation
@@ -31,14 +33,14 @@ setInterval(() => {
 export function routeIncomingCall(router: any, data: IncomingCallData) {
   try {
     console.log('📞 [CallRouter] routeIncomingCall called with:', { data, router: !!router });
-    
+
     // Check if user is authenticated before routing
     const currentUser = authService.getCurrentUserSync();
     if (!currentUser) {
       console.warn('⚠️ [CallRouter] User not authenticated, ignoring incoming call');
       return;
     }
-    
+
     if (!data || (data.type !== 'incoming_call' && (data as any).event !== 'incoming_call')) {
       console.log('📞 [CallRouter] Invalid data or type, returning');
       return;
@@ -59,12 +61,12 @@ export function routeIncomingCall(router: any, data: IncomingCallData) {
     const callKey = `${appointmentId}-${callType}`;
     const now = Date.now();
     const lastProcessed = processedCalls.get(callKey);
-    
+
     if (lastProcessed && (now - lastProcessed) < DEDUP_WINDOW_MS) {
       console.log(`⚠️ [CallRouter] Duplicate call detected, ignoring: ${callKey} (last processed ${now - lastProcessed}ms ago)`);
       return;
     }
-    
+
     // Mark this call as processed
     processedCalls.set(callKey, now);
     console.log(`✅ [CallRouter] Processing new call: ${callKey}`);
@@ -78,7 +80,8 @@ export function routeIncomingCall(router: any, data: IncomingCallData) {
       isIncomingCall: 'true',
       doctorName,
       doctorProfilePicture: doctorAvatar,
-      source: 'native_service'
+      source: 'native_service',
+      answeredFromCallKeep: (data.answeredFromNative === true || (data as any).answeredFromCallKeep === true) ? 'true' : 'false'
     };
 
     console.log('📞 [CallRouter] Navigating to call screen with params:', routeParams);
@@ -87,7 +90,7 @@ export function routeIncomingCall(router: any, data: IncomingCallData) {
       pathname: '/call',
       params: routeParams
     });
-    
+
     console.log('📞 [CallRouter] Navigation completed for call:', callKey);
   } catch (e) {
     console.error('[CallRouter] Failed to route incoming call:', e);

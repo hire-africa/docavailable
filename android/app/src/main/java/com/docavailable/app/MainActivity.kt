@@ -50,13 +50,15 @@ class MainActivity : ReactActivity() {
   private fun handleIncomingCallIntent(intent: Intent?) {
     if (intent?.getBooleanExtra("isIncomingCall", false) == true) {
       val answeredFromNative = intent.getBooleanExtra("answeredFromNative", false)
+      val answeredFromCallKeep = intent.getBooleanExtra("answeredFromCallKeep", false)
+      
       val data = Arguments.createMap().apply {
         putString("sessionId", intent.getStringExtra("sessionId") ?: "")
         putString("doctorId", intent.getStringExtra("doctorId") ?: "")
         putString("doctorName", intent.getStringExtra("doctorName") ?: "")
         putString("callType", intent.getStringExtra("callType") ?: "audio")
         putBoolean("isIncomingCall", true)
-        putBoolean("answeredFromNative", answeredFromNative)
+        putBoolean("answeredFromNative", answeredFromNative && answeredFromCallKeep)
       }
 
       emitNativeIncomingCall(data)
@@ -82,11 +84,12 @@ class MainActivity : ReactActivity() {
 
   private fun deliverPendingNativeCall() {
     val data = pendingNativeCallData ?: return
-    // Attempt to emit. If still not ready, keep it queued.
-    emitNativeIncomingCall(data)
-    if (pendingNativeCallData === data) {
-      pendingNativeCallData = null
-    }
+    
+    // Delay to allow Expo Router navigation stack to fully mount
+    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        emitNativeIncomingCall(data)
+        pendingNativeCallData = null
+    }, 1000) // 1 second is enough for router to mount
   }
 
   /**

@@ -558,7 +558,7 @@ const AppointmentDetails = () => {
             setCallInitiated(false);
           }}
           onCallRejected={() => {
-            Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+            Alert.alert('Call Declined', 'The doctor declined the call.');
             setShowAudioCallModal(false);
             setCallInitiated(false);
           }}
@@ -583,7 +583,7 @@ const AppointmentDetails = () => {
             setCallInitiated(false);
           }}
           onCallRejected={() => {
-            Alert.alert('Call Rejected', 'The doctor is not available right now. Please try again later.');
+            Alert.alert('Call Declined', 'The doctor declined the call.');
             setShowVideoCallModal(false);
             setCallInitiated(false);
           }}

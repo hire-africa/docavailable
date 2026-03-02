@@ -123,6 +123,27 @@ export default function RootLayout() {
   };
 
   useEffect(() => {
+    // Mark router as ready for index.js
+    (global as any).isRouterReady = true;
+    console.log('✅ [RootLayout] Router ready');
+
+    // Handle call that arrived while app was killed
+    const pendingCall = (global as any).pendingIncomingCallData;
+    if (pendingCall) {
+      console.log('📞 [RootLayout] Found pending call from killed state, routing...');
+      (global as any).pendingIncomingCallData = null;
+
+      setTimeout(() => {
+        routeIncomingCall(router, pendingCall);
+      }, 300); // Small delay ensures Stack navigator is mounted
+    }
+
+    return () => {
+      (global as any).isRouterReady = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
     const checkVersion = async () => {
       try {
         const currentVersion = Constants.expoConfig?.version ?? '1.0.0';

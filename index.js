@@ -72,7 +72,7 @@ const waitForAppForeground = async () => {
     console.log('CALLKEEP: app already active');
     return;
   }
-  
+
   console.log('CALLKEEP: waiting for app to resume from', AppState.currentState);
   return new Promise(resolve => {
     const sub = AppState.addEventListener('change', state => {
@@ -82,7 +82,7 @@ const waitForAppForeground = async () => {
         resolve();
       }
     });
-    
+
     // Timeout after 4 seconds to prevent hanging
     setTimeout(() => {
       sub.remove();
@@ -137,7 +137,7 @@ const navigateToActiveCall = async (callData) => {
   const doctorId = callData.doctor_id || callData.doctorId || callData.caller_id || '';
   const doctorName = callData.callerName || callData.doctor_name || callData.doctorName || 'Doctor';
   const doctorProfilePic = callData.doctor_profile_picture || callData.doctorProfilePicture || '';
-  
+
   const params = new URLSearchParams({
     sessionId: String(callData.appointmentId),
     doctorId: String(doctorId),
@@ -145,9 +145,9 @@ const navigateToActiveCall = async (callData) => {
     doctorProfilePicture: String(doctorProfilePic),
     callType: String(callData.callType || callData.call_type || 'audio'),
     isIncomingCall: 'true',
-    answeredFromCallKeep: 'true'
+    answeredFromCallKeep: callData.answeredFromNative ? 'true' : 'false'
   });
-  
+
   const path = `/call?${params.toString()}`;
 
   // ✅ Use safe navigation with retries and return success status
@@ -167,7 +167,7 @@ const handleNativeIncomingCall = () => {
     if (global.nativeCallData) {
       const callData = global.nativeCallData;
       console.log('CALLKEEP: Processing native incoming call:', callData);
-      
+
       // Navigate to call screen with native data
       navigateToActiveCall({
         appointmentId: callData.sessionId,
@@ -177,7 +177,7 @@ const handleNativeIncomingCall = () => {
         isIncomingCall: true,
         answeredFromNative: true,
       });
-      
+
       // Clear the native data
       global.nativeCallData = null;
     }
@@ -189,39 +189,70 @@ const handleNativeIncomingCall = () => {
 // Listen for native incoming call events from MainActivity
 DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
   console.log('CALLKEEP: Received native incoming call event:', callData);
-  
+
   // Check deduplication service to prevent multiple call screens
   const appointmentId = String(callData.sessionId || '');
   const callType = (callData.callType === 'video' ? 'video' : 'audio');
-  
+
   if (!callDeduplicationService.shouldShowCall(appointmentId, callType, 'native')) {
     console.log('CALLKEEP: Duplicate call blocked by deduplication service');
     return;
   }
-  
+
   // Start custom ringtone
   ringtoneService.start();
-  
-  // Navigate to call screen with native data
-  navigateToActiveCall({
-    appointmentId: callData.sessionId,
-    doctorId: callData.doctorId,
-    doctorName: callData.doctorName,
-    callType: callData.callType,
-    isIncomingCall: true,
-    answeredFromNative: true,
-  });
+
+  // Only pass answeredFromCallKeep=true if the user explicitly tapped Answer
+  // in the native CallKeep UI — not just because the notification appeared
+  const wasAnsweredByUser = callData.answeredFromNative === true; // Native side already did && answeredFromCallKeep
+
+  // Store globally — let _layout.tsx navigate when router is ready
+  global.pendingIncomingCallData = {
+    type: 'incoming_call',
+    appointment_id: callData.sessionId,
+    call_type: callType,
+    doctor_name: callData.doctorName || '',
+    doctor_id: callData.doctorId || '',
+    isIncomingCall: 'true',
+    answeredFromNative: wasAnsweredByUser,
+  };
+
+  // If router already ready (background state), navigate immediately
+  if (global.isRouterReady) {
+    console.log('CALLKEEP: Router ready, navigating immediately');
+    navigateToActiveCall({
+      appointmentId: callData.sessionId,
+      doctorId: callData.doctorId,
+      doctorName: callData.doctorName,
+      callType: callData.callType,
+      isIncomingCall: true,
+      answeredFromNative: wasAnsweredByUser,
+    });
+    global.pendingIncomingCallData = null;
+  } else {
+    console.log('CALLKEEP: Router NOT ready, storing as pending call');
+  }
 });
+
+// Flag to ensure call is only answered if it was first displayed
+let hasDisplayedIncomingCall = false;
 
 const handleAnswerCall = async ({ callUUID }) => {
   console.log('CALLKEEP: answerCall event', callUUID);
 
+  // Guard: ignore if call was never displayed to user yet
+  // This prevents auto-answer on background resume on MIUI devices
+  if (!hasDisplayedIncomingCall) {
+    console.log('CALLKEEP: ignoring answerCall — call not yet displayed to user');
+    return;
+  }
+
   // Stop ringtone when answering
-  try { await ringtoneService.stop(); } catch {}
+  try { await ringtoneService.stop(); } catch { }
 
   const callData = await ensureCallData(callUUID);
   const sessionId = callData?.appointmentId || callData?.appointment_id;
-  
+
   // Deduplicate: Skip if we've already answered this session
   // ✅ Deduplicate: Skip if we've already answered this session
   if (sessionId && answeredSessions.has(sessionId)) {
@@ -238,7 +269,7 @@ const handleAnswerCall = async ({ callUUID }) => {
   if (sessionId) {
     answeredSessions.add(sessionId);
     console.log('CALLKEEP: Marked session as answered:', sessionId);
-    
+
     // Auto-clear after 30 seconds to allow re-answers if needed
     setTimeout(() => {
       answeredSessions.delete(sessionId);
@@ -253,7 +284,7 @@ const handleAnswerCall = async ({ callUUID }) => {
   }
 
   console.log('CALLKEEP: answerCall using payload', callData);
-  
+
   // ✅ Navigate to call screen immediately (no artificial delay)
   navigateToActiveCall(callData);
 };
@@ -267,8 +298,10 @@ const clearCallData = async () => {
 const handleEndCall = async ({ callUUID, reason }) => {
   console.log('CALLKEEP: endCall event', callUUID, 'reason:', reason);
 
+  hasDisplayedIncomingCall = false;
+
   // Ensure ringtone stops on end
-  try { await ringtoneService.stop(); } catch {}
+  try { await ringtoneService.stop(); } catch { }
 
   // ✅ Don't clear data if we're just dismissing system UI
   if (isDismissingSystemUI) {
@@ -295,6 +328,7 @@ const handleEndCall = async ({ callUUID, reason }) => {
 
 const handleDidDisplayIncomingCall = ({ callUUID }) => {
   console.log('CALLKEEP: didDisplayIncomingCall', callUUID);
+  hasDisplayedIncomingCall = true;
   // Start custom ringtone when system UI is displayed
   ringtoneService.start();
 };
@@ -312,6 +346,16 @@ console.log('CALLKEEP: registering listeners');
 RNCallKeep.addEventListener('answerCall', handleAnswerCall);
 RNCallKeep.addEventListener('endCall', handleEndCall);
 RNCallKeep.addEventListener('didDisplayIncomingCall', handleDidDisplayIncomingCall);
+
+// Safety resets for flag to ensure it doesn't get stuck
+RNCallKeep.addEventListener('didActivateAudioSession', () => {
+  console.log('CALLKEEP: didActivateAudioSession - safety resetting display flag');
+  hasDisplayedIncomingCall = false;
+});
+RNCallKeep.addEventListener('didReset', () => {
+  console.log('CALLKEEP: didReset - resetting display flag');
+  hasDisplayedIncomingCall = false;
+});
 
 bootstrapPendingCallCheck();
 

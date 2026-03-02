@@ -29,7 +29,7 @@ interface VideoCallModalProps {
   otherParticipantProfilePictureUrl?: string;
   onEndCall: () => void;
   onCallTimeout?: () => void;
-  onCallRejected?: () => void;
+  onCallRejected?: (rejectedBy?: string) => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
   autoAcceptFromSystemUI?: boolean;
@@ -517,7 +517,7 @@ export default function VideoCallModal({
             }, 500);
           }
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Video call rejected');
           onCallRejected?.();
         },
@@ -608,7 +608,7 @@ export default function VideoCallModal({
             }, 500);
           }
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Video call rejected');
           onCallRejected?.();
         },
@@ -699,17 +699,44 @@ export default function VideoCallModal({
     // Unified reject handler - works identically for caller and receiver
     Vibration.vibrate(50);
 
-    // Stop ringtone when rejecting call
+    // Stop ringtone immediately when rejecting call
     try {
       await ringtoneService.stop();
+      console.log('🔕 Ringtone stopped on video call decline');
     } catch (e) {
       console.error('❌ Failed to stop ringtone:', e);
     }
 
-    // Use endCall for both incoming and outgoing to ensure both sides close properly
+    // 1. Hit backend to record decline
+    try {
+      const { environment } = await import('../config/environment');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const token = await AsyncStorage.getItem('auth_token');
+
+      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          appointment_id: appointmentId,
+          caller_id: isDoctor ? (doctorId || userId) : userId, // Use correct ID based on who is rejecting
+        }),
+      });
+      console.log('📝 Call decline recorded in backend');
+    } catch (e) {
+      console.error('❌ Failed to record decline in DB:', e);
+    }
+
+    // 2. End WebRTC session with context
     // This ensures both sides close WebRTC connection and dismiss modal
     if (videoCallService.current) {
-      await videoCallService.current.endCall();
+      try {
+        await videoCallService.current.declineCall(isDoctor);
+      } catch (e) {
+        console.error('❌ Failed to decline call in WebRTC service:', e);
+      }
     }
     onRejectCall?.();
   };

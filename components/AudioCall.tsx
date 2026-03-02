@@ -27,7 +27,7 @@ interface AudioCallProps {
   otherParticipantProfilePictureUrl?: string;
   onEndCall: () => void;
   onCallTimeout?: () => void;
-  onCallRejected?: () => void;
+  onCallRejected?: (rejectedBy?: string) => void;
   onCallAnswered?: () => void;
   isIncomingCall?: boolean;
   autoAcceptFromSystemUI?: boolean;
@@ -275,7 +275,7 @@ export default function AudioCall({
 
           onCallAnswered?.();
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Call rejected');
           onCallRejected?.();
         },
@@ -333,7 +333,7 @@ export default function AudioCall({
             maxCycles: 6              // Safety limit (60 minutes)
           });
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('❌ Call rejected');
           onCallRejected?.();
         },
@@ -620,22 +620,43 @@ export default function AudioCall({
           <TouchableOpacity
             style={[styles.controlButton, styles.declineButton]}
             onPress={async () => {
-              // Unified reject handler - works identically for caller and receiver
               Vibration.vibrate(50);
-              // Stop ringtone immediately when declining call
+
+              // Stop ringtone immediately
               try {
                 await ringtoneService.stop();
                 console.log('🔕 Ringtone stopped on call decline');
-              } catch (e) {
-                console.error('❌ Failed to stop ringtone on decline:', e);
-              }
-              // Use endCall for both incoming and outgoing to ensure both sides close properly
-              // This ensures both sides close WebRTC connection and dismiss modal
+              } catch (e) { }
+
+              // 1. Hit backend to record decline
               try {
-                await AudioCallService.getInstance().endCall();
+                const { environment } = await import('../config/environment');
+                const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                const token = await AsyncStorage.getItem('auth_token');
+
+                await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({
+                    appointment_id: appointmentId,
+                    caller_id: isDoctor ? (doctorId || userId) : userId,
+                    reason: 'declined_by_receiver',
+                    declined_by: isDoctor ? 'doctor' : 'patient',
+                  }),
+                });
+                console.log('✅ Call decline recorded in DB');
               } catch (e) {
-                console.error('❌ Failed to end call on reject:', e);
+                console.error('❌ Failed to record decline in DB:', e);
               }
+
+              // 2. End WebRTC session with context
+              try {
+                await AudioCallService.getInstance().declineCall(isDoctor);
+              } catch (e) { }
+
               onCallRejected?.();
             }}
             activeOpacity={0.8}

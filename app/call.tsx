@@ -201,9 +201,9 @@ export default function CallScreen() {
                 console.log('📞 Audio call timeout');
                 handleCallTimeout();
               },
-              onCallRejected: () => {
+              onCallRejected: (rejectedBy?: string) => {
                 console.log('📞 Audio call rejected');
-                handleCallRejected();
+                handleCallRejected(rejectedBy);
               },
               onRemoteStream: () => {
                 console.log('📞 Remote audio stream received');
@@ -250,9 +250,9 @@ export default function CallScreen() {
                 console.log('📹 Video call timeout');
                 handleCallTimeout();
               },
-              onCallRejected: () => {
+              onCallRejected: (rejectedBy?: string) => {
                 console.log('📹 Video call rejected');
-                handleCallRejected();
+                handleCallRejected(rejectedBy);
               },
               onRemoteStream: () => {
                 console.log('📹 Remote video stream received');
@@ -319,20 +319,17 @@ export default function CallScreen() {
     );
   };
 
-  const handleCallRejected = () => {
-    Alert.alert(
-      'Call Rejected',
-      'The doctor is not available right now. Please try again later.',
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            const isDoctorUser = user?.user_type === 'doctor';
-            router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
-          }
-        }
-      ]
-    );
+  const handleCallRejected = (rejectedBy?: string) => {
+    const isCallerView = !isIncomingCall;
+
+    if (isCallerView) {
+      Alert.alert('Call Declined', 'The doctor declined the call.');
+    } else {
+      Alert.alert('Call Declined', 'You declined the call.');
+    }
+
+    const isDoctorUser = user?.user_type === 'doctor';
+    router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
   };
 
   if (isLoading) {

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import {
-    Alert,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { VideoCallService, VideoCallState } from '../services/videoCallService';
 
@@ -17,7 +17,7 @@ export default function VideoCallTest() {
   const initializeVideoCall = async () => {
     try {
       const service = VideoCallService.getInstance();
-      
+
       const events = {
         onStateChange: (state: VideoCallState) => {
           setCallState(state);
@@ -30,7 +30,7 @@ export default function VideoCallTest() {
           console.log('📹 Video call ended');
           Alert.alert('Call Ended', 'The video call has ended.');
         },
-        onCallRejected: () => {
+        onCallRejected: (rejectedBy?: string) => {
           console.log('📹 Video call rejected');
           Alert.alert('Call Rejected', 'The video call was rejected.');
         },
@@ -40,10 +40,10 @@ export default function VideoCallTest() {
         },
       };
 
-      await service.initialize('test-appointment-123', 'test-user-456', events);
+      await service.initialize('test-appointment-123', 'test-user-456', undefined, events);
       setVideoCallService(service);
       setIsInitialized(true);
-      
+
       Alert.alert('Success', 'Video call service initialized successfully!');
     } catch (error) {
       console.error('❌ Error initializing video call:', error);
@@ -51,19 +51,10 @@ export default function VideoCallTest() {
     }
   };
 
-  const createOffer = async () => {
-    if (!videoCallService) {
-      Alert.alert('Error', 'Video call service not initialized');
-      return;
-    }
-
-    try {
-      await videoCallService.createOffer();
-      Alert.alert('Success', 'Video call offer created and sent!');
-    } catch (error) {
-      console.error('❌ Error creating offer:', error);
-      Alert.alert('Error', `Failed to create offer: ${error}`);
-    }
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const toggleAudio = () => {
@@ -105,7 +96,7 @@ export default function VideoCallTest() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Video Call Test</Text>
-      
+
       {callState && (
         <View style={styles.stateContainer}>
           <Text style={styles.stateTitle}>Call State:</Text>
@@ -113,7 +104,7 @@ export default function VideoCallTest() {
           <Text>Audio Enabled: {callState.isAudioEnabled ? 'Yes' : 'No'}</Text>
           <Text>Video Enabled: {callState.isVideoEnabled ? 'Yes' : 'No'}</Text>
           <Text>Front Camera: {callState.isFrontCamera ? 'Yes' : 'No'}</Text>
-          <Text>Duration: {videoCallService?.getFormattedDuration() || '00:00'}</Text>
+          <Text>Duration: {callState ? formatDuration(callState.callDuration) : '00:00'}</Text>
           <Text>Connection: {callState.connectionState}</Text>
         </View>
       )}
@@ -133,9 +124,9 @@ export default function VideoCallTest() {
           <>
             <TouchableOpacity
               style={[styles.button, styles.secondaryButton]}
-              onPress={createOffer}
+              onPress={() => Alert.alert('Info', 'Offer is automatically created during initialization.')}
             >
-              <Text style={styles.buttonText}>Create Offer</Text>
+              <Text style={styles.buttonText}>About Offer</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

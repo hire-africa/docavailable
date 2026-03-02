@@ -29,10 +29,11 @@ export interface VideoCallEvents {
   onStateChange: (state: VideoCallState) => void;
   onRemoteStream: (stream: MediaStream) => void;
   onCallEnded: () => void;
-  onCallRejected: () => void;
+  onCallRejected: (rejectedBy?: string) => void;
   onCallTimeout: () => void;
   onCallAnswered?: () => void;
   onPeerMediaStateChange?: (payload: { audioEnabled: boolean; videoEnabled: boolean }) => void;
+  onError?: (error: string) => void;
 }
 
 class VideoCallService {
@@ -251,9 +252,9 @@ class VideoCallService {
     this.events?.onCallAnswered?.();
   }
 
-  private handleCallRejected(): void {
+  private handleCallRejected(rejectedBy?: string): void {
     this.endCall();
-    this.events?.onCallRejected();
+    this.events?.onCallRejected(rejectedBy);
   }
 
   private handleCallTimeout(): void {
@@ -303,6 +304,46 @@ class VideoCallService {
     const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
     this.updateCallSessionInBackend(duration, this.state.isConnected);
     this.sendSignalingMessage({ type: 'call-ended', senderId: this.userId, appointmentId: this.appointmentId });
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+
+    await this.resetAudioRouting();
+    this.updateState({ isConnected: false, connectionState: 'disconnected' });
+    this.events?.onCallEnded();
+    (global as any).activeVideoCall = false;
+    if ((global as any).currentCallType === 'video') (global as any).currentCallType = null;
+  }
+
+  async declineCall(isDoctor: boolean = false): Promise<void> {
+    if (this.hasEnded) return;
+    this.hasEnded = true;
+
+    this.stopCallTimer();
+    this.clearCallTimeout();
+    this.clearReofferLoop();
+
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    // Send rejection with context
+    this.sendSignalingMessage({
+      type: 'call-rejected',
+      senderId: this.userId,
+      appointmentId: this.appointmentId,
+      rejectedBy: isDoctor ? 'doctor' : 'patient',
+    });
+
+    const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
+    this.updateCallSessionInBackend(duration, false);
+
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
 
@@ -625,7 +666,7 @@ class VideoCallService {
                 case 'ice-candidate': await this.handleIceCandidate(message.candidate); break;
                 case 'call-ended': this.endCall(); break;
                 case 'call-answered': this.handleCallAnswered(); break;
-                case 'call-rejected': this.handleCallRejected(); break;
+                case 'call-rejected': this.handleCallRejected(message.rejectedBy); break;
                 case 'call-timeout': this.handleCallTimeout(); break;
                 case 'resend-offer-request':
                   if (!this.isIncoming && !this.isIncomingMode && this.peerConnection) {

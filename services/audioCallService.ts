@@ -29,7 +29,7 @@ export interface AudioCallEvents {
   onCallEnded: () => void;
   onError: (error: string) => void;
   onCallAnswered: () => void;
-  onCallRejected: () => void;
+  onCallRejected: (rejectedBy?: string) => void;
   onCallTimeout: () => void;
 }
 
@@ -62,7 +62,6 @@ class AudioCallService {
   private isInitializing: boolean = false;
   private messageQueue: any[] = [];
   private signalingFlushTimer: ReturnType<typeof setInterval> | null = null;
-  private disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
   private iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -249,9 +248,9 @@ class AudioCallService {
     this.events?.onCallAnswered();
   }
 
-  private handleCallRejected(): void {
+  private handleCallRejected(rejectedBy?: string): void {
     this.endCall();
-    this.events?.onCallRejected();
+    this.events?.onCallRejected(rejectedBy);
   }
 
   private handleCallTimeout(): void {
@@ -298,11 +297,27 @@ class AudioCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
     this.clearReofferLoop();
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
     const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
     this.updateCallSessionInBackend(duration, this.state.isConnected);
     this.sendSignalingMessage({ type: 'call-ended', senderId: this.userId, appointmentId: this.appointmentId });
+
+    // Close signaling channel
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+      this.signalingChannel = null;
+    }
+
+    // Release both streams
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
 
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -316,6 +331,49 @@ class AudioCallService {
     if ((global as any).currentCallType === 'audio') (global as any).currentCallType = null;
   }
 
+  async declineCall(isDoctor: boolean = false): Promise<void> {
+    if (this.hasEnded) return;
+    this.hasEnded = true;
+
+    this.stopCallTimer();
+    this.clearCallTimeout();
+    this.clearReofferLoop();
+
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    // Send rejection with context
+    this.sendSignalingMessage({
+      type: 'call-rejected',
+      senderId: this.userId,
+      appointmentId: this.appointmentId,
+      rejectedBy: isDoctor ? 'doctor' : 'patient',
+    });
+
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+      this.signalingChannel = null;
+    }
+
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
+
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+
+    await this.resetAudioRouting();
+    this.updateState({ isConnected: false, connectionState: 'disconnected' });
+    this.events?.onCallEnded();
+    (global as any).activeAudioCall = false;
+  }
+
   async reset(): Promise<void> {
     this.hasEnded = false;
     this.didConnect = false;
@@ -326,8 +384,22 @@ class AudioCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
     this.clearReofferLoop();
+
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+      this.signalingChannel = null;
+    }
+
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
 
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -622,7 +694,7 @@ class AudioCallService {
                 case 'ice-candidate': await this.handleIceCandidate(message.candidate); break;
                 case 'call-ended': this.endCall(); break;
                 case 'call-answered': this.handleCallAnswered(); break;
-                case 'call-rejected': this.handleCallRejected(); break;
+                case 'call-rejected': this.handleCallRejected(message.rejectedBy); break;
                 case 'call-timeout': this.handleCallTimeout(); break;
                 case 'resend-offer-request':
                   if (!this.isIncoming && !this.isIncomingMode && this.peerConnection) {

@@ -10,7 +10,7 @@ module.exports = {
     userInterfaceStyle: "light",
     runtimeVersion: "1.1.3",
     updates: {
-      url: "https://u.expo.dev/972b5d32-2589-4960-a52d-2dcc6fe53eeb"
+      url: "https://u.expo.dev/2166156d-3cb3-4f6e-9cd1-f40471339866"
     },
 
     splash: {

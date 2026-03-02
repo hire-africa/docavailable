@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useCallSetup } from '../hooks/useCallSetup';
 
@@ -28,10 +28,10 @@ interface AudioCallProps {
   isIncomingCall?: boolean;
 }
 
-export default function AudioCall({ 
-  appointmentId, 
-  userId, 
-  isDoctor, 
+export default function AudioCall({
+  appointmentId,
+  userId,
+  isDoctor,
   doctorName = 'Doctor',
   patientName = 'Patient',
   otherParticipantProfilePictureUrl,
@@ -60,7 +60,8 @@ export default function AudioCall({
     callState,
     isInitializing: hookIsInitializing,
     isRinging: hookIsRinging,
-    endCall
+    endCall,
+    declineCall
   } = useCallSetup({
     appointmentId,
     userId,
@@ -74,7 +75,7 @@ export default function AudioCall({
       },
       onCallEnded: onEndCall,
       onCallTimeout: onCallTimeout,
-      onCallRejected: onCallRejected,
+      onCallRejected: (rejectedBy?: string) => onCallRejected?.(),
       onStateChange: (state) => {
         setIsInitializing(state.connectionState === 'connecting');
         setIsRinging(state.connectionState === 'connecting');
@@ -103,8 +104,31 @@ export default function AudioCall({
     onCallAnswered?.();
   };
 
-  const handleRejectCall = () => {
-    onCallRejected?.();
+  const handleRejectCall = async () => {
+    // 1. Hit backend to record decline
+    try {
+      const { environment } = await import('../config/environment');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const token = await AsyncStorage.getItem('auth_token');
+
+      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          appointment_id: appointmentId,
+          caller_id: userId,
+        }),
+      });
+      console.log('📝 Call decline recorded in backend');
+    } catch (e) {
+      console.error('❌ Failed to record decline in DB:', e);
+    }
+
+    // 2. End session with context
+    await declineCall(isDoctor);
     onEndCall();
   };
 
@@ -168,7 +192,7 @@ export default function AudioCall({
             <Text style={styles.callerName}>{doctorName}</Text>
             <Text style={styles.callStatus}>Incoming Audio Call</Text>
           </View>
-          
+
           <View style={styles.actionButtons}>
             <TouchableOpacity
               style={[styles.actionButton, styles.rejectButton]}
@@ -176,7 +200,7 @@ export default function AudioCall({
             >
               <Ionicons name="call" size={30} color="#fff" />
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.actionButton, styles.acceptButton]}
               onPress={handleAcceptCall}
@@ -223,7 +247,7 @@ export default function AudioCall({
             {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
           </Text>
         </View>
-        
+
         <View style={styles.controlButtons}>
           <TouchableOpacity
             style={[styles.controlButton, isMuted && styles.activeButton]}
@@ -231,14 +255,14 @@ export default function AudioCall({
           >
             <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, styles.endCallButton]}
             onPress={handleEndCall}
           >
             <Ionicons name="call" size={24} color="#fff" />
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.controlButton, isSpeakerOn && styles.activeButton]}
             onPress={handleSpeakerToggle}
