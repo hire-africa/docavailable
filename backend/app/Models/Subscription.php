@@ -41,11 +41,13 @@ class Subscription extends Model
         'payment_metadata' => 'array',
     ];
 
-    public function plan(){
+    public function plan()
+    {
         return $this->belongsTo(Plan::class);
     }
 
-    public function user(){
+    public function user()
+    {
         return $this->belongsTo(User::class);
     }
 
@@ -54,15 +56,17 @@ class Subscription extends Model
      */
     public function getIsActiveAttribute(): bool
     {
-        // First check the explicit is_active field
-        if (isset($this->attributes['is_active'])) {
-            return (bool) $this->attributes['is_active'];
+        // First, if explicitly deactivated in DB, it is not active
+        if (isset($this->attributes['is_active']) && !(bool) $this->attributes['is_active']) {
+            return false;
         }
-        
-        // Fallback to checking status and end date
-        return $this->status == 1 && 
-               $this->end_date && 
-               $this->end_date->isFuture();
+
+        // If the end date has passed, it is no longer active at runtime
+        if ($this->end_date && $this->end_date->isPast()) {
+            return false;
+        }
+
+        return $this->status == 1; // 1 = active
     }
 
     /**
@@ -81,7 +85,7 @@ class Subscription extends Model
         if (!$this->end_date) {
             return 0;
         }
-        
+
         return max(0, Carbon::now()->diffInDays($this->end_date, false));
     }
 

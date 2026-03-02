@@ -95,9 +95,14 @@ function NotificationsContent() {
           // Extract type from notification data or use default
           const notificationType = n.data?.type || n.type || 'system';
 
+          let title = n.title || n.data?.title || 'Notification';
+          if (notificationType === 'chat_message') {
+            title = n.data?.title || (n.data?.sender_name ? `New message from ${n.data?.sender_name}` : 'New Message');
+          }
+
           return {
             id: n.id.toString(),
-            title: n.title || n.data?.title || 'Notification',
+            title: title,
             message: n.body || n.data?.body || n.data?.message || '',
             type: notificationType,
             isRead: !!n.read_at,

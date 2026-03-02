@@ -40,9 +40,9 @@ Schedule::command('appointments:expire')
     ->withoutOverlapping();
 
 // Process subscription expirations and apply 30-day plan roll-over rules
-// Runs daily to check and update subscription statuses
+// Runs every 5 minutes to check and update subscription statuses quickly
 Schedule::command('subscriptions:process-expirations')
-    ->daily()
+    ->everyFiveMinutes()
     ->withoutOverlapping();
 
 // Note: Auto-ending for text sessions is handled by the existing ProcessExpiredTextSessions command
@@ -66,5 +66,10 @@ Schedule::command('appointments:activate-booked')
 // NEW: Auto-start appointment sessions (idempotent, no instant interference)
 // Runs every 60 seconds to meet the 30-60s cadence requirement
 Schedule::command('appointments:auto-start-sessions')
+    ->everyMinute()
+    ->withoutOverlapping();
+
+// NEW: Send 10-minute appointment reminders
+Schedule::command('notifications:send-10min-reminders')
     ->everyMinute()
     ->withoutOverlapping();

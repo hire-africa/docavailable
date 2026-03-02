@@ -570,25 +570,47 @@ export default function BookAppointmentFlow() {
             {consultationTypes.map(type => {
               const available = isTypeAvailable(type.key);
               return (
-                <View key={type.key} style={styles.consultationTypeRow}>
-                  <TouchableOpacity
-                    style={[styles.consultationTypeBtn, consultationType === type.key && styles.selectedConsultationTypeBtn, !available && { backgroundColor: '#E0E0E0' }]}
-                    onPress={() => available && setConsultationType(type.key)}
-                    disabled={!available}
-                  >
+                <TouchableOpacity
+                  key={type.key}
+                  style={[
+                    styles.consultationTypeCard,
+                    consultationType === type.key && styles.selectedConsultationTypeCard,
+                    !available && styles.disabledConsultationTypeCard
+                  ]}
+                  onPress={() => available && setConsultationType(type.key)}
+                  disabled={!available}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.consultationTypeIconWrapper,
+                    consultationType === type.key && styles.selectedConsultationTypeIconWrapper,
+                    !available && styles.disabledConsultationTypeIconWrapper
+                  ]}>
                     <FontAwesome
                       name={type.icon as any}
-                      size={16}
-                      color={consultationType === type.key ? '#fff' : (!available ? '#aaa' : '#222')}
+                      size={20}
+                      color={consultationType === type.key ? '#fff' : (!available ? '#aaa' : '#4CAF50')}
                     />
-                  </TouchableOpacity>
+                  </View>
                   <View style={styles.consultationTypeTextContainer}>
-                    <Text style={[styles.consultationTypeText, !available && { color: '#aaa' }]}>{type.label}</Text>
+                    <Text style={[
+                      styles.consultationTypeText,
+                      consultationType === type.key && styles.selectedConsultationTypeText,
+                      !available && { color: '#aaa' }
+                    ]}>{type.label}</Text>
                     {!available && (
                       <Text style={styles.consultationTypeUnavailable}>(0 left)</Text>
                     )}
                   </View>
-                </View>
+                  <View style={styles.consultationTypeRadio}>
+                    {consultationType === type.key && (
+                      <FontAwesome name="check-circle" size={22} color="#4CAF50" />
+                    )}
+                    {consultationType !== type.key && available && (
+                      <FontAwesome name="circle-thin" size={22} color="#E0E0E0" />
+                    )}
+                  </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -1173,36 +1195,68 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginBottom: 8,
   },
-  consultationTypeRow: {
+  consultationTypeCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  consultationTypeBtn: {
-    backgroundColor: '#F1F3F4',
-    borderRadius: 12,
-    padding: 12,
-    marginRight: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+  selectedConsultationTypeCard: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#F1F8F1',
+    borderWidth: 2,
+  },
+  disabledConsultationTypeCard: {
+    backgroundColor: '#F5F5F5',
+    borderColor: '#E0E0E0',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  consultationTypeIconWrapper: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E8F5E9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
   },
-  selectedConsultationTypeBtn: {
+  selectedConsultationTypeIconWrapper: {
     backgroundColor: '#4CAF50',
+  },
+  disabledConsultationTypeIconWrapper: {
+    backgroundColor: '#E0E0E0',
   },
   consultationTypeTextContainer: {
     flex: 1,
   },
   consultationTypeText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#222',
-    fontWeight: '600',
-    fontSize: 15,
+  },
+  selectedConsultationTypeText: {
+    color: '#2E7D32',
   },
   consultationTypeUnavailable: {
-    color: '#aaa',
-    fontSize: 12,
+    fontSize: 13,
+    color: '#F44336',
     marginTop: 2,
+    fontWeight: '500',
+  },
+  consultationTypeRadio: {
+    marginLeft: 12,
+    width: 24,
+    alignItems: 'center',
   },
   reasonInput: {
     backgroundColor: '#fff',

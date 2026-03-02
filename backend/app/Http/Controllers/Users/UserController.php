@@ -15,7 +15,7 @@ class UserController extends Controller
     {
         try {
             $user = User::find(auth()->user()->id);
-            
+
             if (!$user) {
                 \Log::warning('Subscription request: User not found', [
                     'auth_user_id' => auth()->user()->id ?? 'null'
@@ -26,15 +26,15 @@ class UserController extends Controller
                     'message' => 'User not found'
                 ], 404);
             }
-            
+
             \Log::info('Subscription request for user', [
                 'user_id' => $user->id,
                 'email' => $user->email
             ]);
-            
+
             // Try different ways to load the subscription
             $subscription = null;
-            
+
             // Method 1: Direct relationship
             $subscription = $user->subscription;
             \Log::info('Subscription loaded via relationship', [
@@ -43,14 +43,14 @@ class UserController extends Controller
                 'subscription_id' => $subscription->id ?? 'null',
                 'is_active' => $subscription->is_active ?? 'null'
             ]);
-            
+
             // Method 2: Direct query if relationship failed
             if (!$subscription) {
                 $subscription = Subscription::where('user_id', $user->id)
                     ->orderBy('is_active', 'desc')
                     ->orderBy('created_at', 'desc')
                     ->first();
-                    
+
                 \Log::info('Subscription loaded via direct query', [
                     'user_id' => $user->id,
                     'subscription_found' => $subscription ? 'yes' : 'no',
@@ -58,7 +58,7 @@ class UserController extends Controller
                     'is_active' => $subscription->is_active ?? 'null'
                 ]);
             }
-            
+
             // Method 3: Check for any subscription (including inactive)
             if (!$subscription) {
                 $anySubscription = Subscription::where('user_id', $user->id)->first();
@@ -70,20 +70,20 @@ class UserController extends Controller
                     'status' => $anySubscription->status ?? 'null'
                 ]);
             }
-            
+
             if (!$subscription) {
                 \Log::info('No subscription found for user', [
                     'user_id' => $user->id,
                     'email' => $user->email
                 ]);
-                
+
                 return response()->json([
                     'success' => true,
                     'data' => null,
                     'message' => 'No subscription found'
                 ]);
             }
-            
+
             // Log subscription details
             \Log::info('Subscription details', [
                 'subscription_id' => $subscription->id,
@@ -98,7 +98,7 @@ class UserController extends Controller
                 'voice_calls_remaining' => $subscription->voice_calls_remaining,
                 'video_calls_remaining' => $subscription->video_calls_remaining
             ]);
-            
+
             $responseData = [
                 'id' => $subscription->id,
                 'plan_id' => $subscription->plan_id,
@@ -118,24 +118,24 @@ class UserController extends Controller
                 'start_date' => $subscription->start_date,
                 'end_date' => $subscription->end_date
             ];
-            
+
             \Log::info('Returning subscription data', [
                 'subscription_id' => $subscription->id,
                 'response_keys' => array_keys($responseData)
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'data' => $responseData
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error in subscription endpoint', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'user_id' => auth()->user()->id ?? 'null'
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'data' => null,
@@ -171,7 +171,7 @@ class UserController extends Controller
     {
         try {
             $user = User::find($id);
-            
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -255,25 +255,25 @@ class UserController extends Controller
             $perPage = $request->get('per_page', 20);
             $search = $request->get('search');
             $specialty = $request->get('specialty');
-            
+
             $query = User::where('user_type', 'doctor')
                 ->whereIn('status', ['active', 'approved']);
-            
+
             // Apply search filter
             if ($search) {
-                $query->where(function($q) use ($search) {
+                $query->where(function ($q) use ($search) {
                     $q->where('first_name', 'like', "%{$search}%")
-                      ->orWhere('last_name', 'like', "%{$search}%")
-                      ->orWhere('display_name', 'like', "%{$search}%")
-                      ->orWhere('specialization', 'like', "%{$search}%");
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('display_name', 'like', "%{$search}%")
+                        ->orWhere('specialization', 'like', "%{$search}%");
                 });
             }
-            
+
             // Apply specialty filter
             if ($specialty) {
                 $query->where('specialization', 'like', "%{$specialty}%");
             }
-            
+
             $doctors = $query->select([
                 'id',
                 'first_name',
@@ -286,27 +286,29 @@ class UserController extends Controller
                 'city',
                 'country',
                 'status',
+                'rating',
+                'total_ratings',
                 'profile_picture'
             ])
-            ->orderBy('years_of_experience', 'desc')
-            ->orderBy('id', 'desc')
-            ->paginate($perPage);
-            
+                ->orderBy('years_of_experience', 'desc')
+                ->orderBy('id', 'desc')
+                ->paginate($perPage);
+
             // Add profile picture URLs to each doctor
             $doctors->getCollection()->transform(function ($doctor) {
                 $doctorData = $doctor->toArray();
-                
+
                 // Add profile picture URL using model accessor (handles absolute/relative)
                 if ($doctor->profile_picture) {
                     $doctorData['profile_picture_url'] = $doctor->profile_picture_url;
                 }
-                
+
                 // Get actual availability info from doctor_availabilities table
                 $availability = \App\Models\DoctorAvailability::where('doctor_id', $doctor->id)->first();
                 if ($availability) {
                     $doctorData['is_online'] = $availability->is_online;
                     $doctorData['is_online_for_instant_sessions'] = $availability->is_online;
-                    $doctorData['working_hours'] = json_decode($availability->working_hours, true);
+                    $doctorData['working_hours'] = $availability->working_hours;
                     $doctorData['max_patients_per_day'] = $availability->max_patients_per_day;
                 } else {
                     // Set default availability info if no record exists
@@ -315,17 +317,17 @@ class UserController extends Controller
                     $doctorData['working_hours'] = null;
                     $doctorData['max_patients_per_day'] = 10;
                 }
-                
+
                 return $doctorData;
             });
-            
+
             return $this->success($doctors, 'Active doctors fetched successfully');
         } catch (\Exception $e) {
             \Log::error('Error fetching active doctors:', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return $this->error('Failed to fetch active doctors: ' . $e->getMessage(), 500);
         }
     }
@@ -337,7 +339,7 @@ class UserController extends Controller
     {
         try {
             $user = User::find($userId);
-            
+
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -348,7 +350,7 @@ class UserController extends Controller
             // For now, we'll use a simple approach based on last activity
             // You can enhance this with more sophisticated logic later
             $isOnline = false;
-            
+
             // Check if user has been active in the last 5 minutes
             if ($user->last_online_at) {
                 $lastActivity = \Carbon\Carbon::parse($user->last_online_at);
@@ -378,7 +380,7 @@ class UserController extends Controller
     {
         try {
             $user = $request->user();
-            
+
             $user->update([
                 'last_online_at' => now()
             ]);
@@ -406,7 +408,7 @@ class UserController extends Controller
     {
         try {
             $user = User::find($userId);
-            
+
             if (!$user) {
                 return response()->json([
                     'success' => false,

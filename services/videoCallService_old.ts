@@ -1,11 +1,11 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import Constants from 'expo-constants';
 import {
-    mediaDevices,
-    MediaStream,
-    RTCIceCandidate,
-    RTCPeerConnection,
-    RTCSessionDescription,
+  mediaDevices,
+  MediaStream,
+  RTCIceCandidate,
+  RTCPeerConnection,
+  RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import configService from './configService';
@@ -810,15 +810,13 @@ class VideoCallService {
       // Create secure WebSocket connection that handles self-signed certificates
       this.signalingChannel = new SecureWebSocketService({
         url: wsUrl,
-        ignoreSSLErrors: true, // Allow self-signed certificates
         onOpen: () => {
           console.log('✅ [VideoCallService] Connected to video signaling server');
           console.log('🔍 [VideoCallService] Signaling WebSocket URL:', wsUrl);
           console.log('🔍 [VideoCallService] Signaling readyState:', this.signalingChannel?.readyState);
         },
-        onMessage: async (event) => {
+        onMessage: async (message: any) => {
           try {
-            const message = JSON.parse(event.data);
             console.log('📨 Video signaling message received:', message.type);
 
             switch (message.type) {

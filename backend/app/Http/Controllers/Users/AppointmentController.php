@@ -751,6 +751,7 @@ class AppointmentController extends Controller
     public function startSession($id)
     {
         try {
+            $user = auth()->user();
             $appointment = \App\Models\Appointment::find($id);
 
             if (!$appointment) {
@@ -1158,6 +1159,13 @@ class AppointmentController extends Controller
     {
         try {
             $appointment = $this->appointmentService->updateStatus($request, $id);
+
+            // Clear dashboard caches to prevent 60s delay bug
+            if ($appointment) {
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->doctor_id}");
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->patient_id}");
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Appointment status updated successfully',
@@ -1180,6 +1188,13 @@ class AppointmentController extends Controller
     public function deleteExpiredAppointment(Request $request, $id)
     {
         try {
+            // Get appointment to clear patient cache before deletion
+            $appointment = \App\Models\Appointment::find($id);
+            if ($appointment) {
+                \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->patient_id}");
+            }
+            \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_" . auth()->id());
+
             $this->appointmentService->deleteExpiredAppointment($request, $id);
             return response()->json([
                 'success' => true,
@@ -1221,6 +1236,11 @@ class AppointmentController extends Controller
             'appointment_time' => $request->appointment_time,
             'status' => 'pending',
         ]);
+
+        // Clear dashboard caches
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$patient->id}");
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$request->doctor_id}");
+
         return response()->json(['message' => 'Appointment booked', 'appointment' => $appointment]);
     }
 
@@ -1229,6 +1249,11 @@ class AppointmentController extends Controller
     {
         $patient = $request->user();
         $appointment = $patient->appointments()->findOrFail($id);
+
+        // Clear caches
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$patient->id}");
+        \Illuminate\Support\Facades\Cache::forget("comprehensive_dashboard_summary_v2_{$appointment->doctor_id}");
+
         $appointment->delete();
         return response()->json(['message' => 'Appointment cancelled']);
     }

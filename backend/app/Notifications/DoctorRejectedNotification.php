@@ -26,7 +26,11 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        return ['mail', 'database'];
+        $channels = ['mail', 'database'];
+        if ($notifiable->push_notifications_enabled && !empty($notifiable->push_token)) {
+            $channels[] = 'fcm';
+        }
+        return $channels;
     }
 
     /**
@@ -64,6 +68,23 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
             'message' => 'Your doctor account application was not approved. Please check your email for details.',
             'data' => [
                 'reason' => $this->reason,
+            ],
+        ];
+    }
+
+    /**
+     * Get the FCM representation of the notification.
+     */
+    public function toFcm($notifiable): array
+    {
+        return [
+            'notification' => [
+                'title' => 'Account Update',
+                'body' => 'Your doctor account application was not approved. Please check your email for details.',
+            ],
+            'data' => [
+                'type' => 'doctor_rejected',
+                'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
             ],
         ];
     }

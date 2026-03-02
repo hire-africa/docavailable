@@ -260,6 +260,8 @@ Route::middleware(['auth:api'])->group(function () {
     Route::get('/text-sessions/{manualSessionId}/check-response', [TextSessionController::class, 'checkResponse'])->where('manualSessionId', '[0-9]+');
     Route::post('/text-sessions/{manualSessionId}/end', [TextSessionController::class, 'endSession'])->where('manualSessionId', '[0-9]+');
     Route::get('/text-sessions/{manualSessionId}', [TextSessionController::class, 'getSession'])->where('manualSessionId', '[0-9]+');
+    Route::put('/text-sessions/{sessionId}/status', [TextSessionController::class, 'updateStatus'])->where('sessionId', '[0-9]+');
+    Route::post('/text-sessions/{sessionId}/auto-deduction', [TextSessionController::class, 'processAutoDeduction'])->where('sessionId', '[0-9]+');
 
     // Text appointment session routes
     Route::post('/text-appointments/start-session', [TextAppointmentController::class, 'startSession']);

@@ -3098,13 +3098,11 @@ export default function ChatPage() {
     const wsUrl = `wss://docavailable.org/incoming-call-notifications?userId=${currentUserId}`;
     const signalingChannel = new SecureWebSocketService({
       url: wsUrl,
-      ignoreSSLErrors: true, // Allow SSL errors for preview builds
       onOpen: () => {
         console.log('✅ [IncomingCall] WebSocket connected successfully');
       },
-      onMessage: async (event) => {
+      onMessage: async (message: any) => {
         try {
-          const message = JSON.parse(event.data);
           console.log('📨 Incoming call message:', message.type);
 
           // If we receive an offer, handle the incoming call
@@ -3773,12 +3771,10 @@ export default function ChatPage() {
       });
 
       // Submit rating directly via API
-      const response = await apiService.post('/ratings', {
-        session_id: sessionId,
-        doctor_id: doctorId,
-        patient_id: patientId,
+      const response = await apiService.post(`/doctor-ratings/${doctorId}/${patientId}`, {
         rating: rating,
-        comment: comment
+        comment: comment,
+        chatId: sessionId // Backend expects chatId for uniqueness check
       });
 
       const result = response;
@@ -5033,18 +5029,16 @@ export default function ChatPage() {
                         >
                           {message.message}
                         </Text>
-                        {/* Add delivery status for text messages */}
-                        {message.sender_id === currentUserId && (
-                          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
-                            <ReadReceipt
-                              isOwnMessage={true}
-                              deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
-                              readBy={message.read_by}
-                              otherParticipantId={doctorId || patientId}
-                              messageTime={message.created_at}
-                            />
-                          </View>
-                        )}
+                        {/* Show delivery status and timestamp for all text messages */}
+                        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 4 }}>
+                          <ReadReceipt
+                            isOwnMessage={message.sender_id === currentUserId}
+                            deliveryStatus={(message.delivery_status === 'failed' ? 'sent' : message.delivery_status) || 'sent'}
+                            readBy={message.read_by}
+                            otherParticipantId={doctorId || patientId}
+                            messageTime={message.created_at}
+                          />
+                        </View>
                       </View>
                     )}
                     {/* Message Reactions */}

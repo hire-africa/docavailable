@@ -134,7 +134,6 @@ export class WebRTCChatService {
         // Use SecureWebSocketService with production URL
         this.secureWebSocket = new SecureWebSocketService({
           url: wsUrl,
-          ignoreSSLErrors: true,
           onOpen: async () => {
             clearTimeout(connectionTimeoutId);
             console.log('✅ [WebRTCChat] WebRTC chat connected successfully');
@@ -165,9 +164,8 @@ export class WebRTCChatService {
 
             resolve();
           },
-          onMessage: async (event: MessageEvent) => {
+          onMessage: async (data: any) => {
             try {
-              const data = JSON.parse(event.data);
               console.log('📨 [WebRTCChat] Message received:', data.type);
 
               if (data.type === 'chat-message') {

@@ -715,15 +715,13 @@ class AudioCallService {
         // Create secure WebSocket connection that handles self-signed certificates
         this.signalingChannel = new SecureWebSocketService({
           url: wsUrl,
-          ignoreSSLErrors: true, // Allow self-signed certificates
           onOpen: () => {
             console.log('🔌 Connected to signaling server');
             try { this.flushSignalingQueue(); } catch (e) { console.warn('⚠️ [AudioCallService] Failed to flush signaling queue on open:', e); }
             resolve();
           },
-          onMessage: async (event) => {
+          onMessage: async (message: any) => {
             try {
-              const message = JSON.parse(event.data);
               console.log('📨 Signaling message received:', message.type);
 
               switch (message.type) {

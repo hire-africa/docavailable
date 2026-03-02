@@ -19,7 +19,7 @@ class TextSessionNotification extends Notification implements ShouldQueue
     /**
      * Create a new notification instance.
      */
-    public function __construct(TextSession $textSession, string $type, string $message = null)
+    public function __construct(TextSession $textSession, string $type, ?string $message = null)
     {
         $this->textSession = $textSession;
         $this->type = $type;
@@ -31,9 +31,9 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable): array
     {
-        $channels = [];
+        $channels = ['database'];
 
-        // Removed 'database' channel to prevent session updates from cluttering the notification history
+        // Add FCM if user has push notifications enabled and a token
         if ($notifiable->push_notifications_enabled && $notifiable->push_token) {
             $channels[] = 'fcm';
         }
