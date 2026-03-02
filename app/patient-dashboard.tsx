@@ -45,6 +45,7 @@ import { withDoctorPrefix } from '../utils/name';
 import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
 import { appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
+import { textSessionService } from '../services/textSessionService';
 import { apiService } from './services/apiService';
 
 
@@ -954,12 +955,9 @@ export default function PatientDashboard() {
           prevActivities,
           'appointment_offer_sent',
           'Appointment Offer Sent',
-          'Your appointment request has been sent to the doctor. You\'ll receive a notification when they respond.',
-          {
-            doctorName: 'Selected Doctor',
-            patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-            appointmentType: 'Consultation'
-          }
+          `Your appointment request has been sent to the doctor. You'll receive a notification when they respond. (Doctor: Selected Doctor)`,
+          'calendarCheck',
+          '#4CAF50'
         )
       );
 
@@ -972,14 +970,11 @@ export default function PatientDashboard() {
       setActivities(prevActivities =>
         addRealtimeActivity(
           prevActivities,
-          'text_session_started', // Default to text, could be enhanced to detect session type
+          'text_session_started',
           'Session Started',
           'You started a consultation session with a doctor.',
-          {
-            doctorName: 'Selected Doctor',
-            patientName: userData?.display_name || `${userData?.first_name} ${userData?.last_name}`,
-            sessionType: 'Consultation'
-          }
+          'message',
+          '#2196F3'
         )
       );
 
@@ -1134,7 +1129,7 @@ export default function PatientDashboard() {
           // console.log('PatientDashboard: Raw doctors API response:', response);
           if (response.success && response.data) {
             // Handle paginated response from Laravel
-            const doctorsData = response.data.data || response.data;
+            const doctorsData = (response.data as any).data || response.data;
             // console.log('PatientDashboard: Fetched doctors:', doctorsData);
 
             if (Array.isArray(doctorsData)) {
@@ -1394,7 +1389,7 @@ export default function PatientDashboard() {
 
       if (response && response.success && response.data) {
         // Handle paginated response from Laravel (same as original logic)
-        const doctorsData = response.data.data || response.data;
+        const doctorsData = (response.data as any).data || response.data;
         // console.log('PatientDashboard: Fetched doctors:', doctorsData);
 
         if (Array.isArray(doctorsData)) {
@@ -1881,12 +1876,28 @@ export default function PatientDashboard() {
 
     try {
       setLoadingEndedSessions(true);
-      const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
-      // console.log('📱 Loaded ended sessions:', sessions);
+
+      // 1. Fetch from local storage first for immediate display
+      let sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
       setEndedSessions(sessions || []);
+
+      // 2. Sync from backend to catch missing sessions (e.g. fresh install)
+      const historyResponse = await textSessionService.getHistory(1, 20);
+      if (historyResponse.success && historyResponse.data && historyResponse.data.length > 0) {
+        await endedSessionStorageService.syncEndedSessions(user.id, 'patient', historyResponse.data);
+        // Refresh local list after sync
+        sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
+        setEndedSessions(sessions || []);
+      }
     } catch (error) {
-      console.error('Error loading ended sessions:', error);
-      setEndedSessions([]);
+      console.error('Error loading/syncing ended sessions:', error);
+      // Fallback to local data only
+      try {
+        const sessions = await endedSessionStorageService.getEndedSessionsByPatient(user.id);
+        setEndedSessions(sessions || []);
+      } catch (innerError) {
+        setEndedSessions([]);
+      }
     } finally {
       setLoadingEndedSessions(false);
     }
@@ -3151,7 +3162,7 @@ export default function PatientDashboard() {
                   apiService.get('/doctors/active')
                     .then((response: any) => {
                       if (response.success && response.data) {
-                        const doctorsData = response.data.data || response.data;
+                        const doctorsData = (response.data as any).data || response.data;
                         if (Array.isArray(doctorsData)) {
                           const approvedDoctors = doctorsData
                             .filter((doctor: any) => doctor.status === 'approved')
@@ -3333,10 +3344,10 @@ export default function PatientDashboard() {
             if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year > 1900) {
               date = new Date(year, month, day);
             } else {
-              return 'Invalid Date';
+              return null;
             }
           } else {
-            return 'Invalid Date';
+            return null;
           }
         } else {
           // Try parsing as ISO string or other formats
@@ -3363,7 +3374,7 @@ export default function PatientDashboard() {
         __ts: (() => {
           try {
             const d = parseDateTime(appt.appointment_date || appt.date, appt.appointment_time || appt.time);
-            return d ? d.getTime() : 0;
+            return (d instanceof Date) ? d.getTime() : 0;
           } catch {
             return 0;
           }

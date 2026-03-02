@@ -41,43 +41,17 @@ class RingtoneService {
 
         // Use proper ringtone playback - improved approach
         if (Platform.OS === 'android') {
-          // On Android, use notification sound which plays system ringtone
-          // This is the most reliable way to play ringtone on Android
+          // FCM + notifee channel handles the OS-level sound
+          // expo-av handles continuous looping in foreground
           try {
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: 'Incoming Call',
-                body: 'DocAvailable call',
-                sound: 'ringtone', // Uses system ringtone from res/raw
-                priority: Notifications.AndroidNotificationPriority.MAX,
-                vibrate: [0, 1000, 500, 1000],
-                // @ts-ignore - channelId is supported on Android
-                channelId: 'incoming_calls_v3',
-              },
-              trigger: null, // Show immediately
-            });
-            console.log('🔔 Android notification ringtone scheduled');
-
-            // Also try to play a looping sound for continuous ringing
-            // Use a simple beep pattern
-            try {
-              const { sound } = await Audio.Sound.createAsync(
-                { uri: 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OSfTQ8OUKjk8LZjHAY4kdfyzHksBSR3x/DdkEAKFF606euoVRQKRp/g8r5sIQUrgc7y2Yk2CBtpvfDkn00PDlCo5PC2YxwGOJHX8sx5LAUkd8fw3ZBAC' },
-                {
-                  shouldPlay: true,
-                  isLooping: true,
-                  volume: 0.8, // Slightly lower volume
-                  progressUpdateIntervalMillis: 1000,
-                }
-              );
-              this.sound = sound;
-              console.log('🔔 Android audio ringtone also playing');
-            } catch (audioError) {
-              console.warn('⚠️ Audio ringtone failed, using notification only:', audioError);
-            }
-          } catch (notifError) {
-            console.error('❌ Failed to schedule notification ringtone:', notifError);
-            throw notifError;
+            const { sound } = await Audio.Sound.createAsync(
+              require('../assets/sounds/ringtone.mp3'), // real local file, not base64
+              { shouldPlay: true, isLooping: true, volume: 1.0 }
+            );
+            this.sound = sound;
+            console.log('🔔 Android audio ringtone also playing');
+          } catch (audioError) {
+            console.warn('⚠️ expo-av failed:', audioError);
           }
         } else {
           // On iOS, use system sound

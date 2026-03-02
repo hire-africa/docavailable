@@ -53,6 +53,10 @@ class IncomingCallNotification extends Notification
                 'call_session_id' => (string) $this->callSession->id,
                 'started_at' => $this->callSession->started_at?->toIso8601String() ?? now()->toIso8601String(),
             ],
+            'notification' => [
+                'title' => $callerName . ' - ' . ($callType === 'video' ? 'Video Call' : 'Voice Call'),
+                'body' => 'Incoming call...',
+            ],
             'android' => [
                 'priority' => 'high', // Ensures immediate delivery
                 'notification' => [

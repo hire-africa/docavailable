@@ -79,16 +79,6 @@ const setupNotificationChannels = async () => {
 
     for (const channel of channels) {
       await notifee.createChannel(channel);
-      if (channel.id === 'incoming_calls_v3' && Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync(channel.id, {
-          name: channel.name,
-          importance: Notifications.AndroidImportance.MAX,
-          sound: channel.sound,
-          vibrationPattern: channel.vibrationPattern,
-          bypassDnd: true,
-          lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        });
-      }
     }
     console.log('✅ Notification channels registered at boot');
   } catch (error) {

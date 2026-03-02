@@ -4,6 +4,7 @@ import authService from '@/services/authService';
 import { endedSessionStorageService } from '@/services/endedSessionStorageService';
 import { NotificationService } from '@/services/notificationService';
 import { RealTimeEventService } from '@/services/realTimeEventService';
+import { textSessionService } from '@/services/textSessionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -771,15 +772,32 @@ export default function DoctorDashboard() {
   };
 
   const loadEndedSessions = async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
-    setLoadingEndedSessions(true);
     try {
-      const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
-      setEndedSessions(sessions);
+      setLoadingEndedSessions(true);
+
+      // 1. Fetch from local storage first
+      let sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+      setEndedSessions(sessions || []);
+
+      // 2. Sync from backend
+      const historyResponse = await textSessionService.getHistory(1, 20);
+      if (historyResponse.success && historyResponse.data && historyResponse.data.length > 0) {
+        await endedSessionStorageService.syncEndedSessions(user.id, 'doctor', historyResponse.data);
+        // Refresh local list
+        sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+        setEndedSessions(sessions || []);
+      }
     } catch (error) {
-      console.error('Error loading ended sessions:', error);
-      setEndedSessions([]);
+      console.error('Error loading/syncing ended sessions:', error);
+      // Fallback
+      try {
+        const sessions = await endedSessionStorageService.getEndedSessionsByDoctor(user.id);
+        setEndedSessions(sessions || []);
+      } catch (innerError) {
+        setEndedSessions([]);
+      }
     } finally {
       setLoadingEndedSessions(false);
     }

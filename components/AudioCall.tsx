@@ -1,15 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    Vibration,
-    View
+  Animated,
+  Dimensions,
+  Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View
 } from 'react-native';
 import { AudioCallEvents, AudioCallService, AudioCallState } from '../services/audioCallService';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -192,8 +192,9 @@ export default function AudioCall({
 
       initOnceRef.current = null;
       hasInitializedRef.current = false;
-      // Don't end call immediately - let the call complete naturally
-      // The call will be ended by user action or timeout
+
+      // Cleanup on unmount — catches cases where screen is left without proper hangup
+      AudioCallService.getInstance().reset();
     };
   }, [appointmentId]);
 
@@ -248,7 +249,7 @@ export default function AudioCall({
         },
         onCallAnswered: async () => {
           console.log('✅ Call answered');
-          
+
           // Stop ringtone when call is answered
           try {
             const ringtoneService = (await import('../services/ringtoneService')).default;
@@ -257,7 +258,7 @@ export default function AudioCall({
           } catch (error) {
             console.error('❌ Failed to stop ringtone:', error);
           }
-          
+
           // Ensure UI flips to connected immediately on answered
           if (!freezeConnectedRef.current) freezeConnectedRef.current = true;
           setIsRinging(false);
@@ -342,7 +343,7 @@ export default function AudioCall({
         },
       };
 
-      await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events, doctorName, otherParticipantProfilePictureUrl);
+      await AudioCallService.getInstance().initialize(appointmentId, userId, (doctorId as any), events);
 
       // Audio calls start with earpiece mode by default (like normal phone calls)
       console.log('📞 Call initialization completed - audio starts with earpiece mode');

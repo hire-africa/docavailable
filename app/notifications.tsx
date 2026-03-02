@@ -111,13 +111,8 @@ function NotificationsContent() {
           };
         });
 
-        // Filter out chat message notifications
-        const filteredNotifications = apiNotifications.filter(n =>
-          !['message', 'new_message', 'chat_message'].includes(n.type)
-        );
-
-        console.log('🔔 Transformed notifications:', apiNotifications.length, 'Filtered:', filteredNotifications.length);
-        setNotifications(filteredNotifications);
+        console.log('🔔 Transformed notifications:', apiNotifications.length);
+        setNotifications(apiNotifications);
       } else {
         console.log('🔔 No notifications found or API error');
         setNotifications([]);
@@ -162,7 +157,7 @@ function NotificationsContent() {
           onPress: async () => {
             try {
               // Call API to delete from backend
-              await notificationApiService.deleteNotification(parseInt(notificationId));
+              await notificationApiService.deleteNotification(notificationId);
               // Update local state
               setNotifications(prev =>
                 prev.filter(notification => notification.id !== notificationId)

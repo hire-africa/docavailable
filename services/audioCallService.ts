@@ -95,6 +95,15 @@ class AudioCallService {
     }
   }
 
+  private releaseMediaStream(stream: MediaStream | null): void {
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+        stream.removeTrack(track);
+      });
+    }
+  }
+
   async initializeForIncomingCall(appointmentId: string, userId: string, events: AudioCallEvents): Promise<void> {
     try {
       this.isIncoming = true;
@@ -292,14 +301,14 @@ class AudioCallService {
     const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
     this.updateCallSessionInBackend(duration, this.state.isConnected);
     this.sendSignalingMessage({ type: 'call-ended', senderId: this.userId, appointmentId: this.appointmentId });
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
     }
-    if (this.localStream) {
-      this.localStream.getTracks().forEach(t => t.stop());
-      this.localStream = null;
-    }
+
     await this.resetAudioRouting();
     this.updateState({ isConnected: false, connectionState: 'disconnected' });
     this.events?.onCallEnded();
@@ -317,13 +326,12 @@ class AudioCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
     this.clearReofferLoop();
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
-    }
-    if (this.localStream) {
-      this.localStream.getTracks().forEach(t => t.stop());
-      this.localStream = null;
     }
     this.state = { isConnected: false, isAudioEnabled: true, callDuration: 0, connectionState: 'disconnected' };
   }

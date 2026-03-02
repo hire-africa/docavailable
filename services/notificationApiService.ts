@@ -2,7 +2,7 @@ import { ApiResponse, apiService } from './apiService';
 
 // Notification interfaces matching Laravel backend
 export interface Notification {
-  id: number;
+  id: string;
   user_id: number;
   title: string;
   body: string;
@@ -49,17 +49,22 @@ class NotificationApiService {
     };
     unread_count: number;
   }>> {
-    return apiService.get('/notifications', { page, per_page: perPage, unread_only: unreadOnly });
+    return apiService.get('/notifications', {
+      page,
+      per_page: perPage,
+      unread_only: unreadOnly,
+      exclude_types: 'chat_message'
+    });
   }
 
   // Mark notification as read
-  async markAsRead(notificationId: number): Promise<ApiResponse<void>> {
-    return apiService.post('/notifications/mark-read', { notification_id: notificationId.toString() });
+  async markAsRead(notificationId: string): Promise<ApiResponse<void>> {
+    return apiService.post('/notifications/mark-read', { notification_id: notificationId });
   }
 
   // Mark multiple notifications as read
-  async markMultipleAsRead(notificationIds: number[]): Promise<ApiResponse<void>> {
-    return apiService.post('/notifications/mark-read', { notification_ids: notificationIds.map(id => id.toString()) });
+  async markMultipleAsRead(notificationIds: string[]): Promise<ApiResponse<void>> {
+    return apiService.post('/notifications/mark-read', { notification_ids: notificationIds });
   }
 
   // Mark all notifications as read
@@ -68,12 +73,12 @@ class NotificationApiService {
   }
 
   // Delete notification
-  async deleteNotification(notificationId: number): Promise<ApiResponse<void>> {
+  async deleteNotification(notificationId: string): Promise<ApiResponse<void>> {
     return apiService.delete(`/notifications/${notificationId}`);
   }
 
   // Delete multiple notifications
-  async deleteMultipleNotifications(notificationIds: number[]): Promise<ApiResponse<void>> {
+  async deleteMultipleNotifications(notificationIds: string[]): Promise<ApiResponse<void>> {
     return apiService.delete('/notifications', { notification_ids: notificationIds });
   }
 
@@ -98,7 +103,7 @@ class NotificationApiService {
   }
 
   // Get notification by ID
-  async getNotification(notificationId: number): Promise<ApiResponse<Notification>> {
+  async getNotification(notificationId: string): Promise<ApiResponse<Notification>> {
     return apiService.get<Notification>(`/notifications/${notificationId}`);
   }
 

@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { Message } from './messageStorageService';
+import { ChatMessage } from '../types/chat';
 
 // Full ended session payload stored locally
 export interface EndedSession {
@@ -18,7 +18,7 @@ export interface EndedSession {
   session_duration?: number; // minutes
   session_summary?: string;
   reason?: string; // Reason for the session
-  messages: Message[];
+  messages: ChatMessage[];
   message_count: number;
 }
 
@@ -136,7 +136,7 @@ export const endedSessionStorageService = {
   // Backwards-compat simple wrapper
   async saveEndedSession(appointmentId: number, sessionData: any): Promise<void> {
     const endedAt = new Date().toISOString();
-    const messages: Message[] = Array.isArray(sessionData?.messages) ? sessionData.messages : [];
+    const messages: ChatMessage[] = Array.isArray(sessionData?.messages) ? sessionData.messages : [];
     const session: EndedSession = {
       appointment_id: appointmentId,
       doctor_id: sessionData?.doctor_id,
@@ -247,4 +247,42 @@ export const endedSessionStorageService = {
       return '';
     }
   },
-}; 
+
+  /**
+   * Sync ended sessions from API results into local index and metadata
+   */
+  async syncEndedSessions(userId: number, userType: 'patient' | 'doctor', apiSessions: any[]): Promise<void> {
+    try {
+      console.log(`🔄 [EndedSessionStorage] Syncing ${apiSessions.length} sessions for ${userType} ${userId}`);
+
+      for (const session of apiSessions) {
+        const appointmentId = Number(session.appointment_id || session.id);
+
+        // Prepare metadata
+        const meta: EndedSessionMetadata = {
+          appointmentId: appointmentId,
+          patient_id: session.patient_id,
+          patient_name: session.patient_name || (session.patient ? `${session.patient.first_name} ${session.patient.last_name}` : undefined),
+          patient_profile_picture_url: session.patient?.profile_picture_url,
+          patient_profile_picture: session.patient?.profile_picture,
+          doctor_id: session.doctor_id,
+          doctor_name: session.doctor_name || (session.doctor ? `${session.doctor.first_name} ${session.doctor.last_name}` : undefined),
+          doctor_profile_picture_url: session.doctor?.profile_picture_url,
+          doctor_profile_picture: session.doctor?.profile_picture,
+          appointment_date: session.appointment_date || (session.started_at ? session.started_at.split('T')[0] : undefined),
+          ended_at: session.ended_at || session.updated_at,
+          session_duration: session.session_duration,
+          reason: session.reason,
+        };
+
+        // Store metadata and update index
+        await AsyncStorage.setItem(META_KEY(appointmentId), JSON.stringify(meta));
+        await addToUserIndex(userId, userType, appointmentId);
+      }
+
+      console.log(`✅ [EndedSessionStorage] Sync complete for ${userType} ${userId}`);
+    } catch (error) {
+      console.error('Error syncing ended sessions:', error);
+    }
+  }
+};

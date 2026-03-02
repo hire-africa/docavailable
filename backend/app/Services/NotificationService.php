@@ -17,7 +17,7 @@ class NotificationService
     /**
      * Send appointment notification
      */
-    public function sendAppointmentNotification(Appointment $appointment, string $type, string $message = null): void
+    public function sendAppointmentNotification(Appointment $appointment, string $type, ?string $message = null): void
     {
         try {
             $notification = new AppointmentNotification($appointment, $type, $message);
@@ -49,7 +49,7 @@ class NotificationService
     /**
      * Send text session notification
      */
-    public function sendTextSessionNotification(TextSession $textSession, string $type, string $message = null): void
+    public function sendTextSessionNotification(TextSession $textSession, string $type, ?string $message = null): void
     {
         try {
             $notification = new TextSessionNotification($textSession, $type, $message);
@@ -132,7 +132,7 @@ class NotificationService
     /**
      * Send wallet notification
      */
-    public function sendWalletNotification(WalletTransaction $transaction, string $type, string $message = null): void
+    public function sendWalletNotification(WalletTransaction $transaction, string $type, ?string $message = null): void
     {
         try {
             $notification = new WalletNotification($transaction, $type, $message);
@@ -337,15 +337,6 @@ class NotificationService
                 Log::warning("No recipient found for chat notification", [
                     'appointment_id' => $appointment->id,
                     'sender_id' => $sender->id
-                ]);
-                return;
-            }
-
-            // Don't send notification if recipient has disabled push notifications
-            if (!$recipient->push_notifications_enabled || !$recipient->push_token) {
-                Log::info("Recipient has disabled push notifications", [
-                    'recipient_id' => $recipient->id,
-                    'appointment_id' => $appointment->id
                 ]);
                 return;
             }

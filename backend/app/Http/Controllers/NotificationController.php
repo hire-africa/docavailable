@@ -7,6 +7,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Notifications\DatabaseNotification;
+use App\Models\User;
+use App\Models\Appointment;
 
 class NotificationController extends Controller
 {
@@ -16,19 +18,29 @@ class NotificationController extends Controller
     public function getNotifications(Request $request): JsonResponse
     {
         $user = Auth::user();
-        
+
         $perPage = $request->get('per_page', 15);
         $unreadOnly = $request->boolean('unread_only', false);
-        
+        $excludeTypes = $request->get('exclude_types');
+
         $query = $user->notifications();
-        
+
         if ($unreadOnly) {
             $query->whereNull('read_at');
         }
-        
+
+        if ($excludeTypes) {
+            $types = is_array($excludeTypes) ? $excludeTypes : explode(',', $excludeTypes);
+            $query->where(function ($q) use ($types) {
+                foreach ($types as $type) {
+                    $q->where('data->type', '!=', $type);
+                }
+            });
+        }
+
         $notifications = $query->orderBy('created_at', 'desc')
             ->paginate($perPage);
-        
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -63,9 +75,9 @@ class NotificationController extends Controller
 
         $user = Auth::user();
         $notification = $user->notifications()->findOrFail($request->notification_id);
-        
+
         $notification->markAsRead();
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Notification marked as read',
@@ -82,7 +94,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
         $user->unreadNotifications()->update(['read_at' => now()]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'All notifications marked as read',
@@ -99,9 +111,9 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
         $notification = $user->notifications()->findOrFail($id);
-        
+
         $notification->delete();
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Notification deleted successfully',
@@ -117,7 +129,7 @@ class NotificationController extends Controller
     public function getPreferences(): JsonResponse
     {
         $user = Auth::user();
-        
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -152,14 +164,14 @@ class NotificationController extends Controller
         }
 
         $user = Auth::user();
-        
+
         $user->update($request->only([
             'email_notifications_enabled',
             'push_notifications_enabled',
             'sms_notifications_enabled',
             'notification_preferences',
         ]));
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Notification preferences updated successfully',
@@ -191,7 +203,7 @@ class NotificationController extends Controller
 
         $user = Auth::user();
         $user->update(['push_token' => $request->push_token]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Push token updated successfully',
@@ -205,7 +217,7 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
         $user->update(['push_token' => null]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Push token removed successfully',
@@ -218,18 +230,18 @@ class NotificationController extends Controller
     public function getStats(): JsonResponse
     {
         $user = Auth::user();
-        
+
         $totalNotifications = $user->notifications()->count();
         $unreadNotifications = $user->unreadNotifications()->count();
         $readNotifications = $totalNotifications - $unreadNotifications;
-        
+
         // Get notifications by type
         $notificationsByType = $user->notifications()
             ->selectRaw('JSON_EXTRACT(data, "$.type") as notification_type, COUNT(*) as count')
             ->groupBy('notification_type')
             ->get()
             ->pluck('count', 'notification_type');
-        
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -253,10 +265,10 @@ class NotificationController extends Controller
     public function getNotificationSettings(): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Get existing preferences or use defaults
         $preferences = $user->notification_preferences ?? [];
-        
+
         // Return the structure that the frontend expects
         $settings = [
             'communication' => [
@@ -282,7 +294,7 @@ class NotificationController extends Controller
                 'featureAnnouncements' => $preferences['system']['featureAnnouncements'] ?? false,
             ],
         ];
-        
+
         return response()->json([
             'success' => true,
             'data' => $settings,
@@ -324,7 +336,7 @@ class NotificationController extends Controller
         }
 
         $user = Auth::user();
-        
+
         // Update the notification preferences
         $user->update([
             'notification_preferences' => $request->all(),
@@ -333,7 +345,7 @@ class NotificationController extends Controller
             'push_notifications_enabled' => $request->input('communication.push', true),
             'sms_notifications_enabled' => $request->input('communication.sms', false),
         ]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Notification settings updated successfully',
@@ -347,10 +359,10 @@ class NotificationController extends Controller
     public function getPrivacySettings(): JsonResponse
     {
         $user = Auth::user();
-        
+
         // Get existing privacy preferences or use defaults
         $preferences = $user->privacy_preferences ?? [];
-        
+
         // Log the loaded preferences for debugging
         \Log::info('🔍 Loading privacy settings', [
             'user_id' => $user->id,
@@ -360,7 +372,7 @@ class NotificationController extends Controller
             'privacy_exists' => isset($preferences['privacy']),
             'privacy_type' => isset($preferences['privacy']) ? gettype($preferences['privacy']) : 'not_set'
         ]);
-        
+
         // Return the structure that the frontend expects
         $settings = [
             'profileVisibility' => [
@@ -384,7 +396,7 @@ class NotificationController extends Controller
                 'sessionTimeout' => $preferences['security']['sessionTimeout'] ?? 30,
             ],
         ];
-        
+
         return response()->json([
             'success' => true,
             'data' => $settings,
@@ -423,14 +435,14 @@ class NotificationController extends Controller
         }
 
         $user = Auth::user();
-        
+
         // Log the incoming data for debugging
         \Log::info('🔍 Updating privacy settings', [
             'user_id' => $user->id,
             'anonymous_mode' => $request->input('privacy.anonymousMode'),
             'all_data' => $request->all()
         ]);
-        
+
         // Update the privacy preferences
         $user->update([
             'privacy_preferences' => $request->all(),
@@ -439,7 +451,7 @@ class NotificationController extends Controller
             'push_notifications_enabled' => $request->input('communication.push', true),
             'sms_notifications_enabled' => $request->input('communication.sms', false),
         ]);
-        
+
         // Log the updated data for debugging
         $freshUser = $user->fresh();
         \Log::info('🔍 Privacy settings updated', [
@@ -448,7 +460,7 @@ class NotificationController extends Controller
             'stored_preferences_type' => gettype($freshUser->privacy_preferences),
             'anonymous_mode_stored' => $freshUser->privacy_preferences['privacy']['anonymousMode'] ?? 'not_set'
         ]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Privacy settings updated successfully',
@@ -506,12 +518,12 @@ class NotificationController extends Controller
 
             // Send notification
             $notification = new \App\Notifications\ChatMessageNotification(
-                $sender, 
-                $appointment, 
-                $message, 
+                $sender,
+                $appointment,
+                $message,
                 $messageId
             );
-            
+
             $recipient->notify($notification);
 
             return response()->json([
