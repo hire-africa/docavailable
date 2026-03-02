@@ -2,17 +2,17 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Easing,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Animated,
+    Dimensions,
+    Easing,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../../components/AppTour';
@@ -50,6 +50,7 @@ interface DoctorProfile {
   profile_picture_url?: string;
   status: string;
   is_online?: boolean;
+  is_available_now?: boolean;
 }
 
 
@@ -438,11 +439,13 @@ export default function DoctorProfilePage() {
       });
 
       if (!result.success) {
-        const errorMsg = result.message || 'Failed to create session';
+        const errorMsg = ('message' in result && (result as any).message)
+          ? String((result as any).message)
+          : 'Failed to create session';
         console.error(`❌ ${errorPrefix} Session creation failed:`, errorMsg);
         Alert.alert(
           'Session Creation Failed',
-          `${errorMsg}\n\nStatus: ${result.status || 'Unknown'}\n\nPlease check your subscription and try again.`,
+          `${errorMsg}\n\nStatus: ${('status' in result && (result as any).status) ? String((result as any).status) : 'Unknown'}\n\nPlease check your subscription and try again.`,
           [{ text: 'OK' }]
         );
         setStartingSession(false);
@@ -649,7 +652,7 @@ export default function DoctorProfilePage() {
     );
   }
 
-  const isOnline = doctor.is_online || false;
+  const isAvailableNow = (doctor as any).is_available_now || false;
 
   return (
     <View style={styles.container}>
@@ -733,9 +736,9 @@ export default function DoctorProfilePage() {
               )}
 
               <View style={styles.statusContainer}>
-                <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#999' }]} />
-                <Text style={[styles.statusText, { color: isOnline ? '#4CAF50' : '#999' }]}>
-                  {isOnline ? 'Online Now' : 'Offline'}
+                <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]} />
+                <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : '#999' }]}>
+                  {isAvailableNow ? 'Available' : 'Not Available'}
                 </Text>
               </View>
             </View>
@@ -879,18 +882,17 @@ export default function DoctorProfilePage() {
             <TouchableOpacity
               style={[
                 styles.directBookingButton,
-                !isOnline && styles.directBookingButtonDisabled
+                !isAvailableNow && styles.directBookingButtonDisabled
               ]}
               onPress={handleDirectBooking}
-              disabled={!isOnline}
+              disabled={!isAvailableNow}
               ref={tourRefs['talk-now-btn']}
-              collapsable={false}
             >
               <Text style={[
                 styles.directBookingButtonText,
-                !isOnline && styles.directBookingButtonTextDisabled
+                !isAvailableNow && styles.directBookingButtonTextDisabled
               ]}>
-                {isOnline ? 'Talk Now' : 'Talk Now (Offline)'}
+                {isAvailableNow ? 'Talk Now' : 'Talk Now (Not Available)'}
               </Text>
             </TouchableOpacity>
 
@@ -898,7 +900,6 @@ export default function DoctorProfilePage() {
               style={styles.bookAppointmentButton}
               onPress={handleBookAppointment}
               ref={tourRefs['book-appt-btn']}
-              collapsable={false}
             >
               <Text style={styles.bookAppointmentButtonText}>Book Appointment</Text>
             </TouchableOpacity>

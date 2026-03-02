@@ -6,24 +6,24 @@ import { useFocusEffect } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  AppState,
-  BackHandler,
-  Dimensions,
-  Easing,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    AppState,
+    BackHandler,
+    Dimensions,
+    Easing,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -1155,6 +1155,7 @@ export default function PatientDashboard() {
                     profile_picture_url: doctor.profile_picture_url,
                     // Add availability data
                     is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
+                    is_available_now: doctor.is_available_now || false,
                     working_hours: doctor.working_hours,
                     max_patients_per_day: doctor.max_patients_per_day
                   };
@@ -1414,6 +1415,7 @@ export default function PatientDashboard() {
               profile_picture_url: doctor.profile_picture_url,
               // Add availability data
               is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
+              is_available_now: doctor.is_available_now || false,
               working_hours: doctor.working_hours,
               max_patients_per_day: doctor.max_patients_per_day
             }));
@@ -1694,7 +1696,7 @@ export default function PatientDashboard() {
 
     // Filter by online status if toggle is enabled
     if (showOnlyOnline) {
-      filteredDoctors = filteredDoctors.filter(doctor => doctor.is_online);
+      filteredDoctors = filteredDoctors.filter((doctor: any) => doctor.is_available_now);
     }
 
     // Filter by specialization if selected
@@ -2080,6 +2082,33 @@ export default function PatientDashboard() {
             >
               Hi {(user?.display_name && user.display_name.split(' ')[0]) || (user?.email && user.email.split('@')[0]) || 'there'}
             </ThemedText>
+            {/* Status Pill */}
+            <View style={{
+              backgroundColor: (user as any)?.is_online ? '#E8F5E8' : '#F5F5F5',
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              marginBottom: 8,
+              alignSelf: 'center',
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 3,
+                  backgroundColor: (user as any)?.is_online ? '#4CAF50' : '#FF3B30',
+                }} />
+                <Text style={{
+                  fontSize: 12,
+                  fontWeight: '600',
+                  color: (user as any)?.is_online ? '#4CAF50' : '#FF3B30',
+                  textAlign: 'center',
+                  letterSpacing: 0.3,
+                }}>
+                  {(user as any)?.is_online ? 'Online' : 'Offline'}
+                </Text>
+              </View>
+            </View>
             <ThemedText
               style={{
                 fontSize: 16,

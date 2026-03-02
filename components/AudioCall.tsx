@@ -193,8 +193,8 @@ export default function AudioCall({
       initOnceRef.current = null;
       hasInitializedRef.current = false;
 
-      // Cleanup on unmount — catches cases where screen is left without proper hangup
-      AudioCallService.getInstance().reset();
+      // End call properly on unmount — ensures backend DB is updated
+      AudioCallService.getInstance().endCall();
     };
   }, [appointmentId]);
 
@@ -557,7 +557,7 @@ export default function AudioCall({
 
       {/* Dynamic Header based on call state */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onEndCall}>
+        <TouchableOpacity style={styles.backButton} onPress={endCall}>
           <Ionicons name="arrow-back" size={24} color="white" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>

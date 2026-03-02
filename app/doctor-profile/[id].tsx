@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import DoctorProfilePicture from '../../components/DoctorProfilePicture';
 import { environment } from '../../config/environment';
-import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 import { stripDoctorPrefix, withDoctorPrefix } from '../../utils/name';
 import { apiService } from '../services/apiService';
@@ -31,6 +30,7 @@ interface Doctor {
   profile_picture?: string;
   profile_picture_url?: string;
   is_online?: boolean;
+  is_available_now?: boolean;
   working_hours?: any;
   max_patients_per_day?: number;
   rating?: number;
@@ -67,7 +67,7 @@ export default function DoctorProfileScreen() {
       const response = await apiService.get(`/doctors/${id}`);
       
       if (response.success && response.data) {
-        setDoctor(response.data);
+        setDoctor(response.data as any);
       } else {
         Alert.alert('Error', 'Failed to load doctor profile');
       }
@@ -119,7 +119,10 @@ export default function DoctorProfileScreen() {
         // Navigate directly to chat without showing alert
         router.push(`/chat/${result.chatId}`);
       } else {
-        console.error('Error:', result.message || 'Failed to start session');
+        const msg = ('message' in result && (result as any).message)
+          ? String((result as any).message)
+          : 'Failed to start session';
+        console.error('Error:', msg);
         // Session start error logged to console only - no modal shown
       }
     } catch (error) {
@@ -151,14 +154,14 @@ export default function DoctorProfileScreen() {
   if (!doctor) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="medical" size={48} color={Colors.gray} />
+        <Ionicons name="medical" size={48} color="#999" />
         <Text style={styles.errorText}>Doctor not found</Text>
       </View>
     );
   }
 
-  const isOnline = doctor.is_online;
-  const canStartSession = isOnline && !activeSession && user?.role === 'patient';
+  const isAvailableNow = (doctor as any).is_available_now || false;
+  const canStartSession = isAvailableNow && !activeSession && user?.role === 'patient';
   const showTalkNowButton = user?.role === 'patient' && !activeSession;
 
   return (
@@ -194,7 +197,7 @@ export default function DoctorProfileScreen() {
               </Text>
               {doctor.rating && (
                 <View style={styles.ratingContainer}>
-                  <Ionicons name="star" size={16} color={Colors.warning} />
+                  <Ionicons name="star" size={16} color="#FF9800" />
                   <Text style={styles.rating}>
                     {doctor.rating ? doctor.rating.toFixed(1) : '0.0'} ({doctor.review_count || 0} reviews)
                   </Text>
@@ -205,10 +208,10 @@ export default function DoctorProfileScreen() {
 
           {/* Online Status */}
           <View style={styles.statusContainer}>
-            <View style={[styles.statusIndicator, { backgroundColor: isOnline ? Colors.success : Colors.gray }]}>
-              <View style={[styles.statusDot, { backgroundColor: isOnline ? Colors.success : Colors.gray }]} />
-              <Text style={[styles.statusText, { color: isOnline ? Colors.success : Colors.gray }]}>
-                {isOnline ? 'Online Now' : 'Offline'}
+            <View style={[styles.statusIndicator, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]}>
+              <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]} />
+              <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : '#999' }]}>
+                {isAvailableNow ? 'Available' : 'Not Available'}
               </Text>
             </View>
           </View>
@@ -232,7 +235,7 @@ export default function DoctorProfileScreen() {
                   <>
                     <Ionicons name="chatbubble" size={18} color={canStartSession ? "white" : "rgba(255,255,255,0.5)"} />
                     <Text style={[styles.actionButtonText, !canStartSession && styles.actionButtonTextDisabled]}>
-                      {canStartSession ? 'Talk Now' : 'Offline'}
+                      {canStartSession ? 'Talk Now' : 'Not Available'}
                     </Text>
                   </>
                 )}
@@ -263,9 +266,9 @@ export default function DoctorProfileScreen() {
               <Ionicons name="calendar" size={20} color="#4CAF50" />
               <Text style={styles.serviceText}>Appointments</Text>
             </View>
-            {isOnline && (
+            {isAvailableNow && (
               <View style={styles.serviceItem}>
-                <Ionicons name="chatbubble" size={20} color={Colors.success} />
+                <Ionicons name="chatbubble" size={20} color="#4CAF50" />
                 <Text style={styles.serviceText}>Instant Text Sessions</Text>
               </View>
             )}
@@ -273,22 +276,22 @@ export default function DoctorProfileScreen() {
         </View>
 
         {/* Instant Session Info */}
-        {isOnline && (
+        {isAvailableNow && (
           <View style={styles.infoCard}>
             <View style={styles.infoHeader}>
-              <Ionicons name="flash" size={20} color={Colors.warning} />
+              <Ionicons name="flash" size={20} color="#FF9800" />
               <Text style={styles.infoTitle}>Instant Text Session</Text>
             </View>
             <View style={styles.infoItem}>
-              <Ionicons name="time" size={16} color={Colors.text} />
+              <Ionicons name="time" size={16} color="#222" />
               <Text style={styles.infoText}>10 minutes per session</Text>
             </View>
             <View style={styles.infoItem}>
-              <Ionicons name="speedometer" size={16} color={Colors.text} />
+              <Ionicons name="speedometer" size={16} color="#222" />
               <Text style={styles.infoText}>2-minute response time</Text>
             </View>
             <View style={styles.infoItem}>
-              <Ionicons name="card" size={16} color={Colors.text} />
+              <Ionicons name="card" size={16} color="#222" />
               <Text style={styles.infoText}>Uses your subscription sessions</Text>
             </View>
           </View>
@@ -298,7 +301,7 @@ export default function DoctorProfileScreen() {
         {activeSession && (
           <View style={styles.activeSessionCard}>
             <View style={styles.activeSessionHeader}>
-              <Ionicons name="chatbubbles" size={20} color={Colors.success} />
+              <Ionicons name="chatbubbles" size={20} color="#4CAF50" />
               <Text style={styles.activeSessionTitle}>Active Session</Text>
             </View>
             <Text style={styles.activeSessionText}>
@@ -320,28 +323,29 @@ export default function DoctorProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8F9FA',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8F9FA',
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: Colors.text,
+    color: '#222',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8F9FA',
+    padding: 20,
   },
   errorText: {
     fontSize: 18,
-    color: Colors.gray,
+    color: '#666',
     marginTop: 16,
   },
   scrollView: {
@@ -446,12 +450,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: '#222',
     marginBottom: 12,
   },
   bioText: {
     fontSize: 16,
-    color: Colors.text,
+    color: '#222',
     lineHeight: 24,
   },
   servicesList: {
@@ -463,13 +467,13 @@ const styles = StyleSheet.create({
   },
   serviceText: {
     fontSize: 16,
-    color: Colors.text,
+    color: '#222',
     marginLeft: 12,
   },
   infoCard: {
     margin: 20,
     padding: 16,
-    backgroundColor: Colors.lightGray,
+    backgroundColor: '#F1F3F4',
     borderRadius: 12,
   },
   infoHeader: {
@@ -480,7 +484,7 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: '#222',
     marginLeft: 8,
   },
   infoItem: {
@@ -490,16 +494,16 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: Colors.text,
+    color: '#222',
     marginLeft: 8,
   },
   activeSessionCard: {
     margin: 20,
     padding: 16,
-    backgroundColor: Colors.success + '10',
+    backgroundColor: '#4CAF5010',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.success + '30',
+    borderColor: '#4CAF5030',
   },
   activeSessionHeader: {
     flexDirection: 'row',
@@ -509,16 +513,16 @@ const styles = StyleSheet.create({
   activeSessionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.success,
+    color: '#4CAF50',
     marginLeft: 8,
   },
   activeSessionText: {
     fontSize: 14,
-    color: Colors.text,
+    color: '#222',
     marginBottom: 8,
   },
   goToChatButton: {
-    backgroundColor: Colors.success,
+    backgroundColor: '#4CAF50',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -559,7 +563,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
   },
   talkNowButton: {
-    backgroundColor: Colors.success,
+    backgroundColor: '#4CAF50',
   },
   bookButton: {
     backgroundColor: '#4CAF50',

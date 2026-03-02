@@ -97,8 +97,10 @@ class AudioCallService {
   private releaseMediaStream(stream: MediaStream | null): void {
     if (stream) {
       stream.getTracks().forEach(track => {
+        console.log(`🎤 [AudioCallService] Stopping track: ${track.kind} state=${track.readyState}`);
         track.stop();
         stream.removeTrack(track);
+        console.log(`✅ [AudioCallService] Track stopped: ${track.kind}`);
       });
     }
   }
@@ -291,8 +293,40 @@ class AudioCallService {
     }
   }
 
+  private async cancelCallInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [AudioCallService] cancelCallInBackend skipped — no appointmentId');
+      return;
+    }
+    try {
+      const authToken = await this.getAuthToken();
+      console.log('📤 [AudioCallService] Cancelling call session:', {
+        appointmentId: this.appointmentId,
+        hasAuthToken: !!authToken,
+        authTokenLength: authToken?.length
+      });
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          call_type: 'voice',
+          appointment_id: this.appointmentId,
+          session_duration: 0,
+          was_connected: false
+        })
+      });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [AudioCallService] Cancel response:', response.status, JSON.stringify(data));
+    } catch (e) {
+      console.error('❌ [AudioCallService] Failed to cancel call session:', e);
+    }
+  }
+
   async endCall(): Promise<void> {
-    if (this.hasEnded) return;
+    if (this.hasEnded) {
+      console.log('⏭️ [AudioCallService] endCall skipped — hasEnded already true');
+      return;
+    }
     this.hasEnded = true;
     this.stopCallTimer();
     this.clearCallTimeout();
@@ -303,9 +337,22 @@ class AudioCallService {
     }
     this.messageQueue = [];
 
+    const wasConnected = this.state.isConnected;
     const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
-    this.updateCallSessionInBackend(duration, this.state.isConnected);
+    console.log('📞 [AudioCallService] endCall:', { wasConnected, duration, appointmentId: this.appointmentId });
+
+    // If never connected, hit cancel path instead of end
+    // MUST await — otherwise navigation kills the fetch before it completes
+    if (!wasConnected) {
+      await this.cancelCallInBackend();
+    } else {
+      await this.updateCallSessionInBackend(duration, true);
+    }
+
     this.sendSignalingMessage({ type: 'call-ended', senderId: this.userId, appointmentId: this.appointmentId });
+
+    // Give the message time to flush before closing
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Close signaling channel
     if (this.signalingChannel) {
@@ -352,6 +399,9 @@ class AudioCallService {
       appointmentId: this.appointmentId,
       rejectedBy: isDoctor ? 'doctor' : 'patient',
     });
+
+    // Give the message time to flush before closing
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     if (this.signalingChannel) {
       this.signalingChannel.close();
@@ -510,7 +560,7 @@ class AudioCallService {
         this.markConnectedOnce();
       } else if (state === 'disconnected' || state === 'failed') {
         if (this.isInitializing || (!this.isIncoming && !this.isCallAnswered)) return;
-        if (this.didConnect && (Date.now() - this.callStartTime) < 3000) return;
+        if (this.didConnect && (Date.now() - this.callStartTime) < 8000) return;
         this.attemptReconnection();
       }
     });
@@ -519,7 +569,7 @@ class AudioCallService {
       console.log(`🧊 [AudioCallService] ICE connection state changed: ${state}`);
       if (state === 'failed') {
         if (this.isInitializing || (!this.isIncoming && !this.isCallAnswered)) return;
-        if (this.didConnect && (Date.now() - this.callStartTime) < 3000) return;
+        if (this.didConnect && (Date.now() - this.callStartTime) < 8000) return;
         this.attemptReconnection();
       }
       // Don't reconnect on ICE 'disconnected' — it's often transient
@@ -643,6 +693,13 @@ class AudioCallService {
 
   private async attemptReconnection(): Promise<void> {
     if (this.isReconnecting || this.hasEnded) return;
+
+    // Don't reconnect if we just answered — give it time to stabilize
+    if (this.isCallAnswered && (Date.now() - this.callStartTime) < 8000) {
+      console.log('⏭️ [AudioCallService] Skipping reconnection — call just answered, within grace period');
+      return;
+    }
+
     this.isReconnecting = true;
     this.updateState({ connectionState: 'reconnecting' });
     try {

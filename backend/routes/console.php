@@ -39,6 +39,11 @@ Schedule::command('appointments:expire')
     ->everyThirtyMinutes()
     ->withoutOverlapping();
 
+// Reset availability overrides when the current working-hours slot ends
+Schedule::command('availability:reset-overrides')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 // Process subscription expirations and apply 30-day plan roll-over rules
 // Runs every 5 minutes to check and update subscription statuses quickly
 Schedule::command('subscriptions:process-expirations')

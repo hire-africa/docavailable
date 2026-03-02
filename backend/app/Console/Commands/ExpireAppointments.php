@@ -30,10 +30,15 @@ class ExpireAppointments extends Command
         $this->info('Starting appointment expiration check...');
 
         $now = Carbon::now();
+        $autoDeclineHours = (int) (config('appointments.auto_decline_hours') ?? env('APPOINTMENT_AUTO_DECLINE_HOURS', 12));
+        if ($autoDeclineHours <= 0) {
+            $autoDeclineHours = 12;
+        }
+        $autoDeclineCutoff = $now->copy()->subHours($autoDeclineHours);
         
-        // FIX: Find pending appointments that are past their scheduled time OR have been pending for more than 24 hours
+        // Find pending appointments that are past their scheduled time OR have been pending past the auto-decline deadline
         $expiredAppointments = Appointment::where('status', Appointment::STATUS_PENDING)
-            ->where(function ($query) use ($now) {
+            ->where(function ($query) use ($now, $autoDeclineCutoff) {
                 // Past scheduled time
                 $query->where(function ($q) use ($now) {
                     $q->whereNotNull('appointment_datetime_utc')
@@ -48,8 +53,8 @@ class ExpireAppointments extends Command
                                ->where('appointment_time', '<', $now->format('H:i:s'));
                       });
                 })
-                // OR pending for more than 24 hours
-                ->orWhere('created_at', '<', $now->subHours(24));
+                // OR pending past deadline (created_at older than cutoff)
+                ->orWhere('created_at', '<', $autoDeclineCutoff);
             })
             ->get();
 
@@ -72,8 +77,8 @@ class ExpireAppointments extends Command
                 // Determine expiration reason
                 if ($appointment->appointment_datetime_utc && $appointment->appointment_datetime_utc < $now) {
                     $expiredReason = 'Appointment time has passed';
-                } elseif ($appointment->created_at < $now->subHours(24)) {
-                    $expiredReason = 'No doctor response within 24 hours';
+                } elseif ($appointment->created_at < $autoDeclineCutoff) {
+                    $expiredReason = "No doctor response within {$autoDeclineHours} hours";
                 } else {
                     $expiredReason = 'Appointment time has passed (legacy format)';
                 }

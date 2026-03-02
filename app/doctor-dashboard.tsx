@@ -7,25 +7,26 @@ import { RealTimeEventService } from '@/services/realTimeEventService';
 import { textSessionService } from '@/services/textSessionService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  AppState,
-  BackHandler,
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Animated,
+    AppState,
+    BackHandler,
+    Dimensions,
+    Image,
+    Modal,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppTour from '../components/AppTour';
@@ -132,6 +133,8 @@ export default function DoctorDashboard() {
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
   const [loadingWallet, setLoadingWallet] = useState(false);
+  const [availability, setAvailability] = useState<{ is_available_now: boolean; manually_offline: boolean } | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
   const [activeCall, setActiveCall] = useState<any>(null);
@@ -336,6 +339,29 @@ export default function DoctorDashboard() {
       updateEnabledDaysCount();
     }
   }, [user]);
+
+  useEffect(() => {
+    const fetchAvailability = async () => {
+      if (!user?.id) return;
+      setLoadingAvailability(true);
+      try {
+        const response = await apiService.get(`/doctors/${user.id}/availability`);
+        const data = (response as any)?.data?.data ?? (response as any)?.data;
+        if ((response as any)?.success && data) {
+          setAvailability({
+            is_available_now: !!data.is_available_now,
+            manually_offline: !!data.manually_offline,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching doctor availability:', error);
+      } finally {
+        setLoadingAvailability(false);
+      }
+    };
+
+    fetchAvailability();
+  }, [user?.id]);
 
   // Tab-specific refreshes
   useEffect(() => {
@@ -1763,6 +1789,23 @@ export default function DoctorDashboard() {
   };
 
   const renderHomeContent = () => (
+    (() => {
+      const hour = new Date().getHours();
+      const timeGreeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      const firstName = user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
+      const welcomeTitle = `${timeGreeting} Dr. ${firstName}`;
+
+      const pillStatus = (() => {
+        if (availability?.is_available_now) {
+          return { dot: '#4CAF50', text: 'Patients can find you', textColor: '#4CAF50', bg: '#E8F5E8' };
+        }
+        if (availability?.manually_offline) {
+          return { dot: '#FF3B30', text: 'Availability paused', textColor: '#FF3B30', bg: '#FDECEC' };
+        }
+        return { dot: '#111214', text: 'Offline · Not your shift', textColor: '#111214', bg: '#EFEFEF' };
+      })();
+
+      return (
     <ScrollView
       style={styles.content}
       showsVerticalScrollIndicator={false}
@@ -1776,16 +1819,46 @@ export default function DoctorDashboard() {
       }
     >
       {/* Welcome Section - Updated to match patient dashboard */}
-      <View style={{ ...styles.header, alignItems: 'center', flexDirection: 'column', gap: 0, marginTop: 20, marginBottom: 24 }}>
+      <LinearGradient
+        colors={['#4CAF50', '#45a049', '#2E7D32']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          borderRadius: 20,
+          padding: 24,
+          marginBottom: 24,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          elevation: 4,
+          alignItems: 'center',
+          flexDirection: 'column',
+          gap: 0,
+          marginTop: 20,
+        }}
+      >
         {/* User Avatar */}
-        <View style={{ width: 56, height: 56, borderRadius: 28, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 12 }}>
+        <View style={{
+          width: 64,
+          height: 64,
+          borderRadius: 32,
+          overflow: 'hidden',
+          backgroundColor: '#E8F5E8',
+          marginBottom: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
+          elevation: 3,
+        }}>
           {user?.profile_picture_url ? (
-            <Image source={{ uri: user.profile_picture_url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+            <Image source={{ uri: user.profile_picture_url }} style={{ width: 64, height: 64, borderRadius: 32 }} />
           ) : user?.profile_picture ? (
-            <Image source={{ uri: user.profile_picture }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+            <Image source={{ uri: user.profile_picture }} style={{ width: 64, height: 64, borderRadius: 32 }} />
           ) : (
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#4CAF50' }}>
-              <FontAwesome name="user-md" size={20} color="#4CAF50" />
+            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8F5E8', alignItems: 'center', justifyContent: 'center' }}>
+              <FontAwesome name="user-md" size={24} color="#4CAF50" />
             </View>
           )}
         </View>
@@ -1793,33 +1866,51 @@ export default function DoctorDashboard() {
           style={{
             fontSize: 28,
             fontWeight: 'bold',
-            color: colors.text,
+            color: '#FFFFFF',
             textAlign: 'center',
-            marginBottom: 4,
-            maxWidth: 220,
+            marginBottom: 6,
+            maxWidth: 280,
             lineHeight: 34,
-            paddingHorizontal: 8,
-          }}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          Hi Dr. {user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'}
-        </Text>
-        <Text
-          style={{
-            fontSize: 16,
-            color: colors.textSecondary,
-            textAlign: 'center',
-            maxWidth: 260,
-            lineHeight: 22,
             paddingHorizontal: 8,
           }}
           numberOfLines={2}
           ellipsizeMode="tail"
         >
-          Manage your practice and patients
+          {welcomeTitle}
         </Text>
-      </View>
+        {/* Status Pill */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setActiveTab('working-hours')}
+          style={{
+            backgroundColor: pillStatus.bg,
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            marginBottom: 8,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <View style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: pillStatus.dot,
+          }} />
+          <Text style={{
+            fontSize: 12,
+            fontWeight: '600',
+            color: pillStatus.textColor,
+            textAlign: 'center',
+            letterSpacing: 0.2,
+          }}>
+            {loadingAvailability ? 'Checking availability...' : pillStatus.text}
+          </Text>
+        </TouchableOpacity>
+      </LinearGradient>
 
 
       <View style={[styles.quickActions, { marginTop: 20 }]}>
@@ -1856,6 +1947,8 @@ export default function DoctorDashboard() {
 
 
     </ScrollView>
+      );
+    })()
   );
 
   const renderAppointmentsContent = () => (
@@ -2544,7 +2637,6 @@ export default function DoctorDashboard() {
                     </TouchableOpacity>
                   );
                 }
-                return null;
               })}
             </View>
           ));
@@ -4021,7 +4113,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 300,
-    backgroundColor: colors.card,
+    backgroundColor: '#111214',
     borderTopRightRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -4042,7 +4134,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 20,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#222528',
     marginBottom: 20,
   },
   sidebarProfileImage: {
@@ -4054,12 +4146,12 @@ const createStyles = (colors: any) => StyleSheet.create({
   sidebarUserName: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: colors.text,
+    color: '#F2F2F2',
     marginBottom: 4,
   },
   sidebarUserEmail: {
     fontSize: 14,
-    color: colors.textSecondary,
+    color: '#A3A5A8',
   },
   sectionHeader: {
     fontSize: 18,
@@ -4069,7 +4161,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   sectionGroup: {
     marginBottom: 24,
-    backgroundColor: colors.background,
+    backgroundColor: '#1C1E22',
     borderRadius: 16,
     overflow: 'hidden',
     alignSelf: 'center',
@@ -4082,13 +4174,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: 20,
     width: '100%',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#2A2D32',
   },
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: '#222528',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
@@ -4103,7 +4195,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   sidebarMenuItemText: {
     fontSize: 16,
-    color: colors.text,
+    color: '#E8E8E8',
     marginLeft: 4,
     fontWeight: '600',
     flex: 1,

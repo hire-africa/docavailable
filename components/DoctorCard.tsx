@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import favoriteDoctorsService from '../services/favoriteDoctorsService';
+import { stripDoctorPrefix } from '../utils/name';
 import DoctorProfilePicture from './DoctorProfilePicture';
 import Icon from './Icon';
-import { stripDoctorPrefix } from '../utils/name';
-import favoriteDoctorsService from '../services/favoriteDoctorsService';
 
 interface DoctorCardProps {
   doctor: any;
@@ -54,7 +54,7 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
           name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
         />
         {/* Green dot for online doctors */}
-        {doctor.is_online && (
+        {((doctor as any).is_available_now ?? (doctor as any).is_online) && (
           <View style={styles.onlineIndicator} />
         )}
       </View>

@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\TextSession;
 use App\Models\User;
+use App\Models\DoctorAvailability;
+use App\Models\Appointment;
+use App\Models\TextSession;
+use App\Models\Chat;
+use App\Models\Message;
 use App\Models\Subscription;
 use App\Services\MessageStorageService;
 use App\Services\NotificationService;
@@ -12,9 +16,11 @@ use App\Services\VoiceMessageArchiveService;
 use App\Services\AnonymizationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Log; // Added Log facade
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
 
 class TextSessionController extends Controller
 {
@@ -1344,8 +1350,9 @@ class TextSessionController extends Controller
     public function availableDoctors(Request $request): JsonResponse
     {
         try {
-            $doctors = User::where('user_type', 'doctor')
-                // Removed status and online restrictions - show all doctors
+            $doctors = User::with(['doctorAvailability'])
+                ->where('user_type', 'doctor')
+                // Removed status restrictions - show all doctors
                 ->select([
                     'id',
                     'first_name',
@@ -1358,10 +1365,12 @@ class TextSessionController extends Controller
                     'country',
                     'profile_picture_url',
                     'languages_spoken',
-                    'is_online'
                 ])
                 ->get()
                 ->map(function ($doctor) {
+                    $availability = $doctor->doctorAvailability;
+                    $isAvailableNow = $this->computeIsAvailableNow($availability);
+
                     return [
                         'id' => $doctor->id,
                         'name' => $doctor->display_name ?? "{$doctor->first_name} {$doctor->last_name}",
@@ -1371,7 +1380,8 @@ class TextSessionController extends Controller
                         'location' => implode(', ', array_filter([$doctor->city, $doctor->country])),
                         'profile_picture_url' => $doctor->profile_picture_url,
                         'languages_spoken' => $doctor->languages_spoken,
-                        'is_online' => $doctor->is_online,
+                        'is_online' => $isAvailableNow,
+                        'is_available_now' => $isAvailableNow,
                     ];
                 });
 
@@ -1386,6 +1396,60 @@ class TextSessionController extends Controller
                 'message' => 'Failed to fetch available doctors: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot)) continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '') continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeIsAvailableNow(?DoctorAvailability $availability): bool
+    {
+        if (!$availability) return false;
+
+        $now = Carbon::now('UTC');
+
+        // Heartbeat gate: must have been active within 15 minutes
+        if (!$availability->last_active_at) return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+
+        if ($availability->manually_offline) return false;
+        if ($availability->manually_online) return true;
+
+        $workingHours = $availability->working_hours;
+        if (!is_array($workingHours)) return false;
+
+        $dayKey = strtolower($now->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
     }
 
     /**

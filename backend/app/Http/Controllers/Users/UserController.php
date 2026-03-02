@@ -5,7 +5,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Subscription;
+use App\Models\DoctorAvailability;
 use App\Traits\HasImageUrls;
+use Carbon\Carbon;
 
 class UserController extends Controller
 {
@@ -142,6 +144,59 @@ class UserController extends Controller
                 'message' => 'Error loading subscription: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot)) continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '') continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeIsAvailableNow(?\App\Models\DoctorAvailability $availability): bool
+    {
+        if (!$availability) return false;
+
+        $now = Carbon::now('UTC');
+
+        if (!$availability->last_active_at) return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+
+        if ($availability->manually_offline) return false;
+        if ($availability->manually_online) return true;
+
+        $workingHours = $availability->working_hours;
+        if (!is_array($workingHours)) return false;
+
+        $dayKey = strtolower($now->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
     }
 
     public function create_subscription(Request $request)
@@ -310,12 +365,14 @@ class UserController extends Controller
                     $doctorData['is_online_for_instant_sessions'] = $availability->is_online;
                     $doctorData['working_hours'] = $availability->working_hours;
                     $doctorData['max_patients_per_day'] = $availability->max_patients_per_day;
+                    $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
                 } else {
                     // Set default availability info if no record exists
                     $doctorData['is_online'] = false;
                     $doctorData['is_online_for_instant_sessions'] = false;
                     $doctorData['working_hours'] = null;
                     $doctorData['max_patients_per_day'] = 10;
+                    $doctorData['is_available_now'] = false;
                 }
 
                 return $doctorData;

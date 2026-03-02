@@ -68,6 +68,9 @@ class AppointmentExpiredNotification extends Notification implements ShouldQueue
                 'doctor_id' => $this->appointment->doctor_id,
                 'appointment_type' => $this->appointment->appointment_type,
                 'reason' => $this->reason,
+                'cta' => 'try_another_doctor',
+                'cta_label' => 'Try another doctor',
+                'cta_route' => '/(tabs)/',
                 'timestamp' => now()->toISOString(),
             ],
         ];
@@ -92,6 +95,9 @@ class AppointmentExpiredNotification extends Notification implements ShouldQueue
                 "{$this->appointment->appointment_date} {$this->appointment->appointment_time}",
             'reason' => $this->reason,
             'message' => 'Your appointment has expired. ' . $this->reason,
+            'cta' => 'try_another_doctor',
+            'cta_label' => 'Try another doctor',
+            'cta_route' => '/(tabs)/',
             'timestamp' => now()->toISOString(),
         ];
     }

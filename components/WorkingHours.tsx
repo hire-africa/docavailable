@@ -31,6 +31,8 @@ interface DoctorAvailability {
     isOnline: boolean;
     workingHours: WorkingHours;
     maxPatientsPerDay: number;
+    manuallyOnline?: boolean;
+    manuallyOffline?: boolean;
 }
 
 const WorkingHours: React.FC = () => {
@@ -47,6 +49,8 @@ const WorkingHours: React.FC = () => {
             sunday: { enabled: false, slots: [{ start: '09:00', end: '17:00' }] },
         },
         maxPatientsPerDay: 10,
+        manuallyOnline: false,
+        manuallyOffline: false,
     });
 
     const [loading, setLoading] = useState(false);
@@ -103,6 +107,8 @@ const WorkingHours: React.FC = () => {
                     isOnline: data.is_online || false,
                     workingHours: data.working_hours || availability.workingHours,
                     maxPatientsPerDay: data.max_patients_per_day || 10,
+                    manuallyOnline: data.manually_online || false,
+                    manuallyOffline: data.manually_offline || false,
                 };
 
                 console.log('[WorkingHours] Setting availability:', newAvailability);
@@ -133,6 +139,8 @@ const WorkingHours: React.FC = () => {
                 is_online: availability.isOnline,
                 working_hours: availability.workingHours,
                 max_patients_per_day: availability.maxPatientsPerDay,
+                manually_online: availability.manuallyOnline || false,
+                manually_offline: availability.manuallyOffline || false,
             };
 
             const response = await authService.updateDoctorAvailability(user.id.toString(), backendData);
@@ -160,10 +168,12 @@ const WorkingHours: React.FC = () => {
             // Show modal when turning online
             setShowOnlineModal(true);
         } else {
-            // Directly toggle off without modal
+            // Going "offline" = manual offline override
             setAvailability(prev => ({
                 ...prev,
-                isOnline: newOnlineStatus,
+                isOnline: false,
+                manuallyOffline: true,
+                manuallyOnline: false,
             }));
             // Hide on-duty notification when going offline
             onDutyNotificationService.hideOnDutyNotification();
@@ -174,6 +184,8 @@ const WorkingHours: React.FC = () => {
         setAvailability(prev => ({
             ...prev,
             isOnline: true,
+            manuallyOnline: true,
+            manuallyOffline: false,
         }));
         setShowOnlineModal(false);
         // Show on-duty notification when going online

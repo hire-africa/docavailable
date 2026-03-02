@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import authService from '../services/authService';
 import { globalEventService } from '../services/globalEventService';
+import { heartbeatService } from '../services/heartbeatService';
 import { destroyAllInstantSessionDetectors } from '../services/instantSessionMessageDetector';
 import { UserData } from '../services/laravelService';
 
@@ -219,6 +220,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           console.log('AuthContext: User found, setting state:', authState.user.email, 'Type:', authState.user.user_type);
           setUser(authState.user);
           setUserData(authState.user);
+          if (authState.user.user_type === 'doctor') {
+            heartbeatService.start();
+          } else {
+            heartbeatService.stop();
+          }
           // Get token from authService
           const storedToken = await authService.getStoredToken();
           setToken(storedToken);
@@ -244,6 +250,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null);
           setUserData(null);
           setToken(null);
+          heartbeatService.stop();
           // Clean up instant session detectors on logged-out state
           try { await destroyAllInstantSessionDetectors(); } catch { }
         }
@@ -266,6 +273,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('AuthContext: Setting user data:', authState.user);
         setUser(authState.user);
         setUserData(authState.user);
+        if (authState.user.user_type === 'doctor') {
+          heartbeatService.start();
+        } else {
+          heartbeatService.stop();
+        }
         // Get token from authService (synchronous)
         authService.getStoredToken().then(async (storedToken) => {
           setToken(storedToken);
@@ -295,6 +307,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
         setUserData(null);
         setToken(null);
+        heartbeatService.stop();
         // DISCONNECT GLOBAL EVENT SERVICE
         globalEventService.disconnect();
         // Clean up instant session detectors when user logs out

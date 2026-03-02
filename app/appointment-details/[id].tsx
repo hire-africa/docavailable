@@ -2,13 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AudioCallModal from '../../components/AudioCallModal';
 import DirectBookingModal from '../../components/DirectBookingModal';
@@ -56,36 +56,37 @@ const AppointmentDetails = () => {
       setError(null);
       try {
         console.log(`🔍 [AppointmentDetails] Fetching appointment ${id} for user ${user.id}`);
-        const response = await apiService.get(`/appointments/${id}`);
+        const response: any = await apiService.get(`/appointments/${id}`);
 
         if (response.success && response.data) {
           // Map the response data to match expected format
+          const data: any = response.data;
           const appt = {
-            id: response.data.id,
-            doctorName: response.data.doctor_name || 'Unknown Doctor',
-            doctor_name: response.data.doctor_name,
-            patient_name: response.data.patient_name,
-            appointment_date: response.data.date || response.data.appointment_date,
-            appointment_time: response.data.time || response.data.appointment_time,
-            date: response.data.date || response.data.appointment_date,
-            time: response.data.time || response.data.appointment_time,
-            status: response.data.status,
-            appointment_type: response.data.appointment_type || response.data.consultation_type,
-            type: response.data.appointment_type || response.data.consultation_type,
-            reason: response.data.reason,
-            consultation_type: response.data.consultation_type,
-            notes: response.data.notes,
-            created_at: response.data.created_at,
-            updated_at: response.data.updated_at,
-            actual_start_time: response.data.actual_start_time,
-            actual_end_time: response.data.actual_end_time,
-            sessions_deducted: response.data.sessions_deducted,
-            no_show: response.data.no_show,
-            completed_at: response.data.completed_at,
-            earnings_awarded: response.data.earnings_awarded,
-            session_id: response.data.session_id,
-            patient_id: response.data.patient_id,
-            doctor_id: response.data.doctor_id,
+            id: data.id,
+            doctorName: data.doctor_name || 'Unknown Doctor',
+            doctor_name: data.doctor_name,
+            patient_name: data.patient_name,
+            appointment_date: data.date || data.appointment_date,
+            appointment_time: data.time || data.appointment_time,
+            date: data.date || data.appointment_date,
+            time: data.time || data.appointment_time,
+            status: data.status,
+            appointment_type: data.appointment_type || data.consultation_type,
+            type: data.appointment_type || data.consultation_type,
+            reason: data.reason,
+            consultation_type: data.consultation_type,
+            notes: data.notes,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            actual_start_time: data.actual_start_time,
+            actual_end_time: data.actual_end_time,
+            sessions_deducted: data.sessions_deducted,
+            no_show: data.no_show,
+            completed_at: data.completed_at,
+            earnings_awarded: data.earnings_awarded,
+            session_id: data.session_id,
+            patient_id: data.patient_id,
+            doctor_id: data.doctor_id,
           };
           setAppointment(appt);
         } else {
@@ -106,9 +107,9 @@ const AppointmentDetails = () => {
   useEffect(() => {
     const loadSubscription = async () => {
       try {
-        const response = await apiService.get('/subscription');
+        const response: any = await apiService.get('/subscription');
         if (response.success && response.data) {
-          const sub = response.data;
+          const sub: any = response.data;
           setCurrentSubscription({
             ...sub,
             voiceCallsRemaining: sub.voiceCallsRemaining ?? sub.voice_calls_remaining ?? 0,
@@ -210,7 +211,9 @@ const AppointmentDetails = () => {
       });
 
       if (!result.success) {
-        const errorMsg = result.message || 'Failed to create session';
+        const errorMsg = ('message' in result && (result as any).message)
+          ? String((result as any).message)
+          : 'Failed to create session';
         Alert.alert('Session Creation Failed', errorMsg);
         setStartingSession(false);
         setCallInitiated(false);
@@ -316,6 +319,23 @@ const AppointmentDetails = () => {
     }
   };
 
+  const isPending = useCallback((): boolean => {
+    if (!appointment) return false;
+    const s = String(appointment.status).toLowerCase();
+    return s === 'pending' || s === '0';
+  }, [appointment]);
+
+  const formatPickedAtTime = (createdAt?: string | null): string | null => {
+    if (!createdAt) return null;
+    try {
+      const d = new Date(createdAt);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    } catch {
+      return null;
+    }
+  };
+
   // ── Render ───────────────────────────────────────────────────────
   const sessionButtonInfo = appointment ? getSessionButtonState() : { state: 'too_early' as SessionButtonState };
   const sessionType = appointment ? getSessionType() : 'text';
@@ -366,6 +386,19 @@ const AppointmentDetails = () => {
 
           {/* Main Card */}
           <View style={styles.mainCard}>
+            {/* Pending reassurance */}
+            {isPending() && (user?.user_type || userData?.user_type) !== 'doctor' && (
+              <View style={styles.pendingBanner}>
+                <Ionicons name="time-outline" size={18} color="#7A5A00" />
+                <Text style={styles.pendingBannerText}>
+                  Doctors typically respond within 5-6 hours.
+                  {formatPickedAtTime(appointment.created_at)
+                    ? ` Time picked at ${formatPickedAtTime(appointment.created_at)}.`
+                    : ''}
+                </Text>
+              </View>
+            )}
+
             {/* Doctor Section */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -860,6 +893,24 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     flex: 1,
     fontWeight: '500',
+  },
+  pendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E1',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  pendingBannerText: {
+    fontSize: 14,
+    color: '#7A5A00',
+    marginLeft: 10,
+    flex: 1,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   startSessionButton: {
     flexDirection: 'row',

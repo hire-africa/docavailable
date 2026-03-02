@@ -516,6 +516,9 @@ Route::middleware(['auth:api', 'role:doctor'])->group(function () {
     Route::delete('/doctor/appointments/{id}', [AppointmentController::class, 'deleteExpiredAppointment']);
     Route::get('/doctor/patients', [AppointmentController::class, 'doctorPatients']);
 
+    // Doctor heartbeat (availability)
+    Route::post('/doctors/heartbeat', [DoctorController::class, 'heartbeat']);
+
     // Doctor wallet routes
     Route::get('/doctor/wallet', [DoctorWalletController::class, 'getWallet']);
     Route::get('/doctor/wallet/transactions', [DoctorWalletController::class, 'getTransactions']);

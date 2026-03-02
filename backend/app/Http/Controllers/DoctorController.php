@@ -5,9 +5,92 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Carbon\Carbon;
+use App\Models\DoctorAvailability;
 
 class DoctorController extends Controller
 {
+    /**
+     * Doctor heartbeat: updates last_active_at for availability computations.
+     */
+    public function heartbeat(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user || !$user->isDoctor()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only doctors can send heartbeat'
+            ], 403);
+        }
+
+        DoctorAvailability::updateOrCreate(
+            ['doctor_id' => $user->id],
+            ['last_active_at' => now()]
+        );
+
+        return response()->json(['success' => true], 200);
+    }
+
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot)) continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '') continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                // Crosses midnight (rare, but handle): treat as two segments.
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeIsAvailableNow(?DoctorAvailability $availability): bool
+    {
+        if (!$availability) return false;
+
+        $now = Carbon::now('UTC');
+
+        // Heartbeat gate: must have been active within 15 minutes
+        if (!$availability->last_active_at) return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+
+        if ($availability->manually_offline) {
+            return false;
+        }
+
+        if ($availability->manually_online) {
+            return true;
+        }
+
+        $workingHours = $availability->working_hours;
+        if (!is_array($workingHours)) return false;
+        $dayKey = strtolower($now->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
+    }
+
     /**
      * Get all available specializations with their sub-specializations
      */
@@ -119,7 +202,7 @@ class DoctorController extends Controller
             'specialization' => 'required|string'
         ]);
 
-        $doctors = User::where('user_type', 'doctor')
+        $doctors = User::with(['doctorAvailability'])->where('user_type', 'doctor')
             ->where('status', 'approved')
             ->where(function($query) use ($request) {
                 // Check both old single specialization field and new multiple specializations
@@ -141,6 +224,14 @@ class DoctorController extends Controller
                 'total_ratings'
             ])
             ->get();
+
+        $doctors->transform(function ($doctor) {
+            $doctorData = $doctor->toArray();
+            $availability = $doctor->doctorAvailability;
+            $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
+            $doctorData['is_online'] = $availability ? (bool) $availability->is_online : false;
+            return $doctorData;
+        });
 
         return response()->json([
             'success' => true,
@@ -195,13 +286,15 @@ class DoctorController extends Controller
                 'created_at' => $user->created_at,
                 'profile_picture' => $user->profile_picture,
                 'profile_picture_url' => $user->profile_picture_url,
-                'is_online' => false
+                'is_online' => false,
+                'is_available_now' => false,
             ];
 
             // Safely handle availability
             try {
-                $availability = \App\Models\DoctorAvailability::where('doctor_id', $id)->first();
+                $availability = DoctorAvailability::where('doctor_id', $id)->first();
                 $doctorData['is_online'] = $availability ? $availability->is_online : false;
+                $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
             } catch (\Exception $e) {
                 \Log::warning('Error getting doctor availability: ' . $e->getMessage());
             }
@@ -266,6 +359,8 @@ class DoctorController extends Controller
                 'working_hours' => json_decode($availability->working_hours, true),
                 'max_patients_per_day' => $availability->max_patients_per_day,
                 'auto_accept_appointments' => $availability->auto_accept_appointments,
+                'manually_offline' => (bool) $availability->manually_offline,
+                'manually_online' => (bool) $availability->manually_online,
             ]
         ]);
     }
@@ -289,11 +384,21 @@ class DoctorController extends Controller
             'working_hours' => 'array',
             'max_patients_per_day' => 'integer|min:1|max:50',
             'auto_accept_appointments' => 'boolean',
+            'manually_offline' => 'boolean',
+            'manually_online' => 'boolean',
         ]);
 
         $doctor = User::where('user_type', 'doctor')
             ->where('id', $id)
             ->firstOrFail();
+
+        $manualOffline = (bool) $request->input('manually_offline', false);
+        $manualOnline = (bool) $request->input('manually_online', false);
+
+        // Ensure mutual exclusivity
+        if ($manualOffline && $manualOnline) {
+            $manualOnline = false;
+        }
 
         // Update or create availability record
         $availability = \App\Models\DoctorAvailability::updateOrCreate(
@@ -303,6 +408,8 @@ class DoctorController extends Controller
                 'working_hours' => json_encode($request->input('working_hours', [])),
                 'max_patients_per_day' => $request->input('max_patients_per_day', 10),
                 'auto_accept_appointments' => $request->input('auto_accept_appointments', false),
+                'manually_offline' => $manualOffline,
+                'manually_online' => $manualOnline,
             ]
         );
 
@@ -314,6 +421,8 @@ class DoctorController extends Controller
                 'working_hours' => json_decode($availability->working_hours, true),
                 'max_patients_per_day' => $availability->max_patients_per_day,
                 'auto_accept_appointments' => $availability->auto_accept_appointments,
+                'manually_offline' => (bool) $availability->manually_offline,
+                'manually_online' => (bool) $availability->manually_online,
             ]
         ]);
     }
