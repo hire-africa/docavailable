@@ -73,10 +73,6 @@ class DoctorController extends Controller
 
         $nowUtc = Carbon::now('UTC');
 
-        // Heartbeat gate: must have been active within 15 minutes
-        if (!$availability->last_active_at) return false;
-        if (Carbon::parse($availability->last_active_at)->diffInMinutes($nowUtc) > 15) return false;
-
         if ($availability->manually_offline) {
             return false;
         }
