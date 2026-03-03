@@ -13,6 +13,129 @@ class UserController extends Controller
 {
     use HasImageUrls;
 
+    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
+    {
+        $day = $workingHours[$dayKey] ?? null;
+        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
+            return false;
+        }
+
+        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
+
+        foreach ($day['slots'] as $slot) {
+            if (!is_array($slot)) continue;
+            $start = (string) ($slot['start'] ?? '');
+            $end = (string) ($slot['end'] ?? '');
+            if ($start === '' || $end === '') continue;
+
+            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+            $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+            if ($endMinutes <= $startMinutes) {
+                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            } else {
+                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function computeShiftInfo(array $workingHours, Carbon $nowLocal): array
+    {
+        $dayKey = strtolower($nowLocal->format('l'));
+        $day = $workingHours[$dayKey] ?? null;
+
+        $nowMinutes = ((int) $nowLocal->format('H')) * 60 + ((int) $nowLocal->format('i'));
+
+        $currentSlotEndMinutes = null;
+        if (is_array($day) && !empty($day['enabled']) && !empty($day['slots']) && is_array($day['slots'])) {
+            foreach ($day['slots'] as $slot) {
+                if (!is_array($slot)) continue;
+                $start = (string) ($slot['start'] ?? '');
+                $end = (string) ($slot['end'] ?? '');
+                if ($start === '' || $end === '') continue;
+
+                [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+                [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+                $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+                $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+                $inSlot = false;
+                if ($endMinutes <= $startMinutes) {
+                    $inSlot = ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes);
+                } else {
+                    $inSlot = ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes);
+                }
+
+                if ($inSlot) {
+                    $currentSlotEndMinutes = $endMinutes;
+                    break;
+                }
+            }
+        }
+
+        $formatHm = function (Carbon $baseDate, int $minutes): string {
+            $d = $baseDate->copy()->startOfDay()->addMinutes($minutes);
+            return $d->format('H:i');
+        };
+
+        $currentSlotEnd = null;
+        if ($currentSlotEndMinutes !== null) {
+            $currentSlotEnd = $formatHm($nowLocal, $currentSlotEndMinutes);
+        }
+
+        $nextSlotStart = null;
+        $dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        $currentIdx = array_search($dayKey, $dayKeys, true);
+        if ($currentIdx === false) $currentIdx = 0;
+
+        for ($offset = 0; $offset < 7; $offset++) {
+            $idx = ($currentIdx + $offset) % 7;
+            $searchDayKey = $dayKeys[$idx];
+            $searchDay = $workingHours[$searchDayKey] ?? null;
+            if (!is_array($searchDay) || empty($searchDay['enabled']) || empty($searchDay['slots']) || !is_array($searchDay['slots'])) {
+                continue;
+            }
+
+            $candidateStarts = [];
+            foreach ($searchDay['slots'] as $slot) {
+                if (!is_array($slot)) continue;
+                $start = (string) ($slot['start'] ?? '');
+                if ($start === '') continue;
+                [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+                $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+                if ($offset === 0 && $startMinutes <= $nowMinutes) {
+                    continue;
+                }
+                $candidateStarts[] = $startMinutes;
+            }
+
+            if (!empty($candidateStarts)) {
+                sort($candidateStarts);
+                $startMinutes = $candidateStarts[0];
+
+                $labelDay = $offset === 0
+                    ? ''
+                    : ' ' . ucfirst($searchDayKey);
+
+                $nextSlotStart = trim($labelDay . ' at ' . $formatHm($nowLocal->copy()->addDays($offset), $startMinutes));
+                break;
+            }
+        }
+
+        return [
+            'current_slot_end' => $currentSlotEnd,
+            'next_slot_start' => $nextSlotStart,
+        ];
+    }
+
     public function subscription(Request $request)
     {
         try {
@@ -144,59 +267,6 @@ class UserController extends Controller
                 'message' => 'Error loading subscription: ' . $e->getMessage()
             ], 500);
         }
-    }
-
-    private function isWithinWorkingHoursSlot(array $workingHours, Carbon $now, string $dayKey): bool
-    {
-        $day = $workingHours[$dayKey] ?? null;
-        if (!is_array($day) || empty($day['enabled']) || empty($day['slots']) || !is_array($day['slots'])) {
-            return false;
-        }
-
-        $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
-
-        foreach ($day['slots'] as $slot) {
-            if (!is_array($slot)) continue;
-            $start = (string) ($slot['start'] ?? '');
-            $end = (string) ($slot['end'] ?? '');
-            if ($start === '' || $end === '') continue;
-
-            [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
-            [$eh, $em] = array_pad(explode(':', $end), 2, '0');
-            $startMinutes = ((int) $sh) * 60 + ((int) $sm);
-            $endMinutes = ((int) $eh) * 60 + ((int) $em);
-
-            if ($endMinutes <= $startMinutes) {
-                if ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes) {
-                    return true;
-                }
-            } else {
-                if ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private function computeIsAvailableNow(?\App\Models\DoctorAvailability $availability): bool
-    {
-        if (!$availability) return false;
-
-        $now = Carbon::now('UTC');
-
-        if (!$availability->last_active_at) return false;
-        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
-
-        if ($availability->manually_offline) return false;
-        if ($availability->manually_online) return true;
-
-        $workingHours = $availability->working_hours;
-        if (!is_array($workingHours)) return false;
-
-        $dayKey = strtolower($now->format('l'));
-        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
     }
 
     public function create_subscription(Request $request)
@@ -365,7 +435,36 @@ class UserController extends Controller
                     $doctorData['is_online_for_instant_sessions'] = $availability->is_online;
                     $doctorData['working_hours'] = $availability->working_hours;
                     $doctorData['max_patients_per_day'] = $availability->max_patients_per_day;
-                    $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
+
+                    $nowUtc = Carbon::now('UTC');
+                    $doctorTz = 'Africa/Blantyre';
+                    $nowLocal = $nowUtc->copy()->setTimezone($doctorTz);
+
+                    $workingHours = is_array($availability->working_hours)
+                        ? $availability->working_hours
+                        : json_decode($availability->working_hours, true);
+
+                    $dayKey = strtolower($nowLocal->format('l'));
+                    $isWithinHours = is_array($workingHours)
+                        ? $this->isWithinWorkingHoursSlot($workingHours, $nowLocal, $dayKey)
+                        : false;
+
+                    $isHeartbeatFresh = false;
+                    if ($availability->last_active_at) {
+                        $isHeartbeatFresh = Carbon::parse($availability->last_active_at)
+                            ->diffInMinutes($nowUtc) <= 3;
+                    }
+
+                    $manuallyOffline = (bool) $availability->manually_offline;
+
+                    $doctorData['is_available_now'] = $isWithinHours && !$manuallyOffline && $isHeartbeatFresh;
+                    $doctorData['is_on_break'] = $isWithinHours && !$manuallyOffline && !$isHeartbeatFresh;
+
+                    $shiftInfo = is_array($workingHours)
+                        ? $this->computeShiftInfo($workingHours, $nowLocal)
+                        : ['current_slot_end' => null, 'next_slot_start' => null];
+                    $doctorData['current_slot_end'] = $shiftInfo['current_slot_end'] ?? null;
+                    $doctorData['next_slot_start'] = $shiftInfo['next_slot_start'] ?? null;
                 } else {
                     // Set default availability info if no record exists
                     $doctorData['is_online'] = false;
@@ -373,6 +472,9 @@ class UserController extends Controller
                     $doctorData['working_hours'] = null;
                     $doctorData['max_patients_per_day'] = 10;
                     $doctorData['is_available_now'] = false;
+                    $doctorData['is_on_break'] = false;
+                    $doctorData['current_slot_end'] = null;
+                    $doctorData['next_slot_start'] = null;
                 }
 
                 return $doctorData;
