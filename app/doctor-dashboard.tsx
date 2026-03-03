@@ -133,7 +133,7 @@ export default function DoctorDashboard() {
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
   const [loadingWallet, setLoadingWallet] = useState(false);
-  const [availability, setAvailability] = useState<{ is_available_now: boolean; manually_offline: boolean; working_hours?: any } | null>(null);
+  const [availability, setAvailability] = useState<{ is_available_now: boolean; is_on_break?: boolean; manually_offline: boolean; working_hours?: any; current_slot_end?: any; next_slot_start?: any } | null>(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
@@ -350,8 +350,11 @@ export default function DoctorDashboard() {
         if ((response as any)?.success && data) {
           setAvailability({
             is_available_now: !!data.is_available_now,
+            is_on_break: !!data.is_on_break,
             manually_offline: !!data.manually_offline,
             working_hours: data.working_hours,
+            current_slot_end: data.current_slot_end,
+            next_slot_start: data.next_slot_start,
           });
         }
       } catch (error) {
@@ -374,8 +377,11 @@ export default function DoctorDashboard() {
         if (response?.success && data) {
           setAvailability({
             is_available_now: !!data.is_available_now,
+            is_on_break: !!data.is_on_break,
             manually_offline: !!data.manually_offline,
             working_hours: data.working_hours,
+            current_slot_end: data.current_slot_end,
+            next_slot_start: data.next_slot_start,
           });
         }
       }).catch(() => {
@@ -1922,7 +1928,7 @@ export default function DoctorDashboard() {
           return { dot: '#4CAF50', text: 'On Duty', textColor: '#4CAF50', bg: '#E8F5E8' };
         }
         if ((availability as any)?.is_on_break) {
-          return { dot: '#F4C430', text: 'On Break', textColor: '#F4C430', bg: '#FFF8E1' };
+          return { dot: '#F4C430', text: 'On Break · Getting you back online', textColor: '#F4C430', bg: '#FFF8E1' };
         }
         if (availability?.manually_offline) {
           return { dot: '#FF3B30', text: 'Availability paused', textColor: '#FF3B30', bg: '#FDECEC' };
