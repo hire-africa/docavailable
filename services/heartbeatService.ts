@@ -41,7 +41,7 @@ class HeartbeatService {
     if (this.intervalId) return;
     this.intervalId = setInterval(() => {
       this.sendHeartbeat().catch(() => { });
-    }, 60 * 1000);
+    }, 30 * 1000);
   }
 
   private clearInterval() {

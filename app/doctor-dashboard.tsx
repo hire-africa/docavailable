@@ -1894,6 +1894,9 @@ export default function DoctorDashboard() {
         if (availability?.is_available_now) {
           return { dot: '#4CAF50', text: 'Patients can find you', textColor: '#4CAF50', bg: '#E8F5E8' };
         }
+        if ((availability as any)?.is_on_break) {
+          return { dot: '#F4C430', text: 'On break', textColor: '#F4C430', bg: '#FFF8E1' };
+        }
         if (availability?.manually_offline) {
           return { dot: '#FF3B30', text: 'Availability paused', textColor: '#FF3B30', bg: '#FDECEC' };
         }

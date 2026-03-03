@@ -3184,7 +3184,9 @@ export default function PatientDashboard() {
                               status: doctor.status,
                               profile_picture: doctor.profile_picture,
                               profile_picture_url: doctor.profile_picture_url,
-                              is_online: doctor.is_online_for_instant_sessions || false
+                              is_online: doctor.is_online_for_instant_sessions || false,
+                              is_available_now: !!doctor.is_available_now,
+                              is_on_break: !!doctor.is_on_break,
                             }));
                           setDoctors(approvedDoctors);
                         } else {

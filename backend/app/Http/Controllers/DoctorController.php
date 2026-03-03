@@ -156,6 +156,56 @@ class DoctorController extends Controller
         ];
     }
 
+    private function computeAvailabilityState(?DoctorAvailability $availability): array
+    {
+        if (!$availability) {
+            return [
+                'is_within_hours' => false,
+                'is_heartbeat_fresh' => false,
+                'is_available_now' => false,
+                'is_on_break' => false,
+            ];
+        }
+
+        $nowUtc = Carbon::now('UTC');
+
+        $workingHours = is_array($availability->working_hours)
+            ? $availability->working_hours
+            : json_decode($availability->working_hours, true);
+        if (!is_array($workingHours)) {
+            return [
+                'is_within_hours' => false,
+                'is_heartbeat_fresh' => false,
+                'is_available_now' => false,
+                'is_on_break' => false,
+            ];
+        }
+
+        $doctorTz = 'Africa/Blantyre';
+        $nowLocal = $nowUtc->copy()->setTimezone($doctorTz);
+        $dayKey = strtolower($nowLocal->format('l'));
+
+        $isWithinHours = $this->isWithinWorkingHoursSlot($workingHours, $nowLocal, $dayKey);
+
+        $isHeartbeatFresh = false;
+        if ($availability->last_active_at) {
+            $isHeartbeatFresh = Carbon::parse($availability->last_active_at)
+                ->diffInMinutes($nowUtc) <= 3;
+        }
+
+        $manuallyOffline = (bool) $availability->manually_offline;
+
+        $isAvailableNow = $isWithinHours && !$manuallyOffline && $isHeartbeatFresh;
+        $isOnBreak = $isWithinHours && !$manuallyOffline && !$isHeartbeatFresh;
+
+        return [
+            'is_within_hours' => $isWithinHours,
+            'is_heartbeat_fresh' => $isHeartbeatFresh,
+            'is_available_now' => $isAvailableNow,
+            'is_on_break' => $isOnBreak,
+        ];
+    }
+
     private function computeIsAvailableNow(?DoctorAvailability $availability): bool
     {
         if (!$availability) return false;
@@ -320,7 +370,9 @@ class DoctorController extends Controller
         $doctors->transform(function ($doctor) {
             $doctorData = $doctor->toArray();
             $availability = $doctor->doctorAvailability;
-            $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
+            $state = $this->computeAvailabilityState($availability);
+            $doctorData['is_available_now'] = (bool) ($state['is_available_now'] ?? false);
+            $doctorData['is_on_break'] = (bool) ($state['is_on_break'] ?? false);
             $doctorData['is_online'] = $availability ? (bool) $availability->is_online : false;
             return $doctorData;
         });
@@ -386,7 +438,20 @@ class DoctorController extends Controller
             try {
                 $availability = DoctorAvailability::where('doctor_id', $id)->first();
                 $doctorData['is_online'] = $availability ? $availability->is_online : false;
-                $doctorData['is_available_now'] = $this->computeIsAvailableNow($availability);
+                $state = $this->computeAvailabilityState($availability);
+                $doctorData['is_available_now'] = (bool) ($state['is_available_now'] ?? false);
+                $doctorData['is_on_break'] = (bool) ($state['is_on_break'] ?? false);
+
+                $doctorTz = 'Africa/Blantyre';
+                $nowLocal = Carbon::now($doctorTz);
+                $workingHours = is_array($availability?->working_hours)
+                    ? $availability->working_hours
+                    : json_decode($availability?->working_hours, true);
+                $shiftInfo = is_array($workingHours)
+                    ? $this->computeShiftInfo($workingHours, $nowLocal)
+                    : ['current_slot_end' => null, 'next_slot_start' => null];
+                $doctorData['current_slot_end'] = $shiftInfo['current_slot_end'] ?? null;
+                $doctorData['next_slot_start'] = $shiftInfo['next_slot_start'] ?? null;
             } catch (\Exception $e) {
                 \Log::warning('Error getting doctor availability: ' . $e->getMessage());
             }
@@ -454,11 +519,14 @@ class DoctorController extends Controller
             ? $this->computeShiftInfo($workingHours, $nowLocal)
             : ['current_slot_end' => null, 'next_slot_start' => null];
 
+        $state = $this->computeAvailabilityState($availability);
+
         return response()->json([
             'success' => true,
             'data' => [
                 'is_online' => $availability->is_online,
-                'is_available_now' => $this->computeIsAvailableNow($availability),
+                'is_available_now' => (bool) ($state['is_available_now'] ?? false),
+                'is_on_break' => (bool) ($state['is_on_break'] ?? false),
                 'working_hours' => json_decode($availability->working_hours, true),
                 'max_patients_per_day' => $availability->max_patients_per_day,
                 'auto_accept_appointments' => $availability->auto_accept_appointments,

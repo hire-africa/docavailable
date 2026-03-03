@@ -53,8 +53,12 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
           style={styles.profilePicture}
           name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
         />
-        {/* Green dot for on-duty doctors */}
-        {!!(doctor as any).is_available_now && <View style={styles.onlineIndicator} />}
+        {(() => {
+          const isOnDuty = !!(doctor as any).is_available_now;
+          const isOnBreak = !!(doctor as any).is_on_break;
+          const color = isOnDuty ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999';
+          return <View style={[styles.onlineIndicator, { backgroundColor: color }]} />;
+        })()}
       </View>
       
       {/* Content - Right Side */}

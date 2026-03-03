@@ -51,6 +51,7 @@ interface DoctorProfile {
   status: string;
   is_online?: boolean;
   is_available_now?: boolean;
+  is_on_break?: boolean;
   current_slot_end?: string;
   next_slot_start?: string;
 }
@@ -82,11 +83,14 @@ export default function DoctorProfilePage() {
   const [loadingReviews, setLoadingReviews] = useState(false);
 
   const isAvailableNow = !!doctor?.is_available_now;
+  const isOnBreak = !!doctor?.is_on_break;
   const currentSlotEnd = doctor?.current_slot_end;
   const nextSlotStart = doctor?.next_slot_start;
   const availabilityLine = isAvailableNow
     ? `On Duty${currentSlotEnd ? ` · Shift ends at ${currentSlotEnd}` : ''}`
-    : `Off Duty${nextSlotStart ? ` · Next shift starts ${nextSlotStart}` : ''}`;
+    : isOnBreak
+      ? `On Break${currentSlotEnd ? ` · Shift ends at ${currentSlotEnd}` : ''}`
+      : `Off Duty${nextSlotStart ? ` · Next shift starts ${nextSlotStart}` : ''}`;
 
   // Progressive section loading
   const [visibleSections, setVisibleSections] = useState(0);
@@ -743,8 +747,8 @@ export default function DoctorProfilePage() {
               )}
 
               <View style={styles.statusContainer}>
-                <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]} />
-                <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : '#999' }]}>
+                <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999' }]} />
+                <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : isOnBreak ? '#F4C430' : '#999' }]}>
                   {availabilityLine}
                 </Text>
               </View>

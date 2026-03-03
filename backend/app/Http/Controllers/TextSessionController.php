@@ -1369,7 +1369,32 @@ class TextSessionController extends Controller
                 ->get()
                 ->map(function ($doctor) {
                     $availability = $doctor->doctorAvailability;
-                    $isAvailableNow = $this->computeIsAvailableNow($availability);
+                    $nowUtc = Carbon::now('UTC');
+                    $doctorTz = 'Africa/Blantyre';
+                    $nowLocal = $nowUtc->copy()->setTimezone($doctorTz);
+
+                    $workingHours = null;
+                    if ($availability) {
+                        $workingHours = is_array($availability->working_hours)
+                            ? $availability->working_hours
+                            : json_decode($availability->working_hours, true);
+                    }
+
+                    $dayKey = strtolower($nowLocal->format('l'));
+                    $isWithinHours = is_array($workingHours)
+                        ? $this->isWithinWorkingHoursSlot($workingHours, $nowLocal, $dayKey)
+                        : false;
+
+                    $manuallyOffline = (bool) ($availability?->manually_offline ?? false);
+
+                    $isHeartbeatFresh = false;
+                    if ($availability && $availability->last_active_at) {
+                        $isHeartbeatFresh = Carbon::parse($availability->last_active_at)
+                            ->diffInMinutes($nowUtc) <= 3;
+                    }
+
+                    $isAvailableNow = $isWithinHours && !$manuallyOffline && $isHeartbeatFresh;
+                    $isOnBreak = $isWithinHours && !$manuallyOffline && !$isHeartbeatFresh;
 
                     return [
                         'id' => $doctor->id,
@@ -1382,6 +1407,7 @@ class TextSessionController extends Controller
                         'languages_spoken' => $doctor->languages_spoken,
                         'is_online' => $isAvailableNow,
                         'is_available_now' => $isAvailableNow,
+                        'is_on_break' => $isOnBreak,
                     ];
                 });
 
