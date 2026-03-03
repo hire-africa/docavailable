@@ -71,11 +71,11 @@ class DoctorController extends Controller
     {
         if (!$availability) return false;
 
-        $now = Carbon::now('UTC');
+        $nowUtc = Carbon::now('UTC');
 
         // Heartbeat gate: must have been active within 15 minutes
         if (!$availability->last_active_at) return false;
-        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($nowUtc) > 15) return false;
 
         if ($availability->manually_offline) {
             return false;
@@ -87,8 +87,13 @@ class DoctorController extends Controller
 
         $workingHours = $availability->working_hours;
         if (!is_array($workingHours)) return false;
-        $dayKey = strtolower($now->format('l'));
-        return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);
+
+        // Working hours are stored in the doctor's local time, so compare using local time.
+        $doctorTz = 'Africa/Blantyre';
+        $nowLocal = $nowUtc->copy()->setTimezone($doctorTz);
+
+        $dayKey = strtolower($nowLocal->format('l'));
+        return $this->isWithinWorkingHoursSlot($workingHours, $nowLocal, $dayKey);
     }
 
     /**
@@ -356,6 +361,7 @@ class DoctorController extends Controller
             'success' => true,
             'data' => [
                 'is_online' => $availability->is_online,
+                'is_available_now' => $this->computeIsAvailableNow($availability),
                 'working_hours' => json_decode($availability->working_hours, true),
                 'max_patients_per_day' => $availability->max_patients_per_day,
                 'auto_accept_appointments' => $availability->auto_accept_appointments,

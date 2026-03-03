@@ -133,7 +133,7 @@ export default function DoctorDashboard() {
   const [loadingTextSessions, setLoadingTextSessions] = useState(false);
   const [loadingRatings, setLoadingRatings] = useState(false);
   const [loadingWallet, setLoadingWallet] = useState(false);
-  const [availability, setAvailability] = useState<{ is_available_now: boolean; manually_offline: boolean } | null>(null);
+  const [availability, setAvailability] = useState<{ is_available_now: boolean; manually_offline: boolean; working_hours?: any } | null>(null);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [incomingCall, setIncomingCall] = useState<any>(null);
@@ -351,6 +351,7 @@ export default function DoctorDashboard() {
           setAvailability({
             is_available_now: !!data.is_available_now,
             manually_offline: !!data.manually_offline,
+            working_hours: data.working_hours,
           });
         }
       } catch (error) {
@@ -362,6 +363,30 @@ export default function DoctorDashboard() {
 
     fetchAvailability();
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (activeTab !== 'home') return;
+
+    const intervalId = setInterval(() => {
+      apiService.get(`/doctors/${user.id}/availability`).then((response: any) => {
+        const data = response?.data?.data ?? response?.data;
+        if (response?.success && data) {
+          setAvailability({
+            is_available_now: !!data.is_available_now,
+            manually_offline: !!data.manually_offline,
+            working_hours: data.working_hours,
+          });
+        }
+      }).catch(() => {
+        // ignore
+      });
+    }, 60 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [user?.id, activeTab]);
 
   // Tab-specific refreshes
   useEffect(() => {
@@ -1795,6 +1820,76 @@ export default function DoctorDashboard() {
       const firstName = user?.display_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there';
       const welcomeTitle = `${timeGreeting} Dr. ${firstName}`;
 
+      const shiftInfo = (() => {
+        const workingHours = availability?.working_hours;
+        if (!workingHours || typeof workingHours !== 'object') return null;
+
+        const now = new Date();
+        const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+        const todayKey = dayKeys[now.getDay()];
+
+        const parseMinutes = (time: string) => {
+          const [h, m] = time.split(':').map(v => parseInt(v, 10));
+          if (Number.isNaN(h) || Number.isNaN(m)) return null;
+          return h * 60 + m;
+        };
+
+        const formatTime = (minutes: number) => {
+          const d = new Date(now);
+          d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+          return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        };
+
+        const getSlotsForDay = (dayKey: string) => {
+          const day = workingHours[dayKey];
+          if (!day || !day.enabled || !Array.isArray(day.slots)) return [] as Array<{ start: string; end: string }>;
+          return day.slots.filter((s: any) => s && typeof s.start === 'string' && typeof s.end === 'string');
+        };
+
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        if (availability?.is_available_now) {
+          const slots = getSlotsForDay(todayKey);
+          const endsToday = slots
+            .map(s => parseMinutes(s.end))
+            .filter((m): m is number => m !== null)
+            .filter(endMin => {
+              const startMin = parseMinutes(slots.find(ss => ss.end === slots.find(x => x.end)?.end)?.start || '') ?? 0;
+              return endMin > nowMinutes;
+            })
+            .sort((a, b) => a - b)[0];
+
+          if (endsToday !== undefined) {
+            return `This shift ends at ${formatTime(endsToday)}`;
+          }
+
+          return null;
+        }
+
+        // Next shift: search next 7 days for first slot start after now
+        for (let offset = 0; offset < 7; offset++) {
+          const dayIndex = (now.getDay() + offset) % 7;
+          const dayKey = dayKeys[dayIndex];
+          const slots = getSlotsForDay(dayKey);
+          if (slots.length === 0) continue;
+
+          const candidate = slots
+            .map(s => ({ startMin: parseMinutes(s.start), start: s.start }))
+            .filter(s => s.startMin !== null)
+            .map(s => s.startMin as number)
+            .filter(startMin => offset > 0 || startMin > nowMinutes)
+            .sort((a, b) => a - b)[0];
+
+          if (candidate !== undefined) {
+            const prefix = offset === 0 ? 'Next shift starts at' : 'Next shift starts';
+            const dayLabel = offset === 0 ? '' : ` ${dayKey.charAt(0).toUpperCase()}${dayKey.slice(1)}`;
+            return `${prefix}${dayLabel} at ${formatTime(candidate)}`;
+          }
+        }
+
+        return null;
+      })();
+
       const pillStatus = (() => {
         if (availability?.is_available_now) {
           return { dot: '#4CAF50', text: 'Patients can find you', textColor: '#4CAF50', bg: '#E8F5E8' };
@@ -1910,6 +2005,23 @@ export default function DoctorDashboard() {
             {loadingAvailability ? 'Checking availability...' : pillStatus.text}
           </Text>
         </TouchableOpacity>
+        {!!shiftInfo && (
+          <Text
+            style={{
+              fontSize: 12,
+              color: 'rgba(255,255,255,0.9)',
+              textAlign: 'center',
+              marginTop: 4,
+              maxWidth: 280,
+              lineHeight: 18,
+              paddingHorizontal: 8,
+            }}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {shiftInfo}
+          </Text>
+        )}
       </LinearGradient>
 
 
