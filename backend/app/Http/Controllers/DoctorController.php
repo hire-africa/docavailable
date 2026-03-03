@@ -527,7 +527,9 @@ class DoctorController extends Controller
                 'is_online' => $availability->is_online,
                 'is_available_now' => (bool) ($state['is_available_now'] ?? false),
                 'is_on_break' => (bool) ($state['is_on_break'] ?? false),
-                'working_hours' => json_decode($availability->working_hours, true),
+                'working_hours' => is_array($availability->working_hours)
+                    ? $availability->working_hours
+                    : json_decode($availability->working_hours, true),
                 'max_patients_per_day' => $availability->max_patients_per_day,
                 'auto_accept_appointments' => $availability->auto_accept_appointments,
                 'manually_offline' => (bool) $availability->manually_offline,

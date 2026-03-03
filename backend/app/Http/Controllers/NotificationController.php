@@ -38,11 +38,9 @@ class NotificationController extends Controller
 
         if ($excludeTypes) {
             $types = is_array($excludeTypes) ? $excludeTypes : explode(',', $excludeTypes);
-            $query->where(function ($q) use ($types) {
-                foreach ($types as $type) {
-                    $q->where('data->type', '!=', $type);
-                }
-            });
+            foreach ($types as $type) {
+                $query->whereRaw("data::jsonb->>'type' != ?", [trim((string) $type)]);
+            }
         }
 
         $notifications = $query->orderBy('created_at', 'desc')
