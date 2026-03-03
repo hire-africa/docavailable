@@ -81,7 +81,9 @@ class DoctorController extends Controller
             return true;
         }
 
-        $workingHours = $availability->working_hours;
+        $workingHours = is_array($availability->working_hours)
+            ? $availability->working_hours
+            : json_decode($availability->working_hours, true);
         if (!is_array($workingHours)) return false;
 
         // Working hours are stored in the doctor's local time, so compare using local time.
