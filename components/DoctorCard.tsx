@@ -113,6 +113,8 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
   return (
     prevProps.doctor.id === nextProps.doctor.id &&
     prevProps.doctor.is_online === nextProps.doctor.is_online &&
+    prevProps.doctor.is_available_now === nextProps.doctor.is_available_now &&
+    prevProps.doctor.is_on_break === nextProps.doctor.is_on_break &&
     prevProps.doctor.profile_picture_url === nextProps.doctor.profile_picture_url &&
     prevProps.onPress === nextProps.onPress
   );

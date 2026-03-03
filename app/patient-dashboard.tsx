@@ -1155,10 +1155,19 @@ export default function PatientDashboard() {
                     profile_picture_url: doctor.profile_picture_url,
                     // Add availability data
                     is_online: doctor.is_online_for_instant_sessions || doctor.is_online || false,
-                    is_available_now: doctor.is_available_now || false,
+                    is_available_now: !!doctor.is_available_now,
+                    is_on_break: !!doctor.is_on_break,
                     working_hours: doctor.working_hours,
                     max_patients_per_day: doctor.max_patients_per_day
                   };
+
+                  if (__DEV__ && doctor?.id) {
+                    console.log('Discover doctor availability:', {
+                      id: doctor.id,
+                      is_available_now: mappedDoctor.is_available_now,
+                      is_on_break: mappedDoctor.is_on_break,
+                    });
+                  }
 
                   // Debug logging for doctors with profile pictures (storage issue identified)
                   if (doctor.profile_picture_url) {
