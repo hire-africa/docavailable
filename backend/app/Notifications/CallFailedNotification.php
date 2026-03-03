@@ -59,13 +59,15 @@ class CallFailedNotification extends Notification implements ShouldQueue
      */
     public function toFcm(object $notifiable): array
     {
+        $canonicalType = 'call_failed';
         return [
             'title' => 'Call Failed',
             'body' => 'Your call could not be connected. No sessions were deducted.',
             'data' => [
-                'type' => 'call_failed',
-                'call_session_id' => $this->callSession->id,
-                'appointment_id' => $this->callSession->appointment_id,
+                'type' => $canonicalType,
+                'notification_type' => 'failed',
+                'call_session_id' => (string) $this->callSession->id,
+                'appointment_id' => (string) $this->callSession->appointment_id,
                 'call_type' => $this->callSession->call_type,
                 'reason' => $this->reason,
                 'timestamp' => now()->toISOString(),
@@ -80,8 +82,10 @@ class CallFailedNotification extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $canonicalType = 'call_failed';
         return [
-            'type' => 'call_failed',
+            'type' => $canonicalType,
+            'notification_type' => 'failed',
             'call_session_id' => $this->callSession->id,
             'appointment_id' => $this->callSession->appointment_id,
             'call_type' => $this->callSession->call_type,

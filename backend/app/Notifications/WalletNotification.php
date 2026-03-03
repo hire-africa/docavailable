@@ -65,13 +65,14 @@ class WalletNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'wallet_' . $this->type;
         return [
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
             ],
             'data' => [
-                'type' => 'wallet',
+                'type' => $canonicalType,
                 'transaction_id' => $this->transaction->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_WALLET',
@@ -84,8 +85,9 @@ class WalletNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'wallet_' . $this->type;
         return [
-            'type' => 'wallet',
+            'type' => $canonicalType,
             'transaction_id' => $this->transaction->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

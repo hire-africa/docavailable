@@ -2,17 +2,17 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { Notification as ApiNotification, notificationApiService } from '../services/notificationApiService';
@@ -53,6 +53,128 @@ function NotificationsContent() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread'>('all');
 
+  const deriveDisplayText = (n: ApiNotification): { title: string; message: string } => {
+    const data: any = n.data || {};
+    const notificationType = (data?.type || n.type || 'system').toString();
+
+    const fallbackTitle = 'Notification';
+    const fallbackMessage = '';
+
+    // Prefer explicit fields if present
+    const explicitTitle = (n as any)?.title || data?.title;
+    const explicitMessage = (n as any)?.body || data?.body || data?.message;
+
+    if (explicitTitle || explicitMessage) {
+      return {
+        title: explicitTitle || fallbackTitle,
+        message: explicitMessage || fallbackMessage,
+      };
+    }
+
+    // Derive from type + data payload (database notification format)
+    if (notificationType === 'incoming_call') {
+      const callerName = data?.caller_name || data?.doctor_name || data?.doctorName || data?.callerName || 'Unknown';
+      return {
+        title: 'Incoming call',
+        message: `Call from ${callerName}`,
+      };
+    }
+
+    // Common DB types seen for patients
+    if (notificationType === 'welcome') {
+      return {
+        title: 'Welcome',
+        message: 'Welcome to Doc Available',
+      };
+    }
+
+    // New canonical DB types
+    if (notificationType.startsWith('appointment_')) {
+      const appointmentId = data?.appointment_id || data?.appointmentId;
+      const subtype = notificationType.replace('appointment_', '').replace(/_/g, ' ');
+      return {
+        title: 'Appointment update',
+        message: appointmentId ? `Appointment #${appointmentId}: ${subtype}` : `Appointment: ${subtype}`,
+      };
+    }
+
+    if (notificationType.startsWith('text_session_')) {
+      const sessionId = data?.session_id || data?.text_session_id || data?.textSessionId;
+      const subtype = notificationType.replace('text_session_', '').replace(/_/g, ' ');
+      return {
+        title: 'Text session',
+        message: sessionId ? `Session #${sessionId}: ${subtype}` : `Session: ${subtype}`,
+      };
+    }
+
+    if (notificationType.startsWith('wallet_')) {
+      const subtype = notificationType.replace('wallet_', '').replace(/_/g, ' ');
+      const amount = data?.amount || data?.transaction_amount || data?.transaction?.amount;
+      const amountText = amount !== undefined && amount !== null ? ` (${amount})` : '';
+      return {
+        title: 'Wallet update',
+        message: `${subtype}${amountText}`.trim(),
+      };
+    }
+
+    if (notificationType.startsWith('subscription_')) {
+      const subtype = notificationType.replace('subscription_', '').replace(/_/g, ' ');
+      const planName = data?.plan_name || data?.plan?.name || data?.subscription?.plan_name;
+      return {
+        title: 'Subscription update',
+        message: planName ? `${subtype}: ${planName}` : subtype,
+      };
+    }
+
+    if (notificationType.startsWith('call_')) {
+      const subtype = notificationType.replace('call_', '').replace(/_/g, ' ');
+      return {
+        title: 'Call update',
+        message: subtype,
+      };
+    }
+
+    if (notificationType.startsWith('doctor_')) {
+      const subtype = notificationType.replace('doctor_', '').replace(/_/g, ' ');
+      return {
+        title: 'Account update',
+        message: subtype,
+      };
+    }
+
+    if (notificationType === 'text_session_message') {
+      const senderName = data?.sender_name || data?.from_name || data?.doctor_name || data?.patient_name || 'Someone';
+      const preview = (data?.message || data?.text || data?.body || '').toString();
+      return {
+        title: `New message${senderName ? ` from ${senderName}` : ''}`,
+        message: preview || 'You have a new message',
+      };
+    }
+
+    if (notificationType === 'custom') {
+      // Many custom notifications only have data payload; best-effort extraction.
+      const title = data?.subject || data?.notification_title || data?.heading || fallbackTitle;
+      const message = data?.content || data?.notification_body || data?.text || fallbackMessage;
+      return {
+        title: title || fallbackTitle,
+        message: message || fallbackMessage,
+      };
+    }
+
+    if (notificationType === 'chat_message') {
+      const senderName = data?.sender_name || 'Someone';
+      return {
+        title: `New message from ${senderName}`,
+        message: 'You have a new message',
+      };
+    }
+
+    return {
+      title: fallbackTitle,
+      message: fallbackMessage,
+    };
+  };
+
   useEffect(() => {
     loadNotifications();
   }, []);
@@ -91,19 +213,21 @@ function NotificationsContent() {
 
       if (response.success && response.data) {
         // Transform API notifications to our interface format
-        const apiNotifications: Notification[] = response.data.notifications.map((n: ApiNotification) => {
+        const apiNotifications: Notification[] = response.data.notifications
+          .filter((n: ApiNotification) => {
+            const t = (n.data as any)?.type || (n as any)?.type;
+            return t !== 'chat_message';
+          })
+          .map((n: ApiNotification) => {
           // Extract type from notification data or use default
           const notificationType = n.data?.type || n.type || 'system';
 
-          let title = n.title || n.data?.title || 'Notification';
-          if (notificationType === 'chat_message') {
-            title = n.data?.title || (n.data?.sender_name ? `New message from ${n.data?.sender_name}` : 'New Message');
-          }
+          const display = deriveDisplayText(n);
 
           return {
             id: n.id.toString(),
-            title: title,
-            message: n.body || n.data?.body || n.data?.message || '',
+            title: display.title,
+            message: display.message,
             type: notificationType,
             isRead: !!n.read_at,
             timestamp: new Date(n.created_at),

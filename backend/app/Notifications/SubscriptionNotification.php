@@ -65,13 +65,14 @@ class SubscriptionNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'subscription_' . $this->type;
         return [
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
             ],
             'data' => [
-                'type' => 'subscription',
+                'type' => $canonicalType,
                 'subscription_id' => $this->subscription->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_SUBSCRIPTION',
@@ -85,9 +86,10 @@ class SubscriptionNotification extends Notification implements ShouldQueue
     public function toArray($notifiable): array
     {
         $plan = $this->subscription->plan;
+        $canonicalType = 'subscription_' . $this->type;
 
         return [
-            'type' => 'subscription',
+            'type' => $canonicalType,
             'subscription_id' => $this->subscription->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

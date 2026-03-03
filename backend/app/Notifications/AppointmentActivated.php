@@ -56,6 +56,7 @@ class AppointmentActivated extends Notification implements ShouldQueue
     public function toFcm($notifiable): array
     {
         $title = 'Appointment Now Active';
+        $canonicalType = 'appointment_activated';
 
         if ($this->recipientType === 'patient') {
             $body = "Your {$this->appointmentTypeDisplay} appointment with {$this->otherPartyName} is now active. Tap to join.";
@@ -69,7 +70,8 @@ class AppointmentActivated extends Notification implements ShouldQueue
                 'body' => $body,
             ],
             'data' => [
-                'type' => 'appointment_activated',
+                'type' => $canonicalType,
+                'notification_type' => 'activated',
                 'appointment_id' => (string) $this->appointment->id,
                 'appointment_type' => $this->appointment->appointment_type,
                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
@@ -84,8 +86,10 @@ class AppointmentActivated extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $canonicalType = 'appointment_activated';
         return [
-            'type' => 'appointment_activated',
+            'type' => $canonicalType,
+            'notification_type' => 'activated',
             'appointment_id' => $this->appointment->id,
             'appointment_type' => $this->appointment->appointment_type,
             'other_party_name' => $this->otherPartyName,

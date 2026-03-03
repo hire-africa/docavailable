@@ -61,9 +61,10 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'doctor_rejected';
         return [
-            'type' => 'doctor_rejected',
-            'notification_type' => 'doctor_rejected',
+            'type' => $canonicalType,
+            'notification_type' => 'rejected',
             'title' => 'Account Update',
             'message' => 'Your doctor account application was not approved. Please check your email for details.',
             'data' => [
@@ -77,13 +78,15 @@ class DoctorRejectedNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'doctor_rejected';
         return [
             'notification' => [
                 'title' => 'Account Update',
                 'body' => 'Your doctor account application was not approved. Please check your email for details.',
             ],
             'data' => [
-                'type' => 'doctor_rejected',
+                'type' => $canonicalType,
+                'notification_type' => 'rejected',
                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
             ],
         ];

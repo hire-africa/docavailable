@@ -387,7 +387,7 @@ export default function DoctorDashboard() {
       }).catch(() => {
         // ignore
       });
-    }, 60 * 1000);
+    }, 30 * 1000);
 
     return () => {
       clearInterval(intervalId);

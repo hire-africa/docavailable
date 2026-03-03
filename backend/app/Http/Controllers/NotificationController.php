@@ -19,6 +19,13 @@ class NotificationController extends Controller
     {
         $user = Auth::user();
 
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
         $perPage = $request->get('per_page', 15);
         $unreadOnly = $request->boolean('unread_only', false);
         $excludeTypes = $request->get('exclude_types');
@@ -51,6 +58,43 @@ class NotificationController extends Controller
                     'per_page' => $notifications->perPage(),
                     'total' => $notifications->total(),
                 ],
+                'unread_count' => $user->unreadNotifications()->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * Get user's unread notifications (compact)
+     */
+    public function getUnreadNotifications(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthenticated',
+            ], 401);
+        }
+
+        $limit = (int) $request->get('limit', 20);
+        if ($limit < 1) {
+            $limit = 1;
+        }
+        if ($limit > 100) {
+            $limit = 100;
+        }
+
+        $query = $user->notifications()->whereNull('read_at');
+
+        $notifications = $query->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'notifications' => $notifications,
                 'unread_count' => $user->unreadNotifications()->count(),
             ],
         ]);

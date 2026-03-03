@@ -99,13 +99,7 @@ class FcmChannel
         $data = $message['data'] ?? [];
         $type = $data['type'] ?? '';
         $isIncomingCall = ($type === 'incoming_call' || ($data['isIncomingCall'] ?? '') === 'true');
-        $channelId = 'calls'; // default
-
-        if (str_contains($type, 'chat_message') || str_contains($type, 'new_message')) {
-            $channelId = 'messages';
-        } elseif (str_contains($type, 'appointment')) {
-            $channelId = 'appointments';
-        }
+        $channelId = $isIncomingCall ? 'incoming_calls_v3' : 'urgent_medical';
 
         Log::info("📤 FCM V1 Channel: Preparing FCM payload", [
             'user_id' => $notifiable->id,
@@ -137,7 +131,7 @@ class FcmChannel
             $payload['message']['android']['notification'] = [
                 'sound' => 'default',
                 'channel_id' => $channelId,
-                'notification_priority' => $channelId === 'calls' ? 'PRIORITY_MAX' : 'PRIORITY_HIGH',
+                'notification_priority' => 'PRIORITY_MAX',
                 'visibility' => 'PUBLIC'
             ];
         }

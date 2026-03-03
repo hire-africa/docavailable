@@ -59,13 +59,15 @@ class AppointmentExpiredNotification extends Notification implements ShouldQueue
      */
     public function toFcm(object $notifiable): array
     {
+        $canonicalType = 'appointment_expired';
         return [
             'title' => 'Appointment Expired',
             'body' => 'Your appointment has expired. ' . $this->reason,
             'data' => [
-                'type' => 'appointment_expired',
-                'appointment_id' => $this->appointment->id,
-                'doctor_id' => $this->appointment->doctor_id,
+                'type' => $canonicalType,
+                'notification_type' => 'expired',
+                'appointment_id' => (string) $this->appointment->id,
+                'doctor_id' => (string) $this->appointment->doctor_id,
                 'appointment_type' => $this->appointment->appointment_type,
                 'reason' => $this->reason,
                 'cta' => 'try_another_doctor',
@@ -83,8 +85,10 @@ class AppointmentExpiredNotification extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $canonicalType = 'appointment_expired';
         return [
-            'type' => 'appointment_expired',
+            'type' => $canonicalType,
+            'notification_type' => 'expired',
             'appointment_id' => $this->appointment->id,
             'doctor_id' => $this->appointment->doctor_id,
             'doctor_name' => $this->appointment->doctor ? 

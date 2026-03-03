@@ -50,12 +50,14 @@ class CallDeclinedNotification extends Notification implements ShouldQueue
     public function toFcm(object $notifiable): array
     {
         $doctorName = $this->doctor->first_name . ' ' . $this->doctor->last_name;
+        $canonicalType = 'call_declined';
 
         return [
             'title' => 'Call Declined',
             'body' => "Dr. {$doctorName} is not available right now. Please try again later.",
             'data' => [
-                'type' => 'call_declined',
+                'type' => $canonicalType,
+                'notification_type' => 'declined',
                 'call_session_id' => (string) $this->callSession->id,
                 'appointment_id' => (string) $this->callSession->appointment_id,
                 'call_type' => $this->callSession->call_type,
@@ -73,9 +75,11 @@ class CallDeclinedNotification extends Notification implements ShouldQueue
     public function toArray(object $notifiable): array
     {
         $doctorName = $this->doctor->first_name . ' ' . $this->doctor->last_name;
+        $canonicalType = 'call_declined';
 
         return [
-            'type' => 'call_declined',
+            'type' => $canonicalType,
+            'notification_type' => 'declined',
             'call_session_id' => $this->callSession->id,
             'appointment_id' => $this->callSession->appointment_id,
             'call_type' => $this->callSession->call_type,

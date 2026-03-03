@@ -176,6 +176,7 @@ Route::middleware(['auth:api'])->group(function () {
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'getNotifications']);
+    Route::get('/notifications/unread', [NotificationController::class, 'getUnreadNotifications']);
     Route::post('/notifications/mark-read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
     Route::post('/notifications/send-chat-message', [NotificationController::class, 'sendChatMessageNotification']);

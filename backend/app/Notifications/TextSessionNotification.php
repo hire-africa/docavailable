@@ -46,13 +46,14 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function toFcm($notifiable): array
     {
+        $canonicalType = 'text_session_' . $this->type;
         return [
             'notification' => [
                 'title' => $this->getSubject(),
                 'body' => $this->getContent(),
             ],
             'data' => [
-                'type' => 'text_session',
+                'type' => $canonicalType,
                 'session_id' => $this->textSession->id,
                 'notification_type' => $this->type,
                 'click_action' => 'OPEN_TEXT_SESSION',
@@ -65,8 +66,9 @@ class TextSessionNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'text_session_' . $this->type;
         return [
-            'type' => 'text_session',
+            'type' => $canonicalType,
             'session_id' => $this->textSession->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

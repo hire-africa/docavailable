@@ -85,8 +85,9 @@ class AppointmentNotification extends Notification implements ShouldQueue
      */
     public function toArray($notifiable): array
     {
+        $canonicalType = 'appointment_' . $this->type;
         return [
-            'type' => 'appointment',
+            'type' => $canonicalType,
             'appointment_id' => $this->appointment->id,
             'notification_type' => $this->type,
             'title' => $this->getSubject(),

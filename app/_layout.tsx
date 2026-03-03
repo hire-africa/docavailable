@@ -3,7 +3,7 @@ import messaging from '@react-native-firebase/messaging';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, DeviceEventEmitter, NativeEventEmitter, NativeModules, PermissionsAndroid, Platform, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, DeviceEventEmitter, NativeEventEmitter, NativeModules, PermissionsAndroid, Platform, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CustomAlertProvider from '../components/CustomAlertProvider';
@@ -74,6 +74,16 @@ const setupNotificationChannels = async () => {
         sound: 'default',
         vibration: true,
         description: 'Session start and end notifications',
+      }
+      ,
+      {
+        id: 'urgent_medical',
+        name: 'Urgent Medical',
+        importance: NotifeeAndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+        bypassDnd: true,
+        visibility: AndroidVisibility.PUBLIC,
       }
     ];
 
@@ -436,6 +446,56 @@ export default function RootLayout() {
     // Start initialization
     initializeApp();
 
+    // Foreground polling fallback for unread notifications (Android only)
+    let pollTimer: any = null;
+    let appStateSub: any = null;
+    let lastUnreadCount = -1;
+
+    const startPolling = () => {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
+        try {
+          const authToken = await apiService.getAuthToken();
+          if (!authToken) return;
+
+          const res: any = await apiService.get('/notifications/unread', { limit: 5 });
+          const unreadCount = res?.data?.unread_count;
+
+          if (typeof unreadCount === 'number') {
+            if (lastUnreadCount >= 0 && unreadCount > lastUnreadCount) {
+              DeviceEventEmitter.emit('notifications:unread', {
+                unreadCount,
+                notifications: res?.data?.notifications || [],
+                source: 'polling',
+              });
+              DeviceEventEmitter.emit('notifications:refresh', { source: 'polling' });
+            }
+            lastUnreadCount = unreadCount;
+          }
+        } catch {
+          // Best-effort only
+        }
+      }, 60000);
+    };
+
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    if (Platform.OS === 'android') {
+      startPolling();
+      appStateSub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
+          startPolling();
+        } else {
+          stopPolling();
+        }
+      });
+    }
+
     // Initialize global WebRTC signaling service (temporarily disabled)
     // globalWebRTCService.connect().catch((error) => {
     //   console.error('❌ Failed to connect global WebRTC service:', error);
@@ -454,6 +514,9 @@ export default function RootLayout() {
         const notification = remoteMessage?.notification || {};
         const type = (data?.type || '').toString();
 
+        const isChatMessage = type === 'chat_message';
+        const isIncomingCall = type === 'incoming_call';
+
         console.log('📱 [Foreground] Received FCM message:', {
           type,
           title: notification.title,
@@ -462,7 +525,7 @@ export default function RootLayout() {
         });
 
         // For incoming calls, route to call screen (skip notification popup in foreground)
-        if (type === 'incoming_call') {
+        if (isIncomingCall) {
           console.log('📱 [Foreground] Incoming call - routing to call screen');
           console.log('📱 [Foreground] Call data:', data);
 
@@ -494,7 +557,7 @@ export default function RootLayout() {
         }
 
         // For other notifications, determine channel and display
-        if (type.includes('message')) {
+        if (isChatMessage) {
           const appointmentId = (data.appointment_id || data.appointmentId || data.session_id || data.sessionId) as any;
           DeviceEventEmitter.emit('chat:refresh', {
             appointmentId: appointmentId ? String(appointmentId) : undefined,
@@ -503,9 +566,14 @@ export default function RootLayout() {
           });
         }
 
-        const channelId = type.includes('message') ? 'messages' :
-          type.includes('appointment') ? 'appointments' :
-            type.includes('session') ? 'sessions' : 'default';
+        const channelId = isChatMessage ? 'messages' :
+          type.startsWith('appointment_') ? 'appointments' :
+            type.startsWith('text_session_') ? 'sessions' :
+              type.startsWith('wallet_') || type.startsWith('subscription_') ? 'urgent_medical' :
+                type.startsWith('call_') ? 'urgent_medical' :
+                  type.includes('appointment') ? 'appointments' :
+                    type.includes('session') ? 'sessions' :
+                      'urgent_medical';
 
         // Ensure channel exists before displaying notification
         await notifee.createChannel({
@@ -523,7 +591,7 @@ export default function RootLayout() {
         let messageContent = notification.body || 'You have a new notification';
         let expandedText = messageContent;
 
-        if (type.includes('message') && data.appointment_id) {
+        if (isChatMessage && data.appointment_id) {
           try {
             // Fetch the latest message from the chat
             const response = await fetch(`https://docavailable.com/api/appointments/${data.appointment_id}/messages?limit=1&order=desc`);
@@ -540,12 +608,18 @@ export default function RootLayout() {
             console.log('📱 [Foreground] Could not fetch message content, using generic:', error);
             expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
           }
-        } else if (type.includes('message')) {
+        } else if (isChatMessage) {
           expandedText = `Message from ${data.sender_name || 'Doctor'}: ${messageContent}`;
-        } else if (type.includes('appointment')) {
+        } else if (type.startsWith('appointment_') || type.includes('appointment')) {
           expandedText = `Appointment Update: ${messageContent}`;
-        } else if (type.includes('session')) {
+        } else if (type.startsWith('text_session_') || type.includes('session')) {
           expandedText = `Session Update: ${messageContent}`;
+        } else if (type.startsWith('wallet_')) {
+          expandedText = `Wallet Update: ${messageContent}`;
+        } else if (type.startsWith('subscription_')) {
+          expandedText = `Subscription Update: ${messageContent}`;
+        } else if (type.startsWith('call_')) {
+          expandedText = `Call Update: ${messageContent}`;
         }
 
         // Use notifee for reliable popup display
@@ -563,9 +637,12 @@ export default function RootLayout() {
             vibrationPattern: [250, 250, 250, 250],
             smallIcon: 'ic_launcher',
             largeIcon: 'ic_launcher',
-            color: type.includes('message') ? '#2196F3' :
-              type.includes('appointment') ? '#FF9800' :
-                type.includes('session') ? '#9C27B0' : '#4CAF50',
+            color: isChatMessage ? '#2196F3' :
+              (type.startsWith('appointment_') || type.includes('appointment')) ? '#FF9800' :
+                (type.startsWith('text_session_') || type.includes('session')) ? '#9C27B0' :
+                  (type.startsWith('wallet_') || type.startsWith('subscription_')) ? '#4CAF50' :
+                    type.startsWith('call_') ? '#14B8A6' :
+                      '#4CAF50',
             // Add expanded text for better context
             style: {
               type: 1, // BigTextStyle
@@ -606,6 +683,11 @@ export default function RootLayout() {
       } catch (cleanupError) {
         console.warn('⚠️ Cleanup error:', cleanupError);
       }
+
+      stopPolling();
+      try {
+        appStateSub?.remove?.();
+      } catch { }
     };
   }, []);
 

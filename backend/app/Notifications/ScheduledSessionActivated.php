@@ -55,6 +55,7 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
     {
         $title = 'Scheduled Session Active';
         $body = "Your {$this->sessionTypeDisplay} with {$this->patientName} is now active. Tap to join.";
+        $canonicalType = 'text_session_scheduled_activated';
 
         return [
             'notification' => [
@@ -62,7 +63,8 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
                 'body' => $body,
             ],
             'data' => [
-                'type' => 'scheduled_session_activated',
+                'type' => $canonicalType,
+                'notification_type' => 'scheduled_activated',
                 'session_id' => (string) $this->session->id,
                 'session_type' => $this->session->session_type,
                 'click_action' => 'FLUTTER_NOTIFICATION_CLICK',
@@ -77,8 +79,10 @@ class ScheduledSessionActivated extends Notification implements ShouldQueue
      */
     public function toArray(object $notifiable): array
     {
+        $canonicalType = 'text_session_scheduled_activated';
         return [
-            'type' => 'scheduled_session_activated',
+            'type' => $canonicalType,
+            'notification_type' => 'scheduled_activated',
             'session_id' => $this->session->id,
             'session_type' => $this->session->session_type,
             'patient_name' => $this->patientName,
