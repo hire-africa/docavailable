@@ -11,6 +11,8 @@ class HeartbeatService {
     if (this.isRunning) return;
     this.isRunning = true;
 
+    this.sendHeartbeat().catch(() => { });
+
     const onAppStateChange = (state: AppStateStatus) => {
       if (!this.isRunning) return;
       if (state === 'active') {

@@ -1821,6 +1821,33 @@ export default function DoctorDashboard() {
       const welcomeTitle = `${timeGreeting} Dr. ${firstName}`;
 
       const shiftInfo = (() => {
+        const formatEnds = (t: any) => {
+          if (!t) return null;
+          if (typeof t === 'string') return t;
+          try {
+            return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          } catch {
+            return null;
+          }
+        };
+
+        const endsFromApi = formatEnds((availability as any)?.current_slot_end);
+        const nextFromApi = typeof (availability as any)?.next_slot_start === 'string'
+          ? (availability as any)?.next_slot_start
+          : null;
+
+        if (availability?.is_available_now) {
+          return endsFromApi ? `Shift ends at ${endsFromApi}` : null;
+        }
+
+        if ((availability as any)?.is_on_break) {
+          return endsFromApi ? `On duty until ${endsFromApi}` : null;
+        }
+
+        if (nextFromApi) {
+          return `Next shift starts ${nextFromApi}`;
+        }
+
         const workingHours = availability?.working_hours;
         if (!workingHours || typeof workingHours !== 'object') return null;
 
@@ -1860,7 +1887,7 @@ export default function DoctorDashboard() {
             .sort((a, b) => a - b)[0];
 
           if (endsToday !== undefined) {
-            return `This shift ends at ${formatTime(endsToday)}`;
+            return `Shift ends at ${formatTime(endsToday)}`;
           }
 
           return null;
@@ -1892,15 +1919,15 @@ export default function DoctorDashboard() {
 
       const pillStatus = (() => {
         if (availability?.is_available_now) {
-          return { dot: '#4CAF50', text: 'Patients can find you', textColor: '#4CAF50', bg: '#E8F5E8' };
+          return { dot: '#4CAF50', text: 'On Duty', textColor: '#4CAF50', bg: '#E8F5E8' };
         }
         if ((availability as any)?.is_on_break) {
-          return { dot: '#F4C430', text: 'On break', textColor: '#F4C430', bg: '#FFF8E1' };
+          return { dot: '#F4C430', text: 'On Break', textColor: '#F4C430', bg: '#FFF8E1' };
         }
         if (availability?.manually_offline) {
           return { dot: '#FF3B30', text: 'Availability paused', textColor: '#FF3B30', bg: '#FDECEC' };
         }
-        return { dot: '#111214', text: 'Offline · Not your shift', textColor: '#111214', bg: '#EFEFEF' };
+        return { dot: '#111214', text: 'Off Duty', textColor: '#111214', bg: '#EFEFEF' };
       })();
 
       return (
