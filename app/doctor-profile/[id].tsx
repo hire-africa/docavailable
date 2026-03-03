@@ -161,8 +161,14 @@ export default function DoctorProfileScreen() {
   }
 
   const isAvailableNow = (doctor as any).is_available_now || false;
+  const currentSlotEnd = (doctor as any).current_slot_end as string | undefined;
+  const nextSlotStart = (doctor as any).next_slot_start as string | undefined;
   const canStartSession = isAvailableNow && !activeSession && user?.role === 'patient';
   const showTalkNowButton = user?.role === 'patient' && !activeSession;
+
+  const availabilityLine = isAvailableNow
+    ? `On Duty${currentSlotEnd ? ` · Shift ends at ${currentSlotEnd}` : ''}`
+    : `Off Duty${nextSlotStart ? ` · Next shift starts ${nextSlotStart}` : ''}`;
 
   return (
     <View style={styles.container}>
@@ -211,7 +217,7 @@ export default function DoctorProfileScreen() {
             <View style={[styles.statusIndicator, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]}>
               <View style={[styles.statusDot, { backgroundColor: isAvailableNow ? '#4CAF50' : '#999' }]} />
               <Text style={[styles.statusText, { color: isAvailableNow ? '#4CAF50' : '#999' }]}>
-                {isAvailableNow ? 'Available' : 'Not Available'}
+                {availabilityLine}
               </Text>
             </View>
           </View>

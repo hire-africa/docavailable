@@ -67,6 +67,95 @@ class DoctorController extends Controller
         return false;
     }
 
+    private function computeShiftInfo(array $workingHours, Carbon $nowLocal): array
+    {
+        $dayKey = strtolower($nowLocal->format('l'));
+        $day = $workingHours[$dayKey] ?? null;
+
+        $nowMinutes = ((int) $nowLocal->format('H')) * 60 + ((int) $nowLocal->format('i'));
+
+        $currentSlotEndMinutes = null;
+        if (is_array($day) && !empty($day['enabled']) && !empty($day['slots']) && is_array($day['slots'])) {
+            foreach ($day['slots'] as $slot) {
+                if (!is_array($slot)) continue;
+                $start = (string) ($slot['start'] ?? '');
+                $end = (string) ($slot['end'] ?? '');
+                if ($start === '' || $end === '') continue;
+
+                [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+                [$eh, $em] = array_pad(explode(':', $end), 2, '0');
+                $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+                $endMinutes = ((int) $eh) * 60 + ((int) $em);
+
+                $inSlot = false;
+                if ($endMinutes <= $startMinutes) {
+                    $inSlot = ($nowMinutes >= $startMinutes || $nowMinutes < $endMinutes);
+                } else {
+                    $inSlot = ($nowMinutes >= $startMinutes && $nowMinutes < $endMinutes);
+                }
+
+                if ($inSlot) {
+                    $currentSlotEndMinutes = $endMinutes;
+                    break;
+                }
+            }
+        }
+
+        $formatHm = function (Carbon $baseDate, int $minutes): string {
+            $d = $baseDate->copy()->startOfDay()->addMinutes($minutes);
+            return $d->format('H:i');
+        };
+
+        $currentSlotEnd = null;
+        if ($currentSlotEndMinutes !== null) {
+            $currentSlotEnd = $formatHm($nowLocal, $currentSlotEndMinutes);
+        }
+
+        $nextSlotStart = null;
+        $dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        $currentIdx = array_search($dayKey, $dayKeys, true);
+        if ($currentIdx === false) $currentIdx = 0;
+
+        for ($offset = 0; $offset < 7; $offset++) {
+            $idx = ($currentIdx + $offset) % 7;
+            $searchDayKey = $dayKeys[$idx];
+            $searchDay = $workingHours[$searchDayKey] ?? null;
+            if (!is_array($searchDay) || empty($searchDay['enabled']) || empty($searchDay['slots']) || !is_array($searchDay['slots'])) {
+                continue;
+            }
+
+            $candidateStarts = [];
+            foreach ($searchDay['slots'] as $slot) {
+                if (!is_array($slot)) continue;
+                $start = (string) ($slot['start'] ?? '');
+                if ($start === '') continue;
+                [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
+                $startMinutes = ((int) $sh) * 60 + ((int) $sm);
+                if ($offset === 0 && $startMinutes <= $nowMinutes) {
+                    continue;
+                }
+                $candidateStarts[] = $startMinutes;
+            }
+
+            if (!empty($candidateStarts)) {
+                sort($candidateStarts);
+                $startMinutes = $candidateStarts[0];
+
+                $labelDay = $offset === 0
+                    ? ''
+                    : ' ' . ucfirst($searchDayKey);
+
+                $nextSlotStart = trim($labelDay . ' at ' . $formatHm($nowLocal->copy()->addDays($offset), $startMinutes));
+                break;
+            }
+        }
+
+        return [
+            'current_slot_end' => $currentSlotEnd,
+            'next_slot_start' => $nextSlotStart,
+        ];
+    }
+
     private function computeIsAvailableNow(?DoctorAvailability $availability): bool
     {
         if (!$availability) return false;
@@ -355,6 +444,16 @@ class DoctorController extends Controller
             ]);
         }
 
+        $doctorTz = 'Africa/Blantyre';
+        $nowLocal = Carbon::now($doctorTz);
+
+        $workingHours = is_array($availability->working_hours)
+            ? $availability->working_hours
+            : json_decode($availability->working_hours, true);
+        $shiftInfo = is_array($workingHours)
+            ? $this->computeShiftInfo($workingHours, $nowLocal)
+            : ['current_slot_end' => null, 'next_slot_start' => null];
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -365,6 +464,8 @@ class DoctorController extends Controller
                 'auto_accept_appointments' => $availability->auto_accept_appointments,
                 'manually_offline' => (bool) $availability->manually_offline,
                 'manually_online' => (bool) $availability->manually_online,
+                'current_slot_end' => $shiftInfo['current_slot_end'] ?? null,
+                'next_slot_start' => $shiftInfo['next_slot_start'] ?? null,
             ]
         ]);
     }

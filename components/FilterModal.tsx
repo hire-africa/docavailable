@@ -115,7 +115,7 @@ const FilterModal: React.FC<FilterModalProps> = ({
                                         styles.toggleText,
                                         localFilters.showOnlyOnline && styles.toggleTextActive
                                     ]}>
-                                        Show Online Doctors Only
+                                        On duty only
                                     </Text>
                                 </View>
                                 <View style={[

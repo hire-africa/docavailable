@@ -2082,33 +2082,6 @@ export default function PatientDashboard() {
             >
               Hi {(user?.display_name && user.display_name.split(' ')[0]) || (user?.email && user.email.split('@')[0]) || 'there'}
             </ThemedText>
-            {/* Status Pill */}
-            <View style={{
-              backgroundColor: (user as any)?.is_online ? '#E8F5E8' : '#F5F5F5',
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              paddingVertical: 4,
-              marginBottom: 8,
-              alignSelf: 'center',
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <View style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 3,
-                  backgroundColor: (user as any)?.is_online ? '#4CAF50' : '#FF3B30',
-                }} />
-                <Text style={{
-                  fontSize: 12,
-                  fontWeight: '600',
-                  color: (user as any)?.is_online ? '#4CAF50' : '#FF3B30',
-                  textAlign: 'center',
-                  letterSpacing: 0.3,
-                }}>
-                  {(user as any)?.is_online ? 'Online' : 'Offline'}
-                </Text>
-              </View>
-            </View>
             <ThemedText
               style={{
                 fontSize: 16,
@@ -3039,7 +3012,7 @@ export default function PatientDashboard() {
                 {showOnlyOnline && (
                   <View style={styles.activeFilterChip}>
                     <Icon name="online" size={10} color="#4CAF50" style={{ marginRight: 6 }} />
-                    <Text style={styles.activeFilterChipText}>Online Only</Text>
+                    <Text style={styles.activeFilterChipText}>On duty only</Text>
                     <TouchableOpacity
                       onPress={() => setShowOnlyOnline(false)}
                       style={styles.removeFilterButton}

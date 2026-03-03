@@ -53,10 +53,8 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
           style={styles.profilePicture}
           name={stripDoctorPrefix(((doctor as any).name || `${(doctor as any).first_name || ''} ${(doctor as any).last_name || ''}`.trim() || 'Doctor'))}
         />
-        {/* Green dot for online doctors */}
-        {((doctor as any).is_available_now ?? (doctor as any).is_online) && (
-          <View style={styles.onlineIndicator} />
-        )}
+        {/* Green dot for on-duty doctors */}
+        {!!(doctor as any).is_available_now && <View style={styles.onlineIndicator} />}
       </View>
       
       {/* Content - Right Side */}
