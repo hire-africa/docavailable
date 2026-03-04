@@ -192,20 +192,36 @@ export function useCallSetup({
   };
 
   const endCall = () => {
-    if (audioCallService.current) {
-      audioCallService.current.endCall();
+    const audioService = audioCallService.current ?? (callType === 'audio' ? AudioCallService.getInstance() : null);
+    const videoService = videoCallService.current ?? (callType === 'video' ? VideoCallService.getInstance() : null);
+
+    if (audioService) {
+      audioService.endCall();
     }
-    if (videoCallService.current) {
-      videoCallService.current.endCall();
+    if (videoService) {
+      videoService.endCall();
     }
   };
 
   const declineCall = async (isDoctor: boolean) => {
-    if (audioCallService.current) {
-      await audioCallService.current.declineCall(isDoctor);
+    const audioService = audioCallService.current ?? (callType === 'audio' ? AudioCallService.getInstance() : null);
+    const videoService = videoCallService.current ?? (callType === 'video' ? VideoCallService.getInstance() : null);
+
+    // ✅ Ensure appointmentId and userId are set before decline — singleton may not have been initialized by this hook
+    if (audioService && !(audioService as any).appointmentId) {
+      (audioService as any).appointmentId = appointmentId;
+      (audioService as any).userId = userId;
     }
-    if (videoCallService.current) {
-      await videoCallService.current.declineCall(isDoctor);
+    if (videoService && !(videoService as any).appointmentId) {
+      (videoService as any).appointmentId = appointmentId;
+      (videoService as any).userId = userId;
+    }
+
+    if (audioService) {
+      await audioService.declineCall(isDoctor);
+    }
+    if (videoService) {
+      await videoService.declineCall(isDoctor);
     }
   };
 
