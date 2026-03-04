@@ -3,7 +3,6 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 use App\Models\CallSession;
 use App\Models\User;
@@ -11,7 +10,7 @@ use App\Models\User;
 /**
  * Notification sent to patient when doctor declines their call.
  */
-class CallDeclinedNotification extends Notification implements ShouldQueue
+class CallDeclinedNotification extends Notification
 {
     use Queueable;
 

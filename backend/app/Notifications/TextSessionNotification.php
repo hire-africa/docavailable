@@ -3,12 +3,11 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use App\Models\TextSession;
 
-class TextSessionNotification extends Notification implements ShouldQueue
+class TextSessionNotification extends Notification
 {
     use Queueable;
 

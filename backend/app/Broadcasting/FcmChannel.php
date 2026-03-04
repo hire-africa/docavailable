@@ -114,7 +114,7 @@ class FcmChannel
         $payload = [
             'message' => [
                 'token' => $notifiable->push_token,
-                'data' => $data,
+                'data' => array_map('strval', $data), // Ensure all data values are strings for FCM V1
                 'android' => [
                     'priority' => 'high', // High priority for immediate delivery
                 ],
