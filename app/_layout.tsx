@@ -106,29 +106,18 @@ export default function RootLayout() {
   const [updateRequired, setUpdateRequired] = useState(false);
   const [updateData, setUpdateData] = useState({ title: '', message: '', storeUrl: '' });
 
-  // Request phone permissions for call handling
-  const requestPhonePermissions = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const permissions = [
-          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-          PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
-          PermissionsAndroid.PERMISSIONS.READ_PHONE_NUMBERS,
-        ];
+  const requestMediaPermissionsAtBoot = async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const permissions = [
+        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+      ];
 
-        const results = await PermissionsAndroid.requestMultiple(permissions);
-        console.log('📞 Phone permissions requested:', results);
-
-        // Check if all permissions were granted
-        const allGranted = Object.values(results).every(result => result === PermissionsAndroid.RESULTS.GRANTED);
-        if (allGranted) {
-          console.log('✅ All phone permissions granted');
-        } else {
-          console.log('⚠️ Some phone permissions denied');
-        }
-      } catch (error) {
-        console.error('❌ Error requesting phone permissions:', error);
-      }
+      const results = await PermissionsAndroid.requestMultiple(permissions);
+      console.log('🎥 Media permissions requested at boot:', results);
+    } catch (error) {
+      console.error('❌ Error requesting media permissions at boot:', error);
     }
   };
 
@@ -152,6 +141,10 @@ export default function RootLayout() {
       (global as any).isRouterReady = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    requestMediaPermissionsAtBoot();
+  }, []);
 
   useEffect(() => {
     const checkVersion = async () => {

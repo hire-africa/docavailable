@@ -36,7 +36,7 @@ class CallKeepService {
         },
         android: {
           alertTitle: 'Permissions Required',
-          alertDescription: 'DocAvailable needs access to your phone accounts',
+          alertDescription: 'DocAvailable needs permissions to handle calls',
           cancelButton: 'Cancel',
           okButton: 'OK',
           imageName: 'ic_launcher',

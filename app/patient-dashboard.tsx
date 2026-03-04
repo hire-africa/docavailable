@@ -3,6 +3,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { FontAwesome } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -2037,20 +2038,24 @@ export default function PatientDashboard() {
           )}
 
           {/* Welcome Section */}
-          <ThemedView style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 20,
-            padding: 24,
-            marginBottom: 24,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 12,
-            elevation: 4,
-            alignItems: 'center',
-            flexDirection: 'column',
-            gap: 0
-          }}>
+          <LinearGradient
+            colors={['#4CAF50', '#45a049', '#2E7D32']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              borderRadius: 20,
+              padding: 24,
+              marginBottom: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 4,
+              alignItems: 'center',
+              flexDirection: 'column',
+              gap: 0,
+            }}
+          >
             {/* User Avatar */}
             <View style={{
               width: 64,
@@ -2079,7 +2084,7 @@ export default function PatientDashboard() {
               style={{
                 fontSize: 28,
                 fontWeight: 'bold',
-                color: '#222',
+                color: '#FFFFFF',
                 textAlign: 'center',
                 marginBottom: 6,
                 maxWidth: 240,
@@ -2094,7 +2099,7 @@ export default function PatientDashboard() {
             <ThemedText
               style={{
                 fontSize: 16,
-                color: '#666',
+                color: 'rgba(255,255,255,0.92)',
                 textAlign: 'center',
                 maxWidth: 280,
                 lineHeight: 22,
@@ -2105,7 +2110,7 @@ export default function PatientDashboard() {
             >
               How can we support your health today?
             </ThemedText>
-          </ThemedView>
+          </LinearGradient>
 
 
           {/* Remaining Sessions Section */}

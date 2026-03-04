@@ -52,17 +52,9 @@ import callDeduplicationService from './services/callDeduplicationService';
 import callkeepService from './services/callkeepService';
 import ringtoneService from './services/ringtoneService';
 
-// Setup CallKeep on app start
-async function setupCallKeep() {
-  try {
-    await callkeepService.setup();
-    console.log('CALLKEEP: setup complete');
-  } catch (e) {
-    console.log('CALLKEEP: setup error', e);
-  }
-}
-
-setupCallKeep();
+// CallKeep setup is intentionally lazy-initialized to avoid prompting for
+// "phone accounts" permissions on app boot. It will be initialized when
+// the app actually needs to display/answer a call.
 
 // Background message handling is now registered via './firebase-messaging'
 

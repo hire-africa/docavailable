@@ -1,20 +1,21 @@
 import { walletApiService } from '@/services/walletApiService';
 import { FontAwesome } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Dimensions,
-  Image,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Dimensions,
+    Image,
+    Platform,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AppTour from '../components/AppTour';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,6 +42,8 @@ const PAYMENT_RATES = {
     currency: 'USD'
   }
 };
+
+const MIN_WITHDRAWAL_MWK = 50000;
 
 export default function DoctorWithdrawals() {
   return (
@@ -84,6 +87,10 @@ function DoctorWithdrawalsContent() {
   const userCurrency = user?.country?.toLowerCase() === 'malawi' ? 'MWK' : 'USD';
   const paymentRates = PAYMENT_RATES[userCurrency];
   const isMalawiUser = user?.country?.toLowerCase() === 'malawi';
+
+  const parsedWithdrawalAmount = Number(withdrawalAmount);
+  const minWithdrawalAmount = userCurrency === 'MWK' ? MIN_WITHDRAWAL_MWK : 0;
+  const isBelowMinWithdrawal = userCurrency === 'MWK' && Number.isFinite(parsedWithdrawalAmount) && parsedWithdrawalAmount > 0 && parsedWithdrawalAmount < MIN_WITHDRAWAL_MWK;
 
   // Set default payment method based on user's country
   useEffect(() => {
@@ -147,6 +154,10 @@ function DoctorWithdrawalsContent() {
 
   const handleWithdrawal = async () => {
     const amount = parseFloat(withdrawalAmount);
+    if (userCurrency === 'MWK' && amount < MIN_WITHDRAWAL_MWK) {
+      customAlertService.error('Minimum Withdrawal', `Minimum withdrawal amount is ${formatCurrency(MIN_WITHDRAWAL_MWK)}.`);
+      return;
+    }
     if (amount > (wallet?.balance || 0)) {
       customAlertService.error('Error', 'Withdrawal amount cannot exceed available balance.');
       return;
@@ -321,7 +332,12 @@ function DoctorWithdrawalsContent() {
         >
 
           {/* Modern Earnings Summary */}
-          <View style={styles.modernEarningsCard}>
+          <LinearGradient
+            colors={['#4CAF50', '#45a049', '#2E7D32']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.modernEarningsCard}
+          >
             <View style={styles.earningsCardHeader}>
               <View style={styles.earningsIconContainer}>
                 <FontAwesome name="credit-card" size={20} color="#fff" />
@@ -331,48 +347,29 @@ function DoctorWithdrawalsContent() {
 
             <Text style={styles.modernEarningsAmount}>{formatCurrency(wallet?.balance || 0)}</Text>
             <Text style={styles.modernEarningsSubtitle}>Ready for withdrawal</Text>
-          </View>
+          </LinearGradient>
 
           {/* Modern Payment Rates */}
           <View style={styles.modernPaymentRatesCard}>
             <View style={styles.sectionHeader}>
               <FontAwesome name="money" size={20} color="#4CAF50" />
-              <Text style={styles.modernSectionTitle}>Payment Rates ({userCurrency})</Text>
+              <Text style={styles.modernSectionTitle}>Your Earnings Rate</Text>
             </View>
 
-            <View style={styles.ratesContainer}>
-              <View style={styles.modernRateItem}>
-                <View style={styles.rateIconContainer}>
-                  <FontAwesome name="comment" size={16} color="#4CAF50" />
-                </View>
-                <View style={styles.rateInfo}>
-                  <Text style={styles.modernRateLabel}>Text Session</Text>
-                  <Text style={styles.modernRateValue}>{formatCurrency(paymentRates.text_session)}</Text>
-                </View>
+            <View style={styles.singleRateCard}>
+              <View style={styles.singleRateIcon}>
+                <FontAwesome name="clock-o" size={20} color="#4CAF50" />
               </View>
-
-              <View style={styles.modernRateItem}>
-                <View style={styles.rateIconContainer}>
-                  <FontAwesome name="phone" size={16} color="#4CAF50" />
-                </View>
-                <View style={styles.rateInfo}>
-                  <Text style={styles.modernRateLabel}>Audio Call</Text>
-                  <Text style={styles.modernRateValue}>{formatCurrency(paymentRates.audio_call)}</Text>
-                </View>
+              <View style={styles.singleRateInfo}>
+                <Text style={styles.singleRateTitle}>10 Minute Session</Text>
+                <Text style={styles.singleRateSubtitle}>Standard consultation rate</Text>
               </View>
-
-              <View style={styles.modernRateItem}>
-                <View style={styles.rateIconContainer}>
-                  <FontAwesome name="video-camera" size={16} color="#4CAF50" />
-                </View>
-                <View style={styles.rateInfo}>
-                  <Text style={styles.modernRateLabel}>Video Call</Text>
-                  <Text style={styles.modernRateValue}>{formatCurrency(paymentRates.video_call)}</Text>
-                </View>
+              <View style={styles.singleRateAmountContainer}>
+                <Text style={styles.singleRateAmountLabel}>Rate</Text>
+                <Text style={styles.singleRateAmount}>{formatCurrency(userCurrency === 'MWK' ? 3500 : 3)}</Text>
               </View>
             </View>
           </View>
-
 
           {/* Modern Withdrawal Form */}
           <View style={styles.modernWithdrawalCard}>
@@ -382,22 +379,7 @@ function DoctorWithdrawalsContent() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.modernInputLabel}>Amount ({userCurrency})</Text>
-              <View style={styles.amountInputContainer}>
-                <FontAwesome name="dollar" size={16} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.modernAmountInput}
-                  value={withdrawalAmount}
-                  onChangeText={setWithdrawalAmount}
-                  placeholder={`Enter withdrawal amount in ${userCurrency}`}
-                  keyboardType="numeric"
-                  placeholderTextColor="#999"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.modernInputLabel}>Payment Method</Text>
+              <Text style={styles.modernInputLabelLight}>Payment Method</Text>
               <View style={styles.modernPaymentMethodContainer}>
                 <TouchableOpacity
                   style={[styles.modernPaymentMethod, withdrawalMethod === 'bank' && styles.modernPaymentMethodActive]}
@@ -425,7 +407,6 @@ function DoctorWithdrawalsContent() {
                     </Text>
                   </TouchableOpacity>
                 )}
-
               </View>
             </View>
 
@@ -445,7 +426,7 @@ function DoctorWithdrawalsContent() {
             {withdrawalMethod === 'bank' && (
               <View style={styles.modernBankFields}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Bank Name</Text>
+                  <Text style={styles.modernInputLabelLight}>Bank Name</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="university" size={16} color="#666" style={styles.inputIcon} />
                     <TextInput
@@ -459,7 +440,7 @@ function DoctorWithdrawalsContent() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Account Number</Text>
+                  <Text style={styles.modernInputLabelLight}>Account Number</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="hashtag" size={16} color="#666" style={styles.inputIcon} />
                     <TextInput
@@ -475,7 +456,7 @@ function DoctorWithdrawalsContent() {
 
                 {isMalawiUser && (
                   <View style={styles.inputGroup}>
-                    <Text style={styles.modernInputLabel}>Bank Branch</Text>
+                    <Text style={styles.modernInputLabelLight}>Bank Branch</Text>
                     <View style={styles.modernInputContainer}>
                       <FontAwesome name="building" size={16} color="#666" style={styles.inputIcon} />
                       <TextInput
@@ -495,7 +476,7 @@ function DoctorWithdrawalsContent() {
             {withdrawalMethod === 'mobile' && (
               <View style={styles.modernMobileFields}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Mobile Money Provider</Text>
+                  <Text style={styles.modernInputLabelLight}>Mobile Money Provider</Text>
                   <View style={styles.modernProviderContainer}>
                     <TouchableOpacity
                       style={[styles.modernProviderOption, mobileMoneyProvider === 'airtel' && styles.modernProviderOptionActive]}
@@ -520,7 +501,7 @@ function DoctorWithdrawalsContent() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Phone Number</Text>
+                  <Text style={styles.modernInputLabelLight}>Phone Number</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="phone" size={16} color="#666" style={styles.inputIcon} />
                     <TextInput
@@ -540,7 +521,7 @@ function DoctorWithdrawalsContent() {
             {withdrawalMethod === 'mzunguko' && (
               <View style={styles.modernMzungukoFields}>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Mzunguko Full Name</Text>
+                  <Text style={styles.modernInputLabelLight}>Mzunguko Full Name</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="user" size={16} color="#666" style={styles.inputIcon} />
                     <TextInput
@@ -554,7 +535,7 @@ function DoctorWithdrawalsContent() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.modernInputLabel}>Email Address</Text>
+                  <Text style={styles.modernInputLabelLight}>Email Address</Text>
                   <View style={styles.modernInputContainer}>
                     <FontAwesome name="envelope" size={16} color="#666" style={styles.inputIcon} />
                     <TextInput
@@ -570,10 +551,41 @@ function DoctorWithdrawalsContent() {
               </View>
             )}
 
+            <View style={styles.inputGroup}>
+              <View style={styles.amountLabelRow}>
+                <Text style={styles.modernInputLabelLight}>Amount ({userCurrency})</Text>
+              </View>
+              <View style={styles.amountInputContainer}>
+                <FontAwesome name="money" size={16} color="#666" style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.modernAmountInputLight, isBelowMinWithdrawal && styles.modernAmountInputError]}
+                  value={withdrawalAmount}
+                  onChangeText={setWithdrawalAmount}
+                  placeholder={`Enter amount in ${userCurrency}`}
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <View style={styles.withdrawalInfoRow}>
+                <FontAwesome name="info-circle" size={12} color="#666" />
+                <Text style={styles.minHintTextLight}>
+                  Min. withdrawal: {formatCurrency(minWithdrawalAmount)}
+                </Text>
+              </View>
+              {isBelowMinWithdrawal && (
+                <Text style={styles.inlineErrorText}>
+                  Minimum withdrawal amount is {formatCurrency(MIN_WITHDRAWAL_MWK)}.
+                </Text>
+              )}
+            </View>
+
             <TouchableOpacity
-              style={[styles.modernWithdrawButton, (!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko') && styles.modernWithdrawButtonDisabled]}
+              style={[
+                styles.modernWithdrawButton,
+                (!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko' || isBelowMinWithdrawal) && styles.modernWithdrawButtonDisabled
+              ]}
               onPress={withdrawalMethod === 'mzunguko' ? () => customAlertService.info('Coming Soon', 'Mzunguko payment method is coming soon!') : handleWithdrawal}
-              disabled={!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko'}
+              disabled={!withdrawalAmount || submitting || withdrawalMethod === 'mzunguko' || isBelowMinWithdrawal}
             >
               <View style={styles.withdrawButtonContent}>
                 <FontAwesome name="credit-card" size={18} color="#FFFFFF" />
@@ -592,33 +604,37 @@ function DoctorWithdrawalsContent() {
             </View>
             {transactions.length > 0 ? (
               <View style={styles.transactionsList}>
-                {transactions.map((transaction) => (
-                  <View key={transaction.id} style={styles.modernTransactionItem}>
-                    <View style={styles.transactionIconContainer}>
-                      <FontAwesome
-                        name={transaction.type === 'credit' ? 'arrow-up' : 'arrow-down'}
-                        size={16}
-                        color={transaction.type === 'credit' ? '#34C759' : '#FF3B30'}
-                      />
-                    </View>
-                    <View style={styles.transactionInfo}>
-                      <Text style={styles.modernTransactionAmount}>
-                        {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                      </Text>
-                      <Text style={styles.modernTransactionDescription}>
-                        {transaction.type === 'credit'
-                          ? `Paid from ${transaction.patient_name || 'Patient'}`
-                          : `Withdrawal to ${transaction.payment_method === 'bank_transfer' ? 'Bank Account' : 'Mobile Money'}`
-                        }
-                      </Text>
-                      <Text style={styles.modernTransactionDate}>
-                        {new Date(transaction.created_at).toLocaleDateString()}
-                      </Text>
-                    </View>
-                    <View style={styles.transactionStatusContainer}>
-                      <Text style={[styles.modernStatusText, { color: getStatusColor(transaction.status) }]}>
-                        {getStatusText(transaction.status)}
-                      </Text>
+                {transactions.map((transaction, idx) => (
+                  <View key={transaction.id} style={[styles.modernTransactionItem, idx !== transactions.length - 1 && styles.modernTransactionItemDivider]}>
+                    <View style={styles.transactionMainRow}>
+                      <View style={styles.transactionLeftPill}>
+                        <FontAwesome
+                          name={transaction.type === 'credit' ? 'arrow-up' : 'arrow-down'}
+                          size={12}
+                          color={transaction.type === 'credit' ? '#34C759' : '#FF3B30'}
+                        />
+                      </View>
+                      <View style={styles.transactionPrimaryInfo}>
+                        <Text style={styles.modernTransactionDescription} numberOfLines={1}>
+                          {transaction.type === 'credit'
+                            ? `From ${transaction.patient_name || 'Patient'}`
+                            : `Withdrawal to ${transaction.payment_method === 'bank_transfer' ? 'Bank' : 'Mobile'}`
+                          }
+                        </Text>
+                        <Text style={styles.modernTransactionDate}>
+                          {new Date(transaction.created_at).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <View style={styles.transactionRightInfo}>
+                        <Text style={[styles.modernTransactionAmount, { color: transaction.type === 'credit' ? '#34C759' : '#0B1220' }]}>
+                          {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        </Text>
+                        <View style={[styles.statusPill, { borderColor: getStatusColor(transaction.status) }]}>
+                          <Text style={[styles.modernStatusText, { color: getStatusColor(transaction.status) }]}>
+                            {getStatusText(transaction.status)}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
                 ))}
@@ -650,16 +666,16 @@ function DoctorWithdrawalsContent() {
       />
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#F4F6F9',
   },
   mainContent: {
     flex: 1,
-    maxWidth: maxWidth,
+    maxWidth: 600,
     alignSelf: 'center',
     width: '100%',
   },
@@ -667,7 +683,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#F4F6F9',
   },
   loadingText: {
     fontSize: 16,
@@ -676,26 +692,27 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: isWeb ? 40 : 20,
+    paddingHorizontal: 20,
     paddingTop: 20,
   },
-  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#fff',
+    backgroundColor: '#F4F6F9',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#E6EAF0',
     marginTop: 20,
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E6EAF0',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -706,174 +723,70 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
-  headerRight: {
-    width: 40,
-  },
   refreshButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Modern Header Styles
-  modernHeader: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  headerContent: {
-    padding: 24,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  avatarContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    overflow: 'hidden',
-    marginRight: 16,
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  avatarPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#E8F5E9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-  },
-  userDetails: {
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 4,
-  },
-  currencyText: {
-    fontSize: 14,
-    color: '#4CAF50',
-    fontWeight: '600',
-  },
-  // Modern Earnings Card Styles
-  modernEarningsCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E8F5E8',
+    borderColor: '#E6EAF0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modernEarningsCard: {
+    borderRadius: 20,
+    padding: 24,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    alignItems: 'center',
   },
   earningsCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   earningsIconContainer: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#4CAF50',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   earningsCardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#222',
+    color: '#E6EAF0',
   },
   modernEarningsAmount: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: '#FFFFFF',
     marginBottom: 8,
+    textAlign: 'center',
   },
   modernEarningsSubtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 24,
+    color: 'rgba(255,255,255,0.92)',
+    textAlign: 'center',
   },
-  modernWalletStats: {
-    marginBottom: 12,
-  },
-  modernStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-  },
-  statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  statContent: {
-    flex: 1,
-  },
-  modernStatLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-  },
-  modernStatValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
-  },
-  // Modern Payment Rates Styles
   modernPaymentRatesCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 24,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: '#E8F5E8',
+    borderColor: '#E6EAF0',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -881,111 +794,123 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   modernSectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#222',
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0B1220',
     marginLeft: 12,
   },
-  ratesContainer: {
+  singleRateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
     gap: 12,
   },
-  modernRateItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
+  singleRateInfo: {
+    flex: 1,
   },
-  rateIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E8F5E8',
+  singleRateIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    flexShrink: 0,
   },
-  rateInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  modernRateLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#222',
-  },
-  modernRateValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  legendLabel: {
+  singleRateTitle: {
     fontSize: 14,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  singleRateSubtitle: {
+    fontSize: 11,
+    color: '#6B7280',
     fontWeight: '600',
-    color: '#222',
-    flex: 1,
   },
-  legendValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#222',
+  singleRateAmountContainer: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
   },
-  // Modern Withdrawal Form Styles
+  singleRateAmountLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  singleRateAmount: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#10B981',
+  },
   modernWithdrawalCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 24,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: '#E8F5E8',
+    borderColor: '#E6EAF0',
   },
   inputGroup: {
     marginBottom: 20,
   },
-  modernInputLabel: {
-    fontSize: 16,
+  modernInputLabelLight: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4B5563',
+    marginBottom: 10,
+  },
+  withdrawalInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 6,
+  },
+  minHintTextLight: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#222',
-    marginBottom: 8,
+    color: '#6B7280',
+  },
+  amountLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   amountInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#E5E7EB',
   },
   inputIcon: {
     marginLeft: 16,
-    marginRight: 8,
   },
-  modernAmountInput: {
+  modernAmountInputLight: {
     flex: 1,
     padding: 16,
     fontSize: 16,
-    color: '#222',
+    color: '#111827',
+    fontWeight: '700',
+  },
+  modernAmountInputError: {
+    borderColor: '#EF4444',
+  },
+  inlineErrorText: {
+    marginTop: 8,
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
   },
   modernPaymentMethodContainer: {
     flexDirection: 'row',
@@ -995,38 +920,44 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F9FAFB',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#E5E7EB',
     minHeight: 50,
+    gap: 8,
   },
   modernPaymentMethodActive: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#E8F5E8',
+    borderColor: '#10B981',
+    backgroundColor: '#ECFDF5',
   },
   paymentMethodIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   modernPaymentMethodText: {
+    color: '#4B5563',
+    fontWeight: '800',
     fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    flex: 1,
-    textAlign: 'center',
   },
   modernPaymentMethodTextActive: {
-    color: '#4CAF50',
+    color: '#065F46',
   },
-  modernBankFields: {
-    marginTop: 8,
+  modernTextInput: {
+    flex: 1,
+    padding: 16,
+    fontSize: 16,
+    color: '#222',
   },
   modernInputContainer: {
     flexDirection: 'row',
@@ -1036,135 +967,103 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E0E0E0',
   },
-  modernTextInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-    color: '#222',
-  },
-  modernMobileFields: {
-    marginTop: 8,
-  },
-  modernProviderContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modernProviderOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  modernProviderOptionActive: {
-    borderColor: '#4CAF50',
-    backgroundColor: '#E8F5E8',
-  },
-  modernProviderText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-    marginLeft: 8,
-  },
-  modernProviderTextActive: {
-    color: '#4CAF50',
-  },
   modernWithdrawButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#10B981',
     borderRadius: 16,
     padding: 18,
-    shadowColor: '#4CAF50',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
-  },
-  modernWithdrawButtonDisabled: {
-    backgroundColor: '#E0E0E0',
-    shadowOpacity: 0,
-    elevation: 0,
   },
   withdrawButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
   },
   modernWithdrawButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 8,
   },
-  // Modern Transactions Styles
   modernTransactionsCard: {
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 24,
     marginBottom: 20,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: '#E8F5E8',
+    borderColor: '#E6EAF0',
   },
   transactionsList: {
-    gap: 12,
+    borderWidth: 1,
+    borderColor: '#E6EAF0',
+    borderRadius: 14,
+    overflow: 'hidden',
   },
   modernTransactionItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  modernTransactionItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F7',
+  },
+  transactionMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: 16,
+    gap: 12,
   },
-  transactionIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+  transactionLeftPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F2F4F7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    flexShrink: 0,
   },
-  transactionInfo: {
+  transactionPrimaryInfo: {
     flex: 1,
   },
+  transactionRightInfo: {
+    alignItems: 'flex-end',
+    gap: 4,
+    flexShrink: 0,
+  },
   modernTransactionAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#222',
-    marginBottom: 4,
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0B1220',
   },
   modernTransactionDescription: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
     marginBottom: 2,
   },
   modernTransactionDate: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
   },
-  transactionStatusContainer: {
-    alignItems: 'flex-end',
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    backgroundColor: '#FFFFFF',
   },
   modernStatusText: {
     fontSize: 12,
     fontWeight: 'bold',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#F0F0F0',
   },
   emptyTransactionsContainer: {
     alignItems: 'center',
@@ -1182,47 +1081,16 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
   },
-  earningsCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  mzungukoIcon: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
-  earningsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  earningsTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-    marginLeft: 8,
-  },
-  earningsAmount: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4CAF50',
-    marginBottom: 8,
-  },
-  earningsSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 16,
-  },
-  walletStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 16,
-    borderTopWidth: 1,
+  mzungukoPaymentMethod: {
+    flex: 0,
+    width: '100%',
+    justifyContent: 'center',
+    marginTop: 10,
     borderTopColor: '#F0F0F0',
   },
   statItem: {
@@ -1454,19 +1322,45 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     paddingVertical: 20,
   },
-  // Mzunguko Styles
   modernMzungukoFields: {
     marginTop: 16,
   },
-  mzungukoIcon: {
-    width: 106,
-    height: 106,
-    resizeMode: 'contain',
+  modernBankFields: {
+    marginTop: 8,
   },
-  mzungukoPaymentMethod: {
-    flex: 0,
-    width: 120,
-    justifyContent: 'center',
-    alignSelf: 'center',
+  modernMobileFields: {
+    marginTop: 8,
+  },
+  modernProviderContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modernProviderOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  modernProviderOptionActive: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#E8F5E8',
+  },
+  modernProviderText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginLeft: 8,
+  },
+  modernProviderTextActive: {
+    color: '#4CAF50',
+  },
+  modernWithdrawButtonDisabled: {
+    backgroundColor: '#E0E0E0',
+    shadowOpacity: 0,
+    elevation: 0,
   },
 }); 

@@ -2,14 +2,14 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -869,6 +869,9 @@ export default function BookAppointmentFlow() {
           </View>
           <Text style={styles.statusMessage}>
             You'll receive a notification when the doctor confirms or rejects your appointment request.
+          </Text>
+          <Text style={styles.statusMessage}>
+            Doctors typically reply within 3 to 8 hours.
           </Text>
         </View>
       </ScrollView>

@@ -20,7 +20,7 @@ Schedule::command('sessions:process-appointment-sessions')
 
 // NEW: Schedule auto-deductions for text sessions every 10 minutes
 Schedule::command('sessions:process-auto-deductions')
-    ->everyTenMinutes()
+    ->everyMinute()
     ->withoutOverlapping();
 
 // NEW: Cleanup stale call connections every minute
