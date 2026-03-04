@@ -272,21 +272,20 @@ class SubscriptionExpirationService
     protected function expireSubscription(Subscription $subscription): string
     {
         try {
-            // Update status to 2 (expired) and set is_active to false
-            // Do NOT modify start_date or delete subscription
-            $subscription->update([
-                'status' => 2, // 2 = expired
-                'is_active' => false,
-            ]);
-
-            Log::info("Subscription expired", [
-                'subscription_id' => $subscription->id,
-                'user_id' => $subscription->user_id,
-                'end_date' => $subscription->end_date->toISOString(),
-            ]);
-
             // Send notification if notification service is available
             $this->sendExpirationNotification($subscription);
+
+            $subscriptionId = $subscription->id;
+            $userId = $subscription->user_id;
+            $endDate = $subscription->end_date ? $subscription->end_date->toISOString() : null;
+
+            $subscription->delete();
+
+            Log::info("Subscription expired and deleted", [
+                'subscription_id' => $subscriptionId,
+                'user_id' => $userId,
+                'end_date' => $endDate,
+            ]);
 
             return 'expired';
         } catch (\Exception $e) {
