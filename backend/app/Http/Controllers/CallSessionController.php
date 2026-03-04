@@ -221,6 +221,7 @@ class CallSessionController extends Controller
                 }
             }
 
+            /*
             // ── FIX 1: Global patient-level active session guard ────────────────────────
             // Prevents a user from opening multiple tabs/devices and creating parallel
             // call sessions on different appointments, all being billed simultaneously.
@@ -255,6 +256,7 @@ class CallSessionController extends Controller
                 ], 409);
             }
             // ────────────────────────────────────────────────────────────────────────────
+            */
 
             // Check availability first
             $availabilityResponse = $this->checkAvailability($request);

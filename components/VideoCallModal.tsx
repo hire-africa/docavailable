@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Vibration,
-  View,
+    Alert,
+    Animated,
+    Dimensions,
+    Image,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    Vibration,
+    View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -721,7 +721,9 @@ export default function VideoCallModal({
         },
         body: JSON.stringify({
           appointment_id: appointmentId,
-          caller_id: isDoctor ? (doctorId || userId) : userId, // Use correct ID based on who is rejecting
+          caller_id: isDoctor ? (doctorId || userId) : userId,
+          reason: 'declined_by_receiver',
+          declined_by: isDoctor ? 'doctor' : 'patient',
         }),
       });
       console.log('📝 Call decline recorded in backend');

@@ -213,20 +213,28 @@ export default function RootLayout() {
 
       console.log('📞 [IncomingCallBridge] Routing incoming call from native event', normalizedPayload);
 
-      // Check if user is authenticated before routing
-      const currentUser = authService.getCurrentUserSync();
-      if (!currentUser) {
-        console.warn('⚠️ [IncomingCallBridge] User not authenticated, ignoring incoming call');
-        if (isMounted) {
-          setIsCallBooting(false);
+      const attemptRoute = (attemptsLeft: number) => {
+        const currentUser = authService.getCurrentUserSync();
+        if (currentUser) {
+          routeIncomingCall(router, normalizedPayload as any);
+          if (isMounted) {
+            setIsCallBooting(false);
+          }
+          return;
         }
-        return;
-      }
 
-      routeIncomingCall(router, normalizedPayload as any);
-      if (isMounted) {
-        setIsCallBooting(false);
-      }
+        if (attemptsLeft <= 0) {
+          console.warn('⚠️ [IncomingCallBridge] Auth never resolved, dropping call');
+          if (isMounted) {
+            setIsCallBooting(false);
+          }
+          return;
+        }
+
+        setTimeout(() => attemptRoute(attemptsLeft - 1), 500);
+      };
+
+      attemptRoute(10);
     };
 
     const subscription = emitter.addListener('incomingCallShow', handleIncomingCall);
@@ -695,79 +703,79 @@ export default function RootLayout() {
         <AuthProvider>
           <ThemeProvider>
             <CustomAlertProvider>
-              {isCallBooting ? (
-                <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+              <Stack>
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="doctor-signup" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="patient-signup" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="google-signup-questions" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="forgot-password" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="password-reset/[token]" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="verify-reset-code" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="reset-password-with-code" options={{ headerShown: false, gestureEnabled: true }} />
+                <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+                <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+                <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
+                <Stack.Screen name="pending-approval" options={{ headerShown: false, gestureEnabled: false }} />
+                <Stack.Screen name="doctor-profile" options={{ headerShown: false }} />
+                <Stack.Screen name="patient-profile" options={{ headerShown: false }} />
+                <Stack.Screen name="edit-doctor-profile" options={{ headerShown: false }} />
+                <Stack.Screen name="edit-patient-profile" options={{ headerShown: false }} />
+                <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
+                <Stack.Screen name="notifications-settings" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)/doctor-details/[uid]" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)/doctor-details/BookAppointmentFlow" options={{ headerShown: false }} />
+                <Stack.Screen name="doctor-approval/[uid]" options={{ headerShown: false }} />
+                <Stack.Screen name="appointment-details/[id]" options={{ headerShown: false }} />
+                <Stack.Screen name="my-appointments" options={{ headerShown: false }} />
+
+                <Stack.Screen name="text-session-history" options={{ headerShown: false }} />
+                <Stack.Screen name="blog" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-2" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-3" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-7" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-8" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-9" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-10" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-11" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-12" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-13" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-14" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-15" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-16" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-17" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-18" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-19" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-20" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-21" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-22" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-23" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-24" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-25" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-26" options={{ headerShown: false }} />
+                <Stack.Screen name="blog-article-web" options={{ headerShown: false }} />
+                <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
+                <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
+                <Stack.Screen name="call" options={{ headerShown: false }} />
+                <Stack.Screen name="help-support" options={{ headerShown: false }} />
+                <Stack.Screen name="payments/checkout" options={{
+                  headerShown: false,
+                  gestureEnabled: true
+                }} />
+                <Stack.Screen name="test-webview" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" options={{ headerShown: false }} />
+              </Stack>
+
+              {isCallBooting && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
                   <ActivityIndicator size="large" color="#ffffff" />
                   <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>Connecting call...</Text>
                 </View>
-              ) : (
-                <Stack>
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen name="login" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="signup" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="doctor-signup" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="patient-signup" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="google-signup-questions" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="forgot-password" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="password-reset/[token]" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="verify-reset-code" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="reset-password-with-code" options={{ headerShown: false, gestureEnabled: true }} />
-                  <Stack.Screen name="doctor-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-                  <Stack.Screen name="patient-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-                  <Stack.Screen name="admin-dashboard" options={{ headerShown: false, gestureEnabled: false }} />
-                  <Stack.Screen name="pending-approval" options={{ headerShown: false, gestureEnabled: false }} />
-                  <Stack.Screen name="doctor-profile" options={{ headerShown: false }} />
-                  <Stack.Screen name="patient-profile" options={{ headerShown: false }} />
-                  <Stack.Screen name="edit-doctor-profile" options={{ headerShown: false }} />
-                  <Stack.Screen name="edit-patient-profile" options={{ headerShown: false }} />
-                  <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
-                  <Stack.Screen name="notifications-settings" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)/doctor-details/[uid]" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)/doctor-details/BookAppointmentFlow" options={{ headerShown: false }} />
-                  <Stack.Screen name="doctor-approval/[uid]" options={{ headerShown: false }} />
-                  <Stack.Screen name="appointment-details/[id]" options={{ headerShown: false }} />
-                  <Stack.Screen name="my-appointments" options={{ headerShown: false }} />
-
-                  <Stack.Screen name="text-session-history" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-2" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-3" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-4" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-5" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-6" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-7" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-8" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-9" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-10" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-11" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-12" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-13" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-14" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-15" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-16" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-17" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-18" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-19" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-20" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-21" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-22" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-23" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-24" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-25" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-26" options={{ headerShown: false }} />
-                  <Stack.Screen name="blog-article-web" options={{ headerShown: false }} />
-                  <Stack.Screen name="chat/[appointmentId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="ended-session/[appointmentId]" options={{ headerShown: false }} />
-                  <Stack.Screen name="call" options={{ headerShown: false }} />
-                  <Stack.Screen name="help-support" options={{ headerShown: false }} />
-                  <Stack.Screen name="payments/checkout" options={{
-                    headerShown: false,
-                    gestureEnabled: true
-                  }} />
-                  <Stack.Screen name="test-webview" options={{ headerShown: false }} />
-                  <Stack.Screen name="+not-found" options={{ headerShown: false }} />
-                </Stack>
               )}
             </CustomAlertProvider>
           </ThemeProvider>
@@ -775,4 +783,5 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
-} 
+}
+ 

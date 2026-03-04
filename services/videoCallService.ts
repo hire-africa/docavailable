@@ -1,10 +1,10 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
+    mediaDevices,
+    MediaStream,
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -98,6 +98,47 @@ class VideoCallService {
     if (VideoCallService.activeInstance) {
       VideoCallService.activeInstance.endCall();
       VideoCallService.activeInstance = null;
+    }
+  }
+
+  private async cancelCallInBackend(): Promise<void> {
+    if (!this.appointmentId) return;
+    try {
+      const authToken = await this.getAuthToken();
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          call_type: 'video',
+          appointment_id: this.appointmentId,
+          session_duration: 0,
+          was_connected: false
+        })
+      });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [VideoCallService] cancel response:', response.status, JSON.stringify(data));
+    } catch (e) {
+      console.error('❌ [VideoCallService] Failed to cancel call session:', e);
+    }
+  }
+
+  private async declineCallInBackend(): Promise<void> {
+    if (!this.appointmentId) return;
+    try {
+      const authToken = await this.getAuthToken();
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          caller_id: this.userId,
+          reason: 'declined_by_doctor'
+        })
+      });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [VideoCallService] decline response:', response.status, JSON.stringify(data));
+    } catch (e) {
+      console.error('❌ [VideoCallService] Failed to decline call in backend:', e);
     }
   }
 
@@ -280,7 +321,7 @@ class VideoCallService {
     if (!this.appointmentId) return;
     try {
       const authToken = await this.getAuthToken();
-      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
@@ -290,6 +331,8 @@ class VideoCallService {
           was_connected: wasConnected
         })
       });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [VideoCallService] end response:', response.status, JSON.stringify(data));
     } catch (error) {
       console.error('❌ [VideoCallService] Failed to update call session in backend:', error);
     }
@@ -301,11 +344,34 @@ class VideoCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
     this.clearReofferLoop();
+
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    const wasConnected = this.state.isConnected;
     const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
-    this.updateCallSessionInBackend(duration, this.state.isConnected);
+
+    if (!wasConnected) {
+      await this.cancelCallInBackend();
+    } else {
+      await this.updateCallSessionInBackend(duration, true);
+    }
     this.sendSignalingMessage({ type: 'call-ended', senderId: this.userId, appointmentId: this.appointmentId });
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+      this.signalingChannel = null;
+    }
+
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
 
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -341,11 +407,21 @@ class VideoCallService {
       rejectedBy: isDoctor ? 'doctor' : 'patient',
     });
 
-    const duration = Math.floor((Date.now() - this.callStartTime) / 1000);
-    this.updateCallSessionInBackend(duration, false);
+    // Simplify: treat decline same as cancel-before-connected
+    // This avoids the broken /call-sessions/decline endpoint (500)
+    await this.cancelCallInBackend();
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (this.signalingChannel) {
+      this.signalingChannel.close();
+      this.signalingChannel = null;
+    }
 
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
 
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -744,6 +820,8 @@ class VideoCallService {
     this.clearReofferLoop();
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
 
     if (this.peerConnection) {
       this.peerConnection.close();

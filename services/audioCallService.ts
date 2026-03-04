@@ -1,10 +1,10 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import {
-  mediaDevices,
-  MediaStream,
-  RTCIceCandidate,
-  RTCPeerConnection,
-  RTCSessionDescription,
+    mediaDevices,
+    MediaStream,
+    RTCIceCandidate,
+    RTCPeerConnection,
+    RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -278,7 +278,7 @@ class AudioCallService {
     if (!this.appointmentId) return;
     try {
       const authToken = await this.getAuthToken();
-      await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/end`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
         body: JSON.stringify({
@@ -288,6 +288,8 @@ class AudioCallService {
           was_connected: wasConnected
         })
       });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [AudioCallService] end response:', response.status, JSON.stringify(data));
     } catch (error) {
       console.error('❌ [AudioCallService] Failed to update call session in backend:', error);
     }
@@ -319,6 +321,44 @@ class AudioCallService {
       console.log('📥 [AudioCallService] Cancel response:', response.status, JSON.stringify(data));
     } catch (e) {
       console.error('❌ [AudioCallService] Failed to cancel call session:', e);
+    }
+  }
+
+  private async declineCallInBackend(): Promise<void> {
+    if (!this.appointmentId) {
+      console.warn('⚠️ [AudioCallService] declineCallInBackend skipped — no appointmentId');
+      return;
+    }
+    try {
+      const authToken = await this.getAuthToken();
+      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({
+          appointment_id: this.appointmentId,
+          caller_id: this.userId,
+          reason: 'declined_by_doctor'
+        })
+      });
+      const data = await response.json().catch(() => null);
+      console.log('📥 [AudioCallService] decline response:', response.status, JSON.stringify(data));
+
+      if (!response.ok) {
+        console.warn('⚠️ [AudioCallService] decline failed — falling back to cancel end-call fast-path', {
+          status: response.status,
+          appointmentId: this.appointmentId,
+        });
+        await this.cancelCallInBackend();
+      }
+    } catch (e) {
+      console.error('❌ [AudioCallService] Failed to decline call in backend:', e);
+
+      // Always fall back to cancel so we never leave stale "active" sessions in the DB
+      try {
+        await this.cancelCallInBackend();
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -400,14 +440,20 @@ class AudioCallService {
       rejectedBy: isDoctor ? 'doctor' : 'patient',
     });
 
+    // Simplify: treat decline same as cancel-before-connected
+    // This avoids the broken /call-sessions/decline endpoint (500)
+    await this.cancelCallInBackend();
+
     // Give the message time to flush before closing
     await new Promise(resolve => setTimeout(resolve, 500));
 
+    // Close signaling channel
     if (this.signalingChannel) {
       this.signalingChannel.close();
       this.signalingChannel = null;
     }
 
+    // Release both streams
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
     this.releaseMediaStream(this.remoteStream);
@@ -422,6 +468,7 @@ class AudioCallService {
     this.updateState({ isConnected: false, connectionState: 'disconnected' });
     this.events?.onCallEnded();
     (global as any).activeAudioCall = false;
+    if ((global as any).currentCallType === 'audio') (global as any).currentCallType = null;
   }
 
   async reset(): Promise<void> {

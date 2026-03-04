@@ -120,18 +120,48 @@ Scheduled appointments create a row in `appointments` and then later become "cal
 
 ## 2. Doctor Side Walkthrough
 
-### 🩺 Professional Setup
-- **Verification**
-  - Doctors submit credentials.
-  - Account status/approval gates access to patient-facing discovery.
+### Professional Setup
+- **Registration**
+  - Primary UI: `app/doctor-signup.tsx`.
+  - After successful registration, doctors are routed to `app/doctor-dashboard.tsx` (even while pending approval).
+- **Approval / verification state**
+  - Doctor discovery visibility is gated on backend by `status = approved`.
+  - In the dashboard, a pending approval banner can be shown (see `app/doctor-dashboard.tsx`).
 
-### 🟢 Availability: Working Hours & Online Toggle (Verified)
+### Doctor Dashboard Overview (Primary Doctor Hub)
 
-The doctor availability system is stored in `doctor_availabilities` (model `DoctorAvailability`). It contains:
+Primary UI: `app/doctor-dashboard.tsx`
+
+The doctor dashboard is a multi-tab hub (bottom navigation) with key sections used for day-to-day operations:
+
+- **Home**
+  - Summary cards (availability, wallet, recent activity depending on build).
+  - Entry points into working hours, notifications, etc.
+- **Appointments**
+  - Sub-tabs:
+    - Booking Requests (pending)
+    - Accepted Requests
+  - Key actions:
+    - Accept / Reject pending booking requests
+    - Cancel accepted appointments (with reason)
+- **Messages**
+  - Unified inbox-style list including:
+    - Active text sessions
+    - Appointment-linked conversations
+- **Working Hours**
+  - Working hour schedule editing + save flow.
+- **Profile**
+  - Doctor account/profile management
+
+### Availability: Working Hours, Online, and “Available Now” (Verified)
+
+The doctor availability system is stored in `doctor_availabilities` (model `DoctorAvailability`). It contains (relevant fields):
 
 - `is_online` (boolean)
 - `working_hours` (JSON / array)
 - `max_patients_per_day` (integer)
+- `last_active_at` (timestamp, driven by doctor heartbeat)
+- `manually_offline` / `manually_online` (manual override flags used by server-side availability computation)
 
 #### A. Working Hours Page (Doctor)
 
@@ -165,7 +195,7 @@ Data flow:
      - `working_hours`
      - `max_patients_per_day`
 
-#### B. Online Toggle (Doctor)
+#### B. Online / Manual Availability Controls
 
 There are two related UI paths in the codebase:
 
@@ -181,7 +211,25 @@ There are two related UI paths in the codebase:
    - This is a separate implementation path that toggles online status immediately.
    - If you want “one source of truth” for the app behavior, the Working Hours flow + `DoctorController@updateAvailability` is the one that directly affects patient-facing doctor availability responses used by booking and discovery.
 
-#### C. How This Affects the Patient Side
+#### C. “Available Now” vs “Online” vs “Working Hours”
+
+The backend can compute a dynamic availability state (see `DoctorController`):
+
+- **Working hours**
+  - Stored as a weekly schedule (day → enabled + slots).
+  - Primarily used for *scheduled booking time-slot availability*.
+- **Online (`is_online`)**
+  - Used as a general “instant availability” signal and for “online only” filters.
+- **Available now (`is_available_now`)**
+  - Computed using:
+    - within working hours
+    - not manually offline
+    - heartbeat freshness (`last_active_at` within a short window)
+  - This enables a more accurate “doctor is actually active” signal and supports an “on break” state.
+
+Doctor heartbeat:
+- Endpoint: `DoctorController@heartbeat`.
+- Purpose: update `doctor_availabilities.last_active_at` to keep “available now” accurate.
 
 1. **Discover / Doctor listing**
    - Patient UI can filter doctors by online status.
@@ -196,18 +244,67 @@ There are two related UI paths in the codebase:
    - **Online toggle**: used for “instant availability” signals on the patient side (and the online-only filter).
    - **Working hours**: used to gate what time slots patients can book for scheduled appointments.
 
-### 📅 Managing Appointments
-*   **Requests**: Doctors receive push notifications for new booking requests.
-*   **Actions**: Can "Accept", "Decline", or "Propose Reschedule".
-*   **In-Progress**: Access to active sessions and patient medical history during the call.
+### Managing Appointments (Doctor)
 
-### 💬 Communication Tools
-*   **Consultation Hub**: A central place to view all upcoming, active, and past sessions.
-*   **Chat/Call Interface**: High-quality WebRTC audio/video and real-time text chat with media sharing (images/documents).
+Primary UI: `app/doctor-dashboard.tsx` (Appointments tab)
 
-### 💰 Earnings & Withdrawals
-*   **Auto-Earnings**: Credits are automatically added to the doctor's wallet upon session completion.
-*   **Withdrawal Requests**: Doctors can request to cash out their earnings once they reach a minimum threshold.
+- **Booking requests (Pending)**
+  - Displays pending appointment requests.
+  - Key actions:
+    - Accept
+    - Reject
+    - Delete expired pending requests (when the requested time has passed)
+- **Accepted requests**
+  - Displays accepted appointments.
+  - Key actions:
+    - View appointment details (patient info, scheduled time, type, reason)
+    - Cancel an appointment (requires a reason)
+
+Once an appointment is accepted and the scheduled time window is reached, chat/call are unlocked by the backend appointment activation logic (see patient-side section for activation/unlock rules).
+
+### Messaging & Consultation Entry (Doctor)
+
+Primary UIs:
+- `app/doctor-dashboard.tsx` (Messages tab)
+- `app/chat/[appointmentId].tsx` (Chat + call screen; supports appointment and instant-session routing identifiers)
+
+Key behaviors:
+- **Unified inbox**
+  - The Messages tab aggregates active text sessions and appointment chats into a single list.
+- **Text sessions and auto-deductions**
+  - For long-running text sessions, the backend processes auto-deductions on an interval.
+  - Scheduler command: `backend/app/Console/Commands/ProcessAutoDeductions.php`.
+  - The chat screen listens for real-time “deduction” events and updates local state accordingly (see `app/chat/[appointmentId].tsx`).
+
+### Earnings, Wallet, and Withdrawals (Doctor)
+
+Primary UI:
+- `app/doctor-withdrawals.tsx`
+
+API/service layer:
+- `services/walletApiService.ts`
+  - `GET /doctor/wallet`
+  - `GET /doctor/wallet/transactions`
+  - `GET /doctor/wallet/earnings-summary`
+  - `GET /doctor/wallet/payment-rates`
+  - `POST /doctor/wallet/withdraw`
+  - `GET /doctor/wallet/withdrawal-requests`
+
+Core behaviors:
+- **Wallet balance** is shown with recent transactions.
+- **Withdrawal requests**
+  - Submitted via `POST /doctor/wallet/withdraw`.
+  - UI supports bank transfer and (for Malawi) mobile money.
+  - Minimum withdrawal (MWK): `50,000` (see `app/doctor-withdrawals.tsx`).
+
+### Notifications & Real-Time Events (Doctor)
+
+- The doctor dashboard integrates push notifications and real-time events to surface:
+  - booking requests
+  - incoming calls
+  - message events
+
+Key services used in `app/doctor-dashboard.tsx` include `NotificationService` and `RealTimeEventService`.
 
 ---
 
@@ -222,4 +319,4 @@ There are two related UI paths in the codebase:
 
 ---
 
-*Last Updated: March 2, 2026*
+*Last Updated: March 4, 2026*
