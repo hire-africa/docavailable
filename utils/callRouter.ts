@@ -57,6 +57,19 @@ export function routeIncomingCall(router: any, data: IncomingCallData) {
       return;
     }
 
+    // CRITICAL: Block incoming calls when another call is already active or connecting
+    const g: any = global as any;
+    if (g.activeAudioCall || g.activeVideoCall || g.currentCallType) {
+      console.warn(`🚫 [CallRouter] Incoming call BLOCKED — another call is active`, {
+        appointmentId,
+        callType,
+        activeAudioCall: !!g.activeAudioCall,
+        activeVideoCall: !!g.activeVideoCall,
+        currentCallType: g.currentCallType,
+      });
+      return;
+    }
+
     // CRITICAL: Prevent duplicate navigation for the same call
     const callKey = `${appointmentId}-${callType}`;
     const now = Date.now();

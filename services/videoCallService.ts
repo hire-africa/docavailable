@@ -1,10 +1,10 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import {
-    mediaDevices,
-    MediaStream,
-    RTCIceCandidate,
-    RTCPeerConnection,
-    RTCSessionDescription,
+  mediaDevices,
+  MediaStream,
+  RTCIceCandidate,
+  RTCPeerConnection,
+  RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -96,7 +96,7 @@ class VideoCallService {
 
   static clearInstance(): void {
     if (VideoCallService.activeInstance) {
-      VideoCallService.activeInstance.endCall();
+      VideoCallService.activeInstance.destroyResources();
       VideoCallService.activeInstance = null;
     }
   }
@@ -122,31 +122,17 @@ class VideoCallService {
     }
   }
 
-  private async declineCallInBackend(): Promise<void> {
-    if (!this.appointmentId) return;
-    try {
-      const authToken = await this.getAuthToken();
-      const response = await fetch(`${environment.LARAVEL_API_URL}/api/call-sessions/decline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({
-          appointment_id: this.appointmentId,
-          caller_id: this.userId,
-          reason: 'declined_by_doctor'
-        })
-      });
-      const data = await response.json().catch(() => null);
-      console.log('📥 [VideoCallService] decline response:', response.status, JSON.stringify(data));
-    } catch (e) {
-      console.error('❌ [VideoCallService] Failed to decline call in backend:', e);
-    }
-  }
+  // Removed dead/non-functional declineCallInBackend (using cancelCallInBackend fallback instead)
 
   private releaseMediaStream(stream: MediaStream | null): void {
     if (stream) {
       stream.getTracks().forEach(track => {
-        track.stop();
-        stream.removeTrack(track);
+        try {
+          track.stop();
+          stream.removeTrack(track);
+        } catch (e) {
+          console.warn(`⚠️ [VideoCallService] Error stopping track: ${track.kind}`, e);
+        }
       });
     }
   }
@@ -173,14 +159,20 @@ class VideoCallService {
 
   async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: VideoCallEvents): Promise<void> {
     try {
-      if (this.isInitializing) return;
-      this.isInitializing = true;
-      if ((global as any).activeAudioCall) {
-        this.isInitializing = false;
-        return;
-      }
+      // Set global flag early to close the race condition window
       (global as any).activeVideoCall = true;
       (global as any).currentCallType = 'video';
+
+      if (this.isInitializing) return;
+      this.isInitializing = true;
+
+      const g: any = global as any;
+      if (g.activeAudioCall || g.activeVideoCall === true && VideoCallService.activeInstance !== this) {
+        console.warn('⚠️ [VideoCallService] Another call is already active');
+        this.isInitializing = false;
+        (global as any).activeVideoCall = false; // Reset if blocked
+        return;
+      }
       this.isIncoming = false;
       this.events = events;
       this.appointmentId = appointmentId;
@@ -199,6 +191,21 @@ class VideoCallService {
       this.isInitializing = false;
     } catch (error: any) {
       console.error('❌ [VideoCallService] Failed to initialize call:', error.message);
+      // Clean up any resources acquired before the failure
+      this.releaseMediaStream(this.localStream);
+      this.localStream = null;
+      if (this.signalingChannel) {
+        try { this.signalingChannel.close(); } catch (e) { }
+        this.signalingChannel = null;
+      }
+      if (this.peerConnection) {
+        try { this.peerConnection.close(); } catch (e) { }
+        this.peerConnection = null;
+      }
+      this.clearReofferLoop();
+      this.clearCallTimeout();
+      (global as any).activeVideoCall = false;
+      if ((global as any).currentCallType === 'video') (global as any).currentCallType = null;
       this.updateState({ connectionState: 'failed' });
       this.isInitializing = false;
     }
@@ -685,6 +692,13 @@ class VideoCallService {
       this.hasAccepted = true;
     } catch (error) {
       console.error('❌ [VideoCallService] Failed to process incoming call:', error);
+      // Clean up any resources acquired before the failure
+      this.releaseMediaStream(this.localStream);
+      this.localStream = null;
+      if (this.peerConnection) {
+        try { this.peerConnection.close(); } catch (e) { }
+        this.peerConnection = null;
+      }
     }
   }
 
@@ -818,6 +832,26 @@ class VideoCallService {
     this.stopCallTimer();
     this.clearCallTimeout();
     this.clearReofferLoop();
+
+    // Fix: clear signaling flush timer and queue (was missing)
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    // Fix: close signaling channel (was missing)
+    if (this.signalingChannel) {
+      try { this.signalingChannel.close(); } catch (e) { }
+      this.signalingChannel = null;
+    }
+
+    // Fix: clear disconnect grace timer (was missing)
+    if (this.disconnectGraceTimer) {
+      clearTimeout(this.disconnectGraceTimer);
+      this.disconnectGraceTimer = null;
+    }
+
     this.releaseMediaStream(this.localStream);
     this.localStream = null;
     this.releaseMediaStream(this.remoteStream);
@@ -835,6 +869,102 @@ class VideoCallService {
       callDuration: 0,
       connectionState: 'disconnected'
     };
+
+    // Clear global flags in reset to prevent stale state blocking new calls
+    (global as any).activeVideoCall = false;
+    if ((global as any).currentCallType === 'video') (global as any).currentCallType = null;
+  }
+
+  /**
+   * SYNC-SAFE: Immediately releases ALL native resources without any awaits.
+   * Designed to be called from React cleanup functions (useEffect return),
+   * clearInstance(), or any context that cannot await async methods.
+   * Does NOT send backend notifications — use endCall() for graceful termination.
+   */
+  destroyResources(): void {
+    if (this.hasEnded) {
+      console.log('⏭️ [VideoCallService] destroyResources skipped — already ended');
+      return;
+    }
+    console.log('🧹 [VideoCallService] destroyResources — sync cleanup');
+
+    // 0. Capture appointmentId before nulling — needed for backend cancel
+    const appointmentId = this.appointmentId;
+    const wasConnected = this.state.isConnected;
+
+    // 1. Stop all timers
+    this.stopCallTimer();
+    this.clearCallTimeout();
+    this.clearReofferLoop();
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+    if (this.disconnectGraceTimer) {
+      clearTimeout(this.disconnectGraceTimer);
+      this.disconnectGraceTimer = null;
+    }
+
+    // 2. Release media streams (sync on RN WebRTC)
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
+
+    // 3. Close peer connection
+    if (this.peerConnection) {
+      try { this.peerConnection.close(); } catch (e) { }
+      this.peerConnection = null;
+    }
+
+    // 4. Close signaling channel
+    if (this.signalingChannel) {
+      try { this.signalingChannel.close(); } catch (e) { }
+      this.signalingChannel = null;
+    }
+
+    // 5. Reset all flags
+    this.hasEnded = true;
+    this.isInitializing = false;
+    this.creatingOffer = false;
+    this.isReconnecting = false;
+    this.didConnect = false;
+    this.didEmitAnswered = false;
+    this.isCallAnswered = false;
+
+    // 6. Reset global flags
+    (global as any).activeVideoCall = false;
+    if ((global as any).currentCallType === 'video') (global as any).currentCallType = null;
+
+    // 7. Reset audio routing (fire & forget — ok if this fails)
+    this.resetAudioRouting().catch(() => { });
+
+    // 8. Null events to prevent callbacks into unmounted components
+    this.events = null;
+
+    // 9. Reset state
+    this.state = {
+      isConnected: false,
+      isAudioEnabled: true,
+      isVideoEnabled: true,
+      isFrontCamera: true,
+      callDuration: 0,
+      connectionState: 'disconnected'
+    };
+
+    // 10. Fire-and-forget backend cancel so DB doesn't stay stuck on "connecting"
+    //     Only for calls that never connected (connected calls should use endCall() for billing)
+    if (appointmentId && !wasConnected) {
+      this.appointmentId = appointmentId; // Temporarily restore for the cancel call
+      this.cancelCallInBackend().catch((e) => {
+        console.warn('⚠️ [VideoCallService] destroyResources: backend cancel failed (non-fatal):', e);
+      }).finally(() => {
+        this.appointmentId = null;
+      });
+    } else {
+      this.appointmentId = null;
+    }
   }
 
   getState(): VideoCallState { return this.state; }

@@ -537,6 +537,13 @@ export default function RootLayout() {
             return;
           }
 
+          // Block if another call is already active or connecting
+          const g: any = global as any;
+          if (g.activeAudioCall || g.activeVideoCall || g.currentCallType) {
+            console.warn('🚫 [Foreground] Incoming call blocked — another call is active');
+            return;
+          }
+
           // Check deduplication service to prevent multiple call screens
           const appointmentId = String(data.appointment_id || '');
           const callType = (data.call_type === 'video' ? 'video' : 'audio') as 'audio' | 'video';
@@ -784,4 +791,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
- 

@@ -48,9 +48,11 @@ if (typeof global !== 'undefined' && !global.preloadedAuthPromise) {
 
 // Import CallKeep for call management
 import RNCallKeep from 'react-native-callkeep';
+import { AudioCallService } from './services/audioCallService';
 import callDeduplicationService from './services/callDeduplicationService';
 import callkeepService from './services/callkeepService';
 import ringtoneService from './services/ringtoneService';
+import { VideoCallService } from './services/videoCallService';
 
 // CallKeep setup is intentionally lazy-initialized to avoid prompting for
 // "phone accounts" permissions on app boot. It will be initialized when
@@ -182,6 +184,12 @@ const handleNativeIncomingCall = () => {
 DeviceEventEmitter.addListener('nativeIncomingCall', (callData) => {
   console.log('CALLKEEP: Received native incoming call event:', callData);
 
+  // Block if another call is already active or connecting
+  if (global.activeAudioCall || global.activeVideoCall || global.currentCallType) {
+    console.log('CALLKEEP: Incoming call blocked — another call is active');
+    return;
+  }
+
   // Check deduplication service to prevent multiple call screens
   const appointmentId = String(callData.sessionId || '');
   const callType = (callData.callType === 'video' ? 'video' : 'audio');
@@ -300,6 +308,19 @@ const handleEndCall = async ({ callUUID, reason }) => {
     console.log('CALLKEEP: endCall ignored (dismissing system UI, keeping call data)');
     isDismissingSystemUI = false;
     return;
+  }
+
+  // ✅ Release WebRTC resources (media streams, peer connections, signaling)
+  // Wrapped in try/catch so failures don't break the existing CallKeep flow
+  try {
+    AudioCallService.clearInstance();
+  } catch (e) {
+    console.warn('CALLKEEP: audio cleanup error (non-fatal):', e);
+  }
+  try {
+    VideoCallService.clearInstance();
+  } catch (e) {
+    console.warn('CALLKEEP: video cleanup error (non-fatal):', e);
   }
 
   // Clear call from deduplication service

@@ -73,6 +73,17 @@ export default function CallScreen() {
     initializeCall();
   }, []);
 
+  // Safety net: ensure resources are released on unmount (e.g., if navigation kills the screen)
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [CallScreen] Unmount safety net - destroying resources');
+      try { AudioCallService.getInstance().destroyResources(); } catch (e) { }
+      try { VideoCallService.getInstance().destroyResources(); } catch (e) { }
+      AudioCallService.clearInstance();
+      VideoCallService.clearInstance();
+    };
+  }, []);
+
   // SECURITY: Block system back navigation during active call
   // Users can only exit the call screen by explicitly ending the call
   useEffect(() => {
@@ -181,44 +192,9 @@ export default function CallScreen() {
           }
           setShowAudioCall(true);
         } else {
-          // Outgoing call - show UI immediately
-          setShowAudioCall(true);
-          audioCallService.current = AudioCallService.getInstance();
-          await audioCallService.current.initialize(
-            appointmentId,
-            userId,
-            String(doctorId || ''),
-            {
-              onCallAnswered: () => {
-                console.log('📞 Audio call answered');
-                // UI already shown, just log
-              },
-              onCallEnded: () => {
-                console.log('📞 Audio call ended');
-                handleCallEnd();
-              },
-              onCallTimeout: () => {
-                console.log('📞 Audio call timeout');
-                handleCallTimeout();
-              },
-              onCallRejected: (rejectedBy?: string) => {
-                console.log('📞 Audio call rejected');
-                handleCallRejected(rejectedBy);
-              },
-              onRemoteStream: () => {
-                console.log('📞 Remote audio stream received');
-              },
-              onStateChange: (state) => {
-                console.log('📞 Audio call state changed:', state);
-              },
-              onError: (error) => {
-                console.error('📞 Audio call error:', error);
-                setError(error);
-              }
-            }
-          );
-
-          // The call starts automatically after initialization
+          // Outgoing call - show UI immediately, let AudioCall component handle initialization
+          // (do NOT call initialize() here -- AudioCall.tsx does its own initialization
+          //  on the same singleton, which would cause a double getUserMedia race)
           setShowAudioCall(true);
         }
       } else if (normalizedCallType === 'video') {
@@ -290,12 +266,12 @@ export default function CallScreen() {
       console.error('❌ Failed to stop ringtone:', error);
     }
 
-    // Clean up call services
+    // Clean up call services - MUST await to ensure cleanup completes before navigation
     if (audioCallService.current) {
-      audioCallService.current.endCall();
+      await audioCallService.current.endCall();
     }
     if (videoCallService.current) {
-      videoCallService.current.endCall();
+      await videoCallService.current.endCall();
     }
 
     // Navigate back to the correct dashboard based on role

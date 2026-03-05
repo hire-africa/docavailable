@@ -1,10 +1,10 @@
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import {
-    mediaDevices,
-    MediaStream,
-    RTCIceCandidate,
-    RTCPeerConnection,
-    RTCSessionDescription,
+  mediaDevices,
+  MediaStream,
+  RTCIceCandidate,
+  RTCPeerConnection,
+  RTCSessionDescription,
 } from 'react-native-webrtc';
 import { environment } from '../config/environment';
 import { SecureWebSocketService } from './secureWebSocketService';
@@ -89,7 +89,7 @@ class AudioCallService {
 
   static clearInstance(): void {
     if (AudioCallService.activeInstance) {
-      AudioCallService.activeInstance.endCall();
+      AudioCallService.activeInstance.destroyResources();
       AudioCallService.activeInstance = null;
     }
   }
@@ -97,10 +97,14 @@ class AudioCallService {
   private releaseMediaStream(stream: MediaStream | null): void {
     if (stream) {
       stream.getTracks().forEach(track => {
-        console.log(`🎤 [AudioCallService] Stopping track: ${track.kind} state=${track.readyState}`);
-        track.stop();
-        stream.removeTrack(track);
-        console.log(`✅ [AudioCallService] Track stopped: ${track.kind}`);
+        try {
+          console.log(`🎤 [AudioCallService] Stopping track: ${track.kind} state=${track.readyState}`);
+          track.stop();
+          stream.removeTrack(track);
+          console.log(`✅ [AudioCallService] Track stopped: ${track.kind}`);
+        } catch (e) {
+          console.warn(`⚠️ [AudioCallService] Error stopping track: ${track.kind}`, e);
+        }
       });
     }
   }
@@ -128,15 +132,20 @@ class AudioCallService {
 
   async initialize(appointmentId: string, userId: string, doctorId: string | number | undefined, events: AudioCallEvents): Promise<void> {
     try {
-      if (this.isInitializing) return;
-      this.isInitializing = true;
-      if ((global as any).activeVideoCall) {
-        events?.onError?.('Another call is active');
-        this.isInitializing = false;
-        return;
-      }
+      // Set global flag early to close the race condition window
       (global as any).activeAudioCall = true;
       (global as any).currentCallType = 'audio';
+
+      if (this.isInitializing) return;
+      this.isInitializing = true;
+
+      const g: any = global as any;
+      if (g.activeVideoCall) {
+        events?.onError?.('Another call is active');
+        this.isInitializing = false;
+        (global as any).activeAudioCall = false; // Reset if blocked
+        return;
+      }
       this.isIncoming = false;
       this.events = events;
       this.appointmentId = appointmentId;
@@ -155,6 +164,21 @@ class AudioCallService {
       this.isInitializing = false;
     } catch (error: any) {
       console.error('❌ [AudioCallService] Failed to initialize call:', error.message);
+      // Clean up any resources acquired before the failure
+      this.releaseMediaStream(this.localStream);
+      this.localStream = null;
+      if (this.signalingChannel) {
+        try { this.signalingChannel.close(); } catch (e) { }
+        this.signalingChannel = null;
+      }
+      if (this.peerConnection) {
+        try { this.peerConnection.close(); } catch (e) { }
+        this.peerConnection = null;
+      }
+      this.clearReofferLoop();
+      this.clearCallTimeout();
+      (global as any).activeAudioCall = false;
+      if ((global as any).currentCallType === 'audio') (global as any).currentCallType = null;
       this.events?.onError(`Failed to initialize call: ${error.message}`);
       this.updateState({ connectionState: 'failed' });
       this.isInitializing = false;
@@ -503,6 +527,91 @@ class AudioCallService {
       this.peerConnection = null;
     }
     this.state = { isConnected: false, isAudioEnabled: true, callDuration: 0, connectionState: 'disconnected' };
+
+    // Clear global flags in reset to prevent stale state blocking new calls
+    (global as any).activeAudioCall = false;
+    if ((global as any).currentCallType === 'audio') (global as any).currentCallType = null;
+  }
+
+  /**
+   * SYNC-SAFE: Immediately releases ALL native resources without any awaits.
+   * Designed to be called from React cleanup functions (useEffect return),
+   * clearInstance(), or any context that cannot await async methods.
+   * Does NOT send backend notifications — use endCall() for graceful termination.
+   */
+  destroyResources(): void {
+    if (this.hasEnded) {
+      console.log('⏭️ [AudioCallService] destroyResources skipped — already ended');
+      return;
+    }
+    console.log('🧹 [AudioCallService] destroyResources — sync cleanup');
+
+    // 0. Capture appointmentId before nulling — needed for backend cancel
+    const appointmentId = this.appointmentId;
+    const wasConnected = this.state.isConnected;
+
+    // 1. Stop all timers
+    this.stopCallTimer();
+    this.clearCallTimeout();
+    this.clearReofferLoop();
+    if (this.signalingFlushTimer) {
+      clearInterval(this.signalingFlushTimer);
+      this.signalingFlushTimer = null;
+    }
+    this.messageQueue = [];
+
+    // 2. Release media streams (sync on RN WebRTC)
+    this.releaseMediaStream(this.localStream);
+    this.localStream = null;
+    this.releaseMediaStream(this.remoteStream);
+    this.remoteStream = null;
+
+    // 3. Close peer connection
+    if (this.peerConnection) {
+      try { this.peerConnection.close(); } catch (e) { }
+      this.peerConnection = null;
+    }
+
+    // 4. Close signaling channel
+    if (this.signalingChannel) {
+      try { this.signalingChannel.close(); } catch (e) { }
+      this.signalingChannel = null;
+    }
+
+    // 5. Reset all flags
+    this.hasEnded = true;
+    this.isInitializing = false;
+    this.creatingOffer = false;
+    this.isReconnecting = false;
+    this.didConnect = false;
+    this.didEmitAnswered = false;
+    this.isCallAnswered = false;
+
+    // 6. Reset global flags
+    (global as any).activeAudioCall = false;
+    if ((global as any).currentCallType === 'audio') (global as any).currentCallType = null;
+
+    // 7. Reset audio routing (fire & forget — ok if this fails)
+    this.resetAudioRouting().catch(() => { });
+
+    // 8. Null events to prevent callbacks into unmounted components
+    this.events = null;
+
+    // 9. Reset state
+    this.state = { isConnected: false, isAudioEnabled: true, callDuration: 0, connectionState: 'disconnected' };
+
+    // 10. Fire-and-forget backend cancel so DB doesn't stay stuck on "connecting"
+    //     Only for calls that never connected (connected calls should use endCall() for billing)
+    if (appointmentId && !wasConnected) {
+      this.appointmentId = appointmentId; // Temporarily restore for the cancel call
+      this.cancelCallInBackend().catch((e) => {
+        console.warn('⚠️ [AudioCallService] destroyResources: backend cancel failed (non-fatal):', e);
+      }).finally(() => {
+        this.appointmentId = null;
+      });
+    } else {
+      this.appointmentId = null;
+    }
   }
 
   toggleAudio(): boolean {
@@ -735,6 +844,13 @@ class AudioCallService {
       this.hasAccepted = true;
     } catch (error) {
       console.error('❌ [AudioCallService] Failed to process incoming call:', error);
+      // Clean up any resources acquired before the failure
+      this.releaseMediaStream(this.localStream);
+      this.localStream = null;
+      if (this.peerConnection) {
+        try { this.peerConnection.close(); } catch (e) { }
+        this.peerConnection = null;
+      }
     }
   }
 

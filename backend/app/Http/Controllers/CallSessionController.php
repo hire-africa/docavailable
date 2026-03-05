@@ -604,7 +604,7 @@ class CallSessionController extends Controller
                         ]);
 
                         $callSession->update([
-                            'status' => CallSession::STATUS_CANCELLED,
+                            'status' => CallSession::STATUS_ENDED,
                             'ended_at' => now(),
                             'last_activity_at' => now(),
                             'is_connected' => false,
@@ -698,7 +698,7 @@ class CallSessionController extends Controller
                         ]);
 
                         $callSession->update([
-                            'status' => CallSession::STATUS_MISSED,
+                            'status' => CallSession::STATUS_ENDED,
                             'ended_at' => now(),
                             'last_activity_at' => now(),
                             'is_connected' => false,
@@ -1568,7 +1568,7 @@ class CallSessionController extends Controller
 
             // Update call session status - MUST set ended_at to properly close the session
             $callSession->update([
-                'status' => CallSession::STATUS_DECLINED,
+                'status' => CallSession::STATUS_ENDED,
                 'declined_at' => now(),
                 'declined_by' => $user->id,
                 'decline_reason' => $reason,
@@ -1609,7 +1609,7 @@ class CallSessionController extends Controller
                 'message' => 'Call declined successfully',
                 'data' => [
                     'call_session_id' => $callSession->id,
-                    'status' => CallSession::STATUS_DECLINED,
+                    'status' => CallSession::STATUS_ENDED,
                     'declined_at' => $callSession->declined_at,
                     'ended_at' => $callSession->ended_at,
                     'reason' => $reason
@@ -1685,7 +1685,7 @@ class CallSessionController extends Controller
                 // If never connected: mark as MISSED/CANCELLED (no billing)
                 if (!$wasConnected && !$callSession->connected_at) {
                     $callSession->update([
-                        'status' => CallSession::STATUS_MISSED,
+                        'status' => CallSession::STATUS_ENDED,
                         'ended_at' => $now,
                         'last_activity_at' => $now,
                         'reason' => 'server_cleanup_' . $reason,

@@ -860,14 +860,6 @@ class PaymentController extends Controller
                     'activated_at' => now()
                 ];
 
-                // Remove any expired/inactive subscriptions for this user
-                Subscription::where('user_id', $userId)
-                    ->where(function ($q) {
-                        $q->where('is_active', false)
-                            ->orWhere('status', '!=', 1);
-                    })
-                    ->delete();
-
                 // Try to create the subscription
                 try {
                     $subscription = Subscription::create($subscriptionData);

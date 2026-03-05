@@ -1,7 +1,7 @@
 import messaging from '@react-native-firebase/messaging';
+import { NativeModules } from 'react-native';
 import callkeepService from './services/callkeepService';
 import { storeCallData } from './services/callkeepStorage';
-import { NativeModules } from 'react-native';
 
 // ✅ Track displayed calls to prevent duplicates
 const displayedCalls = new Set();
@@ -13,6 +13,11 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
 
     // Check if this is an incoming call
     if (data.type === 'incoming_call' || data.isIncomingCall === 'true') {
+      // Block if another call is already active
+      if (global.activeAudioCall || global.activeVideoCall || global.currentCallType) {
+        console.log('FCM BG: Incoming call blocked — another call is active');
+        return;
+      }
       const appointmentId = data.appointment_id || data.appointmentId || '';
       const sessionId = data.session_id || data.sessionId || '';
       const callIdFromData = data.call_id || data.callId || '';
@@ -24,7 +29,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
         console.log('FCM: Already displayed call for', dedupeKey, '- ignoring duplicate FCM');
         return;
       }
-      
+
       const callId = callkeepService.generateCallId();
       const callerName = data.doctor_name || data.doctorName || data.caller || 'Unknown Caller';
       const callType = data.call_type || data.callType || 'audio';
@@ -33,7 +38,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
       if (dedupeKey) {
         displayedCalls.add(dedupeKey);
         console.log('FCM: Marked call as displayed:', dedupeKey);
-        
+
         // Auto-clear after 60 seconds to allow new calls
         setTimeout(() => {
           displayedCalls.delete(dedupeKey);
@@ -63,7 +68,7 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
             callerName,
             callType,
           });
-          
+
           console.log('Native incoming call displayed:', {
             sessionId: appointmentId,
             callerName,

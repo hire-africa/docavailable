@@ -193,8 +193,9 @@ export default function AudioCall({
       initOnceRef.current = null;
       hasInitializedRef.current = false;
 
-      // End call properly on unmount — ensures backend DB is updated
-      AudioCallService.getInstance().endCall();
+      // Sync-safe cleanup: immediately release all media/signaling resources
+      // clearInstance() internally calls destroyResources() synchronously
+      AudioCallService.clearInstance();
     };
   }, [appointmentId]);
 

@@ -238,7 +238,17 @@ export function useCallSetup({
     setupCall();
 
     return () => {
-      endCall();
+      // Sync-safe cleanup: uses destroyResources() instead of async endCall()
+      // because React cleanup functions are synchronous
+      const audioService = audioCallService.current ?? (callType === 'audio' ? AudioCallService.getInstance() : null);
+      const videoService = videoCallService.current ?? (callType === 'video' ? VideoCallService.getInstance() : null);
+
+      if (audioService) {
+        audioService.destroyResources();
+      }
+      if (videoService) {
+        videoService.destroyResources();
+      }
     };
   }, [isIncomingCall]);
 

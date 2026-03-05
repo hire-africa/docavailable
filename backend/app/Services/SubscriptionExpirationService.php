@@ -25,19 +25,19 @@ class SubscriptionExpirationService
         ];
 
         try {
-            // Get all subscriptions that are currently marked as active
-            // We only process subscriptions with status = 1 (active) and is_active = true
-            $activeSubscriptions = Subscription::where('status', 1)
-                ->where('is_active', true)
-                ->whereNotNull('end_date')
+            // Get all subscriptions that have an end date in the past
+            // We process them regardless of status to ensure cleanup
+            $now = Carbon::now();
+            $expiredCandidates = Subscription::whereNotNull('end_date')
+                ->where('end_date', '<', $now)
                 ->with('plan')
                 ->get();
 
-            Log::info("Processing subscription expirations", [
-                'total_active' => $activeSubscriptions->count()
+            Log::info("Processing subscription candidates for expiration", [
+                'count' => $expiredCandidates->count()
             ]);
 
-            foreach ($activeSubscriptions as $subscription) {
+            foreach ($expiredCandidates as $subscription) {
                 try {
                     $result = $this->processSubscription($subscription);
                     $stats[$result]++;
@@ -75,11 +75,6 @@ class SubscriptionExpirationService
     {
         $now = Carbon::now();
 
-        // Safety check: only process if subscription is still active in the database
-        if ($subscription->status != 1 || !$subscription->getRawOriginal('is_active')) {
-            return 'skipped';
-        }
-
         // Safety check: must have end_date
         if (!$subscription->end_date) {
             Log::warning("Subscription missing end_date", [
@@ -90,18 +85,16 @@ class SubscriptionExpirationService
 
         $currentEndDate = Carbon::parse($subscription->end_date);
 
-        // Calculate original end_date from start_date + plan duration
-        // This is needed to determine if roll-over has already been applied
-        $originalEndDate = $this->calculateOriginalEndDate($subscription);
-
         // Check if subscription has passed its end date
         if ($now->isAfter($currentEndDate)) {
             // Check for 30-day plan roll-over eligibility
             // Use original end_date for roll-over check, not current end_date
+            $originalEndDate = $this->calculateOriginalEndDate($subscription);
+
             if ($this->isEligibleForRollover($subscription, $originalEndDate, $now)) {
                 return $this->applyRollover($subscription, $originalEndDate);
             } else {
-                // Normal expiration: mark as expired
+                // Normal expiration: mark as expired and delete
                 return $this->expireSubscription($subscription);
             }
         }

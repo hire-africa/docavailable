@@ -2,18 +2,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Image,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    Vibration,
-    View,
+  Alert,
+  Animated,
+  Dimensions,
+  Image,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  Vibration,
+  View,
 } from 'react-native';
 import { RTCView } from 'react-native-webrtc';
 import backgroundBillingManager from '../services/backgroundBillingManager';
@@ -257,9 +257,9 @@ export default function VideoCallModal({
         connectSoundRef.current = null;
         hangupSoundRef.current = null;
       })();
-      if (videoCallService.current) {
-        videoCallService.current.reset();
-      }
+      // Sync-safe cleanup: immediately release all media/signaling resources
+      // clearInstance() internally calls destroyResources() synchronously
+      VideoCallService.clearInstance();
     };
   }, [isIncomingCall, appointmentId, autoAcceptFromSystemUI]);
 
