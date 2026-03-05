@@ -74,10 +74,10 @@ class DashboardController extends Controller
         $appointments = Appointment::where('doctor_id', $user->id)
             ->with(['patient:id,first_name,last_name,profile_picture,gender,country'])
             ->whereIn('status', [
-                    Appointment::STATUS_PENDING,
-                    Appointment::STATUS_CONFIRMED,
-                    Appointment::STATUS_RESCHEDULE_PROPOSED
-                ])
+                Appointment::STATUS_PENDING,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_RESCHEDULE_PROPOSED
+            ])
             ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')
             ->orderBy('appointment_date', 'asc')
             ->orderBy('appointment_time', 'asc')
@@ -118,16 +118,25 @@ class DashboardController extends Controller
      */
     private function getPatientSummary($user)
     {
-        $subscription = $user->subscription;
+        // Clean up expired subscriptions on dashboard access
+        \App\Models\Subscription::where('user_id', $user->id)
+            ->where('is_active', true)
+            ->whereNotNull('end_date')
+            ->where('end_date', '<', now())
+            ->delete();
+
+        // Get aggregated sessions across all active (non-expired) subscriptions
+        $aggregated = \App\Models\Subscription::getAggregatedSessions($user->id);
+        $subs = $aggregated['subscriptions'];
 
         // Get upcoming appointments with minimal fields
         $appointments = Appointment::where('patient_id', $user->id)
             ->with(['doctor:id,first_name,last_name,profile_picture,specialization,rating'])
             ->whereIn('status', [
-                    Appointment::STATUS_PENDING,
-                    Appointment::STATUS_CONFIRMED,
-                    Appointment::STATUS_RESCHEDULE_PROPOSED
-                ])
+                Appointment::STATUS_PENDING,
+                Appointment::STATUS_CONFIRMED,
+                Appointment::STATUS_RESCHEDULE_PROPOSED
+            ])
             ->select('id', 'patient_id', 'doctor_id', 'appointment_date', 'appointment_time', 'status', 'appointment_type', 'duration_minutes')
             ->orderBy('appointment_date', 'asc')
             ->orderBy('appointment_time', 'asc')
@@ -140,22 +149,26 @@ class DashboardController extends Controller
             }
         }
 
+        $newest = $subs->isNotEmpty() ? $subs->last() : null;
+        $latestEnd = $subs->isNotEmpty() ? $subs->max('end_date') : null;
+
         return [
-            'subscription' => $subscription ? [
-                'id' => $subscription->id,
-                'plan_id' => $subscription->plan_id,
-                'is_active' => $subscription->isActive,
-                'plan_name' => $subscription->plan_name,
-                'plan_price' => $subscription->plan_price,
-                'plan_currency' => $subscription->plan_currency,
-                'text_sessions_remaining' => $subscription->text_sessions_remaining,
-                'voice_calls_remaining' => $subscription->voice_calls_remaining,
-                'video_calls_remaining' => $subscription->video_calls_remaining,
-                'total_text_sessions' => $subscription->total_text_sessions,
-                'total_voice_calls' => $subscription->total_voice_calls,
-                'total_video_calls' => $subscription->total_video_calls,
-                'activated_at' => $subscription->activated_at,
-                'expires_at' => $subscription->expires_at,
+            'subscription' => $subs->isNotEmpty() ? [
+                'id' => $newest->id,
+                'plan_id' => $newest->plan_id,
+                'is_active' => true,
+                'plan_name' => $newest->plan_name,
+                'plan_price' => $newest->plan_price,
+                'plan_currency' => $newest->plan_currency,
+                'text_sessions_remaining' => $aggregated['text_sessions_remaining'],
+                'voice_calls_remaining' => $aggregated['voice_calls_remaining'],
+                'video_calls_remaining' => $aggregated['video_calls_remaining'],
+                'total_text_sessions' => $aggregated['total_text_sessions'],
+                'total_voice_calls' => $aggregated['total_voice_calls'],
+                'total_video_calls' => $aggregated['total_video_calls'],
+                'activated_at' => $newest->activated_at,
+                'expires_at' => $latestEnd,
+                'active_subscriptions_count' => $subs->count(),
             ] : null,
             'appointments' => $appointments,
             'active_sessions' => TextSession::where('patient_id', $user->id)
