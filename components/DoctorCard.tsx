@@ -39,7 +39,7 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
     }
   };
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.card}
       onPress={() => onPress(doctor)}
       activeOpacity={0.7}
@@ -60,7 +60,7 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
           return <View style={[styles.onlineIndicator, { backgroundColor: color }]} />;
         })()}
       </View>
-      
+
       {/* Content - Right Side */}
       <View style={styles.content}>
         <View style={styles.locationBadgeContainer}>
@@ -82,25 +82,25 @@ const DoctorCard: React.FC<DoctorCardProps> = React.memo(({ doctor, onPress, onF
             return `${specializationText} • ${doctor.years_of_experience || 0}+ years`;
           })()}
         </Text>
-        
+
         {doctor.languages_spoken && doctor.languages_spoken.length > 0 && (
           <Text style={styles.languages}>
             Languages: {doctor.languages_spoken.join(', ')}
           </Text>
         )}
       </View>
-      
+
       {/* Bookmark and Chevron Icons - Right Side */}
       <View style={styles.rightActions}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.bookmarkButton}
           onPress={handleFavoritePress}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Icon 
-            name={isFavorite ? 'bookmark' : 'bookmarkO'} 
-            size={20} 
-            color={isFavorite ? '#4CAF50' : '#CCC'} 
+          <Icon
+            name={isFavorite ? 'bookmark' : 'bookmarkO'}
+            size={20}
+            color={isFavorite ? '#4CAF50' : '#CCC'}
           />
         </TouchableOpacity>
         <Icon name="right" size={20} color="#4CAF50" style={styles.chevron} />

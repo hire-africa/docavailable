@@ -215,21 +215,38 @@ class TextSessionController extends Controller
 
             // Use transaction to ensure atomicity and prevent race conditions
             $textSession = DB::transaction(function () use ($patientId, $doctorId, $reason, $sessionsRemaining) {
-                // Lock and check for existing session again within transaction
-                $existingSession = TextSession::where('patient_id', $patientId)
-                    ->where('doctor_id', $doctorId)
+                // Lock and check for existing session for PATIENT within transaction
+                $existingPatientSession = TextSession::where('patient_id', $patientId)
                     ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
                     ->lockForUpdate()
                     ->first();
 
-                if ($existingSession) {
+                if ($existingPatientSession) {
                     // Apply lazy expiration at read-time
-                    $existingSession->applyLazyExpiration();
+                    $existingPatientSession->applyLazyExpiration();
 
                     // Re-check status after lazy expiration
-                    if (in_array($existingSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
-                        throw new \Exception('You already have an active session with this doctor');
+                    if (in_array($existingPatientSession->status, [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])) {
+                        throw new \Exception('You already have an active session');
                     }
+                }
+
+                // Check if DOCTOR is currently in another session (with anyone)
+                $doctorBusyInText = TextSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [TextSession::STATUS_ACTIVE, TextSession::STATUS_WAITING_FOR_DOCTOR])
+                    ->exists();
+
+                $doctorBusyInCall = \App\Models\CallSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [
+                        \App\Models\CallSession::STATUS_ACTIVE,
+                        \App\Models\CallSession::STATUS_CONNECTING,
+                        \App\Models\CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        \App\Models\CallSession::STATUS_ANSWERED,
+                    ])
+                    ->exists();
+
+                if ($doctorBusyInText || $doctorBusyInCall) {
+                    throw new \Exception('Doctor is currently in another session');
                 }
 
                 // Create text session
@@ -1435,10 +1452,12 @@ class TextSessionController extends Controller
         $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
 
         foreach ($day['slots'] as $slot) {
-            if (!is_array($slot)) continue;
+            if (!is_array($slot))
+                continue;
             $start = (string) ($slot['start'] ?? '');
             $end = (string) ($slot['end'] ?? '');
-            if ($start === '' || $end === '') continue;
+            if ($start === '' || $end === '')
+                continue;
 
             [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
             [$eh, $em] = array_pad(explode(':', $end), 2, '0');
@@ -1461,19 +1480,25 @@ class TextSessionController extends Controller
 
     private function computeIsAvailableNow(?DoctorAvailability $availability): bool
     {
-        if (!$availability) return false;
+        if (!$availability)
+            return false;
 
         $now = Carbon::now('UTC');
 
         // Heartbeat gate: must have been active within 15 minutes
-        if (!$availability->last_active_at) return false;
-        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15) return false;
+        if (!$availability->last_active_at)
+            return false;
+        if (Carbon::parse($availability->last_active_at)->diffInMinutes($now) > 15)
+            return false;
 
-        if ($availability->manually_offline) return false;
-        if ($availability->manually_online) return true;
+        if ($availability->manually_offline)
+            return false;
+        if ($availability->manually_online)
+            return true;
 
         $workingHours = $availability->working_hours;
-        if (!is_array($workingHours)) return false;
+        if (!is_array($workingHours))
+            return false;
 
         $dayKey = strtolower($now->format('l'));
         return $this->isWithinWorkingHoursSlot($workingHours, $now, $dayKey);

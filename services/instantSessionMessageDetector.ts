@@ -62,6 +62,7 @@ export class InstantSessionMessageDetector {
   private hasPatientMessageSent: boolean = false;
   private hasDoctorResponded: boolean = false;
   private sessionActivated: boolean = false;
+  private sessionExpired: boolean = false;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
   private reconnectDelay: number = 1000;
@@ -191,6 +192,7 @@ export class InstantSessionMessageDetector {
         this.handleSessionActivated(data);
         break;
       case 'session-expired':
+        this.sessionExpired = true;
         this.handleSessionExpired(data);
         break;
       case 'session-status-response':
@@ -242,6 +244,7 @@ export class InstantSessionMessageDetector {
     this.timerState.isActive = false;
     this.timerState.timeRemaining = 0;
     this.timerState.doctor_response_deadline = null;
+    this.sessionExpired = false;
   }
 
   /**
@@ -586,6 +589,7 @@ export class InstantSessionMessageDetector {
           this.timerState.isActive = false;
           this.timerState.timeRemaining = 0;
           this.timerState.doctor_response_deadline = null;
+          this.sessionExpired = true;
           await this.saveSessionState();
           this.events.onTimerExpired();
           return;
@@ -918,6 +922,13 @@ export class InstantSessionMessageDetector {
   }
 
   /**
+   * Check if session is expired
+   */
+  isSessionExpired(): boolean {
+    return this.sessionExpired;
+  }
+
+  /**
    * Get connection status
    */
   getConnectionStatus(): boolean {
@@ -966,6 +977,7 @@ export class InstantSessionMessageDetector {
         hasPatientMessageSent: this.hasPatientMessageSent,
         hasDoctorResponded: this.hasDoctorResponded,
         sessionActivated: this.sessionActivated,
+        sessionExpired: this.sessionExpired,
         timerState: this.timerState,
         timestamp: Date.now()
       };
@@ -994,6 +1006,7 @@ export class InstantSessionMessageDetector {
           this.hasPatientMessageSent = state.hasPatientMessageSent || false;
           this.hasDoctorResponded = state.hasDoctorResponded || false;
           this.sessionActivated = state.sessionActivated || false;
+          this.sessionExpired = state.sessionExpired || false;
           this.timerState = state.timerState || this.timerState;
 
           console.log('📱 [InstantSessionDetector] Session state restored for session:', this.config.sessionId, {
@@ -1037,6 +1050,7 @@ export class InstantSessionMessageDetector {
       this.hasPatientMessageSent = false;
       this.hasDoctorResponded = false;
       this.sessionActivated = false;
+      this.sessionExpired = false;
       this.timerState = {
         isActive: false,
         timeRemaining: 0, // Will be set from server deadline

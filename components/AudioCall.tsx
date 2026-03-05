@@ -558,9 +558,7 @@ export default function AudioCall({
 
       {/* Dynamic Header based on call state */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={endCall}>
-          <Ionicons name="arrow-back" size={24} color="white" />
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
         <Text style={styles.headerTitle}>
           {shouldShowIncomingUI ? 'Incoming Call' : 'Audio Call'}
         </Text>

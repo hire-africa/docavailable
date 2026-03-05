@@ -11,6 +11,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import authService from '../services/authService';
 import callDeduplicationService from '../services/callDeduplicationService';
+import callkeepService from '../services/callkeepService';
 import pushNotificationService from '../services/pushNotificationService';
 import { SessionNotificationHandler } from '../services/sessionNotificationHandler';
 import { routeIncomingCall } from '../utils/callRouter';
@@ -582,6 +583,20 @@ export default function RootLayout() {
                   type.includes('appointment') ? 'appointments' :
                     type.includes('session') ? 'sessions' :
                       'urgent_medical';
+
+        // ✅ Handle foreground termination signals
+        if (type === 'call_cancelled' || type === 'call_declined') {
+          console.log('📱 [Foreground] Call termination received:', type);
+          callkeepService.endAllCalls();
+          try {
+            if (NativeModules.IncomingCallModule && NativeModules.IncomingCallModule.dismissIncomingCall) {
+              NativeModules.IncomingCallModule.dismissIncomingCall({
+                sessionId: data.appointment_id || data.appointmentId || ''
+              });
+            }
+          } catch (e) { }
+          return; // Don't show notification for termination
+        }
 
         // Ensure channel exists before displaying notification
         await notifee.createChannel({

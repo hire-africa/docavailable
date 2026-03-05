@@ -34,7 +34,7 @@
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_URL" android:value="https://u.expo.dev/2eb40af4-b32e-462e-b070-a1b171e65485"/>
     <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version"/>
-    <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://u.expo.dev/2166156d-3cb3-4f6e-9cd1-f40471339866"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATE_URL" android:value="https://u.expo.dev/690c2d88-6ac8-4ca2-943e-83009e660415"/>
     <service android:name="io.wazo.callkeep.VoiceConnectionService" android:label="DocAvailable" android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE" android:foregroundServiceType="phoneCall" android:exported="true">
       <intent-filter>
         <action android:name="android.telecom.ConnectionService"/>

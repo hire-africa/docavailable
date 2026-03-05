@@ -1,5 +1,5 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
     FlatList,
     Modal,
@@ -9,6 +9,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import citiesData from '../app/cities.json';
 
 // Complete list of all countries in the world
 const allCountries = [
@@ -48,16 +49,45 @@ interface LocationPickerProps {
 
 export default function LocationPicker({ country, setCountry, city, setCity, errors, fieldRefs }: LocationPickerProps) {
     const [showCountryPicker, setShowCountryPicker] = useState(false);
+    const [showCityPicker, setShowCityPicker] = useState(false);
+    const [citySearch, setCitySearch] = useState('');
+
+    const cities = useMemo(() => {
+        if (!country) return [];
+        const countryCities = (citiesData as Record<string, string[]>)[country] || [];
+        return countryCities.sort();
+    }, [country]);
+
+    const filteredCities = useMemo(() => {
+        if (!citySearch) return cities;
+        return cities.filter(c => c.toLowerCase().includes(citySearch.toLowerCase()));
+    }, [cities, citySearch]);
 
     const handleCountrySelect = (selectedCountry: string) => {
         setCountry(selectedCountry);
+        setCity(''); // Reset city when country changes
         setShowCountryPicker(false);
     };
 
-    const renderPickerItem = ({ item }: { item: string }) => (
+    const handleCitySelect = (selectedCity: string) => {
+        setCity(selectedCity);
+        setShowCityPicker(false);
+        setCitySearch('');
+    };
+
+    const renderCountryItem = ({ item }: { item: string }) => (
         <TouchableOpacity
             style={styles.pickerItem}
             onPress={() => handleCountrySelect(item)}
+        >
+            <Text style={styles.pickerItemText}>{item}</Text>
+        </TouchableOpacity>
+    );
+
+    const renderCityItem = ({ item }: { item: string }) => (
+        <TouchableOpacity
+            style={styles.pickerItem}
+            onPress={() => handleCitySelect(item)}
         >
             <Text style={styles.pickerItemText}>{item}</Text>
         </TouchableOpacity>
@@ -85,14 +115,17 @@ export default function LocationPicker({ country, setCountry, city, setCity, err
 
                 <View style={styles.halfInput}>
                     <Text style={styles.inputLabel}>City</Text>
-                    <TextInput
+                    <TouchableOpacity
                         ref={fieldRefs?.city}
-                        style={[styles.input, errors?.city && styles.inputError]}
-                        placeholder="Enter your city"
-                        placeholderTextColor="#999"
-                        value={city}
-                        onChangeText={setCity}
-                    />
+                        style={[styles.pickerButton, errors?.city && styles.inputError, !country && styles.disabledButton]}
+                        onPress={() => country && setShowCityPicker(true)}
+                        disabled={!country}
+                    >
+                        <Text style={[styles.pickerButtonText, !city && styles.placeholderText]}>
+                            {city || 'Select City'}
+                        </Text>
+                        <FontAwesome name="chevron-down" size={16} color="#666" />
+                    </TouchableOpacity>
                     {errors?.city && <Text style={styles.errorText}>{errors.city}</Text>}
                 </View>
             </View>
@@ -115,11 +148,62 @@ export default function LocationPicker({ country, setCountry, city, setCity, err
                         <FlatList
                             data={countryList}
                             keyExtractor={(item) => item}
-                            renderItem={renderPickerItem}
+                            renderItem={renderCountryItem}
                             showsVerticalScrollIndicator={false}
                             initialNumToRender={20}
                             maxToRenderPerBatch={20}
                             windowSize={10}
+                        />
+                    </View>
+                </View>
+            </Modal>
+
+            {/* City Picker Modal */}
+            <Modal
+                visible={showCityPicker}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => {
+                    setShowCityPicker(false);
+                    setCitySearch('');
+                }}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Select City</Text>
+                            <TouchableOpacity onPress={() => {
+                                setShowCityPicker(false);
+                                setCitySearch('');
+                            }}>
+                                <FontAwesome name="times" size={20} color="#666" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.searchContainer}>
+                            <FontAwesome name="search" size={16} color="#999" style={styles.searchIcon} />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Search city..."
+                                value={citySearch}
+                                onChangeText={setCitySearch}
+                                placeholderTextColor="#999"
+                            />
+                        </View>
+
+                        <FlatList
+                            data={filteredCities}
+                            keyExtractor={(item) => item}
+                            renderItem={renderCityItem}
+                            showsVerticalScrollIndicator={false}
+                            initialNumToRender={20}
+                            maxToRenderPerBatch={20}
+                            windowSize={10}
+                            ListEmptyComponent={() => (
+                                <View style={styles.emptyContainer}>
+                                    <Text style={styles.emptyText}>No cities found</Text>
+                                </View>
+                            )}
                         />
                     </View>
                 </View>
@@ -182,6 +266,10 @@ const styles = StyleSheet.create({
     inputError: {
         borderColor: '#FF3B30',
     },
+    disabledButton: {
+        backgroundColor: '#F5F5F5',
+        borderColor: '#E0E0E0',
+    },
     errorText: {
         color: '#FF3B30',
         fontSize: 12,
@@ -211,6 +299,24 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#333',
     },
+    searchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: '#F9F9F9',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    searchIcon: {
+        marginRight: 10,
+    },
+    searchInput: {
+        flex: 1,
+        height: 40,
+        fontSize: 16,
+        color: '#333',
+    },
     pickerItem: {
         paddingVertical: 16,
         paddingHorizontal: 20,
@@ -221,4 +327,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#333',
     },
-}); 
+    emptyContainer: {
+        padding: 40,
+        alignItems: 'center',
+    },
+    emptyText: {
+        fontSize: 16,
+        color: '#999',
+    },
+});

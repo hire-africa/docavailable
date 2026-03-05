@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../components/AudioCall';
 import VideoCallModal from '../components/VideoCallModal';
@@ -327,9 +327,15 @@ export default function CallScreen() {
         <View style={styles.errorContainer}>
           <Text style={styles.errorTitle}>Call Error</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <Text style={styles.retryText} onPress={() => router.back()}>
-            Go Back
-          </Text>
+          <TouchableOpacity
+            style={styles.exitButton}
+            onPress={() => {
+              const isDoctorUser = user?.user_type === 'doctor';
+              router.replace(isDoctorUser ? '/doctor-dashboard' : '/patient-dashboard');
+            }}
+          >
+            <Text style={styles.exitButtonText}>Exit Call</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -442,5 +448,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     textDecorationLine: 'underline',
+  },
+  exitButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  exitButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

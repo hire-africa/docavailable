@@ -1,15 +1,16 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import CustomAlertDialog from '../components/CustomAlertDialog';
 import DirectBookingModal from '../components/DirectBookingModal';
 import SessionTypeSelectionModal, { SessionType } from '../components/SessionTypeSelectionModal';
 import { environment } from '../config/environment';
@@ -88,6 +89,7 @@ export default function InstantSessionsScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedSessionType, setSelectedSessionType] = useState<SessionType>('text');
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [showBusyModal, setShowBusyModal] = useState(false);
 
   const fetchAvailableDoctors = async () => {
     try {
@@ -208,7 +210,12 @@ export default function InstantSessionsScreen() {
           ? String((result as any).message)
           : 'Failed to start session';
         console.error('❌ [InstantSessions] Session creation failed:', msg);
-        Alert.alert('Error', msg);
+
+        if (msg.includes('Doctor is currently in another session')) {
+          setShowBusyModal(true);
+        } else {
+          Alert.alert('Error', msg);
+        }
         setStartingSession(false);
         return;
       }
@@ -434,6 +441,15 @@ export default function InstantSessionsScreen() {
         sessionType={selectedSessionType}
         loading={startingSession}
         subscription={subscription}
+      />
+
+      <CustomAlertDialog
+        visible={showBusyModal}
+        onClose={() => setShowBusyModal(false)}
+        title="Doctor Busy"
+        message="The doctor is currently in another session. Please try again in a few minutes or choose another available doctor."
+        type="warning"
+        buttons={[{ text: 'OK', onPress: () => setShowBusyModal(false) }]}
       />
     </>
   );

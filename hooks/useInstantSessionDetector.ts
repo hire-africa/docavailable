@@ -156,6 +156,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
       setTimerState(detectorRef.current.getTimerState());
     }
 
@@ -191,6 +192,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       setHasPatientSentMessage(detectorRef.current.hasPatientSentMessage());
       setHasDoctorResponded(detectorRef.current.hasDoctorRespondedToMessage());
       setIsSessionActivated(detectorRef.current.isSessionActivated());
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
       setTimerState(detectorRef.current.getTimerState());
 
       // Force state sync to ensure hook state matches detector state
@@ -200,7 +202,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
       // Immediately rehydrate timer from backend after successful connect to avoid race conditions
       try {
         const { apiService } = await import('../services/apiService');
-        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`) as any;
         if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
           const remaining = Math.max(0, Math.floor(result.timeRemaining));
           if (remaining > 0) {
@@ -230,7 +232,7 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
 
         // Import lazily to avoid cycles
         const { apiService } = await import('../services/apiService');
-        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`);
+        const result = await apiService.get(`/text-sessions/${sessionId}/check-response`) as any;
         if (cancelled) return;
 
         if (result?.success && result?.status === 'waiting' && typeof result?.timeRemaining === 'number' && result?.doctor_response_deadline) {
@@ -309,6 +311,8 @@ export function useInstantSessionDetector(options: UseInstantSessionDetectorOpti
   const forceStateSync = (): void => {
     if (detectorRef.current) {
       detectorRef.current.forceStateSync();
+      // Also sync isSessionExpired state directly in the hook
+      setIsSessionExpired(detectorRef.current.isSessionExpired());
     }
   };
 

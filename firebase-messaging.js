@@ -95,6 +95,26 @@ messaging().setBackgroundMessageHandler(async remoteMessage => {
         callType,
       });
     }
+
+    // ✅ Handle call termination signals (Cancelled/Declined)
+    if (data.type === 'call_cancelled' || data.type === 'call_declined') {
+      console.log('FCM BG: Call termination received:', data.type);
+
+      // Stop ringing via CallKeep
+      await callkeepService.endAllCalls();
+
+      // Dismiss native IncomingCallActivity if present
+      try {
+        if (NativeModules.IncomingCallModule && NativeModules.IncomingCallModule.dismissIncomingCall) {
+          await NativeModules.IncomingCallModule.dismissIncomingCall({
+            sessionId: data.appointment_id || data.appointmentId || ''
+          });
+          console.log('FCM BG: Native incoming call dismissed');
+        }
+      } catch (nativeError) {
+        console.warn('FCM BG: Native dismiss failed:', nativeError);
+      }
+    }
   } catch (e) {
     console.log('Background FCM handler error:', e);
   }

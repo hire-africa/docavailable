@@ -2,21 +2,22 @@ import { FontAwesome } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    Easing,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  Easing,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppTour from '../../../components/AppTour';
 import AudioCallModal from '../../../components/AudioCallModal';
+import CustomAlertDialog from '../../../components/CustomAlertDialog';
 import DirectBookingModal from '../../../components/DirectBookingModal';
 import DoctorProfilePicture from '../../../components/DoctorProfilePicture';
 import SessionTypeSelectionModal, { SessionType } from '../../../components/SessionTypeSelectionModal';
@@ -75,6 +76,8 @@ export default function DoctorProfilePage() {
   const [startingSession, setStartingSession] = useState(false);
   // Track if call has been initiated to prevent duplicates
   const [callInitiated, setCallInitiated] = useState(false);
+  // Busy modal state
+  const [showBusyModal, setShowBusyModal] = useState(false);
   // Similar doctors
   const [similarDoctors, setSimilarDoctors] = useState<any[]>([]);
   const [loadingSimilar, setLoadingSimilar] = useState(false);
@@ -456,11 +459,16 @@ export default function DoctorProfilePage() {
           ? String((result as any).message)
           : 'Failed to create session';
         console.error(`❌ ${errorPrefix} Session creation failed:`, errorMsg);
-        Alert.alert(
-          'Session Creation Failed',
-          `${errorMsg}\n\nStatus: ${('status' in result && (result as any).status) ? String((result as any).status) : 'Unknown'}\n\nPlease check your subscription and try again.`,
-          [{ text: 'OK' }]
-        );
+
+        if (errorMsg.includes('Doctor is currently in another session')) {
+          setShowBusyModal(true);
+        } else {
+          Alert.alert(
+            'Session Creation Failed',
+            `${errorMsg}\n\nStatus: ${('status' in result && (result as any).status) ? String((result as any).status) : 'Unknown'}\n\nPlease check your subscription and try again.`,
+            [{ text: 'OK' }]
+          );
+        }
         setStartingSession(false);
         setCallInitiated(false);
         return;
@@ -548,22 +556,12 @@ export default function DoctorProfilePage() {
           return;
         }
 
-        console.log('✅ [DoctorProfile] All validations passed, opening call modal:', {
-          appointmentId,
-          doctorId: doctor.id,
-          sessionType
-        });
-
         setDirectSessionId(appointmentId);
         if (sessionType === 'audio') {
-          console.log('🎤 [DoctorProfile] Setting showAudioCallModal to true');
           setShowAudioCallModal(true);
         } else {
-          console.log('📹 [DoctorProfile] Setting showVideoCallModal to true');
           setShowVideoCallModal(true);
         }
-
-        console.log('✅ Call modal opened for session:', appointmentId);
       }
     } catch (error: any) {
       const errorMsg = error?.message || 'Unknown error occurred';
@@ -1157,6 +1155,14 @@ export default function DoctorProfilePage() {
         }}
         elementRefs={tourRefs}
         scrollViewRef={scrollViewRef}
+      />
+      <CustomAlertDialog
+        visible={showBusyModal}
+        onClose={() => setShowBusyModal(false)}
+        title="Doctor Busy"
+        message="The doctor is currently in another session. Please try again in a few minutes or choose another available doctor."
+        type="warning"
+        buttons={[{ text: 'OK', onPress: () => setShowBusyModal(false) }]}
       />
     </View >
   );

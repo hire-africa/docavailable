@@ -1,18 +1,19 @@
 import { FontAwesome } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { router, Stack } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    Platform,
-    RefreshControl,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { Notification as ApiNotification, notificationApiService } from '../services/notificationApiService';
@@ -175,28 +176,28 @@ function NotificationsContent() {
     };
   };
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
+  // Load notifications and mark as read when page opens or gains focus
+  useFocusEffect(
+    useCallback(() => {
+      const init = async () => {
+        await loadNotifications();
+        // After loading, mark all as read
+        await markAllAsRead();
+      };
+      init();
+    }, [user, userData])
+  );
 
-  // Subscribe to real-time events
+  // Subscribe to real-time events while screen is mounted
   useEffect(() => {
     const unsubscribe = RealTimeEventService.subscribe((event) => {
       console.log('📡 [Notifications] Received real-time event:', event);
-
       // Reload notifications when new events arrive
       loadNotifications();
     });
 
     return unsubscribe;
   }, []);
-
-  // Mark all notifications as read when page opens
-  useEffect(() => {
-    if (notifications.length > 0) {
-      markAllAsRead();
-    }
-  }, [notifications.length]);
 
   const loadNotifications = async () => {
     try {
@@ -219,21 +220,21 @@ function NotificationsContent() {
             return t !== 'chat_message';
           })
           .map((n: ApiNotification) => {
-          // Extract type from notification data or use default
-          const notificationType = n.data?.type || n.type || 'system';
+            // Extract type from notification data or use default
+            const notificationType = n.data?.type || n.type || 'system';
 
-          const display = deriveDisplayText(n);
+            const display = deriveDisplayText(n);
 
-          return {
-            id: n.id.toString(),
-            title: display.title,
-            message: display.message,
-            type: notificationType,
-            isRead: !!n.read_at,
-            timestamp: new Date(n.created_at),
-            data: n.data
-          };
-        });
+            return {
+              id: n.id.toString(),
+              title: display.title,
+              message: display.message,
+              type: notificationType,
+              isRead: !!n.read_at,
+              timestamp: new Date(n.created_at),
+              data: n.data
+            };
+          });
 
         console.log('🔔 Transformed notifications:', apiNotifications.length);
         setNotifications(apiNotifications);

@@ -137,19 +137,15 @@ export default function InstantSessionTimer({
     if (isSessionActivated) {
       return 'Session Active';
     }
-    
+
     if (hasDoctorResponded) {
       return 'Doctor Responded';
     }
-    
+
     if (isSessionExpired) {
       return 'Session Expired';
     }
-    
-    if (hasPatientSentMessage && !isActive) {
-      return 'Session Expired';
-    }
-    
+
     // Don't show status text while waiting - just show timer
     return '';
   };
@@ -166,13 +162,9 @@ export default function InstantSessionTimer({
     if (isSessionExpired) {
       return '#F44336';
     }
-    
+
     if (hasPatientSentMessage && isActive) {
       return timeRemaining <= 10 ? '#F44336' : WARNING_COLOR;
-    }
-    
-    if (hasPatientSentMessage && !isActive) {
-      return '#F44336';
     }
 
     return GRAY_COLOR;
@@ -232,7 +224,7 @@ export default function InstantSessionTimer({
           <View style={styles.infoOnlyContainer}>
             <Text style={styles.title}>Instant Session</Text>
             <Text style={[styles.infoText, { color: '#F44336', fontWeight: '600' }]}>
-              {isPatient 
+              {isPatient
                 ? 'Doctor did not respond in time - You have not been charged'
                 : 'Session expired - You did not respond in time'
               }
@@ -265,11 +257,11 @@ export default function InstantSessionTimer({
                   {
                     transform: [{ scale: pulseAnim }],
                     borderColor: getTimerColor(),
-                    backgroundColor: timeRemaining <= 10 ? 
+                    backgroundColor: timeRemaining <= 10 ?
                       warningAnim.interpolate({
                         inputRange: [0, 1],
                         outputRange: ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.3)']
-                      }) : 
+                      }) :
                       'rgba(76, 175, 80, 0.1)'
                   }
                 ]}
@@ -279,19 +271,19 @@ export default function InstantSessionTimer({
                 </Text>
               </Animated.View>
             </View>
-            
+
             <View style={styles.rightSection}>
               <View style={styles.header}>
                 <Text style={styles.title}>
-                  {hasPatientSentMessage && isActive && !hasDoctorResponded 
-                    ? 'Waiting for Doctor' 
+                  {hasPatientSentMessage && isActive && !hasDoctorResponded
+                    ? 'Waiting for Doctor'
                     : 'Instant Session'}
                 </Text>
                 <Text style={[styles.status, { color: getStatusColor() }]}>
                   {getStatusText()}
                 </Text>
               </View>
-              
+
               <View style={styles.progressContainer}>
                 <View style={styles.progressBar}>
                   <Animated.View
@@ -305,7 +297,7 @@ export default function InstantSessionTimer({
                   />
                 </View>
               </View>
-              
+
               {hasDoctorResponded && (
                 <Text style={styles.infoText} numberOfLines={2}>
                   Doctor responded! Session active.

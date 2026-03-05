@@ -25,6 +25,9 @@ export class WebRTCChatService {
   private pingTimeout = 60000; // Increased from 30 to 60 seconds for more stable connections
   private connectionTimeout = 30000; // 30 seconds connection timeout
   private isSyncing = false; // Flag to prevent multiple simultaneous syncs
+  private saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private savePromise: Promise<void> | null = null;
+  private saveResolve: (() => void) | null = null;
 
   constructor(config: ChatConfig, events: ChatEvents) {
     console.log('🔧 [WebRTCChat] Constructor called with config:', {
@@ -58,14 +61,36 @@ export class WebRTCChatService {
     }
   }
 
-  // Save messages to AsyncStorage
-  private async saveMessages(): Promise<void> {
-    try {
-      await AsyncStorage.setItem(this.storageKey, JSON.stringify(this.messages));
-      console.log('💾 [WebRTCChat] Saved messages to storage:', this.messages.length);
-    } catch (error) {
-      console.error('❌ [WebRTCChat] Error saving messages to storage:', error);
+  // Save messages to AsyncStorage with debouncing to prevent UI blocking
+  private saveMessages(): Promise<void> {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
     }
+
+    if (!this.savePromise) {
+      this.savePromise = new Promise((resolve) => {
+        this.saveResolve = resolve;
+      });
+    }
+
+    this.saveTimeout = setTimeout(async () => {
+      try {
+        const startTime = Date.now();
+        await AsyncStorage.setItem(this.storageKey, JSON.stringify(this.messages));
+        const duration = Date.now() - startTime;
+        console.log(`💾 [WebRTCChat] Saved ${this.messages.length} messages to storage in ${duration}ms (debounced)`);
+      } catch (error) {
+        console.error('❌ [WebRTCChat] Error saving messages to storage:', error);
+      } finally {
+        const resolve = this.saveResolve;
+        this.saveTimeout = null;
+        this.savePromise = null;
+        this.saveResolve = null;
+        if (resolve) resolve();
+      }
+    }, 500); // 500ms debounce period
+
+    return this.savePromise;
   }
 
   // Add message and save to storage
@@ -356,61 +381,8 @@ export class WebRTCChatService {
       await this.addMessage(chatMessage);
 
       // CRITICAL: Always persist to backend API to ensure timer starts and messages are stored
-      // This is especially important for text sessions where the first patient message must trigger the 90-second timer
-      try {
-        const authToken = await this.getAuthToken();
-        if (authToken) {
-          const apiUrl = `${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`;
-          console.log('📤 [WebRTCChat] Persisting message to backend (required for timer):', apiUrl);
-          console.log('📤 [WebRTCChat] Message details:', {
-            appointmentId: this.config.appointmentId,
-            isTextSession: this.config.appointmentId.startsWith('text_session_'),
-            message: message.substring(0, 50),
-            messageId: messageId
-          });
-
-          const resp = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              message: message,
-              message_type: 'text',
-              temp_id: messageId,
-            }),
-          });
-
-          if (!resp.ok) {
-            const errorText = await resp.text();
-            console.error('❌ [WebRTCChat] Backend persist failed:', resp.status, errorText);
-          } else {
-            const json = await resp.json().catch(() => null);
-            if (json?.success) {
-              console.log('✅ [WebRTCChat] Backend persisted message and timer should be started:', json.data?.id);
-              // Update message ID if backend returned a different one
-              if (json.data?.id && json.data.id !== messageId) {
-                chatMessage.id = json.data.id;
-                // Update stored message with real ID
-                const messages = await this.getMessages();
-                const messageIndex = messages.findIndex(m => m.id === messageId || m.temp_id === messageId);
-                if (messageIndex >= 0) {
-                  messages[messageIndex].id = json.data.id;
-                  messages[messageIndex].temp_id = undefined;
-                  await this.saveMessages();
-                }
-              }
-            } else {
-              console.warn('⚠️ [WebRTCChat] Backend persist returned non-success:', json);
-            }
-          }
-        } else {
-          console.error('❌ [WebRTCChat] No auth token available to persist message to backend - timer may not start!');
-        }
-      } catch (persistErr) {
-        console.error('❌ [WebRTCChat] Failed to persist message to backend - timer may not start!', persistErr);
-      }
+      // Optimization: Fire-and-forget the backend persistence so it doesn't block the UI
+      this.persistToBackend(chatMessage);
 
       // Note: We no longer trigger onMessage for the sender's own message here
       // because the UI adds it immediately and we return it from this function.
@@ -540,45 +512,9 @@ export class WebRTCChatService {
       await this.addMessage(chatMessage);
       this.events.onMessage(chatMessage);
 
-      // Also persist the voice message to the backend API for consistency and to ensure proper typing/media_url in history
-      try {
-        if (authToken) {
-          const appointmentIdForApi = (typeof appointmentId === 'string') ? appointmentId : String(numericAppointmentId);
-          const apiUrl = `${this.config.baseUrl}/api/chat/${appointmentIdForApi}/messages`;
-          console.log('📤 [WebRTCChat] Persisting voice message to backend:', apiUrl);
-          const resp = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              message: '🎤 Voice message',
-              message_type: 'voice',
-              media_url: mediaUrl,
-              temp_id: messageId,
-            }),
-          });
-          if (!resp.ok) {
-            console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
-            // Update message status to indicate backend sync failed
-            chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
-          } else {
-            const json = await resp.json().catch(() => null);
-            console.log('✅ [WebRTCChat] Backend persisted voice message:', json?.success);
-            chatMessage.delivery_status = 'delivered';
-          }
-        } else {
-          console.warn('⚠️ [WebRTCChat] No auth token available to persist voice message to backend');
-        }
-      } catch (persistErr) {
-        console.warn('⚠️ [WebRTCChat] Failed to persist voice message to backend:', persistErr);
-        // Update message status
-        chatMessage.delivery_status = 'sent'; // Still sent via WebSocket
-      }
-
-      // Update the message in storage with final status
-      await this.addMessage(chatMessage);
+      // Also persist the voice message to the backend API for consistency
+      // Optimization: Fire-and-forget the backend persistence so it doesn't block the UI
+      this.persistToBackend(chatMessage);
 
       console.log('📤 [WebRTCChat] Voice message sent successfully:', messageId);
       return chatMessage;
@@ -670,39 +606,8 @@ export class WebRTCChatService {
       this.events.onMessage(uploadedMessage);
 
       // Also persist to backend API as fallback
-      try {
-        if (authToken) {
-          const appointmentIdForApi = (typeof appointmentId === 'string') ? appointmentId : String(numericAppointmentId);
-          const apiUrl = `${this.config.baseUrl}/api/chat/${appointmentIdForApi}/messages`;
-          console.log('📤 [WebRTCChat] Persisting image message to backend:', apiUrl);
-          const resp = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              id: messageId, // Send messageId as id so backend uses it
-              message: '🖼️ Image',
-              message_type: 'image',
-              media_url: uploadResult.mediaUrl,
-              temp_id: messageId, // Also send as temp_id for backwards compatibility
-            }),
-          });
-          if (!resp.ok) {
-            console.warn('⚠️ [WebRTCChat] Backend persist returned non-OK:', resp.status);
-          } else {
-            const json = await resp.json().catch(() => null);
-            console.log('✅ [WebRTCChat] Backend persisted image message:', json?.success);
-            uploadedMessage.delivery_status = 'delivered';
-          }
-        } else {
-          console.warn('⚠️ [WebRTCChat] No auth token available to persist image message to backend');
-        }
-      } catch (persistErr) {
-        console.warn('⚠️ [WebRTCChat] Failed to persist image message to backend:', persistErr);
-        uploadedMessage.delivery_status = 'sent'; // Still sent via WebSocket
-      }
+      // Optimization: Fire-and-forget the backend persistence so it doesn't block the UI
+      this.persistToBackend(uploadedMessage);
 
       // Message already added and updated above
 
@@ -1213,6 +1118,70 @@ export class WebRTCChatService {
       this.websocket.send(JSON.stringify(message));
     } catch (error) {
       console.error('❌ [WebRTCChat] Failed to send read receipt:', error);
+    }
+  }
+
+  /**
+   * Persist a message to the backend API in the background.
+   * This ensures the UI is not blocked while waiting for slow API responses (e.g., push notifications).
+   */
+  private async persistToBackend(chatMessage: ChatMessage): Promise<void> {
+    try {
+      const authToken = await this.getAuthToken();
+      if (!authToken) {
+        console.error('❌ [WebRTCChat] No auth token available to persist message to backend');
+        return;
+      }
+
+      const apiUrl = `${this.config.baseUrl}/api/chat/${this.config.appointmentId}/messages`;
+      console.log(`📤 [WebRTCChat] Background persisting ${chatMessage.message_type} message to backend:`, apiUrl);
+
+      const resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: chatMessage.message,
+          message_type: chatMessage.message_type,
+          media_url: chatMessage.media_url,
+          temp_id: chatMessage.temp_id || chatMessage.id,
+          id: chatMessage.id, // Explicitly send the ID we generated
+        }),
+      });
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        console.error('❌ [WebRTCChat] Backend persist failed:', resp.status, errorText);
+      } else {
+        const json = await resp.json().catch(() => null);
+        if (json?.success) {
+          console.log(`✅ [WebRTCChat] Backend persisted ${chatMessage.message_type} message successfully:`, json.data?.id);
+
+          // If backend returned a real database ID, update our local one
+          if (json.data?.id && json.data.id !== chatMessage.id) {
+            const oldId = chatMessage.id;
+            const newId = json.data.id;
+
+            // Update in-memory count
+            const messageIndex = this.messages.findIndex(m => m.id === oldId || m.temp_id === oldId);
+            if (messageIndex >= 0) {
+              this.messages[messageIndex].id = newId;
+              this.messages[messageIndex].temp_id = undefined;
+              this.messages[messageIndex].delivery_status = 'delivered';
+              await this.saveMessages();
+
+              // Notify UI of the ID change
+              this.events.onMessage(this.messages[messageIndex]);
+            }
+          }
+        } else {
+          console.warn('⚠️ [WebRTCChat] Backend persist returned non-success:', json);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [WebRTCChat] Unexpected error in background persistence:', error);
     }
   }
 

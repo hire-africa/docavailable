@@ -1,3 +1,4 @@
+import { NativeModules } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
 import 'react-native-get-random-values';
 
@@ -148,6 +149,18 @@ class CallKeepService {
 
   getCurrentCallId(): string | null {
     return this.currentCallId;
+  }
+
+  async dismissIncomingCall(appointmentId: string) {
+    try {
+      if (NativeModules.IncomingCallModule && NativeModules.IncomingCallModule.dismissIncomingCall) {
+        await NativeModules.IncomingCallModule.dismissIncomingCall({
+          sessionId: appointmentId
+        });
+      }
+    } catch (e) {
+      console.warn('CallKeep: dismissIncomingCall error:', e);
+    }
   }
 
   generateCallId(): string {

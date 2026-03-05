@@ -42,10 +42,12 @@ class DoctorController extends Controller
         $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
 
         foreach ($day['slots'] as $slot) {
-            if (!is_array($slot)) continue;
+            if (!is_array($slot))
+                continue;
             $start = (string) ($slot['start'] ?? '');
             $end = (string) ($slot['end'] ?? '');
-            if ($start === '' || $end === '') continue;
+            if ($start === '' || $end === '')
+                continue;
 
             [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
             [$eh, $em] = array_pad(explode(':', $end), 2, '0');
@@ -77,10 +79,12 @@ class DoctorController extends Controller
         $currentSlotEndMinutes = null;
         if (is_array($day) && !empty($day['enabled']) && !empty($day['slots']) && is_array($day['slots'])) {
             foreach ($day['slots'] as $slot) {
-                if (!is_array($slot)) continue;
+                if (!is_array($slot))
+                    continue;
                 $start = (string) ($slot['start'] ?? '');
                 $end = (string) ($slot['end'] ?? '');
-                if ($start === '' || $end === '') continue;
+                if ($start === '' || $end === '')
+                    continue;
 
                 [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
                 [$eh, $em] = array_pad(explode(':', $end), 2, '0');
@@ -114,7 +118,8 @@ class DoctorController extends Controller
         $nextSlotStart = null;
         $dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         $currentIdx = array_search($dayKey, $dayKeys, true);
-        if ($currentIdx === false) $currentIdx = 0;
+        if ($currentIdx === false)
+            $currentIdx = 0;
 
         for ($offset = 0; $offset < 7; $offset++) {
             $idx = ($currentIdx + $offset) % 7;
@@ -126,9 +131,11 @@ class DoctorController extends Controller
 
             $candidateStarts = [];
             foreach ($searchDay['slots'] as $slot) {
-                if (!is_array($slot)) continue;
+                if (!is_array($slot))
+                    continue;
                 $start = (string) ($slot['start'] ?? '');
-                if ($start === '') continue;
+                if ($start === '')
+                    continue;
                 [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
                 $startMinutes = ((int) $sh) * 60 + ((int) $sm);
                 if ($offset === 0 && $startMinutes <= $nowMinutes) {
@@ -208,7 +215,8 @@ class DoctorController extends Controller
 
     private function computeIsAvailableNow(?DoctorAvailability $availability): bool
     {
-        if (!$availability) return false;
+        if (!$availability)
+            return false;
 
         $nowUtc = Carbon::now('UTC');
 
@@ -223,7 +231,8 @@ class DoctorController extends Controller
         $workingHours = is_array($availability->working_hours)
             ? $availability->working_hours
             : json_decode($availability->working_hours, true);
-        if (!is_array($workingHours)) return false;
+        if (!is_array($workingHours))
+            return false;
 
         // Working hours are stored in the doctor's local time, so compare using local time.
         $doctorTz = 'Africa/Blantyre';
@@ -346,10 +355,10 @@ class DoctorController extends Controller
 
         $doctors = User::with(['doctorAvailability'])->where('user_type', 'doctor')
             ->where('status', 'approved')
-            ->where(function($query) use ($request) {
+            ->where(function ($query) use ($request) {
                 // Check both old single specialization field and new multiple specializations
                 $query->where('specialization', $request->specialization)
-                      ->orWhereJsonContains('specializations', $request->specialization);
+                    ->orWhereJsonContains('specializations', $request->specialization);
             })
             ->select([
                 'id',
@@ -390,7 +399,7 @@ class DoctorController extends Controller
     {
         try {
             \Log::info('Fetching doctor details for ID: ' . $id);
-            
+
             // First, let's check if the user exists at all
             $user = User::find($id);
             if (!$user) {
@@ -399,7 +408,7 @@ class DoctorController extends Controller
                     'message' => 'User not found'
                 ], 404);
             }
-            
+
             // Check if it's a doctor
             if ($user->user_type !== 'doctor') {
                 return response()->json([
@@ -407,7 +416,7 @@ class DoctorController extends Controller
                     'message' => 'User is not a doctor'
                 ], 404);
             }
-            
+
             \Log::info('Doctor found: ' . $user->first_name . ' ' . $user->last_name);
 
             // Build basic doctor data
@@ -460,13 +469,13 @@ class DoctorController extends Controller
                 'success' => true,
                 'data' => $doctorData
             ]);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error fetching doctor details: ' . $e->getMessage(), [
                 'doctor_id' => $id,
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching doctor details: ' . $e->getMessage()
@@ -485,7 +494,7 @@ class DoctorController extends Controller
 
         // Get availability from doctor_availabilities table or return default
         $availability = \App\Models\DoctorAvailability::where('doctor_id', $id)->first();
-        
+
         if (!$availability) {
             // Return default availability structure
             $defaultAvailability = [
@@ -601,4 +610,4 @@ class DoctorController extends Controller
             ]
         ]);
     }
-} 
+}

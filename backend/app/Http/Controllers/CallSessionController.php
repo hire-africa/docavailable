@@ -221,42 +221,6 @@ class CallSessionController extends Controller
                 }
             }
 
-            /*
-            // ── FIX 1: Global patient-level active session guard ────────────────────────
-            // Prevents a user from opening multiple tabs/devices and creating parallel
-            // call sessions on different appointments, all being billed simultaneously.
-            $anyExistingCall = \App\Models\CallSession::where('patient_id', $user->id)
-                ->whereIn('status', [
-                    CallSession::STATUS_ACTIVE,
-                    CallSession::STATUS_CONNECTING,
-                    CallSession::STATUS_WAITING_FOR_DOCTOR,
-                    CallSession::STATUS_ANSWERED,
-                ])
-                ->lockForUpdate()
-                ->first();
-
-            if ($anyExistingCall && $anyExistingCall->appointment_id !== (string) $appointmentId) {
-                // User already has an active call on a DIFFERENT session — block this one
-                Log::warning("Blocked parallel call session attempt", [
-                    'user_id' => $user->id,
-                    'existing_session_id' => $anyExistingCall->id,
-                    'existing_appointment_id' => $anyExistingCall->appointment_id,
-                    'attempted_appointment_id' => $appointmentId,
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'You already have an active call session. Please end it before starting a new one.',
-                    'error_code' => 'PARALLEL_SESSION_BLOCKED',
-                    'existing_session' => [
-                        'session_id' => $anyExistingCall->id,
-                        'appointment_id' => $anyExistingCall->appointment_id,
-                        'status' => $anyExistingCall->status,
-                    ],
-                ], 409);
-            }
-            // ────────────────────────────────────────────────────────────────────────────
-            */
 
             // Check availability first
             $availabilityResponse = $this->checkAvailability($request);
@@ -288,17 +252,57 @@ class CallSessionController extends Controller
                 // For scheduled calls, derive doctor from appointment
                 if ($appointment) {
                     $doctorId = (int) $appointment->doctor_id;
-                } else {
-                    // Backward compatibility: non-direct calls that are not numeric appointments
-                    $doctorId = $request->input('doctor_id');
-                    if (!$doctorId) {
-                        return response()->json([
-                            'success' => false,
-                            'message' => 'Doctor ID is required'
-                        ], 400);
-                    }
                 }
             }
+
+            // ── Active Session Guards ───────────────────────────────────────────────
+
+            // 1. Patient-level Guard (Patient cannot have >1 active call)
+            $anyExistingPatientCall = \App\Models\CallSession::where('patient_id', $user->id)
+                ->whereIn('status', [
+                    CallSession::STATUS_ACTIVE,
+                    CallSession::STATUS_CONNECTING,
+                    CallSession::STATUS_WAITING_FOR_DOCTOR,
+                    CallSession::STATUS_ANSWERED,
+                ])
+                ->where('appointment_id', '!=', (string) $appointmentId)
+                ->first();
+
+            if ($anyExistingPatientCall) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You already have an active call session. Please end it before starting a new one.',
+                    'error_code' => 'PARALLEL_SESSION_BLOCKED',
+                ], 409);
+            }
+
+            // 2. Doctor-level Guard (Doctor cannot have >1 active session of any type)
+            if ($doctorId) {
+                $doctorBusyInText = \App\Models\TextSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [
+                        \App\Models\TextSession::STATUS_ACTIVE,
+                        \App\Models\TextSession::STATUS_WAITING_FOR_DOCTOR
+                    ])
+                    ->exists();
+
+                $doctorBusyInCall = \App\Models\CallSession::where('doctor_id', $doctorId)
+                    ->whereIn('status', [
+                        CallSession::STATUS_ACTIVE,
+                        CallSession::STATUS_CONNECTING,
+                        CallSession::STATUS_WAITING_FOR_DOCTOR,
+                        CallSession::STATUS_ANSWERED,
+                    ])
+                    ->exists();
+
+                if ($doctorBusyInText || $doctorBusyInCall) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Doctor is currently in another session',
+                        'error_code' => 'DOCTOR_BUSY',
+                    ], 409);
+                }
+            }
+            // ────────────────────────────────────────────────────────────────────────────
 
             $sessionCreationService = app(SessionCreationService::class);
             $sessionResult = $sessionCreationService->createCallSession(
@@ -611,6 +615,21 @@ class CallSessionController extends Controller
                             'call_duration' => 0,
                         ]);
 
+                        // Notify the peer (usually doctor) that the caller hung up
+                        try {
+                            $peerId = ($user->id == $callSession->doctor_id)
+                                ? $callSession->patient_id
+                                : $callSession->doctor_id;
+
+                            $peer = User::find($peerId);
+                            if ($peer && $peer->push_notifications_enabled && !empty($peer->push_token)) {
+                                $peer->notify(new \App\Notifications\CallCancelledNotification($callSession, $user));
+                                Log::info("Peer notified of call cancellation (fast-path)", ['peer_id' => $peerId]);
+                            }
+                        } catch (\Exception $notifyError) {
+                            Log::warning("Failed to notify peer of call cancellation (fast-path)", ['error' => $notifyError->getMessage()]);
+                        }
+
                         return response()->json([
                             'success' => true,
                             'message' => 'Call cancelled before connection - no billing applied',
@@ -704,6 +723,21 @@ class CallSessionController extends Controller
                             'is_connected' => false,
                             'call_duration' => 0,
                         ]);
+
+                        // Notify the peer (usually doctor) that the caller hung up
+                        try {
+                            $peerId = ($user->id == $callSession->doctor_id)
+                                ? $callSession->patient_id
+                                : $callSession->doctor_id;
+
+                            $peer = User::find($peerId);
+                            if ($peer && $peer->push_notifications_enabled && !empty($peer->push_token)) {
+                                $peer->notify(new \App\Notifications\CallCancelledNotification($callSession, $user));
+                                Log::info("Peer notified of call cancellation (fast-path)", ['peer_id' => $peerId]);
+                            }
+                        } catch (\Exception $notifyError) {
+                            Log::warning("Failed to notify peer of call cancellation (fast-path)", ['error' => $notifyError->getMessage()]);
+                        }
 
                         return response()->json([
                             'success' => true,

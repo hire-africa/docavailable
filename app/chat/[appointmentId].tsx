@@ -2802,6 +2802,7 @@ export default function ChatPage() {
             updateTextMessage(tempId, message.id);
             playSound(SOUNDS.SENT);
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
+            setSending(false); // OPTIMISTIC: Free the UI immediately after WebRTC handoff
 
             // Debug instant session state after message sent
             if (isInstantSession) {

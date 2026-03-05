@@ -1106,18 +1106,14 @@ export default function VideoCallModal({
           <Animated.View style={[styles.header, !shouldShowIncomingUI && { opacity: uiOpacity }, { zIndex: 2 }]}
             pointerEvents={shouldShowIncomingUI ? 'auto' : (uiVisible ? 'auto' : 'none')}
           >
-            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
+            <View style={styles.placeholder} />
             <Text style={styles.headerTitle}>{shouldShowIncomingUI ? 'Incoming Video Call' : 'Video Call'}</Text>
             <View style={styles.placeholder} />
           </Animated.View>
         ) : (
           // Connected call header - vertical: name then duration
           <Animated.View style={[styles.connectedHeader, { opacity: uiOpacity }, { zIndex: 2 }]} pointerEvents={uiVisible ? 'auto' : 'none'}>
-            <TouchableOpacity style={styles.backButton} onPress={() => { endCall(); }}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
+            <View style={styles.placeholder} />
 
             <View style={styles.connectedHeaderCenter}>
               <Text style={styles.connectedUserName}>
