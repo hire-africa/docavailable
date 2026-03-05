@@ -156,7 +156,42 @@ class UserController extends Controller
                 ], 404);
             }
 
-            // Get aggregated sessions across all active subscriptions
+            // Clean up expired subscriptions on access (handles case where cron is not running)
+            $expiredSubs = Subscription::where('user_id', $user->id)
+                ->where('is_active', true)
+                ->whereNotNull('end_date')
+                ->where('end_date', '<', now())
+                ->get();
+
+            if ($expiredSubs->isNotEmpty()) {
+                foreach ($expiredSubs as $expiredSub) {
+                    \Log::info("Cleaning up expired subscription on access", [
+                        'subscription_id' => $expiredSub->id,
+                        'user_id' => $user->id,
+                        'end_date' => $expiredSub->end_date,
+                    ]);
+                    $expiredSub->delete();
+                }
+
+                // Send expiration notification (once, not per subscription)
+                try {
+                    $notificationService = new \App\Services\NotificationService();
+                    $notificationService->createNotification(
+                        $user->id,
+                        'Subscription Expired',
+                        $expiredSubs->count() === 1
+                        ? 'Your subscription has expired. Please renew to continue using our services.'
+                        : $expiredSubs->count() . ' subscriptions have expired. Please renew to continue using our services.',
+                        'subscription',
+                        ['expired_count' => $expiredSubs->count()]
+                    );
+                } catch (\Exception $e) {
+                    // Non-blocking
+                    \Log::warning("Failed to send expiration notification", ['error' => $e->getMessage()]);
+                }
+            }
+
+            // Get aggregated sessions across all active (non-expired) subscriptions
             $aggregated = Subscription::getAggregatedSessions($user->id);
             $subs = $aggregated['subscriptions'];
 
