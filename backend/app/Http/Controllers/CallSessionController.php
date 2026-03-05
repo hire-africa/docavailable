@@ -38,31 +38,31 @@ class CallSessionController extends Controller
                 ], 400);
             }
 
-            // Get user's subscription
-            $subscription = Subscription::where('user_id', $user->id)->first();
+            // Get user's aggregated subscription data
+            $totalRemaining = Subscription::getTotalRemaining($user->id, $callType);
 
-            if (!$subscription) {
+            if ($totalRemaining <= 0) {
+                // Check if any subscription exists at all
+                $hasAny = Subscription::where('user_id', $user->id)->exists();
+                if (!$hasAny) {
+                    return response()->json([
+                        'success' => false,
+                        'can_make_call' => false,
+                        'message' => 'No subscription found. Please subscribe to make calls.',
+                        'remaining_calls' => 0
+                    ]);
+                }
+
                 return response()->json([
                     'success' => false,
                     'can_make_call' => false,
-                    'message' => 'No subscription found. Please subscribe to make calls.',
+                    'message' => "No remaining {$callType} calls in your subscription. Please upgrade or wait for renewal.",
                     'remaining_calls' => 0
                 ]);
             }
 
-            if (!$subscription->is_active) {
-                return response()->json([
-                    'success' => false,
-                    'can_make_call' => false,
-                    'message' => 'Your subscription is not active. Please renew to make calls.',
-                    'remaining_calls' => 0
-                ]);
-            }
-
-            // Check remaining calls based on type
-            $remainingCalls = 0;
-            $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-            $remainingCalls = $subscription->$callTypeField ?? 0;
+            $remainingCalls = $totalRemaining;
+            $aggregated = Subscription::getAggregatedSessions($user->id);
 
             if ($remainingCalls <= 0) {
                 return response()->json([
@@ -77,7 +77,7 @@ class CallSessionController extends Controller
                 'user_id' => $user->id,
                 'call_type' => $callType,
                 'remaining_calls' => $remainingCalls,
-                'subscription_active' => $subscription->is_active
+                'subscription_active' => true
             ]);
 
             return response()->json([
@@ -86,10 +86,10 @@ class CallSessionController extends Controller
                 'message' => "You have {$remainingCalls} {$callType} calls remaining",
                 'remaining_calls' => $remainingCalls,
                 'subscription' => [
-                    'textSessionsRemaining' => $subscription->text_sessions_remaining,
-                    'voiceCallsRemaining' => $subscription->voice_calls_remaining,
-                    'videoCallsRemaining' => $subscription->video_calls_remaining,
-                    'isActive' => $subscription->is_active
+                    'textSessionsRemaining' => $aggregated['text_sessions_remaining'],
+                    'voiceCallsRemaining' => $aggregated['voice_calls_remaining'],
+                    'videoCallsRemaining' => $aggregated['video_calls_remaining'],
+                    'isActive' => true
                 ]
             ]);
 
@@ -230,10 +230,10 @@ class CallSessionController extends Controller
                 return $availabilityResponse;
             }
 
-            // Get subscription for remaining sessions count
-            $subscription = Subscription::where('user_id', $user->id)->first();
+            // Get aggregated subscription info for remaining sessions count
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-            $sessionsRemainingBeforeStart = $subscription->$callTypeField;
+            $totalRemaining = Subscription::getTotalRemaining($user->id, $callType);
+            $sessionsRemainingBeforeStart = $totalRemaining;
 
             // For direct sessions, we need to find a doctor
             $doctorId = null;
@@ -419,7 +419,7 @@ class CallSessionController extends Controller
                 'call_type' => $callType,
                 'appointment_id' => $appointmentId,
                 'doctor_id' => $doctorId,
-                'remaining_calls' => $subscription->$callTypeField
+                'remaining_calls' => $totalRemaining
             ]);
 
             return response()->json([
@@ -437,7 +437,7 @@ class CallSessionController extends Controller
                     'tokens' => $tokensCount ?? 0,
                     'last_notified_at' => now()->toISOString(),
                 ],
-                'remaining_calls' => $subscription->$callTypeField,
+                'remaining_calls' => $totalRemaining,
                 'call_type' => $callType,
                 'appointment_id' => $appointmentId
             ]);
@@ -791,77 +791,75 @@ class CallSessionController extends Controller
 
                 if ($callSession->connected_at && !$callSession->manual_deduction_applied && $connectedSeconds >= $minimumBillableSeconds) {
                     $patient = $user;
-                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    // FIFO: get oldest active subscription with remaining calls
+                    $subscription = Subscription::getOldestActiveForDeduction($patient->id, $callType);
 
                     if ($subscription) {
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
 
-                        if ($subscription->$callTypeField >= 1) {
-                            // Deduct 1 session from patient
-                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - 1);
-                            $subscription->save();
+                        // Deduct 1 session from oldest subscription
+                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - 1);
+                        $subscription->save();
 
-                            // Pay the doctor
-                            $doctor = User::find($callSession->doctor_id);
-                            if ($doctor) {
-                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor);
-                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                        // Pay the doctor
+                        $doctor = User::find($callSession->doctor_id);
+                        if ($doctor) {
+                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor);
+                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
 
-                                $doctorWallet->credit(
-                                    $paymentAmount,
-                                    "Manual hangup payment for 1 {$callType} call session with " . $patient->first_name . " " . $patient->last_name,
-                                    $callType,
-                                    $callSession->id,
-                                    'call_sessions_manual',
+                            $doctorWallet->credit(
+                                $paymentAmount,
+                                "Manual hangup payment for 1 {$callType} call session with " . $patient->first_name . " " . $patient->last_name,
+                                $callType,
+                                $callSession->id,
+                                'call_sessions_manual',
+                                [
+                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                    'sessions_used' => 1,
+                                    'currency' => $currency,
+                                    'payment_amount' => $paymentAmount,
+                                ]
+                            );
+
+                            // Send payment received notification to doctor
+                            try {
+                                $notificationService = new \App\Services\NotificationService();
+                                $patientName = $patient->first_name . ' ' . $patient->last_name;
+                                $notificationService->createNotification(
+                                    $doctor->id,
+                                    'Payment Received',
+                                    "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
+                                    'payment',
                                     [
-                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                        'sessions_used' => 1,
+                                        'amount' => $paymentAmount,
                                         'currency' => $currency,
-                                        'payment_amount' => $paymentAmount,
+                                        'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
+                                        'patient_name' => $patientName,
                                     ]
                                 );
-
-                                // Send payment received notification to doctor
-                                try {
-                                    $notificationService = new \App\Services\NotificationService();
-                                    $patientName = $patient->first_name . ' ' . $patient->last_name;
-                                    $notificationService->createNotification(
-                                        $doctor->id,
-                                        'Payment Received',
-                                        "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
-                                        'payment',
-                                        [
-                                            'amount' => $paymentAmount,
-                                            'currency' => $currency,
-                                            'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
-                                            'patient_name' => $patientName,
-                                        ]
-                                    );
-                                } catch (\Exception $notificationError) {
-                                    // Log but don't fail the payment if notification fails
-                                    Log::warning("Failed to send payment received notification (manual deduction)", [
-                                        'call_session_id' => $callSession->id,
-                                        'doctor_id' => $doctor->id,
-                                        'error' => $notificationError->getMessage()
-                                    ]);
-                                }
+                            } catch (\Exception $notificationError) {
+                                Log::warning("Failed to send payment received notification (manual deduction)", [
+                                    'call_session_id' => $callSession->id,
+                                    'doctor_id' => $doctor->id,
+                                    'error' => $notificationError->getMessage()
+                                ]);
                             }
-
-                            // Mark manual deduction as applied
-                            $callSession->update([
-                                'manual_deduction_applied' => true,
-                                'sessions_used' => ($callSession->sessions_used ?? 0) + 1,
-                            ]);
-                            $manualDeductionApplied = true;
-
-                            Log::info("Manual hangup deduction applied", [
-                                'call_session_id' => $callSession->id,
-                                'appointment_id' => $appointmentId,
-                                'sessions_deducted' => 1,
-                                'connected_seconds' => $connectedSeconds,
-                            ]);
                         }
+
+                        // Mark manual deduction as applied
+                        $callSession->update([
+                            'manual_deduction_applied' => true,
+                            'sessions_used' => ($callSession->sessions_used ?? 0) + 1,
+                        ]);
+                        $manualDeductionApplied = true;
+
+                        Log::info("Manual hangup deduction applied", [
+                            'call_session_id' => $callSession->id,
+                            'appointment_id' => $appointmentId,
+                            'sessions_deducted' => 1,
+                            'connected_seconds' => $connectedSeconds,
+                        ]);
                     }
                 } elseif ($callSession->connected_at && !$callSession->manual_deduction_applied && $connectedSeconds < $minimumBillableSeconds) {
                     // FIX 3: Call was too short — mark deduction as "applied" (skipped) so it's idempotent
@@ -913,81 +911,75 @@ class CallSessionController extends Controller
                 if ($remainingAutoDeductions > 0) {
                     // Get patient subscription with lock
                     $patient = $user;
-                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    // FIFO: get oldest active subscription with remaining calls
+                    $subscription = Subscription::getOldestActiveForDeduction($patient->id, $callType);
 
                     if ($subscription) {
-                        // Determine call type field
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
 
-                        // Check if patient has enough sessions
-                        if ($subscription->$callTypeField >= $remainingAutoDeductions) {
-                            // Deduct from patient subscription
-                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $remainingAutoDeductions);
-                            $subscription->save();
-                            $deductionResult['patient_deduction_success'] = true;
-                            $deductionResult['patient_sessions_deducted'] = $remainingAutoDeductions;
+                        // Deduct remaining auto-deductions from oldest subscription
+                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - $remainingAutoDeductions);
+                        $subscription->save();
+                        $deductionResult['patient_deduction_success'] = true;
+                        $deductionResult['patient_sessions_deducted'] = $remainingAutoDeductions;
 
-                            // Update call session
-                            $callSession->auto_deductions_processed = $autoDeductions;
-                            $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $remainingAutoDeductions;
-                            $callSession->save();
+                        // Update call session
+                        $callSession->auto_deductions_processed = $autoDeductions;
+                        $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $remainingAutoDeductions;
+                        $callSession->save();
 
-                            // Pay the doctor
-                            $doctor = User::find($callSession->doctor_id);
-                            if ($doctor) {
-                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $remainingAutoDeductions;
-                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                        // Pay the doctor
+                        $doctor = User::find($callSession->doctor_id);
+                        if ($doctor) {
+                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $remainingAutoDeductions;
+                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
 
-                                $doctorWallet->credit(
-                                    $paymentAmount,
-                                    "Auto-deduction payment for {$remainingAutoDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
-                                    $callType,
-                                    $callSession->id,
-                                    'call_sessions_auto',
+                            $doctorWallet->credit(
+                                $paymentAmount,
+                                "Auto-deduction payment for {$remainingAutoDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
+                                $callType,
+                                $callSession->id,
+                                'call_sessions_auto',
+                                [
+                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                    'session_duration' => $duration,
+                                    'sessions_used' => $remainingAutoDeductions,
+                                    'auto_deductions' => $remainingAutoDeductions,
+                                    'currency' => $currency,
+                                    'payment_amount' => $paymentAmount,
+                                ]
+                            );
+
+                            // Send payment received notification to doctor
+                            try {
+                                $notificationService = new \App\Services\NotificationService();
+                                $patientName = $patient->first_name . ' ' . $patient->last_name;
+                                $notificationService->createNotification(
+                                    $doctor->id,
+                                    'Payment Received',
+                                    "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
+                                    'payment',
                                     [
-                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                        'session_duration' => $duration,
-                                        'sessions_used' => $remainingAutoDeductions,
-                                        'auto_deductions' => $remainingAutoDeductions,
+                                        'amount' => $paymentAmount,
                                         'currency' => $currency,
-                                        'payment_amount' => $paymentAmount,
+                                        'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
+                                        'patient_name' => $patientName,
                                     ]
                                 );
-
-                                // Send payment received notification to doctor
-                                try {
-                                    $notificationService = new \App\Services\NotificationService();
-                                    $patientName = $patient->first_name . ' ' . $patient->last_name;
-                                    $notificationService->createNotification(
-                                        $doctor->id,
-                                        'Payment Received',
-                                        "You received a payment of {$paymentAmount} {$currency} from {$patientName}.",
-                                        'payment',
-                                        [
-                                            'amount' => $paymentAmount,
-                                            'currency' => $currency,
-                                            'payment_id' => $doctorWallet->transactions()->latest()->first()->id ?? null,
-                                            'patient_name' => $patientName,
-                                        ]
-                                    );
-                                } catch (\Exception $notificationError) {
-                                    // Log but don't fail the payment if notification fails
-                                    Log::warning("Failed to send payment received notification (auto deduction)", [
-                                        'call_session_id' => $callSession->id,
-                                        'doctor_id' => $doctor->id,
-                                        'error' => $notificationError->getMessage()
-                                    ]);
-                                }
-
-                                $deductionResult['doctor_payment_success'] = true;
-                                $deductionResult['doctor_payment_amount'] = $paymentAmount;
+                            } catch (\Exception $notificationError) {
+                                Log::warning("Failed to send payment received notification (auto deduction)", [
+                                    'call_session_id' => $callSession->id,
+                                    'doctor_id' => $doctor->id,
+                                    'error' => $notificationError->getMessage()
+                                ]);
                             }
-                        } else {
-                            $deductionResult['errors'][] = 'Insufficient remaining calls for deduction';
+
+                            $deductionResult['doctor_payment_success'] = true;
+                            $deductionResult['doctor_payment_amount'] = $paymentAmount;
                         }
                     } else {
-                        $deductionResult['errors'][] = 'Patient subscription not found';
+                        $deductionResult['errors'][] = 'No subscription with remaining calls found';
                     }
                 }
 
@@ -1289,54 +1281,49 @@ class CallSessionController extends Controller
                 // Only process if there are new deductions to make
                 if ($newDeductions > 0) {
                     $patient = $user;
-                    $subscription = $patient->subscription()->lockForUpdate()->first();
+                    // FIFO: get oldest active subscription with remaining calls
+                    $subscription = Subscription::getOldestActiveForDeduction($patient->id, $callType);
 
                     if ($subscription) {
-                        // Determine call type field
                         $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
 
-                        // Check if patient has enough sessions
-                        if ($subscription->$callTypeField >= $newDeductions) {
-                            // Deduct from patient subscription
-                            $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
-                            $subscription->save();
+                        // Deduct new deductions from oldest subscription
+                        $subscription->$callTypeField = max(0, $subscription->$callTypeField - $newDeductions);
+                        $subscription->save();
 
-                            // Update call session
-                            $callSession->auto_deductions_processed = $autoDeductions;
-                            $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
-                            $callSession->save();
+                        // Update call session
+                        $callSession->auto_deductions_processed = $autoDeductions;
+                        $callSession->sessions_used = ($callSession->sessions_used ?? 0) + $newDeductions;
+                        $callSession->save();
 
-                            // Pay the doctor for new deductions
-                            $doctor = User::find($callSession->doctor_id);
-                            if ($doctor) {
-                                $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
-                                $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
-                                $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
+                        // Pay the doctor for new deductions
+                        $doctor = User::find($callSession->doctor_id);
+                        if ($doctor) {
+                            $doctorWallet = \App\Models\DoctorWallet::getOrCreate($doctor->id);
+                            $paymentAmount = \App\Services\DoctorPaymentService::getPaymentAmountForDoctor($callType, $doctor) * $newDeductions;
+                            $currency = \App\Services\DoctorPaymentService::getCurrency($doctor);
 
-                                $doctorWallet->credit(
-                                    $paymentAmount,
-                                    "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
-                                    $callType,
-                                    $callSession->id,
-                                    'call_sessions_auto',
-                                    [
-                                        'patient_name' => $patient->first_name . " " . $patient->last_name,
-                                        'session_duration' => $duration,
-                                        'sessions_used' => $newDeductions,
-                                        'auto_deductions' => $newDeductions,
-                                        'currency' => $currency,
-                                        'payment_amount' => $paymentAmount,
-                                    ]
-                                );
-                            }
-
-                            $deductionResult['deductions_processed'] = $newDeductions;
-                            $deductionResult['remaining_calls'] = $subscription->$callTypeField;
-                        } else {
-                            $deductionResult['errors'][] = 'Insufficient remaining calls for auto-deduction';
+                            $doctorWallet->credit(
+                                $paymentAmount,
+                                "Auto-deduction payment for {$newDeductions} {$callType} call session(s) with " . $patient->first_name . " " . $patient->last_name,
+                                $callType,
+                                $callSession->id,
+                                'call_sessions_auto',
+                                [
+                                    'patient_name' => $patient->first_name . " " . $patient->last_name,
+                                    'session_duration' => $duration,
+                                    'sessions_used' => $newDeductions,
+                                    'auto_deductions' => $newDeductions,
+                                    'currency' => $currency,
+                                    'payment_amount' => $paymentAmount,
+                                ]
+                            );
                         }
+
+                        $deductionResult['deductions_processed'] = $newDeductions;
+                        $deductionResult['remaining_calls'] = $subscription->$callTypeField;
                     } else {
-                        $deductionResult['errors'][] = 'Patient subscription not found';
+                        $deductionResult['errors'][] = 'No subscription with remaining calls found';
                     }
                 }
 

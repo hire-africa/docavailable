@@ -23,10 +23,12 @@ class UserController extends Controller
         $nowMinutes = ((int) $now->format('H')) * 60 + ((int) $now->format('i'));
 
         foreach ($day['slots'] as $slot) {
-            if (!is_array($slot)) continue;
+            if (!is_array($slot))
+                continue;
             $start = (string) ($slot['start'] ?? '');
             $end = (string) ($slot['end'] ?? '');
-            if ($start === '' || $end === '') continue;
+            if ($start === '' || $end === '')
+                continue;
 
             [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
             [$eh, $em] = array_pad(explode(':', $end), 2, '0');
@@ -57,10 +59,12 @@ class UserController extends Controller
         $currentSlotEndMinutes = null;
         if (is_array($day) && !empty($day['enabled']) && !empty($day['slots']) && is_array($day['slots'])) {
             foreach ($day['slots'] as $slot) {
-                if (!is_array($slot)) continue;
+                if (!is_array($slot))
+                    continue;
                 $start = (string) ($slot['start'] ?? '');
                 $end = (string) ($slot['end'] ?? '');
-                if ($start === '' || $end === '') continue;
+                if ($start === '' || $end === '')
+                    continue;
 
                 [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
                 [$eh, $em] = array_pad(explode(':', $end), 2, '0');
@@ -94,7 +98,8 @@ class UserController extends Controller
         $nextSlotStart = null;
         $dayKeys = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         $currentIdx = array_search($dayKey, $dayKeys, true);
-        if ($currentIdx === false) $currentIdx = 0;
+        if ($currentIdx === false)
+            $currentIdx = 0;
 
         for ($offset = 0; $offset < 7; $offset++) {
             $idx = ($currentIdx + $offset) % 7;
@@ -106,9 +111,11 @@ class UserController extends Controller
 
             $candidateStarts = [];
             foreach ($searchDay['slots'] as $slot) {
-                if (!is_array($slot)) continue;
+                if (!is_array($slot))
+                    continue;
                 $start = (string) ($slot['start'] ?? '');
-                if ($start === '') continue;
+                if ($start === '')
+                    continue;
                 [$sh, $sm] = array_pad(explode(':', $start), 2, '0');
                 $startMinutes = ((int) $sh) * 60 + ((int) $sm);
                 if ($offset === 0 && $startMinutes <= $nowMinutes) {
@@ -142,9 +149,6 @@ class UserController extends Controller
             $user = User::find(auth()->user()->id);
 
             if (!$user) {
-                \Log::warning('Subscription request: User not found', [
-                    'auth_user_id' => auth()->user()->id ?? 'null'
-                ]);
                 return response()->json([
                     'success' => false,
                     'data' => null,
@@ -152,56 +156,11 @@ class UserController extends Controller
                 ], 404);
             }
 
-            \Log::info('Subscription request for user', [
-                'user_id' => $user->id,
-                'email' => $user->email
-            ]);
+            // Get aggregated sessions across all active subscriptions
+            $aggregated = Subscription::getAggregatedSessions($user->id);
+            $subs = $aggregated['subscriptions'];
 
-            // Try different ways to load the subscription
-            $subscription = null;
-
-            // Method 1: Direct relationship
-            $subscription = $user->subscription;
-            \Log::info('Subscription loaded via relationship', [
-                'user_id' => $user->id,
-                'subscription_found' => $subscription ? 'yes' : 'no',
-                'subscription_id' => $subscription->id ?? 'null',
-                'is_active' => $subscription->is_active ?? 'null'
-            ]);
-
-            // Method 2: Direct query if relationship failed
-            if (!$subscription) {
-                $subscription = Subscription::where('user_id', $user->id)
-                    ->orderBy('is_active', 'desc')
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-
-                \Log::info('Subscription loaded via direct query', [
-                    'user_id' => $user->id,
-                    'subscription_found' => $subscription ? 'yes' : 'no',
-                    'subscription_id' => $subscription->id ?? 'null',
-                    'is_active' => $subscription->is_active ?? 'null'
-                ]);
-            }
-
-            // Method 3: Check for any subscription (including inactive)
-            if (!$subscription) {
-                $anySubscription = Subscription::where('user_id', $user->id)->first();
-                \Log::info('Any subscription found for user', [
-                    'user_id' => $user->id,
-                    'any_subscription_found' => $anySubscription ? 'yes' : 'no',
-                    'subscription_id' => $anySubscription->id ?? 'null',
-                    'is_active' => $anySubscription->is_active ?? 'null',
-                    'status' => $anySubscription->status ?? 'null'
-                ]);
-            }
-
-            if (!$subscription) {
-                \Log::info('No subscription found for user', [
-                    'user_id' => $user->id,
-                    'email' => $user->email
-                ]);
-
+            if ($subs->isEmpty()) {
                 return response()->json([
                     'success' => true,
                     'data' => null,
@@ -209,45 +168,32 @@ class UserController extends Controller
                 ]);
             }
 
-            // Log subscription details
-            \Log::info('Subscription details', [
-                'subscription_id' => $subscription->id,
-                'user_id' => $subscription->user_id,
-                'plan_id' => $subscription->plan_id,
-                'plan_name' => $subscription->plan_name,
-                'is_active' => $subscription->is_active,
-                'status' => $subscription->status,
-                'start_date' => $subscription->start_date,
-                'end_date' => $subscription->end_date,
-                'text_sessions_remaining' => $subscription->text_sessions_remaining,
-                'voice_calls_remaining' => $subscription->voice_calls_remaining,
-                'video_calls_remaining' => $subscription->video_calls_remaining
-            ]);
+            // Use the newest subscription for plan metadata (name, price, etc.)
+            $newest = $subs->last();
+            // Use the earliest end_date for display
+            $earliestEnd = $subs->min('end_date');
+            $latestEnd = $subs->max('end_date');
 
             $responseData = [
-                'id' => $subscription->id,
-                'plan_id' => $subscription->plan_id,
-                'planName' => $subscription->plan_name,
-                'plan_price' => $subscription->plan_price,
-                'plan_currency' => $subscription->plan_currency,
-                'textSessionsRemaining' => $subscription->text_sessions_remaining,
-                'voiceCallsRemaining' => $subscription->voice_calls_remaining,
-                'videoCallsRemaining' => $subscription->video_calls_remaining,
-                'totalTextSessions' => $subscription->total_text_sessions,
-                'totalVoiceCalls' => $subscription->total_voice_calls,
-                'totalVideoCalls' => $subscription->total_video_calls,
-                'activatedAt' => $subscription->activated_at,
-                'expiresAt' => $subscription->expires_at,
-                'isActive' => $subscription->is_active,
-                'status' => $subscription->status,
-                'start_date' => $subscription->start_date,
-                'end_date' => $subscription->end_date
+                'id' => $newest->id,
+                'plan_id' => $newest->plan_id,
+                'planName' => $newest->plan_name,
+                'plan_price' => $newest->plan_price,
+                'plan_currency' => $newest->plan_currency,
+                'textSessionsRemaining' => $aggregated['text_sessions_remaining'],
+                'voiceCallsRemaining' => $aggregated['voice_calls_remaining'],
+                'videoCallsRemaining' => $aggregated['video_calls_remaining'],
+                'totalTextSessions' => $aggregated['total_text_sessions'],
+                'totalVoiceCalls' => $aggregated['total_voice_calls'],
+                'totalVideoCalls' => $aggregated['total_video_calls'],
+                'activatedAt' => $newest->activated_at,
+                'expiresAt' => $latestEnd,
+                'isActive' => true,
+                'status' => 1,
+                'start_date' => $newest->start_date,
+                'end_date' => $latestEnd,
+                'active_subscriptions_count' => $subs->count(),
             ];
-
-            \Log::info('Returning subscription data', [
-                'subscription_id' => $subscription->id,
-                'response_keys' => array_keys($responseData)
-            ]);
 
             return response()->json([
                 'success' => true,
@@ -257,7 +203,6 @@ class UserController extends Controller
         } catch (\Exception $e) {
             \Log::error('Error in subscription endpoint', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
                 'user_id' => auth()->user()->id ?? 'null'
             ]);
 
@@ -332,11 +277,11 @@ class UserController extends Controller
     public function getPatientSubscription($patientId)
     {
         try {
-            $subscription = Subscription::where('user_id', $patientId)
-                ->where('is_active', true)
-                ->first();
+            // Aggregate sessions across all active subscriptions
+            $aggregated = Subscription::getAggregatedSessions($patientId);
+            $subs = $aggregated['subscriptions'];
 
-            if (!$subscription) {
+            if ($subs->isEmpty()) {
                 return response()->json([
                     'success' => true,
                     'data' => null,
@@ -344,23 +289,27 @@ class UserController extends Controller
                 ]);
             }
 
+            $newest = $subs->last();
+            $latestEnd = $subs->max('end_date');
+
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'id' => $subscription->id,
-                    'plan_id' => $subscription->plan_id,
-                    'plan_name' => $subscription->plan_name,
-                    'plan_price' => $subscription->plan_price,
-                    'plan_currency' => $subscription->plan_currency,
-                    'textSessionsRemaining' => $subscription->text_sessions_remaining,
-                    'voiceCallsRemaining' => $subscription->voice_calls_remaining,
-                    'videoCallsRemaining' => $subscription->video_calls_remaining,
-                    'totalTextSessions' => $subscription->total_text_sessions,
-                    'totalVoiceCalls' => $subscription->total_voice_calls,
-                    'totalVideoCalls' => $subscription->total_video_calls,
-                    'activatedAt' => $subscription->activated_at,
-                    'expiresAt' => $subscription->expires_at,
-                    'isActive' => $subscription->is_active
+                    'id' => $newest->id,
+                    'plan_id' => $newest->plan_id,
+                    'plan_name' => $newest->plan_name,
+                    'plan_price' => $newest->plan_price,
+                    'plan_currency' => $newest->plan_currency,
+                    'textSessionsRemaining' => $aggregated['text_sessions_remaining'],
+                    'voiceCallsRemaining' => $aggregated['voice_calls_remaining'],
+                    'videoCallsRemaining' => $aggregated['video_calls_remaining'],
+                    'totalTextSessions' => $aggregated['total_text_sessions'],
+                    'totalVoiceCalls' => $aggregated['total_voice_calls'],
+                    'totalVideoCalls' => $aggregated['total_video_calls'],
+                    'activatedAt' => $newest->activated_at,
+                    'expiresAt' => $latestEnd,
+                    'isActive' => true,
+                    'active_subscriptions_count' => $subs->count(),
                 ]
             ]);
         } catch (\Exception $e) {

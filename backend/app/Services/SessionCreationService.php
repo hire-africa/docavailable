@@ -55,28 +55,18 @@ class SessionCreationService
         ?int $appointmentId = null
     ): array {
         try {
-            // Get patient's subscription
-            $subscription = Subscription::where('user_id', $patientId)
-                ->where('is_active', true)
-                ->first();
+            // Get patient's aggregated sessions across all active subscriptions
+            $totalTextRemaining = Subscription::getTotalRemaining($patientId, 'text');
 
-            if (!$subscription) {
+            if ($totalTextRemaining <= 0) {
                 return [
                     'success' => false,
                     'session' => null,
-                    'message' => 'No active subscription found for patient'
+                    'message' => 'No active subscription found with text sessions remaining'
                 ];
             }
 
-            $sessionsRemaining = $subscription->text_sessions_remaining;
-
-            if ($sessionsRemaining <= 0) {
-                return [
-                    'success' => false,
-                    'session' => null,
-                    'message' => 'You have no text sessions remaining in your subscription. Please upgrade your plan or wait for renewal.'
-                ];
-            }
+            $sessionsRemaining = $totalTextRemaining;
 
             // Use transaction to ensure atomicity and prevent race conditions
             $windowSeconds = (int) config('app.text_session_response_window', 300);
@@ -250,10 +240,9 @@ class SessionCreationService
                 ];
             }
 
-            // Get subscription for remaining sessions count
-            $subscription = Subscription::where('user_id', $patientId)->first();
+            // Get aggregated subscription remaining for this call type
             $callTypeField = $callType === 'voice' ? 'voice_calls_remaining' : 'video_calls_remaining';
-            $sessionsRemainingBeforeStart = $subscription ? $subscription->$callTypeField : 0;
+            $sessionsRemainingBeforeStart = Subscription::getTotalRemaining($patientId, $callType);
 
             // Patient-level active session guard
             $anyExistingCall = CallSession::where('patient_id', $patientId)
