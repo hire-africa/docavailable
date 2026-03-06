@@ -989,19 +989,31 @@ class TextSessionController extends Controller
      */
     public function getSession(Request $request, $manualSessionId): JsonResponse
     {
+        // 🛠 Fix: Handle text_session_ prefix if passed from frontend
+        $actualId = $manualSessionId;
+        if (is_string($manualSessionId)) {
+            $actualId = str_replace(['text_session_', 'text_session:'], '', $manualSessionId);
+        }
+
         // Enforce numeric ID to prevent SQL errors if string routes are matched incorrectly
-        if (!is_numeric($manualSessionId)) {
+        if (!is_numeric($actualId)) {
+            Log::warning('⚠️ [TextSessionController] Invalid session ID format received', [
+                'received_id' => $manualSessionId,
+                'parsed_id' => $actualId
+            ]);
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid session ID format'
             ], 404);
         }
 
+        $actualId = (int) $actualId;
+
         try {
             $user = auth()->user();
 
             $session = TextSession::with(['patient.subscription', 'doctor'])
-                ->where('id', $manualSessionId)
+                ->where('id', $actualId)
                 ->first();
 
             if (!$session) {
@@ -1014,8 +1026,14 @@ class TextSessionController extends Controller
             // Apply lazy expiration at read-time
             $session->applyLazyExpiration();
 
-            // Check if user is part of this session
-            if ($session->patient_id !== $user->id && $session->doctor_id !== $user->id) {
+            // Check if user is part of this session (Strict Authorization)
+            if ((int) $session->patient_id !== (int) $user->id && (int) $session->doctor_id !== (int) $user->id) {
+                Log::warning('⚠️ [TextSessionController] Unauthorized access attempt', [
+                    'session_id' => $actualId,
+                    'user_id' => $user->id,
+                    'patient_id' => $session->patient_id,
+                    'doctor_id' => $session->doctor_id
+                ]);
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to session'

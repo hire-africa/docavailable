@@ -7,24 +7,24 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Easing,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Easing,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import BottomNavigation from '../components/BottomNavigation';
@@ -46,6 +46,7 @@ import { withDoctorPrefix } from '../utils/name';
 import { useTextAppointmentConverter } from '../hooks/useTextAppointmentConverter';
 import { appointmentService } from '../services/appointmentService';
 import { EndedSessionMetadata, endedSessionStorageService } from '../services/endedSessionStorageService';
+import { notificationApiService } from '../services/notificationApiService';
 import { textSessionService } from '../services/textSessionService';
 import { apiService } from './services/apiService';
 
@@ -933,6 +934,15 @@ export default function PatientDashboard() {
       if (user?.id) {
         console.log('PatientDashboard: Screen focused, refreshing subscription data...');
         refreshSubscriptionData();
+
+        // Refresh notification count on focus to ensure it's up to date after returning from notifications page
+        notificationApiService.getUnreadCount()
+          .then(response => {
+            if (response.success && response.data) {
+              setUnreadNotificationCount(response.data.count);
+            }
+          })
+          .catch(err => console.error('Error refreshing notification count on focus:', err));
       }
     }, [user?.id, refreshSubscriptionData])
   );

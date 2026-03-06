@@ -2802,7 +2802,6 @@ export default function ChatPage() {
             updateTextMessage(tempId, message.id);
             playSound(SOUNDS.SENT);
             console.log('✅ [ChatComponent] Message sent successfully via WebRTC:', message.id);
-            setSending(false); // OPTIMISTIC: Free the UI immediately after WebRTC handoff
 
             // Debug instant session state after message sent
             if (isInstantSession) {
@@ -5100,8 +5099,8 @@ export default function ChatPage() {
 
         {/* Input - Fixed at bottom with proper keyboard handling and safe area */}
         <View style={{
-          flexDirection: 'row',
-          alignItems: 'flex-end',
+          flexDirection: 'column',
+          alignItems: 'stretch',
           paddingHorizontal: 16,
           paddingTop: 12,
           paddingBottom: 0,
@@ -5214,30 +5213,19 @@ export default function ChatPage() {
             </View>
           )}
 
-          {/* Animated Buttons Container */}
-          <Animated.View style={{
-            flexDirection: 'row',
-            width: buttonsWidth,
-            overflow: 'hidden',
-          }}>
-            {/* Image Button */}
-            <TouchableOpacity
-              onPress={handlePickImage}
-              disabled={
-                sendingGalleryImage ||
-                sending ||
-                sessionEnded ||
-                !sessionValid ||
-                !isTextInputEnabled() || // Disable for call appointments
-                selectedImage !== null ||
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
-              }
-              style={{
-                padding: 8,
-                marginRight: 8,
-                opacity: (sendingGalleryImage ||
+          {/* Input Controls Row */}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginBottom: !validationResult.isValid ? 4 : 0 }}>
+            {/* Animated Buttons Container */}
+            <Animated.View style={{
+              flexDirection: 'row',
+              width: buttonsWidth,
+              overflow: 'hidden',
+            }}>
+              {/* Image Button */}
+              <TouchableOpacity
+                onPress={handlePickImage}
+                disabled={
+                  sendingGalleryImage ||
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
@@ -5245,241 +5233,274 @@ export default function ChatPage() {
                   selectedImage !== null ||
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
-              }}
-            >
-              <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
-            </TouchableOpacity>
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                }
+                style={{
+                  padding: 8,
+                  marginRight: 8,
+                  opacity: (sendingGalleryImage ||
+                    sending ||
+                    sessionEnded ||
+                    !sessionValid ||
+                    !isTextInputEnabled() || // Disable for call appointments
+                    selectedImage !== null ||
+                    (isInstantSession && isSessionExpired) ||
+                    (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                    (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                }}
+              >
+                <Ionicons name="image" size={24} color={(sendingGalleryImage || selectedImage !== null || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
+              </TouchableOpacity>
 
-            {/* Camera Button */}
-            <TouchableOpacity
-              onPress={handleTakePhoto}
-              disabled={
-                sendingCameraImage ||
-                sending ||
-                sessionEnded ||
-                !sessionValid ||
-                !isTextInputEnabled() || // Disable for call appointments
-                (isInstantSession && isSessionExpired) ||
-                (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
-              }
-              style={{
-                padding: 8,
-                marginRight: 8,
-                opacity: (sendingCameraImage ||
+              {/* Camera Button */}
+              <TouchableOpacity
+                onPress={handleTakePhoto}
+                disabled={
+                  sendingCameraImage ||
                   sending ||
                   sessionEnded ||
                   !sessionValid ||
                   !isTextInputEnabled() || // Disable for call appointments
                   (isInstantSession && isSessionExpired) ||
                   (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
-              }}
-            >
-              <Ionicons name="camera" size={24} color={(sendingCameraImage || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
-            </TouchableOpacity>
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                }
+                style={{
+                  padding: 8,
+                  marginRight: 8,
+                  opacity: (sendingCameraImage ||
+                    sending ||
+                    sessionEnded ||
+                    !sessionValid ||
+                    !isTextInputEnabled() || // Disable for call appointments
+                    (isInstantSession && isSessionExpired) ||
+                    (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                    (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                }}
+              >
+                <Ionicons name="camera" size={24} color={(sendingCameraImage || !isTextInputEnabled()) ? "#999" : "#4CAF50"} />
+              </TouchableOpacity>
 
-            {/* Voice Recording Button */}
+              {/* Voice Recording Button */}
+              <TouchableOpacity
+                onPress={isRecording ? stopRecording : startRecording}
+                disabled={
+                  sending ||
+                  sessionEnded ||
+                  !sessionValid ||
+                  !isTextInputEnabled() || // Disable for call appointments
+                  (isInstantSession && isSessionExpired) ||
+                  (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
+                }
+                style={{
+                  padding: 8,
+                  marginRight: 8,
+                  opacity: (sending ||
+                    sessionEnded ||
+                    !sessionValid ||
+                    !isTextInputEnabled() || // Disable for call appointments
+                    (isInstantSession && isSessionExpired) ||
+                    (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                    (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                }}
+              >
+                <Ionicons
+                  name={isRecording ? "stop" : "mic"}
+                  size={24}
+                  color={(sending ||
+                    sessionEnded ||
+                    !sessionValid ||
+                    !isTextInputEnabled() || // Disable for call appointments
+                    (isInstantSession && isSessionExpired) ||
+                    (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
+                    (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
+                />
+              </TouchableOpacity>
+            </Animated.View>
+
+            <TextInput
+              value={newMessage}
+              onChangeText={(text) => {
+                setNewMessage(text);
+                const result = validateMessage(text);
+                setValidationResult(result);
+
+                // Send typing indicator via WebRTC (try session service first, then chat service)
+                if (isWebRTCConnected) {
+                  if (webrtcSessionService) {
+                    webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
+                  } else if (webrtcChatService) {
+                    webrtcChatService.sendTypingIndicator(text.length > 0, currentUserId);
+                  }
+                }
+              }}
+              editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
+              placeholder="Message..."
+              placeholderTextColor="#999"
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: !validationResult.isValid ? '#FF3B30' : (newMessage.trim() ? '#4CAF50' : '#E5E5E5'),
+                borderRadius: 24,
+                paddingHorizontal: 18,
+                paddingVertical: 14,
+                fontSize: 16,
+                color: '#000',
+                marginRight: 8,
+                opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
+                backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
+                maxHeight: 100,
+                minHeight: 48,
+                textAlignVertical: 'center',
+              }}
+              multiline
+              maxLength={1000}
+            />
+
             <TouchableOpacity
-              onPress={isRecording ? stopRecording : startRecording}
+              onPress={async () => {
+                if (selectedImage) {
+                  const caption = newMessage.trim();
+
+                  // Validate caption if present
+                  if (caption) {
+                    const result = validateMessage(caption);
+                    if (!result.isValid) {
+                      setValidationResult(result);
+                      return;
+                    }
+                  }
+
+                  const imageToSend = selectedImage; // Store reference before clearing
+
+                  // Clear image and caption IMMEDIATELY to dismiss preview and prevent duplicate sends
+                  setSelectedImage(null);
+                  setNewMessage('');
+                  setValidationResult({ isValid: true, reasons: [] });
+
+                  try {
+                    if (webrtcChatService) {
+                      // WebRTC service handles immediate display via onMessage callback
+                      console.log('📤 [Send] Sending image via WebRTC');
+                      const message = await webrtcChatService.sendImageMessage(imageToSend, appointmentId);
+                      if (message && message.media_url) {
+                        console.log('✅ [Send] Image sent via WebRTC:', message.id);
+
+                        // Send caption as separate text message if provided
+                        if (caption) {
+                          const captionTempId = addImmediateTextMessage(caption);
+                          const captionMessage = await webrtcChatService.sendMessage(caption);
+                          if (captionMessage) {
+                            updateTextMessage(captionTempId, captionMessage.id);
+                          }
+                        }
+                      } else {
+                        throw new Error('WebRTC image send returned null');
+                      }
+                    } else {
+                      // Backend API - use immediate display with temp message
+                      console.log('📤 [Send] Sending image via Backend API');
+                      const tempId = addImmediateImageMessage(imageToSend);
+                      await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
+
+                      // Send caption as separate text message if provided
+                      if (caption) {
+                        await sendMessageViaBackendAPI(addImmediateTextMessage(caption), caption);
+                      }
+                    }
+                  } catch (error) {
+                    console.error('❌ [Send] Failed to send image via WebRTC, falling back to backend:', error);
+                    // Fallback to backend with immediate display
+                    const tempId = addImmediateImageMessage(imageToSend);
+                    await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
+
+                    // Still try to send caption if provided
+                    if (caption) {
+                      const captionTempId = addImmediateTextMessage(caption);
+                      try {
+                        if (webrtcChatService) {
+                          const captionMessage = await webrtcChatService.sendMessage(caption);
+                          if (captionMessage) {
+                            updateTextMessage(captionTempId, captionMessage.id);
+                          }
+                        } else {
+                          await sendMessageViaBackendAPI(captionTempId, caption);
+                        }
+                      } catch (captionError) {
+                        console.error('❌ Failed to send caption:', captionError);
+                      }
+                    }
+                  }
+                } else {
+                  // Send text message
+                  handleSendMessage();
+                }
+              }}
               disabled={
                 sending ||
+                (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
+                !validationResult.isValid || // Disable if invalid
                 sessionEnded ||
                 !sessionValid ||
-                !isTextInputEnabled() || // Disable for call appointments
                 (isInstantSession && isSessionExpired) ||
                 (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
                 (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
               }
               style={{
-                padding: 8,
-                marginRight: 8,
-                opacity: (sending ||
-                  sessionEnded ||
-                  !sessionValid ||
-                  !isTextInputEnabled() || // Disable for call appointments
-                  (isInstantSession && isSessionExpired) ||
-                  (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? 0.3 : 1,
+                backgroundColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : '#E5E5E5',
+                borderRadius: 24,
+                padding: 14,
+                minWidth: 48,
+                height: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) || !validationResult.isValid ? 0.5 : 1,
+                shadowColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : 'transparent',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 3,
               }}
             >
-              <Ionicons
-                name={isRecording ? "stop" : "mic"}
-                size={24}
-                color={(sending ||
-                  sessionEnded ||
-                  !sessionValid ||
-                  !isTextInputEnabled() || // Disable for call appointments
-                  (isInstantSession && isSessionExpired) ||
-                  (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-                  (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))) ? "#999" : (isRecording ? "#ff4444" : "#4CAF50")}
-              />
+              {sending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#fff" /> // FIX: Only show send icon
+              )}
             </TouchableOpacity>
-          </Animated.View>
+          </View>
 
-          <TextInput
-            value={newMessage}
-            onChangeText={(text) => {
-              setNewMessage(text);
-              const result = validateMessage(text);
-              setValidationResult(result);
-
-              // Send typing indicator via WebRTC (try session service first, then chat service)
-              if (isWebRTCConnected) {
-                if (webrtcSessionService) {
-                  webrtcSessionService.sendTypingIndicator(text.length > 0, currentUserId);
-                } else if (webrtcChatService) {
-                  webrtcChatService.sendTypingIndicator(text.length > 0, currentUserId);
-                }
-              }
-            }}
-            editable={sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))}
-            placeholder={!validationResult.isValid ? validationResult.reasons[0] : "Message..."}
-            placeholderTextColor={!validationResult.isValid ? '#FF3B30' : "#999"}
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: !validationResult.isValid ? '#FF3B30' : (newMessage.trim() ? '#4CAF50' : '#E5E5E5'),
-              borderRadius: 24,
-              paddingHorizontal: 18,
-              paddingVertical: 14,
-              fontSize: 16,
-              color: '#000',
-              marginRight: 8,
-              opacity: (sessionValid && !sessionEnded && isTextInputEnabled() && (isTextSession || isAppointmentTime || (isTextAppointment && textAppointmentSession.isActive))) ? 1 : 0.5,
-              backgroundColor: (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ? '#F5F5F5' : 'white',
-              maxHeight: 100,
-              minHeight: 48,
-              textAlignVertical: 'center',
-            }}
-            multiline
-            maxLength={1000}
-          />
-
-          <TouchableOpacity
-            onPress={async () => {
-              if (selectedImage) {
-                const caption = newMessage.trim();
-
-                // Validate caption if present
-                if (caption) {
-                  const result = validateMessage(caption);
-                  if (!result.isValid) {
-                    setValidationResult(result);
-                    return;
-                  }
-                }
-
-                const imageToSend = selectedImage; // Store reference before clearing
-
-                // Clear image and caption IMMEDIATELY to dismiss preview and prevent duplicate sends
-                setSelectedImage(null);
-                setNewMessage('');
-                setValidationResult({ isValid: true, reasons: [] });
-
-                try {
-                  if (webrtcChatService) {
-                    // WebRTC service handles immediate display via onMessage callback
-                    console.log('📤 [Send] Sending image via WebRTC');
-                    const message = await webrtcChatService.sendImageMessage(imageToSend, appointmentId);
-                    if (message && message.media_url) {
-                      console.log('✅ [Send] Image sent via WebRTC:', message.id);
-
-                      // Send caption as separate text message if provided
-                      if (caption) {
-                        const captionTempId = addImmediateTextMessage(caption);
-                        const captionMessage = await webrtcChatService.sendMessage(caption);
-                        if (captionMessage) {
-                          updateTextMessage(captionTempId, captionMessage.id);
-                        }
-                      }
-                    } else {
-                      throw new Error('WebRTC image send returned null');
-                    }
-                  } else {
-                    // Backend API - use immediate display with temp message
-                    console.log('📤 [Send] Sending image via Backend API');
-                    const tempId = addImmediateImageMessage(imageToSend);
-                    await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
-
-                    // Send caption as separate text message if provided
-                    if (caption) {
-                      await sendMessageViaBackendAPI(addImmediateTextMessage(caption), caption);
-                    }
-                  }
-                } catch (error) {
-                  console.error('❌ [Send] Failed to send image via WebRTC, falling back to backend:', error);
-                  // Fallback to backend with immediate display
-                  const tempId = addImmediateImageMessage(imageToSend);
-                  await sendImageMessageViaBackendAPIWithUpdate(imageToSend, tempId);
-
-                  // Still try to send caption if provided
-                  if (caption) {
-                    const captionTempId = addImmediateTextMessage(caption);
-                    try {
-                      if (webrtcChatService) {
-                        const captionMessage = await webrtcChatService.sendMessage(caption);
-                        if (captionMessage) {
-                          updateTextMessage(captionTempId, captionMessage.id);
-                        }
-                      } else {
-                        await sendMessageViaBackendAPI(captionTempId, caption);
-                      }
-                    } catch (captionError) {
-                      console.error('❌ Failed to send caption:', captionError);
-                    }
-                  }
-                }
-              } else {
-                // Send text message
-                handleSendMessage();
-              }
-            }}
-            disabled={
-              sending ||
-              (!newMessage.trim() && !selectedImage) || // Allow sending if there's text OR image
-              !validationResult.isValid || // Disable if invalid
-              sessionEnded ||
-              !sessionValid ||
-              (isInstantSession && isSessionExpired) ||
-              (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated && isPatient) ||
-              (!isTextSession && !isAppointmentTime && !(isTextAppointment && textAppointmentSession.isActive))
-            }
-            style={{
-              backgroundColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : '#E5E5E5',
-              borderRadius: 24,
-              padding: 14,
-              minWidth: 48,
-              height: 48,
-              alignItems: 'center',
-              justifyContent: 'center',
-              opacity: (sessionEnded && !isPatient) || (isInstantSession && hasPatientSentMessage && !hasDoctorResponded && !isSessionActivated) || !validationResult.isValid ? 0.5 : 1,
-              shadowColor: (newMessage.trim() || selectedImage) && !sending && validationResult.isValid ? '#4CAF50' : 'transparent',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.2,
-              shadowRadius: 4,
-              elevation: 3,
-            }}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#fff" /> // FIX: Only show send icon
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Validation Error Hint */}
-        {
-          !validationResult.isValid && (
-            <View style={{ paddingHorizontal: 60, paddingBottom: 8, marginTop: -4 }}>
-              <Text style={{ color: '#FF3B30', fontSize: 12, fontWeight: '500' }}>
-                {validationResult.reasons[0]}
-              </Text>
+          {/* Validation Error Hint */}
+          {!validationResult.isValid && (
+            <View style={{
+              paddingHorizontal: 12,
+              paddingBottom: 12,
+              paddingTop: 4,
+            }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                backgroundColor: '#FEF2F2',
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: '#FEE2E2',
+                shadowColor: '#EF4444',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.05,
+                shadowRadius: 2,
+                elevation: 1,
+              }}>
+                <Ionicons name="alert-circle" size={18} color="#DC2626" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#991B1B', fontSize: 13, fontWeight: '600', flex: 1 }}>
+                  {validationResult.reasons[0]}
+                </Text>
+              </View>
             </View>
-          )
-        }
+          )}
+        </View>
 
         {/* Voice Recording Interface */}
         {

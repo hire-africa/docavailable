@@ -118,6 +118,16 @@ class FcmChannel
                 'android' => [
                     'priority' => 'high', // High priority for immediate delivery
                 ],
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10', // High priority for APNs
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'content-available' => 1,
+                        ],
+                    ],
+                ],
             ]
         ];
 
@@ -136,9 +146,9 @@ class FcmChannel
             ];
         }
 
-        // Add iOS config from notification if present
+        // Add/Merge iOS config from notification if present
         if (isset($message['apns'])) {
-            $payload['message']['apns'] = $message['apns'];
+            $payload['message']['apns'] = array_replace_recursive($payload['message']['apns'], $message['apns']);
         }
 
         try {
@@ -170,11 +180,32 @@ class FcmChannel
                 ]);
                 return $result;
             } else {
+                $status = $response->status();
+                $body = $response->json();
+                $errorCode = $body['error']['status'] ?? 'UNKNOWN';
+                $details = $body['error']['details'] ?? [];
+
                 Log::error("❌ FCM V1 Channel: Failed to send notification", [
                     'user_id' => $notifiable->id,
-                    'status' => $response->status(),
-                    'body' => $response->body()
+                    'status' => $status,
+                    'error_code' => $errorCode,
+                    'body' => $body
                 ]);
+
+                // Handle stale tokens (UNREGISTERED or INVALID_ARGUMENT with specific message)
+                if ($errorCode === 'UNREGISTERED' || ($errorCode === 'INVALID_ARGUMENT' && str_contains(json_encode($body), 'is not a valid FCM registration token'))) {
+                    Log::warning("⚠️ FCM V1 Channel: Token is invalid or unregistered. Inactivating token for user.", [
+                        'user_id' => $notifiable->id,
+                        'token_preview' => substr($notifiable->push_token, 0, 10) . '...'
+                    ]);
+
+                    // Atomic update to clear the token and disable push notifications
+                    \App\Models\User::where('id', $notifiable->id)->update([
+                        'push_token' => null,
+                        'push_notifications_enabled' => false
+                    ]);
+                }
+
                 return false;
             }
         } catch (\Exception $e) {

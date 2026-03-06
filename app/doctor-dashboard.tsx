@@ -2,6 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useAlert } from '@/hooks/useAlert';
 import authService from '@/services/authService';
 import { endedSessionStorageService } from '@/services/endedSessionStorageService';
+import { notificationApiService } from '@/services/notificationApiService';
 import { NotificationService } from '@/services/notificationService';
 import { RealTimeEventService } from '@/services/realTimeEventService';
 import { textSessionService } from '@/services/textSessionService';
@@ -11,22 +12,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    AppState,
-    BackHandler,
-    Dimensions,
-    Image,
-    Modal,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Animated,
+  AppState,
+  BackHandler,
+  Dimensions,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppTour from '../components/AppTour';
@@ -513,6 +514,15 @@ export default function DoctorDashboard() {
         if (activeTab === 'home') {
           refreshHomeTab();
         }
+
+        // Refresh notification count on focus to ensure it's up to date after returning from notifications page
+        notificationApiService.getUnreadCount()
+          .then(response => {
+            if (response.success && response.data) {
+              setUnreadNotificationCount(response.data.count);
+            }
+          })
+          .catch(err => console.error('Error refreshing notification count on focus:', err));
       }
     }, [user, activeTab])
   );
@@ -1937,164 +1947,164 @@ export default function DoctorDashboard() {
       })();
 
       return (
-    <ScrollView
-      style={styles.content}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshingHome}
-          onRefresh={refreshHomeTab}
-          colors={['#4CAF50']}
-          tintColor="#4CAF50"
-        />
-      }
-    >
-      {/* Welcome Section - Updated to match patient dashboard */}
-      <LinearGradient
-        colors={['#4CAF50', '#45a049', '#2E7D32']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          borderRadius: 20,
-          padding: 24,
-          marginBottom: 24,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.08,
-          shadowRadius: 12,
-          elevation: 4,
-          alignItems: 'center',
-          flexDirection: 'column',
-          gap: 0,
-          marginTop: 20,
-        }}
-      >
-        {/* User Avatar */}
-        <View style={{
-          width: 64,
-          height: 64,
-          borderRadius: 32,
-          overflow: 'hidden',
-          backgroundColor: '#E8F5E8',
-          marginBottom: 16,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
-          elevation: 3,
-        }}>
-          {user?.profile_picture_url ? (
-            <Image source={{ uri: user.profile_picture_url }} style={{ width: 64, height: 64, borderRadius: 32 }} />
-          ) : user?.profile_picture ? (
-            <Image source={{ uri: user.profile_picture }} style={{ width: 64, height: 64, borderRadius: 32 }} />
-          ) : (
-            <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8F5E8', alignItems: 'center', justifyContent: 'center' }}>
-              <FontAwesome name="user-md" size={24} color="#4CAF50" />
-            </View>
-          )}
-        </View>
-        <Text
-          style={{
-            fontSize: 28,
-            fontWeight: 'bold',
-            color: '#FFFFFF',
-            textAlign: 'center',
-            marginBottom: 6,
-            maxWidth: 280,
-            lineHeight: 34,
-            paddingHorizontal: 8,
-          }}
-          numberOfLines={2}
-          ellipsizeMode="tail"
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshingHome}
+              onRefresh={refreshHomeTab}
+              colors={['#4CAF50']}
+              tintColor="#4CAF50"
+            />
+          }
         >
-          {welcomeTitle}
-        </Text>
-        {/* Status Pill */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => setActiveTab('working-hours')}
-          style={{
-            backgroundColor: pillStatus.bg,
-            borderRadius: 12,
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            marginBottom: 8,
-            alignSelf: 'center',
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <View style={{
-            width: 6,
-            height: 6,
-            borderRadius: 3,
-            backgroundColor: pillStatus.dot,
-          }} />
-          <Text style={{
-            fontSize: 12,
-            fontWeight: '600',
-            color: pillStatus.textColor,
-            textAlign: 'center',
-            letterSpacing: 0.2,
-          }}>
-            {loadingAvailability ? 'Checking availability...' : pillStatus.text}
-          </Text>
-        </TouchableOpacity>
-        {!!shiftInfo && (
-          <Text
+          {/* Welcome Section - Updated to match patient dashboard */}
+          <LinearGradient
+            colors={['#4CAF50', '#45a049', '#2E7D32']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
             style={{
-              fontSize: 12,
-              color: 'rgba(255,255,255,0.9)',
-              textAlign: 'center',
-              marginTop: 4,
-              maxWidth: 280,
-              lineHeight: 18,
-              paddingHorizontal: 8,
+              borderRadius: 20,
+              padding: 24,
+              marginBottom: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 12,
+              elevation: 4,
+              alignItems: 'center',
+              flexDirection: 'column',
+              gap: 0,
+              marginTop: 20,
             }}
-            numberOfLines={2}
-            ellipsizeMode="tail"
           >
-            {shiftInfo}
-          </Text>
-        )}
-      </LinearGradient>
-
-
-      <View style={[styles.quickActions, { marginTop: 20 }]}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.actionGrid}>
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
-            <View style={styles.actionIcon}>
-              <Icon name="calendar" size={20} color="#666" />
+            {/* User Avatar */}
+            <View style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              overflow: 'hidden',
+              backgroundColor: '#E8F5E8',
+              marginBottom: 16,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 3,
+            }}>
+              {user?.profile_picture_url ? (
+                <Image source={{ uri: user.profile_picture_url }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+              ) : user?.profile_picture ? (
+                <Image source={{ uri: user.profile_picture }} style={{ width: 64, height: 64, borderRadius: 32 }} />
+              ) : (
+                <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: '#E8F5E8', alignItems: 'center', justifyContent: 'center' }}>
+                  <FontAwesome name="user-md" size={24} color="#4CAF50" />
+                </View>
+              )}
             </View>
-            <Text style={styles.actionTitle}>Appointments</Text>
-            <Text style={styles.actionSubtitle}>Manage bookings</Text>
-          </TouchableOpacity>
+            <Text
+              style={{
+                fontSize: 28,
+                fontWeight: 'bold',
+                color: '#FFFFFF',
+                textAlign: 'center',
+                marginBottom: 6,
+                maxWidth: 280,
+                lineHeight: 34,
+                paddingHorizontal: 8,
+              }}
+              numberOfLines={2}
+              ellipsizeMode="tail"
+            >
+              {welcomeTitle}
+            </Text>
+            {/* Status Pill */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => setActiveTab('working-hours')}
+              style={{
+                backgroundColor: pillStatus.bg,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                marginBottom: 8,
+                alignSelf: 'center',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <View style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: pillStatus.dot,
+              }} />
+              <Text style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: pillStatus.textColor,
+                textAlign: 'center',
+                letterSpacing: 0.2,
+              }}>
+                {loadingAvailability ? 'Checking availability...' : pillStatus.text}
+              </Text>
+            </TouchableOpacity>
+            {!!shiftInfo && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: 'rgba(255,255,255,0.9)',
+                  textAlign: 'center',
+                  marginTop: 4,
+                  maxWidth: 280,
+                  lineHeight: 18,
+                  paddingHorizontal: 8,
+                }}
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {shiftInfo}
+              </Text>
+            )}
+          </LinearGradient>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
-            <View style={styles.actionIcon}>
-              <Icon name="message" size={20} color="#666" />
+
+          <View style={[styles.quickActions, { marginTop: 20 }]}>
+            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <View style={styles.actionGrid}>
+              <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('appointments')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="calendar" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Appointments</Text>
+                <Text style={styles.actionSubtitle}>Manage bookings</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => setActiveTab('messages')}>
+                <View style={styles.actionIcon}>
+                  <Icon name="message" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Messages</Text>
+                <Text style={styles.actionSubtitle}>Chat with patients</Text>
+              </TouchableOpacity>
+
+              <WorkingHoursCard onPress={() => setActiveTab('working-hours')} enabledDaysCount={enabledDaysCount} />
+
+              <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
+                <View style={styles.actionIcon}>
+                  <FontAwesome name="money" size={20} color="#666" />
+                </View>
+                <Text style={styles.actionTitle}>Earnings</Text>
+                <Text style={styles.actionSubtitle}>Withdraw funds</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.actionTitle}>Messages</Text>
-            <Text style={styles.actionSubtitle}>Chat with patients</Text>
-          </TouchableOpacity>
-
-          <WorkingHoursCard onPress={() => setActiveTab('working-hours')} enabledDaysCount={enabledDaysCount} />
-
-          <TouchableOpacity style={styles.actionCard} onPress={() => router.push('/doctor-withdrawals')}>
-            <View style={styles.actionIcon}>
-              <FontAwesome name="money" size={20} color="#666" />
-            </View>
-            <Text style={styles.actionTitle}>Earnings</Text>
-            <Text style={styles.actionSubtitle}>Withdraw funds</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+          </View>
 
 
 
-    </ScrollView>
+        </ScrollView>
       );
     })()
   );

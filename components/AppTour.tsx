@@ -469,14 +469,15 @@ export default function AppTour({
 
   const getTooltipPosition = () => {
     const tooltipWidth = 300;
-    // Larger height when image is present
-    const tooltipHeight = currentStep.imagePath ? 350 : 150;
-    const spacing = 20;
+    // Estimate height more conservatively to ensure it fits
+    const tooltipHeight = currentStep.imagePath ? 400 : 250;
+    const spacing = 15;
+    const horizontalPadding = 10;
 
     // For center/welcome/complete steps, center the tooltip
     if (!highlightLayout || currentStep.position === 'center' || currentStep.target === 'welcome' || currentStep.target === 'complete') {
       return {
-        top: height / 2 - tooltipHeight / 2,
+        top: Math.max(insets.top + 20, height / 2 - tooltipHeight / 2),
         left: width / 2 - tooltipWidth / 2,
       };
     }
@@ -489,56 +490,50 @@ export default function AppTour({
     const safeW = isNaN(w) || w <= 0 ? 200 : w;
     const safeH = isNaN(h) || h <= 0 ? 50 : h;
 
-    // Check if element is near bottom of screen - if so, show tooltip above
+    // Calculate available space
     const elementBottom = safeY + safeH;
-    const spaceBelow = height - elementBottom;
-    const spaceAbove = safeY;
-    const showAbove = spaceBelow < tooltipHeight + spacing || currentStep.position === 'top';
+    const spaceBelow = height - elementBottom - insets.bottom - 20;
+    const spaceAbove = safeY - insets.top - 20;
 
-    switch (currentStep.position) {
-      case 'top':
-        return {
-          top: Math.max(insets.top + 20, safeY - tooltipHeight - 60), // Increased spacing
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-        };
-      case 'bottom':
-        // For bottom nav tabs, show tooltip well above with extra spacing
-        if (currentStep.target.includes('-tab') && !currentStep.target.includes('appointments-')) {
-          // This is a bottom navigation tab, show tooltip above
-          return {
-            top: Math.max(insets.top + 20, safeY - tooltipHeight - 80), // Much more spacing to keep nav visible
-            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-          };
-        }
-        // For bottom position (like appointments sub-tabs), always show tooltip below the element
-        // The user wants the card on the bottom to show the button up top
-        return {
-          top: safeY + safeH + spacing,
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-        };
-      case 'left':
-        return {
-          top: Math.max(insets.top + 20, safeY + safeH / 2 - tooltipHeight / 2),
-          left: Math.max(20, safeX - tooltipWidth - spacing),
-        };
-      case 'right':
-        return {
-          top: Math.max(insets.top + 20, safeY + safeH / 2 - tooltipHeight / 2),
-          left: Math.min(width - tooltipWidth - 20, safeX + safeW + spacing),
-        };
-      default:
-        // Default: show above if element is near bottom, otherwise show above by default
-        if (showAbove || elementBottom > height * 0.7) {
-          return {
-            top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing - 20),
-            left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-          };
-        }
-        return {
-          top: Math.max(insets.top + 20, safeY - tooltipHeight - spacing),
-          left: Math.max(20, Math.min(width - tooltipWidth - 20, safeX + safeW / 2 - tooltipWidth / 2)),
-        };
+    let finalPosition = currentStep.position || 'bottom';
+
+    // Automatic position adjustment if space is insufficient
+    if (finalPosition === 'bottom' && spaceBelow < tooltipHeight + spacing && spaceAbove > spaceBelow) {
+      finalPosition = 'top';
+    } else if (finalPosition === 'top' && spaceAbove < tooltipHeight + spacing && spaceBelow > spaceAbove) {
+      finalPosition = 'bottom';
     }
+
+    let topVal = 0;
+    let leftVal = Math.max(horizontalPadding, Math.min(width - tooltipWidth - horizontalPadding, safeX + safeW / 2 - tooltipWidth / 2));
+
+    switch (finalPosition) {
+      case 'top':
+        topVal = safeY - tooltipHeight - spacing;
+        break;
+      case 'bottom':
+        topVal = safeY + safeH + spacing;
+        break;
+      case 'left':
+        topVal = safeY + safeH / 2 - tooltipHeight / 2;
+        leftVal = Math.max(horizontalPadding, safeX - tooltipWidth - spacing);
+        break;
+      case 'right':
+        topVal = safeY + safeH / 2 - tooltipHeight / 2;
+        leftVal = Math.min(width - tooltipWidth - horizontalPadding, safeX + safeW + spacing);
+        break;
+      default:
+        topVal = safeY + safeH + spacing;
+    }
+
+    // Final clamping to ensure tooltip stays on screen
+    const minTop = insets.top + spacing;
+    const maxTop = height - (currentStep.imagePath ? 380 : 220) - insets.bottom - spacing; // Adjust maxTop based on actual content
+
+    return {
+      top: Math.max(minTop, Math.min(maxTop, topVal)),
+      left: leftVal,
+    };
   };
 
   if (!visible || !currentStep) return null;

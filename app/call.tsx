@@ -1,5 +1,5 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { Stack, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AudioCall from '../components/AudioCall';
@@ -84,17 +84,37 @@ export default function CallScreen() {
     };
   }, []);
 
+  const navigation = useNavigation();
+
   // SECURITY: Block system back navigation during active call
   // Users can only exit the call screen by explicitly ending the call
-  useEffect(() => {
-    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      // Block the back button - return true to prevent default behavior
-      console.log('🚫 [CallScreen] Back button blocked during active call');
-      return true;
-    });
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        // Block the back button - return true to prevent default behavior
+        console.log('🚫 [CallScreen] Hardware back button blocked during active call');
+        return true;
+      };
 
-    return () => backHandler.remove();
-  }, []);
+      // Add hardware back listener
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // Add navigation listener to prevent ANY way of leaving the screen accidentally (swipes, gestures, etc.)
+      const beforeRemoveUnsub = navigation.addListener('beforeRemove', (e: any) => {
+        // If it's a "back" or "pop" action from navigation itself
+        if (e.data.action.type === 'POP' || e.data.action.type === 'GO_BACK') {
+          // Prevent default behavior
+          e.preventDefault();
+          console.log('🚫 [CallScreen] Navigation back action blocked');
+        }
+      });
+
+      return () => {
+        backHandler.remove();
+        beforeRemoveUnsub();
+      };
+    }, [navigation])
+  );
 
   const initializeCall = async () => {
     let initTimeout: ReturnType<typeof setTimeout> | null = null;
